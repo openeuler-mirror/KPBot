@@ -140,6 +140,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
 # Skills: code-optimizer plugin
 SKILL_ROOT="$PLUGIN_ROOT/plugins/code-optimizer/skills"
+# OpenCode 覆盖层：仅含与 claude 版本有差异的文件（稀疏镜像 skills/ 结构）
+OPENCODE_OVERLAY="$PLUGIN_ROOT/plugins/code-optimizer/opencode"
+# claude-only 的 skill：opencode 无对应工具，安装时跳过
+OPENCODE_SKIP="drive-claude-optimize-pipeline batch-drive-optimize-pipeline"
 
 # --- Parse arguments ---
 for arg in "$@"; do
@@ -250,33 +254,32 @@ echo ""
 ok "开始安装..."
 echo ""
 
-# --- Step 1: Create directory & skill symlinks ---
+# --- Step 1: Copy skills (with opencode overlay) ---
 step "[1/4] Setting up KPBot skills..."
 mkdir -p "$CONFIG_ROOT/skills"
 
-# Pre-clean existing KPBot skill symlinks
-for skill_dir in "$SKILL_ROOT"/*/; do
-    [ -d "$skill_dir" ] || continue
-    name=$(basename "$skill_dir")
-    target="$CONFIG_ROOT/skills/$name"
-    [ -e "$target" ] || [ -L "$target" ] && rm -rf "$target"
-done
+# 清理目标目录下旧内容（幂等重装）
+rm -rf "$CONFIG_ROOT/skills"/*
 
-# Create symlinks
-skill_link_count=0
-for skill_dir in "$SKILL_ROOT"/*/; do
-    [ -d "$skill_dir" ] || continue
-    name=$(basename "$skill_dir")
-    ln -sfn "$(realpath "$skill_dir")" "$CONFIG_ROOT/skills/$name"
-    skill_link_count=$((skill_link_count + 1))
-done
+# 基底：拷贝全部 skills（claude 格式）
+cp -r "$SKILL_ROOT/"* "$CONFIG_ROOT/skills/"
+skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
-# Clean broken symlinks
-for link in "$CONFIG_ROOT/skills"/*; do
-    [ -L "$link" ] && [ ! -e "$link" ] && rm "$link"
-done
-
-ok "Skills: $skill_link_count symlinks created"
+if [ "$TOOL" = "opencode" ]; then
+    # OpenCode 覆盖层：用 opencode/ 下的差异文件覆盖 claude 版本
+    if [ -d "$OPENCODE_OVERLAY" ]; then
+        cp -r "$OPENCODE_OVERLAY/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+        ok "OpenCode overlay applied"
+    fi
+    # 跳过 claude-only 的 skill（opencode 无对应工具）
+    for skip_name in $OPENCODE_SKIP; do
+        [ -e "$CONFIG_ROOT/skills/$skip_name" ] && rm -rf "$CONFIG_ROOT/skills/$skip_name"
+        skill_count=$((skill_count - 1))
+    done
+    ok "Skills: $skill_count copied (opencode)"
+else
+    ok "Skills: $skill_count copied (claude)"
+fi
 echo ""
 
 # --- Step 2: Install config file ---
@@ -298,7 +301,10 @@ else
     fi
 fi
 
-if [ "$config_src" = "$config_target" ]; then
+if [ ! -f "$config_src" ]; then
+    # 配置文件不存在（仓库未提供 CLAUDE.md），跳过此步
+    info "No CLAUDE.md in plugin root, skip config install"
+elif [ "$config_src" = "$config_target" ]; then
     # Already at target location (running from plugin root with matching name)
     ok "$config_name already in place"
 elif [ "$LEVEL" = "global" ] || { [ "$LEVEL" = "project" ] && [ "$INSTALL_BASE" != "$SCRIPT_DIR" ]; }; then
@@ -330,8 +336,8 @@ if [ "$TOOL" = "opencode" ]; then
     # OpenCode auto-scans .opencode/skills/ — Step 1 already done
     ok "Auto-scan: skills/"
 else
-    # Claude: skills/ symlinks already in .claude/skills/ from Step 1
-    ok "Skills: $skill_link_count discovery symlinks in .claude/skills/"
+    # Claude: skills copied to .claude/skills/ from Step 1
+    ok "Skills: $skill_count copied to .claude/skills/"
 fi
 echo ""
 
@@ -350,18 +356,18 @@ else
     health_ok=false
 fi
 
-# Check config file
+# Check config file (warning only — config is optional when plugin omits CLAUDE.md)
 if [ "$TOOL" = "opencode" ]; then
     if [ "$LEVEL" = "project" ]; then
-        [ -f "$INSTALL_BASE/AGENTS.md" ] || { health_errors="${health_errors}\n  ${RED}✗${NC} AGENTS.md missing in project directory"; health_ok=false; }
+        [ -f "$INSTALL_BASE/AGENTS.md" ] || { health_errors="${health_errors}\n  ${YELLOW}⚠${NC} AGENTS.md not installed (no CLAUDE.md in plugin)"; }
     else
-        [ -f "$CONFIG_ROOT/AGENTS.md" ] || { health_errors="${health_errors}\n  ${RED}✗${NC} AGENTS.md missing"; health_ok=false; }
+        [ -f "$CONFIG_ROOT/AGENTS.md" ] || { health_errors="${health_errors}\n  ${YELLOW}⚠${NC} AGENTS.md not installed (no CLAUDE.md in plugin)"; }
     fi
 else
     if [ "$LEVEL" = "project" ]; then
-        [ -f "$INSTALL_BASE/CLAUDE.md" ] || { health_errors="${health_errors}\n  ${RED}✗${NC} CLAUDE.md missing in project directory"; health_ok=false; }
+        [ -f "$INSTALL_BASE/CLAUDE.md" ] || { health_errors="${health_errors}\n  ${YELLOW}⚠${NC} CLAUDE.md not installed (no CLAUDE.md in plugin)"; }
     else
-        [ -f "$CONFIG_ROOT/CLAUDE.md" ] || { health_errors="${health_errors}\n  ${RED}✗${NC} CLAUDE.md missing"; health_ok=false; }
+        [ -f "$CONFIG_ROOT/CLAUDE.md" ] || { health_errors="${health_errors}\n  ${YELLOW}⚠${NC} CLAUDE.md not installed (no CLAUDE.md in plugin)"; }
     fi
 fi
 
