@@ -6,21 +6,21 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://gitee.com/suxikang/server-applicationoptimization.git server-application-optimization
+git clone https://atomgit.com/openEuler/KPBot.git
 
 # 2. 放入 Claude Code 的 skills 搜寻路径
 mkdir -p ~/.claude/skills
-cp -r server-application-optimization/skills/server-application-optimization ~/.claude/skills/
+cp -r KPBot/Plugins/app-tuner/skills/ServerApplicationoptimization/skills/server-application-optimization ~/.claude/skills/
 ```
 
 Claude Code 启动时自动发现 `~/.claude/skills/` 下的 skill，无需额外注册。
 
 其他编程 Agent：
 
-- Codex：在仓库上下文中直接使用 `skills/server-application-optimization/` 主源目录。
-- Cursor：通过项目规则、Agent 配置或上下文指向 `skills/server-application-optimization/SKILL.md`。
-- OpenCode：使用 `.opencode/skills/server-application-optimization/` 轻量入口。
-- 其他支持目录式 `SKILL.md` 的 Agent：直接加载 `skills/server-application-optimization/`。
+- Codex：在仓库上下文中直接使用 `Plugins/app-tuner/skills/ServerApplicationoptimization/skills/server-application-optimization/` 主源目录。
+- Cursor：通过项目规则、Agent 配置或上下文指向 `Plugins/app-tuner/skills/ServerApplicationoptimization/skills/server-application-optimization/SKILL.md`。
+- OpenCode：使用 `Plugins/app-tuner/skills/ServerApplicationoptimization/.opencode/skills/server-application-optimization/` 轻量入口。
+- 其他支持目录式 `SKILL.md` 的 Agent：直接加载 `Plugins/app-tuner/skills/ServerApplicationoptimization/skills/server-application-optimization/`。
 
 ## 2. 使用
 

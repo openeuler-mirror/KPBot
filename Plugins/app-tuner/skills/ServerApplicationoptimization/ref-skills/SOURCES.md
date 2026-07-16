@@ -8,7 +8,7 @@
 
 ### 1. `library-replacement`
 
-- 原始来源仓库：`git@gitee.com:KunpengSDK/skills.git`
+- 原始来源仓库：`ref-skills/library-replacement/`
 - 原始来源路径：`library-replacement/`
 - 当前纳入日期：`2026-04-16`
 - 当前接入方式：复制最小可运行单元到仓库内
@@ -19,7 +19,7 @@
 
 ### 2. `network-io-performance`
 
-- 原始来源仓库：`git@gitee.com:chen-kai888/opencode.git`
+- 原始来源仓库：`ref-skills/network-io-performance/`
 - 原始来源路径：`network-io-performance/`
 - 当前纳入日期：`2026-04-16`
 - 当前接入方式：复制最小可运行单元到仓库内
@@ -30,9 +30,9 @@
 
 ### 3. `cpu-affinity-optimization`
 
-- 原始来源仓库：`git@gitee.com:KunpengSDK/skills.git`
+- 原始来源仓库：`ref-skills/cpu-affinity-optimization/`
 - 原始来源路径：`cpu-affinity-agent/`
-- 辅助来源仓库：`https://gitee.com/wuqicong/multi-component-bind-core-agent.git`
+- 辅助来源仓库：`ref-skills/cpu-affinity-optimization/`
 - 辅助来源路径：`multi-component-bind-core-agent/`
 - 当前纳入日期：`2026-04-17`
 - 当前接入方式：提炼通用 CPU 亲和性能力后内置到仓库
@@ -44,7 +44,7 @@
 
 ### 4. `compiler-option-optimization`
 
-- 原始来源仓库：`git@gitee.com:KunpengSDK/skills.git`
+- 原始来源仓库：`ref-skills/compiler-option-optimization/`
 - 原始来源路径：`compiler-option-optimization/`（PR #11，commit `057b8fd`）
 - 当前纳入日期：`2026-05-14`
 - 当前接入方式：复制完整 skill 到仓库内（SKILL.md + scripts/perf_hotspot.sh）
