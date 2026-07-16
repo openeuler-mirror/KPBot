@@ -142,24 +142,6 @@ claude plugins install --plugin-dir /path/to/KPBot/plugins/code-optimizer
 
 安装后，Claude Code 会根据上下文自动激活相关 skills。
 
-### 欢迎页面
-
-安装后每次启动时，会自动展示 KPBot ASCII 艺术字欢迎横幅：
-
-```
-  _  __  ____    ____     ___    _
- | |/ / |  _ \  | __ )   / _ \  | |_
- | ' /  |  _ \  |  _ \  | (_) | | __|
- | . \  |  __/  | |_) |  \___/  | |_
- |_|\_\ |_|     |____/           \__|
-
- 鲲鹏/ARM 高性能计算工具集  v0.1.0
- 📦 code-optimizer  ✅  已加载
- 📋 36 个优化技能可用
-```
-
-- **Claude Code**: 通过 `SessionStart` hook 实现（`hooks/hooks.json`）
-
 ## 支持平台
 
 - Kunpeng-0xd01
