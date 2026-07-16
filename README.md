@@ -316,7 +316,6 @@ KPBot/
 │   ├── code-optimizer/            # 代码优化插件 (36 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
-│   │   ├── hooks/                 #   SessionStart 欢迎横幅 hook
 │   │   └── skills/                #   技能源目录
 │   └── app-tuner/                 # 应用级调优插件
 │       ├── .claude-plugin/
