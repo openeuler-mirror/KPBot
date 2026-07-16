@@ -67,8 +67,10 @@ cd /path/to/your-c-project
 
 ### 安装脚本自动完成
 
-1. **Skills 软链接** — 将插件技能链接到目标工具的 skills 目录
-2. **配置文件** — 生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）
+1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
+   - Claude Code：拷贝全部 36 个 skills（claude 格式）
+   - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并跳过 2 个 claude-only skill（共 34 个）
+2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
 
@@ -128,7 +130,9 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 
 每个阶段对应一个独立的 skill，由 LLM 按序调用。
 
-### 可用技能列表（36 个）
+### 可用技能列表
+
+Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -166,8 +170,8 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 - `prepare-project` — 项目准备与基线建立
 - `decompose-tasks` — 任务分解与排序
 - `decide-optimization` — 优化策略门控
-- `drive-claude-optimize-pipeline` — 驱动 Claude 执行 Pipeline
-- `batch-drive-optimize-pipeline` — 批量自动化评估
+- `drive-claude-optimize-pipeline` — 驱动 Claude 执行 Pipeline _(claude-only)_
+- `batch-drive-optimize-pipeline` — 批量自动化评估 _(claude-only)_
 
 **平台知识**
 - `kunpeng_microarch` — Kunpeng-0xd01/0xd03/0xd06 微架构知识库
@@ -252,7 +256,7 @@ claude plugins install code-optimizer --marketplace kpbot-marketplace
 ### OpenCode
 
 ```bash
-# 项目级：删除 skills 软链接和配置文件
+# 项目级：删除 skills 目录和配置文件
 rm -rf .opencode/skills/
 rm -f AGENTS.md
 
@@ -316,7 +320,8 @@ KPBot/
 │   ├── code-optimizer/            # 代码优化插件 (36 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
-│   │   └── skills/                #   技能源目录
+│   │   ├── skills/                #   技能源目录（claude 格式，单一源）
+│   │   └── opencode/              #   OpenCode 覆盖层（26 个差异文件，稀疏镜像 skills/ 结构）
 │   └── app-tuner/                 # 应用级调优插件
 │       ├── .claude-plugin/
 │       │   └── plugin.json
