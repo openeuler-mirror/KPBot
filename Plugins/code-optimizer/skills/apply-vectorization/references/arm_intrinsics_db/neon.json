@@ -1,0 +1,344 @@
+[
+  {
+    "id": "intrinsic.neon.vaddq_f32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "arithmetic",
+      "add"
+    ],
+    "display_name": "vaddq_f32",
+    "intrinsic_names": [
+      "vaddq_f32"
+    ],
+    "instruction_names": [
+      "FADD",
+      "ADD"
+    ],
+    "prototype": "float32x4_t vaddq_f32(float32x4_t a, float32x4_t b)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "a and b must both be float32x4_t vectors"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "add",
+    "tail_policy": "Preserve scalar add semantics in the epilogue.",
+    "usage_template": "float32x4_t vc = vaddq_f32(va, vb);",
+    "correctness_rules": [
+      "Use the same element type for both operands and the destination vector.",
+      "Keep the scalar fallback equivalent to the vector body."
+    ],
+    "anti_patterns": [
+      "Mixing integer and floating-point NEON types in the same add without an explicit conversion.",
+      "Using vaddq_f32 when the loop really needs a fused multiply-add pattern."
+    ],
+    "related_items": [
+      "intrinsic.neon.vld1q_f32",
+      "intrinsic.neon.vst1q_f32",
+      "intrinsic.sve.svadd_f32_x"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Vector arithmetic / Addition",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.neon.vfmaq_f32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "arithmetic",
+      "fma"
+    ],
+    "display_name": "vfmaq_f32",
+    "intrinsic_names": [
+      "vfmaq_f32"
+    ],
+    "instruction_names": [
+      "FMLA"
+    ],
+    "prototype": "float32x4_t vfmaq_f32(float32x4_t acc, float32x4_t lhs, float32x4_t rhs)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "acc, lhs and rhs must all be float32x4_t vectors"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "fma",
+    "tail_policy": "Use the same multiply-add formula in the scalar cleanup path.",
+    "usage_template": "vacc = vfmaq_f32(vacc, vlhs, vrhs);",
+    "correctness_rules": [
+      "Choose vfmaq_f32 only when the scalar algorithm already performs an accumulate += lhs * rhs.",
+      "Keep the accumulator lifetime explicit; do not overwrite unrelated vectors."
+    ],
+    "anti_patterns": [
+      "Replacing a plain add with vfmaq_f32 without a multiply operand.",
+      "Using vfmaq_f32 in a loop with non-contiguous rhs loads."
+    ],
+    "related_items": [
+      "intrinsic.neon.vdupq_n_f32",
+      "intrinsic.sve.svmla_f32_x"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Vector arithmetic / Fused multiply-add",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.neon.vdupq_n_f32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "broadcast",
+      "dup"
+    ],
+    "display_name": "vdupq_n_f32",
+    "intrinsic_names": [
+      "vdupq_n_f32"
+    ],
+    "instruction_names": [
+      "DUP"
+    ],
+    "prototype": "float32x4_t vdupq_n_f32(float32_t value)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Broadcast one scalar float32 value into all 4 lanes"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "broadcast",
+    "tail_policy": "No dedicated tail handling; use the same scalar value in both vector and scalar paths.",
+    "usage_template": "float32x4_t alpha_vec = vdupq_n_f32(alpha);",
+    "correctness_rules": [
+      "Use when one scalar is intentionally replicated across all NEON lanes.",
+      "Keep the scalar source outside the main loop when possible."
+    ],
+    "anti_patterns": [
+      "Rebuilding the same broadcast value on every iteration without need.",
+      "Using NEON broadcast in an SVE length-agnostic loop."
+    ],
+    "related_items": [
+      "intrinsic.neon.vfmaq_f32",
+      "intrinsic.sve.svdup_n_f32"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Move / duplicate intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.neon.vld1q_f32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "load-store",
+      "contiguous-load",
+      "ld1"
+    ],
+    "display_name": "vld1q_f32",
+    "intrinsic_names": [
+      "vld1q_f32"
+    ],
+    "instruction_names": [
+      "LD1"
+    ],
+    "prototype": "float32x4_t vld1q_f32(float32_t const *ptr)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "ptr must point to at least 4 contiguous float32 elements"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "load",
+    "tail_policy": "Pair with an explicit scalar epilogue when the trip count is not a multiple of 4 lanes.",
+    "usage_template": "float32x4_t va = vld1q_f32(a + i);",
+    "correctness_rules": [
+      "Use only for fixed-width 128-bit NEON loops with unit-stride access.",
+      "Advance the loop by 4 float32 lanes per iteration."
+    ],
+    "anti_patterns": [
+      "Using vld1q_f32 inside a loop that still increments by 1 element.",
+      "Reading from indirect or gather-style addresses."
+    ],
+    "related_items": [
+      "intrinsic.neon.vst1q_f32",
+      "intrinsic.neon.vaddq_f32",
+      "rule.neon.explicit-epilogue"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Vector arithmetic / load-store intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.neon.vst1q_f32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "load-store",
+      "contiguous-store",
+      "st1"
+    ],
+    "display_name": "vst1q_f32",
+    "intrinsic_names": [
+      "vst1q_f32"
+    ],
+    "instruction_names": [
+      "ST1"
+    ],
+    "prototype": "void vst1q_f32(float32_t *ptr, float32x4_t val)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "ptr must point to at least 4 writable float32 elements"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "store",
+    "tail_policy": "Write back the vector body first, then finish the remainder with scalar stores.",
+    "usage_template": "vst1q_f32(out + i, vc);",
+    "correctness_rules": [
+      "Store the same lane width that the NEON main loop computes.",
+      "Keep the store address unit-stride and alias-safe."
+    ],
+    "anti_patterns": [
+      "Using vst1q_f32 when the destination overlaps with a later scalar tail in an unsafe way.",
+      "Combining NEON stores with SVE or SME stores in the same kernel body."
+    ],
+    "related_items": [
+      "intrinsic.neon.vld1q_f32",
+      "intrinsic.neon.vaddq_f32",
+      "rule.cross-isa.no-mixed-templates"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Vector arithmetic / load-store intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.neon.vaddvq_f32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "reduction",
+      "horizontal-add"
+    ],
+    "display_name": "vaddvq_f32",
+    "intrinsic_names": [
+      "vaddvq_f32"
+    ],
+    "instruction_names": [
+      "FADDP"
+    ],
+    "prototype": "float32_t vaddvq_f32(float32x4_t a)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "a must contain the accumulated float32 lanes to reduce"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "horizontal-reduction",
+    "tail_policy": "Run scalar cleanup before or after the horizontal add, then combine with the reduced vector accumulator.",
+    "usage_template": "float acc = vaddvq_f32(vacc);",
+    "correctness_rules": [
+      "Use only for final horizontal reduction of a vector accumulator.",
+      "Document that float32 reduction changes the scalar addition order and is not bit-exact."
+    ],
+    "anti_patterns": [
+      "Using vaddvq_f32 for prefix-sum or per-element scan output.",
+      "Hiding a strict floating-point ordering requirement behind a vector reduction."
+    ],
+    "related_items": [
+      "intrinsic.neon.vaddq_f32",
+      "intrinsic.neon.vfmaq_f32"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Vector arithmetic / Across vector arithmetic",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.neon.vaddvq_s32",
+    "kind": "intrinsic",
+    "isa": "neon",
+    "group_path": [
+      "neon",
+      "reduction",
+      "horizontal-add"
+    ],
+    "display_name": "vaddvq_s32",
+    "intrinsic_names": [
+      "vaddvq_s32"
+    ],
+    "instruction_names": [
+      "ADDV"
+    ],
+    "prototype": "int32_t vaddvq_s32(int32x4_t a)",
+    "header": "<arm_neon.h>",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "a must contain the accumulated int32 lanes to reduce"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "horizontal-reduction",
+    "tail_policy": "Run scalar cleanup for any remaining elements and add it to the reduced vector accumulator.",
+    "usage_template": "int32_t acc = vaddvq_s32(vacc);",
+    "correctness_rules": [
+      "Use only when int32 overflow behavior is either irrelevant or explicitly acceptable.",
+      "Keep prefix-scan style outputs on the reject path."
+    ],
+    "anti_patterns": [
+      "Using vaddvq_s32 when the original scalar contract depends on trapping or undefined overflow details.",
+      "Reducing a vector accumulator while also writing per-iteration accumulator state."
+    ],
+    "related_items": [
+      "intrinsic.neon.vaddq_f32",
+      "rule.neon.explicit-epilogue"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Vector arithmetic / Across vector arithmetic",
+      "retrieved_at": "2026-05-12"
+    }
+  }
+]

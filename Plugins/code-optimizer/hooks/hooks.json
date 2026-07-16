@@ -1,0 +1,18 @@
+{
+  "description": "KPBot 欢迎页面 — 会话启动时自动展示 KPBOT ASCII 艺术字横幅",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/welcome.sh\"",
+            "async": false,
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

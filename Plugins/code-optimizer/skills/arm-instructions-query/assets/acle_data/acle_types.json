@@ -1,0 +1,648 @@
+[
+  {
+    "name": "int8x8_t",
+    "element_type": "int8_t",
+    "element_count": 8,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 8 x int8_t (64-bit)"
+  },
+  {
+    "name": "int8x16_t",
+    "element_type": "int8_t",
+    "element_count": 16,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 16 x int8_t (128-bit)"
+  },
+  {
+    "name": "uint8x8_t",
+    "element_type": "uint8_t",
+    "element_count": 8,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 8 x uint8_t (64-bit)"
+  },
+  {
+    "name": "uint8x16_t",
+    "element_type": "uint8_t",
+    "element_count": 16,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 16 x uint8_t (128-bit)"
+  },
+  {
+    "name": "int16x4_t",
+    "element_type": "int16_t",
+    "element_count": 4,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 4 x int16_t (64-bit)"
+  },
+  {
+    "name": "int16x8_t",
+    "element_type": "int16_t",
+    "element_count": 8,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 8 x int16_t (128-bit)"
+  },
+  {
+    "name": "uint16x4_t",
+    "element_type": "uint16_t",
+    "element_count": 4,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 4 x uint16_t (64-bit)"
+  },
+  {
+    "name": "uint16x8_t",
+    "element_type": "uint16_t",
+    "element_count": 8,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 8 x uint16_t (128-bit)"
+  },
+  {
+    "name": "int32x2_t",
+    "element_type": "int32_t",
+    "element_count": 2,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 2 x int32_t (64-bit)"
+  },
+  {
+    "name": "int32x4_t",
+    "element_type": "int32_t",
+    "element_count": 4,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 4 x int32_t (128-bit)"
+  },
+  {
+    "name": "uint32x2_t",
+    "element_type": "uint32_t",
+    "element_count": 2,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 2 x uint32_t (64-bit)"
+  },
+  {
+    "name": "uint32x4_t",
+    "element_type": "uint32_t",
+    "element_count": 4,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 4 x uint32_t (128-bit)"
+  },
+  {
+    "name": "int64x2_t",
+    "element_type": "int64_t",
+    "element_count": 2,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 2 x int64_t (128-bit)"
+  },
+  {
+    "name": "uint64x2_t",
+    "element_type": "uint64_t",
+    "element_count": 2,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 2 x uint64_t (128-bit)"
+  },
+  {
+    "name": "float16x4_t",
+    "element_type": "float16_t",
+    "element_count": 4,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 4 x float16_t (64-bit)"
+  },
+  {
+    "name": "float16x8_t",
+    "element_type": "float16_t",
+    "element_count": 8,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 8 x float16_t (128-bit)"
+  },
+  {
+    "name": "float32x2_t",
+    "element_type": "float32_t",
+    "element_count": 2,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 2 x float32_t (64-bit)"
+  },
+  {
+    "name": "float32x4_t",
+    "element_type": "float32_t",
+    "element_count": 4,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 4 x float32_t (128-bit)"
+  },
+  {
+    "name": "float64x2_t",
+    "element_type": "float64_t",
+    "element_count": 2,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 2 x float64_t (128-bit)"
+  },
+  {
+    "name": "poly8x8_t",
+    "element_type": "poly8_t",
+    "element_count": 8,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 8 x poly8_t (64-bit)"
+  },
+  {
+    "name": "poly8x16_t",
+    "element_type": "poly8_t",
+    "element_count": 16,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 16 x poly8_t (128-bit)"
+  },
+  {
+    "name": "poly16x4_t",
+    "element_type": "poly16_t",
+    "element_count": 4,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 4 x poly16_t (64-bit)"
+  },
+  {
+    "name": "poly16x8_t",
+    "element_type": "poly16_t",
+    "element_count": 8,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 8 x poly16_t (128-bit)"
+  },
+  {
+    "name": "poly64x2_t",
+    "element_type": "poly64_t",
+    "element_count": 2,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 2 x poly64_t (128-bit)"
+  },
+  {
+    "name": "bfloat16x4_t",
+    "element_type": "bfloat16_t",
+    "element_count": 4,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 4 x bfloat16_t (64-bit)"
+  },
+  {
+    "name": "bfloat16x8_t",
+    "element_type": "bfloat16_t",
+    "element_count": 8,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 8 x bfloat16_t (128-bit)"
+  },
+  {
+    "name": "mfloat8x8_t",
+    "element_type": "mfloat8_t",
+    "element_count": 8,
+    "total_bits": 64,
+    "family": "neon",
+    "description": "Neon vector of 8 x mfloat8_t (64-bit)"
+  },
+  {
+    "name": "mfloat8x16_t",
+    "element_type": "mfloat8_t",
+    "element_count": 16,
+    "total_bits": 128,
+    "family": "neon",
+    "description": "Neon vector of 16 x mfloat8_t (128-bit)"
+  },
+  {
+    "name": "svint8_t",
+    "element_type": "int8_t",
+    "element_bits": 8,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of int8_t"
+  },
+  {
+    "name": "svuint8_t",
+    "element_type": "uint8_t",
+    "element_bits": 8,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of uint8_t"
+  },
+  {
+    "name": "svint16_t",
+    "element_type": "int16_t",
+    "element_bits": 16,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of int16_t"
+  },
+  {
+    "name": "svuint16_t",
+    "element_type": "uint16_t",
+    "element_bits": 16,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of uint16_t"
+  },
+  {
+    "name": "svint32_t",
+    "element_type": "int32_t",
+    "element_bits": 32,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of int32_t"
+  },
+  {
+    "name": "svuint32_t",
+    "element_type": "uint32_t",
+    "element_bits": 32,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of uint32_t"
+  },
+  {
+    "name": "svint64_t",
+    "element_type": "int64_t",
+    "element_bits": 64,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of int64_t"
+  },
+  {
+    "name": "svuint64_t",
+    "element_type": "uint64_t",
+    "element_bits": 64,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of uint64_t"
+  },
+  {
+    "name": "svfloat16_t",
+    "element_type": "float16_t",
+    "element_bits": 16,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of float16_t"
+  },
+  {
+    "name": "svfloat32_t",
+    "element_type": "float32_t",
+    "element_bits": 32,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of float32_t"
+  },
+  {
+    "name": "svfloat64_t",
+    "element_type": "float64_t",
+    "element_bits": 64,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of float64_t"
+  },
+  {
+    "name": "svbfloat16_t",
+    "element_type": "bfloat16_t",
+    "element_bits": 16,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of bfloat16_t"
+  },
+  {
+    "name": "svmfloat8_t",
+    "element_type": "mfloat8_t",
+    "element_bits": 8,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE sizeless vector of mfloat8_t"
+  },
+  {
+    "name": "svint8x2_t",
+    "element_type": "svint8_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svint8_t"
+  },
+  {
+    "name": "svint8x3_t",
+    "element_type": "svint8_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svint8_t"
+  },
+  {
+    "name": "svint8x4_t",
+    "element_type": "svint8_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svint8_t"
+  },
+  {
+    "name": "svuint8x2_t",
+    "element_type": "svuint8_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svuint8_t"
+  },
+  {
+    "name": "svuint8x3_t",
+    "element_type": "svuint8_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svuint8_t"
+  },
+  {
+    "name": "svuint8x4_t",
+    "element_type": "svuint8_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svuint8_t"
+  },
+  {
+    "name": "svint16x2_t",
+    "element_type": "svint16_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svint16_t"
+  },
+  {
+    "name": "svint16x3_t",
+    "element_type": "svint16_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svint16_t"
+  },
+  {
+    "name": "svint16x4_t",
+    "element_type": "svint16_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svint16_t"
+  },
+  {
+    "name": "svuint16x2_t",
+    "element_type": "svuint16_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svuint16_t"
+  },
+  {
+    "name": "svuint16x3_t",
+    "element_type": "svuint16_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svuint16_t"
+  },
+  {
+    "name": "svuint16x4_t",
+    "element_type": "svuint16_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svuint16_t"
+  },
+  {
+    "name": "svint32x2_t",
+    "element_type": "svint32_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svint32_t"
+  },
+  {
+    "name": "svint32x3_t",
+    "element_type": "svint32_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svint32_t"
+  },
+  {
+    "name": "svint32x4_t",
+    "element_type": "svint32_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svint32_t"
+  },
+  {
+    "name": "svuint32x2_t",
+    "element_type": "svuint32_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svuint32_t"
+  },
+  {
+    "name": "svuint32x3_t",
+    "element_type": "svuint32_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svuint32_t"
+  },
+  {
+    "name": "svuint32x4_t",
+    "element_type": "svuint32_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svuint32_t"
+  },
+  {
+    "name": "svint64x2_t",
+    "element_type": "svint64_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svint64_t"
+  },
+  {
+    "name": "svint64x3_t",
+    "element_type": "svint64_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svint64_t"
+  },
+  {
+    "name": "svint64x4_t",
+    "element_type": "svint64_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svint64_t"
+  },
+  {
+    "name": "svuint64x2_t",
+    "element_type": "svuint64_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svuint64_t"
+  },
+  {
+    "name": "svuint64x3_t",
+    "element_type": "svuint64_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svuint64_t"
+  },
+  {
+    "name": "svuint64x4_t",
+    "element_type": "svuint64_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svuint64_t"
+  },
+  {
+    "name": "svfloat16x2_t",
+    "element_type": "svfloat16_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svfloat16_t"
+  },
+  {
+    "name": "svfloat16x3_t",
+    "element_type": "svfloat16_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svfloat16_t"
+  },
+  {
+    "name": "svfloat16x4_t",
+    "element_type": "svfloat16_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svfloat16_t"
+  },
+  {
+    "name": "svfloat32x2_t",
+    "element_type": "svfloat32_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svfloat32_t"
+  },
+  {
+    "name": "svfloat32x3_t",
+    "element_type": "svfloat32_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svfloat32_t"
+  },
+  {
+    "name": "svfloat32x4_t",
+    "element_type": "svfloat32_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svfloat32_t"
+  },
+  {
+    "name": "svfloat64x2_t",
+    "element_type": "svfloat64_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svfloat64_t"
+  },
+  {
+    "name": "svfloat64x3_t",
+    "element_type": "svfloat64_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svfloat64_t"
+  },
+  {
+    "name": "svfloat64x4_t",
+    "element_type": "svfloat64_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svfloat64_t"
+  },
+  {
+    "name": "svbfloat16x2_t",
+    "element_type": "svbfloat16_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svbfloat16_t"
+  },
+  {
+    "name": "svbfloat16x3_t",
+    "element_type": "svbfloat16_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svbfloat16_t"
+  },
+  {
+    "name": "svbfloat16x4_t",
+    "element_type": "svbfloat16_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svbfloat16_t"
+  },
+  {
+    "name": "svmfloat8x2_t",
+    "element_type": "svmfloat8_t",
+    "tuple_count": 2,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 2 x svmfloat8_t"
+  },
+  {
+    "name": "svmfloat8x3_t",
+    "element_type": "svmfloat8_t",
+    "tuple_count": 3,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 3 x svmfloat8_t"
+  },
+  {
+    "name": "svmfloat8x4_t",
+    "element_type": "svmfloat8_t",
+    "tuple_count": 4,
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE tuple of 4 x svmfloat8_t"
+  },
+  {
+    "name": "svbool_t",
+    "family": "sve",
+    "sizeless": true,
+    "description": "SVE predicate type (one bit per vector byte)"
+  }
+]

@@ -1,0 +1,496 @@
+[
+  {
+    "id": "intrinsic.sve.svadd_f32_x",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "arithmetic",
+      "predicated-add"
+    ],
+    "display_name": "svadd_f32_x",
+    "intrinsic_names": [
+      "svadd_f32_x"
+    ],
+    "instruction_names": [
+      "ADD",
+      "ADD (vectors, predicated)"
+    ],
+    "prototype": "svfloat32_t svadd_f32_x(svbool_t pg, svfloat32_t op1, svfloat32_t op2)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Use a predicate generated for the same loop slice"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "add",
+    "tail_policy": "Let the predicate mask the inactive tail lanes instead of branching to a second vector body.",
+    "usage_template": "svfloat32_t vc = svadd_f32_x(pg, va, vb);",
+    "correctness_rules": [
+      "Match the element type of both operands and the destination vector.",
+      "Use the same predicate for all operations in a single SVE step."
+    ],
+    "anti_patterns": [
+      "Dropping the predicate argument or reusing a stale predicate.",
+      "Switching from svadd_f32_x back to NEON arithmetic mid-loop."
+    ],
+    "related_items": [
+      "intrinsic.neon.vaddq_f32",
+      "intrinsic.sve.svwhilelt_b32",
+      "intrinsic.sve.svld1_f32"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svmla_f32_x",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "arithmetic",
+      "predicated-fma"
+    ],
+    "display_name": "svmla_f32_x",
+    "intrinsic_names": [
+      "svmla_f32_x"
+    ],
+    "instruction_names": [
+      "FMLA",
+      "MLA"
+    ],
+    "prototype": "svfloat32_t svmla_f32_x(svbool_t pg, svfloat32_t acc, svfloat32_t lhs, svfloat32_t rhs)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "acc, lhs and rhs must all use the same scalable float32 element type"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "fma",
+    "tail_policy": "Predication masks the inactive lanes; keep the scalar cleanup only for the non-SVE fallback path.",
+    "usage_template": "vacc = svmla_f32_x(pg, vacc, vlhs, vrhs);",
+    "correctness_rules": [
+      "Use svmla_f32_x when the scalar logic is an accumulate += lhs * rhs pattern.",
+      "Keep the accumulator vector alive across the depth loop instead of recreating it per scalar op."
+    ],
+    "anti_patterns": [
+      "Using svmla_f32_x for a plain add without multiplication.",
+      "Combining svmla_f32_x with fixed-width loop stepping."
+    ],
+    "related_items": [
+      "intrinsic.neon.vfmaq_f32",
+      "intrinsic.sve.svdup_n_f32",
+      "intrinsic.sve.svwhilelt_b32"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svdup_n_f32",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "broadcast",
+      "dup"
+    ],
+    "display_name": "svdup_n_f32",
+    "intrinsic_names": [
+      "svdup_n_f32"
+    ],
+    "instruction_names": [
+      "DUP"
+    ],
+    "prototype": "svfloat32_t svdup_n_f32(float32_t value)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Broadcast one scalar float32 value across the active SVE vector lanes"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "broadcast",
+    "tail_policy": "No direct tail logic; the surrounding predicate determines which lanes participate.",
+    "usage_template": "svfloat32_t vlhs = svdup_n_f32(lhs[row * k + depth]);",
+    "correctness_rules": [
+      "Use the matching scalar type for the target vector element width.",
+      "Prefer one broadcast per scalar value rather than rebuilding identical vectors repeatedly."
+    ],
+    "anti_patterns": [
+      "Treating svdup_n_f32 like a fixed 4-lane NEON duplicate.",
+      "Using svdup_n_f32 while the loop step is still hard-coded."
+    ],
+    "related_items": [
+      "intrinsic.neon.vdupq_n_f32",
+      "intrinsic.sve.svmla_f32_x"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / List of SVE intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svld1_f32",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "load-store",
+      "predicated-load",
+      "ld1"
+    ],
+    "display_name": "svld1_f32",
+    "intrinsic_names": [
+      "svld1_f32"
+    ],
+    "instruction_names": [
+      "LD1",
+      "LD1W"
+    ],
+    "prototype": "svfloat32_t svld1_f32(svbool_t pg, float32_t const *base)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "pg must come from a matching predicate such as svwhilelt_b32"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "load",
+    "tail_policy": "The predicate naturally suppresses inactive tail lanes; do not add a separate scalar tail for the same iteration.",
+    "usage_template": "svfloat32_t va = svld1_f32(pg, a + i);",
+    "correctness_rules": [
+      "Pass a valid svbool_t predicate as the first argument.",
+      "Use unit-stride contiguous access unless the algorithm explicitly supports another addressing mode."
+    ],
+    "anti_patterns": [
+      "Calling svld1_f32 without a predicate value.",
+      "Using svld1_f32 together with a fixed i += 4 increment."
+    ],
+    "related_items": [
+      "intrinsic.sve.svwhilelt_b32",
+      "intrinsic.sve.svst1_f32",
+      "rule.sve.predicated-load-store",
+      "rule.sve.header-required"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svst1_f32",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "load-store",
+      "predicated-store",
+      "st1"
+    ],
+    "display_name": "svst1_f32",
+    "intrinsic_names": [
+      "svst1_f32"
+    ],
+    "instruction_names": [
+      "ST1",
+      "ST1W"
+    ],
+    "prototype": "void svst1_f32(svbool_t pg, float32_t *base, svfloat32_t data)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Use the same predicate and vector shape as the corresponding SVE load and compute step"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "store",
+    "tail_policy": "Predication handles the partial last step; keep the scalar fallback only for non-SVE paths.",
+    "usage_template": "svst1_f32(pg, out + i, vc);",
+    "correctness_rules": [
+      "Keep the store predicate aligned with the compute predicate.",
+      "Write back only to contiguous, alias-safe output memory."
+    ],
+    "anti_patterns": [
+      "Using an unpredicated store in a scalable-width loop.",
+      "Mixing svst1_f32 with NEON stores in the same loop body."
+    ],
+    "related_items": [
+      "intrinsic.sve.svld1_f32",
+      "intrinsic.sve.svwhilelt_b32",
+      "rule.cross-isa.no-mixed-templates"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svcntw",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "predicate-and-vl",
+      "vector-length"
+    ],
+    "display_name": "svcntw",
+    "intrinsic_names": [
+      "svcntw"
+    ],
+    "instruction_names": [
+      "CNTW"
+    ],
+    "prototype": "uint64_t svcntw(void)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Returns the current vector length measured in 32-bit elements"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "vector-length",
+    "tail_policy": "Drive the loop step with svcntw() instead of a hard-coded lane count.",
+    "usage_template": "const int vl = (int)svcntw();",
+    "correctness_rules": [
+      "Use svcntw() or the matching svcnt*() form to keep the loop vector-length agnostic.",
+      "Do not assume the returned value is constant across all machines."
+    ],
+    "anti_patterns": [
+      "Hard-coding i += 4 in an SVE loop.",
+      "Casting away the scalable-width intent by treating svcntw() like a compile-time constant."
+    ],
+    "related_items": [
+      "intrinsic.sve.svwhilelt_b32",
+      "rule.sve.length-agnostic"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / List of SVE intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svwhilelt_b32",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "predicate-and-vl",
+      "whilelt"
+    ],
+    "display_name": "svwhilelt_b32",
+    "intrinsic_names": [
+      "svwhilelt_b32"
+    ],
+    "instruction_names": [
+      "WHILELT"
+    ],
+    "prototype": "svbool_t svwhilelt_b32(uint64_t op1, uint64_t op2)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "op1 is the current scalar index and op2 is the loop upper bound"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "predicate",
+    "tail_policy": "The predicate masks both the full vectors and the final partial iteration.",
+    "usage_template": "svbool_t pg = svwhilelt_b32((uint64_t)i, (uint64_t)n);",
+    "correctness_rules": [
+      "Build a fresh predicate from the current scalar index and loop bound each iteration.",
+      "Use the same predicate for both loads, arithmetic and stores that belong to that step."
+    ],
+    "anti_patterns": [
+      "Generating pg once outside the loop and reusing it for all iterations.",
+      "Pairing svwhilelt_b32 with a loop that still advances by a fixed NEON lane count."
+    ],
+    "related_items": [
+      "intrinsic.sve.svcntw",
+      "intrinsic.sve.svld1_f32",
+      "intrinsic.sve.svst1_f32",
+      "rule.sve.predicated-load-store"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svaddv_f32",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "reduction",
+      "horizontal-add"
+    ],
+    "display_name": "svaddv_f32",
+    "intrinsic_names": [
+      "svaddv_f32"
+    ],
+    "instruction_names": [
+      "FADDV"
+    ],
+    "prototype": "float32_t svaddv_f32(svbool_t pg, svfloat32_t op)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "pg selects active lanes in the accumulated vector"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "horizontal-reduction",
+    "tail_policy": "Use the loop predicate to keep inactive tail lanes out of the final reduction.",
+    "usage_template": "float acc = svaddv_f32(svptrue_b32(), vacc);",
+    "correctness_rules": [
+      "Use for final reduction of an SVE vector accumulator, not for scan output.",
+      "Document that float32 reduction changes the scalar addition order and may not be bit-exact."
+    ],
+    "anti_patterns": [
+      "Calling svaddv_f32 while the scalar contract requires strict left-to-right floating-point order.",
+      "Treating svaddv_f32 as a replacement for prefix-sum semantics."
+    ],
+    "related_items": [
+      "intrinsic.sve.svadd_f32_x",
+      "intrinsic.sve.svmla_f32_x"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve.svaddv_s32",
+    "kind": "intrinsic",
+    "isa": "sve",
+    "group_path": [
+      "sve",
+      "reduction",
+      "horizontal-add"
+    ],
+    "display_name": "svaddv_s32",
+    "intrinsic_names": [
+      "svaddv_s32"
+    ],
+    "instruction_names": [
+      "SADDV"
+    ],
+    "prototype": "int32_t svaddv_s32(svbool_t pg, svint32_t op)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "pg selects active int32 lanes in the accumulated vector"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "horizontal-reduction",
+    "tail_policy": "Predicate the vector loop and reduce only active lanes.",
+    "usage_template": "int32_t acc = svaddv_s32(svptrue_b32(), vacc);",
+    "correctness_rules": [
+      "Use only when int32 overflow behavior is either irrelevant or explicitly acceptable.",
+      "Do not use for loops that expose the running accumulator on every iteration."
+    ],
+    "anti_patterns": [
+      "Vectorizing an int32 sum when the original semantics require trapping or checked overflow.",
+      "Using svaddv_s32 for histogram, scatter or prefix-scan patterns."
+    ],
+    "related_items": [
+      "intrinsic.sve.svadd_f32_x",
+      "intrinsic.sve.svwhilelt_b32"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sve2.svdot_s32",
+    "kind": "intrinsic",
+    "isa": "sve2",
+    "group_path": [
+      "sve",
+      "sve2",
+      "dot-product"
+    ],
+    "display_name": "svdot_s32",
+    "intrinsic_names": [
+      "svdot_s32"
+    ],
+    "instruction_names": [
+      "SDOT",
+      "SDOT (vectors)"
+    ],
+    "prototype": "svint32_t svdot_s32(svint32_t acc, svint8_t lhs, svint8_t rhs)",
+    "header": "<arm_sve.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE2"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "acc is widened int32 accumulation, lhs/rhs are int8 vectors"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "dot-product",
+    "tail_policy": "Use only in SVE2-aware kernels; partial lanes still rely on the surrounding predicate strategy.",
+    "usage_template": "acc = svdot_s32(acc, lhs_i8, rhs_i8);",
+    "correctness_rules": [
+      "Gate usage on __ARM_FEATURE_SVE2.",
+      "Use a widened int32 accumulator that matches the dot-product semantics."
+    ],
+    "anti_patterns": [
+      "Calling svdot_s32 in plain SVE-only code without an SVE2 feature check.",
+      "Using float32 operands with svdot_s32."
+    ],
+    "related_items": [
+      "intrinsic.sve.svmla_f32_x",
+      "rule.sve.header-required"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  }
+]

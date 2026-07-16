@@ -1,0 +1,687 @@
+[
+  {
+    "id": "rule.neon.explicit-epilogue",
+    "kind": "rule",
+    "isa": "neon",
+    "group_path": [
+      "rules",
+      "neon",
+      "epilogue"
+    ],
+    "display_name": "NEON loops must keep an explicit scalar epilogue",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_NEON"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Applies when a fixed-width NEON main loop advances by a constant lane count"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Require a scalar cleanup loop unless the trip count is proven to be an exact multiple of the NEON width.",
+    "usage_template": "for (; i + 4 <= n; i += 4) { ... } for (; i < n; ++i) { ... }",
+    "correctness_rules": [
+      "A fixed-width NEON loop must show how it handles the remainder elements."
+    ],
+    "anti_patterns": [
+      "Ending the kernel after the NEON loop with no scalar cleanup."
+    ],
+    "related_items": [
+      "intrinsic.neon.vld1q_f32",
+      "intrinsic.neon.vst1q_f32"
+    ],
+    "source": {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "section": "Advanced SIMD (Neon) intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.cross-isa.no-mixed-templates",
+    "kind": "rule",
+    "isa": "sme",
+    "group_path": [
+      "rules",
+      "cross-isa",
+      "template-consistency"
+    ],
+    "display_name": "Do not mix NEON, SVE and SME templates in one kernel body",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_NEON",
+      "__ARM_FEATURE_SVE",
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Applies whenever more than one SIMD ISA family appears in the same snippet"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Use one ISA template per kernel body; move cross-ISA dispatch to a higher layer.",
+    "usage_template": "Dispatch NEON, SVE and SME implementations in separate functions instead of mixing them inline.",
+    "correctness_rules": [
+      "A generated kernel body should follow one SIMD model at a time: fixed-width NEON, scalable SVE or streaming/ZA SME."
+    ],
+    "anti_patterns": [
+      "Calling vld1q_f32 and svld1_f32 in the same loop body.",
+      "Mixing NEON arithmetic with SME ZA ownership attributes inside one generated kernel."
+    ],
+    "related_items": [
+      "intrinsic.neon.vld1q_f32",
+      "intrinsic.sve.svld1_f32",
+      "attribute.sme.__arm_streaming"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "Advanced SIMD intrinsics / SVE introduction / SME keyword attributes",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sme.no-abi-runtime-stubs",
+    "kind": "rule",
+    "isa": "sme",
+    "group_path": [
+      "rules",
+      "sme",
+      "abi-runtime"
+    ],
+    "display_name": "Do not fake SME ABI support routines with weak stubs",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Applies when generated code or link output references SME ABI support routines."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Not applicable.",
+    "usage_template": "nm -u candidate.compare | rg '__arm_tpidr2|__arm_za_disable'",
+    "correctness_rules": [
+      "Generated SME source must not define weak __arm_tpidr2_save, __arm_tpidr2_restore or __arm_za_disable stubs.",
+      "If these symbols remain unresolved after linking, return success=false unless the target runtime is known to provide them."
+    ],
+    "anti_patterns": [
+      "Adding weak stubs to make an executable link while silently disabling the real SME ABI contract."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_new_za",
+      "instruction.sme.inline_asm.smstart_za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME ABI state and SME ZA state assertions",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sme.inline-asm-standalone-za",
+    "kind": "rule",
+    "isa": "sme",
+    "group_path": [
+      "rules",
+      "sme",
+      "inline-asm"
+    ],
+    "display_name": "SME ZA inline asm must be standalone and scan-verifiable",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Applies when generated code uses smstart/smstop, ZERO, FMOPA, MOVA or ZA ST1W inline asm."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Use predicates for partial tile edges; do not hide tail handling behind unmasked stores.",
+    "usage_template": "__arm_streaming + smstart za + zero {za} + fmopa + predicated st1w + smstop za",
+    "correctness_rules": [
+      "Standalone SME ZA inline asm must include explicit ZA state start/stop, fresh zeroing, outer-product accumulation and predicated write-back.",
+      "Compile to assembly and scan for required SME instructions plus absence of __arm_tpidr2_* calls."
+    ],
+    "anti_patterns": [
+      "Returning success for inline asm that was not compiled, linked and scanned.",
+      "Using __arm_new(\"za\") in the standalone inline-asm path before SME ABI runtime support is verified."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.smstart_za",
+      "instruction.sme.inline_asm.fmopa_f32",
+      "instruction.sme.inline_asm.st1w_za0h_s32"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / Controlling the use of streaming mode / SME instruction intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sme.streaming-required",
+    "kind": "rule",
+    "isa": "sme",
+    "group_path": [
+      "rules",
+      "sme",
+      "streaming-mode"
+    ],
+    "display_name": "SME intrinsics must appear in a streaming-capable context",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Applies when ZA or SME instruction intrinsics are present"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Not applicable.",
+    "usage_template": "void kernel(...) __arm_streaming __arm_inout(\"za\");",
+    "correctness_rules": [
+      "ZA and SME instruction intrinsics require a streaming-aware function context."
+    ],
+    "anti_patterns": [
+      "Calling svmopa_* or svadd_write_za* from a plain C function with no streaming attribute."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_streaming",
+      "intrinsic.sme.svmopa_za32_s8_m",
+      "intrinsic.sme2.svadd_write_za32_s32_vg1x2"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "Header files / <arm_sme.h> / SME keyword attributes related to streaming mode",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sme.zero-za-fresh-za",
+    "kind": "rule",
+    "isa": "sme",
+    "group_path": [
+      "rules",
+      "sme",
+      "za-initialization"
+    ],
+    "display_name": "svzero_za() requires fresh-ZA intent or explicit ZA output",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_new(\"za\")",
+      "__arm_out(\"za\")"
+    ],
+    "operand_constraints": [
+      "Applies when svzero_za() is present"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Not applicable.",
+    "usage_template": "void kernel(...) __arm_streaming __arm_new(\"za\"); svzero_za();",
+    "correctness_rules": [
+      "svzero_za() should only appear in a fresh-ZA path or a function that explicitly outputs ZA state."
+    ],
+    "anti_patterns": [
+      "Zeroing ZA in a kernel that should preserve or continue caller-owned accumulation."
+    ],
+    "related_items": [
+      "intrinsic.sme.svzero_za",
+      "attribute.sme.__arm_new_za",
+      "attribute.sme.__arm_out_za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME instruction intrinsics / ZERO",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sme.za-ownership",
+    "kind": "rule",
+    "isa": "sme",
+    "group_path": [
+      "rules",
+      "sme",
+      "za-ownership"
+    ],
+    "display_name": "ZA intrinsics must declare ownership at the function boundary",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_inout(\"za\")",
+      "__arm_new(\"za\")",
+      "__arm_out(\"za\")"
+    ],
+    "operand_constraints": [
+      "Applies when code uses ZA state, tile or slice intrinsics"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Not applicable.",
+    "usage_template": "void kernel(...) __arm_streaming __arm_inout(\"za\");",
+    "correctness_rules": [
+      "At least one ZA ownership attribute must be visible when a function uses ZA state."
+    ],
+    "anti_patterns": [
+      "Calling ZA intrinsics while omitting all of __arm_inout(\"za\"), __arm_new(\"za\") and __arm_out(\"za\")."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_inout_za",
+      "attribute.sme.__arm_new_za",
+      "attribute.sme.__arm_out_za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME ZA state assertions",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "attribute.sme.__arm_streaming",
+    "kind": "attribute",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "attributes",
+      "streaming-mode"
+    ],
+    "display_name": "__arm_streaming",
+    "intrinsic_names": [
+      "__arm_streaming"
+    ],
+    "instruction_names": [],
+    "prototype": "void kernel(...) __arm_streaming;",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Annotates a function that must execute in SME streaming mode"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "streaming-attribute",
+    "tail_policy": "Not applicable; this attribute constrains the function context, not the loop epilogue.",
+    "usage_template": "void kernel(...) __arm_streaming;",
+    "correctness_rules": [
+      "Use when the function body contains SME-only intrinsics that require streaming mode.",
+      "Do not add __arm_streaming to code that only needs plain NEON or plain SVE semantics."
+    ],
+    "anti_patterns": [
+      "Calling ZA or SME tile intrinsics without a streaming-capable function context.",
+      "Treating __arm_streaming as a stylistic annotation instead of an ABI contract."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_streaming_compatible",
+      "attribute.sme.__arm_inout_za",
+      "rule.sme.streaming-required"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME keyword attributes related to streaming mode",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "attribute.sme.__arm_streaming_compatible",
+    "kind": "attribute",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "attributes",
+      "streaming-mode"
+    ],
+    "display_name": "__arm_streaming_compatible",
+    "intrinsic_names": [
+      "__arm_streaming_compatible"
+    ],
+    "instruction_names": [],
+    "prototype": "void helper(...) __arm_streaming_compatible;",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Marks functions that are callable from streaming and non-streaming contexts"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "streaming-attribute",
+    "tail_policy": "Not applicable; this attribute constrains call-compatibility, not loop shape.",
+    "usage_template": "void zero_za_wrapper(...) __arm_streaming_compatible;",
+    "correctness_rules": [
+      "Use when the function or intrinsic is specified as compatible with streaming and non-streaming callers.",
+      "Prefer the stricter __arm_streaming attribute when the body requires streaming-only instructions."
+    ],
+    "anti_patterns": [
+      "Using __arm_streaming_compatible to hide a missing ZA ownership contract.",
+      "Assuming it automatically implies __arm_inout(\"za\") or __arm_out(\"za\")."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_streaming",
+      "intrinsic.sme.svzero_za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME keyword attributes related to streaming mode",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "attribute.sme.__arm_inout_za",
+    "kind": "attribute",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "attributes",
+      "za-ownership"
+    ],
+    "display_name": "__arm_inout(\"za\")",
+    "intrinsic_names": [
+      "__arm_inout(\"za\")"
+    ],
+    "instruction_names": [],
+    "prototype": "void kernel(...) __arm_inout(\"za\");",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Declares that the callee both consumes and preserves ZA state across the call"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "za-ownership",
+    "tail_policy": "Not applicable; this is a ZA state contract.",
+    "usage_template": "void kernel(...) __arm_streaming __arm_inout(\"za\");",
+    "correctness_rules": [
+      "Use when the function receives an existing ZA state and updates it in place.",
+      "Keep the caller and callee signatures consistent with the same ZA ownership semantics."
+    ],
+    "anti_patterns": [
+      "Adding __arm_inout(\"za\") without any ZA state flowing across the call boundary.",
+      "Using ZA intrinsics while omitting all ZA ownership attributes."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_new_za",
+      "attribute.sme.__arm_out_za",
+      "rule.sme.za-ownership"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME ZA state assertions",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "attribute.sme.__arm_new_za",
+    "kind": "attribute",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "attributes",
+      "za-ownership"
+    ],
+    "display_name": "__arm_new(\"za\")",
+    "intrinsic_names": [
+      "__arm_new(\"za\")"
+    ],
+    "instruction_names": [],
+    "prototype": "void kernel(...) __arm_new(\"za\");",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Declares that the function creates a fresh ZA state"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "za-ownership",
+    "tail_policy": "Not applicable; this is a ZA state lifecycle contract.",
+    "usage_template": "void kernel(...) __arm_streaming __arm_new(\"za\");",
+    "correctness_rules": [
+      "Use when the current function is responsible for creating a new ZA state.",
+      "Pair with explicit ZA initialization when the tile state must start from zero."
+    ],
+    "anti_patterns": [
+      "Using __arm_new(\"za\") when the function actually consumes an incoming ZA tile state.",
+      "Calling svzero_za() without documenting fresh-ZA semantics."
+    ],
+    "related_items": [
+      "intrinsic.sme.svzero_za",
+      "attribute.sme.__arm_out_za",
+      "rule.sme.zero-za-fresh-za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME ZA state assertions",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "attribute.sme.__arm_out_za",
+    "kind": "attribute",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "attributes",
+      "za-ownership"
+    ],
+    "display_name": "__arm_out(\"za\")",
+    "intrinsic_names": [
+      "__arm_out(\"za\")"
+    ],
+    "instruction_names": [],
+    "prototype": "void kernel(...) __arm_out(\"za\");",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Declares that the function produces a ZA state for later consumption"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "za-ownership",
+    "tail_policy": "Not applicable; this is a call-boundary contract for ZA state.",
+    "usage_template": "void kernel(...) __arm_streaming __arm_out(\"za\");",
+    "correctness_rules": [
+      "Use when the function writes a new ZA result that the caller continues to use.",
+      "Document the write-back boundary clearly when ZA leaves the current function."
+    ],
+    "anti_patterns": [
+      "Using __arm_out(\"za\") for a function that never exposes ZA state to its caller.",
+      "Combining __arm_out(\"za\") with a scalar-only body."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_inout_za",
+      "attribute.sme.__arm_new_za",
+      "intrinsic.sme.svzero_za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME ZA state assertions",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sve.header-required",
+    "kind": "rule",
+    "isa": "sve",
+    "group_path": [
+      "rules",
+      "sve",
+      "headers"
+    ],
+    "display_name": "SVE and SME intrinsics must include the matching header",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE",
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Applies when code uses sv* or SME-specific __arm_* constructs"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Not applicable.",
+    "usage_template": "#include <arm_sve.h>  // or <arm_sme.h> when SME/ZA intrinsics are used",
+    "correctness_rules": [
+      "sv* intrinsics require <arm_sve.h>; SME/ZA intrinsics and attributes require <arm_sme.h>."
+    ],
+    "anti_patterns": [
+      "Using svld1_f32 or svzero_za() with no Arm SVE or SME header include."
+    ],
+    "related_items": [
+      "intrinsic.sve.svld1_f32",
+      "intrinsic.sme.svzero_za",
+      "attribute.sme.__arm_streaming"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "Header files / <arm_sve.h> / <arm_sme.h>",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sve.predicated-load-store",
+    "kind": "rule",
+    "isa": "sve",
+    "group_path": [
+      "rules",
+      "sve",
+      "predication"
+    ],
+    "display_name": "SVE loads and stores must show predicate coverage",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Applies to predicated SVE memory access paths"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "The same predicate must guard the active lanes of the current step.",
+    "usage_template": "svbool_t pg = svwhilelt_b32(...); svld1_f32(pg, ...); svst1_f32(pg, ...);",
+    "correctness_rules": [
+      "Predicated loads and stores must use a live predicate argument, typically from svwhilelt_*."
+    ],
+    "anti_patterns": [
+      "Using svld1_* or svst1_* with no visible predicate generation."
+    ],
+    "related_items": [
+      "intrinsic.sve.svwhilelt_b32",
+      "intrinsic.sve.svld1_f32",
+      "intrinsic.sve.svst1_f32"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / Mapping of SVE instructions to intrinsics",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "rule.sve.length-agnostic",
+    "kind": "rule",
+    "isa": "sve",
+    "group_path": [
+      "rules",
+      "sve",
+      "vector-length"
+    ],
+    "display_name": "SVE loops must be vector-length agnostic",
+    "intrinsic_names": [],
+    "instruction_names": [],
+    "prototype": "",
+    "header": "",
+    "feature_macros": [
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [],
+    "operand_constraints": [
+      "Applies when SVE intrinsics or SVE predicates are used"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "rule",
+    "tail_policy": "Use svcnt*() and predicate-based masking instead of hard-coded lane counts.",
+    "usage_template": "for (int i = 0; i < n; i += svcntw()) { ... }",
+    "correctness_rules": [
+      "The loop step must come from svcnt*() or an equivalent scalable-width construct."
+    ],
+    "anti_patterns": [
+      "Using i += 4 or another fixed lane count in an SVE loop."
+    ],
+    "related_items": [
+      "intrinsic.sve.svcntw",
+      "intrinsic.sve.svwhilelt_b32"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SVE language extensions and intrinsics / SVE introduction",
+      "retrieved_at": "2026-05-12"
+    }
+  }
+]
