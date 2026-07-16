@@ -1,0 +1,1103 @@
+===== dmidecode-memory =====
+time: 2026-06-26 10:14:07
+# dmidecode 3.4
+Getting SMBIOS data from sysfs.
+SMBIOS 3.3.0 present.
+
+Handle 0x0006, DMI type 16, 23 bytes
+Physical Memory Array
+	Location: System Board Or Motherboard
+	Use: System Memory
+	Error Correction Type: Multi-bit ECC
+	Maximum Capacity: 8 TB
+	Error Information Handle: Not Provided
+	Number Of Devices: 32
+
+Handle 0x0008, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM000 J27
+	Bank Locator: SOCKET 0 CHANNEL 0 DIMM 0
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0009, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM001 J28
+	Bank Locator: SOCKET 0 CHANNEL 0 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x000A, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM010 J21
+	Bank Locator: SOCKET 0 CHANNEL 1 DIMM 0
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x000B, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM011 J22
+	Bank Locator: SOCKET 0 CHANNEL 1 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x000C, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM020 J19
+	Bank Locator: SOCKET 0 CHANNEL 2 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F9947E
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x000D, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM021 J20
+	Bank Locator: SOCKET 0 CHANNEL 2 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x000E, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM030 J13
+	Bank Locator: SOCKET 0 CHANNEL 3 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F8A59C
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x000F, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM031 J14
+	Bank Locator: SOCKET 0 CHANNEL 3 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0010, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM040 J25
+	Bank Locator: SOCKET 0 CHANNEL 4 DIMM 0
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0011, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM041 J26
+	Bank Locator: SOCKET 0 CHANNEL 4 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0012, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM050 J23
+	Bank Locator: SOCKET 0 CHANNEL 5 DIMM 0
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0013, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM051 J24
+	Bank Locator: SOCKET 0 CHANNEL 5 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0014, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM060 J17
+	Bank Locator: SOCKET 0 CHANNEL 6 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F9941D
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0015, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM061 J18
+	Bank Locator: SOCKET 0 CHANNEL 6 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0016, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM070 J15
+	Bank Locator: SOCKET 0 CHANNEL 7 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F3580C
+	Asset Tag: 1917 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0017, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM071 J16
+	Bank Locator: SOCKET 0 CHANNEL 7 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0018, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM100 J43
+	Bank Locator: SOCKET 1 CHANNEL 0 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F8A553
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0019, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM101 J44
+	Bank Locator: SOCKET 1 CHANNEL 0 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x001A, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM110 J37
+	Bank Locator: SOCKET 1 CHANNEL 1 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F962FF
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x001B, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM111 J38
+	Bank Locator: SOCKET 1 CHANNEL 1 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x001C, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM120 J35
+	Bank Locator: SOCKET 1 CHANNEL 2 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F894E6
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x001D, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM121 J36
+	Bank Locator: SOCKET 1 CHANNEL 2 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x001E, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM130 J29
+	Bank Locator: SOCKET 1 CHANNEL 3 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F894FC
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x001F, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM131 J30
+	Bank Locator: SOCKET 1 CHANNEL 3 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0020, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM140 J41
+	Bank Locator: SOCKET 1 CHANNEL 4 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F894FB
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0021, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM141 J42
+	Bank Locator: SOCKET 1 CHANNEL 4 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0022, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM150 J39
+	Bank Locator: SOCKET 1 CHANNEL 5 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F8A45F
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0023, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM151 J40
+	Bank Locator: SOCKET 1 CHANNEL 5 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0024, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM160 J33
+	Bank Locator: SOCKET 1 CHANNEL 6 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F97D6E
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0025, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM161 J34
+	Bank Locator: SOCKET 1 CHANNEL 6 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+Handle 0x0026, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 32 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM170 J31
+	Bank Locator: SOCKET 1 CHANNEL 7 DIMM 0
+	Type: DDR4
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 2933 MT/s
+	Manufacturer: Samsung
+	Serial Number: 31F894E2
+	Asset Tag: 1918 
+	Part Number: M393A4K40CB2-CVF    
+	Rank: 2
+	Configured Memory Speed: 2933 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: <OUT OF SPEC>
+	Memory Operating Mode Capability: None
+	Firmware Version: Not Specified
+	Module Manufacturer ID: Unknown
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: None
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x0027, DMI type 17, 92 bytes
+Memory Device
+	Array Handle: 0x0006
+	Error Information Handle: Not Provided
+	Total Width: Unknown
+	Data Width: Unknown
+	Size: No Module Installed
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM171 J32
+	Bank Locator: SOCKET 1 CHANNEL 7 DIMM 1
+	Type: Unknown
+	Type Detail: Unknown Synchronous
+
+
+===== lshw-memory =====
+time: 2026-06-26 10:14:07
+  *-firmware
+       description: BIOS
+       vendor: Huawei Corp.
+       physical id: 1
+       version: 4.03_DVM
+       date: 04/03/2023
+       size: 644KiB
+       capacity: 6MiB
+       capabilities: pci upgrade shadowing cdboot bootselect edd int13floppynec int13floppytoshiba int13floppy360 int13floppy1200 int13floppy720 int13floppy2880 int9keyboard int10video acpi usb biosbootspecification uefi
+  *-memory
+       description: System Memory
+       physical id: 6
+       slot: System board or motherboard
+       size: 384GiB
+       capacity: 8TiB
+       capabilities: ecc
+       configuration: errordetection=multi-bit-ecc
+     *-bank:0
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 0
+          serial: NO DIMM
+          slot: DIMM000 J27
+     *-bank:1
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 1
+          serial: NO DIMM
+          slot: DIMM001 J28
+     *-bank:2
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 2
+          serial: NO DIMM
+          slot: DIMM010 J21
+     *-bank:3
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 3
+          serial: NO DIMM
+          slot: DIMM011 J22
+     *-bank:4
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 4
+          serial: 31F9947E
+          slot: DIMM020 J19
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:5
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 5
+          serial: NO DIMM
+          slot: DIMM021 J20
+     *-bank:6
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 6
+          serial: 31F8A59C
+          slot: DIMM030 J13
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:7
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 7
+          serial: NO DIMM
+          slot: DIMM031 J14
+     *-bank:8
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 8
+          serial: NO DIMM
+          slot: DIMM040 J25
+     *-bank:9
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 9
+          serial: NO DIMM
+          slot: DIMM041 J26
+     *-bank:10
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: a
+          serial: NO DIMM
+          slot: DIMM050 J23
+     *-bank:11
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: b
+          serial: NO DIMM
+          slot: DIMM051 J24
+     *-bank:12
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: c
+          serial: 31F9941D
+          slot: DIMM060 J17
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:13
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: d
+          serial: NO DIMM
+          slot: DIMM061 J18
+     *-bank:14
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: e
+          serial: 31F3580C
+          slot: DIMM070 J15
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:15
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: f
+          serial: NO DIMM
+          slot: DIMM071 J16
+     *-bank:16
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 10
+          serial: 31F8A553
+          slot: DIMM100 J43
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:17
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 11
+          serial: NO DIMM
+          slot: DIMM101 J44
+     *-bank:18
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 12
+          serial: 31F962FF
+          slot: DIMM110 J37
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:19
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 13
+          serial: NO DIMM
+          slot: DIMM111 J38
+     *-bank:20
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 14
+          serial: 31F894E6
+          slot: DIMM120 J35
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:21
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 15
+          serial: NO DIMM
+          slot: DIMM121 J36
+     *-bank:22
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 16
+          serial: 31F894FC
+          slot: DIMM130 J29
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:23
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 17
+          serial: NO DIMM
+          slot: DIMM131 J30
+     *-bank:24
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 18
+          serial: 31F894FB
+          slot: DIMM140 J41
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:25
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 19
+          serial: NO DIMM
+          slot: DIMM141 J42
+     *-bank:26
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 1a
+          serial: 31F8A45F
+          slot: DIMM150 J39
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:27
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 1b
+          serial: NO DIMM
+          slot: DIMM151 J40
+     *-bank:28
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 1c
+          serial: 31F97D6E
+          slot: DIMM160 J33
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:29
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 1d
+          serial: NO DIMM
+          slot: DIMM161 J34
+     *-bank:30
+          description: DIMM DDR4 Synchronous Registered (Buffered) 2933 MHz (0.3 ns)
+          product: M393A4K40CB2-CVF
+          vendor: Samsung
+          physical id: 1e
+          serial: 31F894E2
+          slot: DIMM170 J31
+          size: 32GiB
+          width: 64 bits
+          clock: 2933MHz (0.3ns)
+     *-bank:31
+          description: DIMM Synchronous [empty]
+          product: NO DIMM
+          vendor: NO DIMM
+          physical id: 1f
+          serial: NO DIMM
+          slot: DIMM171 J32
+  *-cache:0
+       description: L1 cache
+       physical id: 28
+       slot: L1 Cache
+       size: 8MiB
+       capacity: 8MiB
+       capabilities: synchronous internal write-back instruction
+       configuration: level=1
+  *-cache:1
+       description: L2 cache
+       physical id: 29
+       slot: L2 Cache
+       size: 32MiB
+       capacity: 32MiB
+       capabilities: synchronous internal varies unified
+       configuration: level=2
+  *-cache:2
+       description: L3 cache
+       physical id: 2a
+       slot: L3 Cache
+       size: 64MiB
+       capacity: 64MiB
+       capabilities: synchronous internal varies unified
+       configuration: level=3
+  *-cache:3
+       description: L1 cache
+       physical id: 2c
+       slot: L1 Cache
+       size: 8MiB
+       capacity: 8MiB
+       capabilities: synchronous internal write-back instruction
+       configuration: level=1
+  *-cache:4
+       description: L2 cache
+       physical id: 2d
+       slot: L2 Cache
+       size: 32MiB
+       capacity: 32MiB
+       capabilities: synchronous internal varies unified
+       configuration: level=2
+  *-cache:5
+       description: L3 cache
+       physical id: 2e
+       slot: L3 Cache
+       size: 64MiB
+       capacity: 64MiB
+       capabilities: synchronous internal varies unified
+       configuration: level=3
+
+===== free-human =====
+time: 2026-06-26 10:14:09
+               total        used        free      shared  buff/cache   available
+Mem:           376Gi        12Gi       364Gi       4.1Gi       5.7Gi       363Gi
+Swap:          4.0Gi       353Mi       3.7Gi
+
+===== proc-meminfo =====
+time: 2026-06-26 10:14:09
+MemTotal:       394643384 kB
+MemFree:        381792152 kB
+MemAvailable:   381330024 kB
+Buffers:           83444 kB
+Cached:          4985284 kB
+SwapCached:        31440 kB
+Active:           827748 kB
+Inactive:        8811944 kB
+Active(anon):     353360 kB
+Inactive(anon):  8541588 kB
+Active(file):     474388 kB
+Inactive(file):   270356 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:       4194300 kB
+SwapFree:        3832596 kB
+Dirty:                88 kB
+Writeback:             0 kB
+AnonPages:       4540004 kB
+Mapped:           339168 kB
+Shmem:           4323936 kB
+KReclaimable:     933412 kB
+Slab:            1686484 kB
+SReclaimable:     933412 kB
+SUnreclaim:       753072 kB
+KernelStack:       26576 kB
+PageTables:        19408 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:    201515992 kB
+Committed_AS:   34802560 kB
+VmallocTotal:   135290159040 kB
+VmallocUsed:      334900 kB
+VmallocChunk:          0 kB
+Percpu:           195072 kB
+HardwareCorrupted:     0 kB
+AnonHugePages:    135168 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+CmaTotal:              0 kB
+CmaFree:               0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+

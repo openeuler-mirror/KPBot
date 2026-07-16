@@ -1,0 +1,1409 @@
+===== lspci-network =====
+time: 2026-06-26 10:14:09
+05:00.0 Signal processing controller [1180]: Huawei Technologies Co., Ltd. iBMA Virtual Network Adapter [19e5:1710] (rev 01)
+7d:00.0 Ethernet controller [0200]: Huawei Technologies Co., Ltd. HNS GE/10GE/25GE RDMA Network Controller [19e5:a222] (rev 21)
+7d:00.1 Ethernet controller [0200]: Huawei Technologies Co., Ltd. HNS GE/10GE/25GE Network Controller [19e5:a221] (rev 21)
+7d:00.2 Ethernet controller [0200]: Huawei Technologies Co., Ltd. HNS GE/10GE/25GE RDMA Network Controller [19e5:a222] (rev 21)
+7d:00.3 Ethernet controller [0200]: Huawei Technologies Co., Ltd. HNS GE/10GE/25GE Network Controller [19e5:a221] (rev 21)
+85:00.0 Ethernet controller [0200]: Huawei Technologies Co., Ltd. Hi1822 Family (4*25GE) [19e5:1822] (rev 45)
+86:00.0 Ethernet controller [0200]: Huawei Technologies Co., Ltd. Hi1822 Family (4*25GE) [19e5:1822] (rev 45)
+87:00.0 Ethernet controller [0200]: Huawei Technologies Co., Ltd. Hi1822 Family (4*25GE) [19e5:1822] (rev 45)
+88:00.0 Ethernet controller [0200]: Huawei Technologies Co., Ltd. Hi1822 Family (4*25GE) [19e5:1822] (rev 45)
+
+===== ip-link-brief =====
+time: 2026-06-26 10:14:09
+lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
+enp125s0f0       DOWN           f8:2e:3f:37:35:ed <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enp125s0f1       DOWN           f8:2e:3f:37:35:ee <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enp125s0f2       DOWN           f8:2e:3f:37:35:ef <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enp125s0f3       DOWN           f8:2e:3f:37:35:f0 <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enp133s0         UP             c8:a7:76:e9:e7:5e <BROADCAST,MULTICAST,UP,LOWER_UP> 
+enp134s0         UP             c8:a7:76:e9:e7:5f <BROADCAST,MULTICAST,UP,LOWER_UP> 
+enp135s0         DOWN           c8:a7:76:e9:e7:60 <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enp136s0         DOWN           c8:a7:76:e9:e7:61 <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+docker0          DOWN           02:42:93:02:8e:83 <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+
+===== ip-address-brief =====
+time: 2026-06-26 10:14:09
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+enp125s0f0       DOWN           
+enp125s0f1       DOWN           
+enp125s0f2       DOWN           
+enp125s0f3       DOWN           
+enp133s0         UP             192.168.90.170/24 fe80::97c:4078:1b57:b1ad/64 
+enp134s0         UP             10.1.90.170/24 fe80::49b0:854e:522f:f1ce/64 
+enp135s0         DOWN           
+enp136s0         DOWN           
+docker0          DOWN           172.17.0.1/16 fe80::42:93ff:fe02:8e83/64 
+
+===== ifconfig-all =====
+time: 2026-06-26 10:14:09
+docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        inet 172.17.0.1  netmask 255.255.0.0  broadcast 172.17.255.255
+        inet6 fe80::42:93ff:fe02:8e83  prefixlen 64  scopeid 0x20<link>
+        ether 02:42:93:02:8e:83  txqueuelen 0  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 6  bytes 568 (568.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp125s0f0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether f8:2e:3f:37:35:ed  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp125s0f1: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether f8:2e:3f:37:35:ee  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp125s0f2: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether f8:2e:3f:37:35:ef  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp125s0f3: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether f8:2e:3f:37:35:f0  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp133s0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.90.170  netmask 255.255.255.0  broadcast 192.168.90.255
+        inet6 fe80::97c:4078:1b57:b1ad  prefixlen 64  scopeid 0x20<link>
+        ether c8:a7:76:e9:e7:5e  txqueuelen 1000  (Ethernet)
+        RX packets 2921954194  bytes 373392200738 (347.7 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 2147499070  bytes 5503707479701 (5.0 TiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp134s0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 10.1.90.170  netmask 255.255.255.0  broadcast 10.1.90.255
+        inet6 fe80::49b0:854e:522f:f1ce  prefixlen 64  scopeid 0x20<link>
+        ether c8:a7:76:e9:e7:5f  txqueuelen 1000  (Ethernet)
+        RX packets 3  bytes 180 (180.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 1864  bytes 115772 (113.0 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp135s0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether c8:a7:76:e9:e7:60  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+enp136s0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether c8:a7:76:e9:e7:61  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 896156389  bytes 1184509551679 (1.0 TiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 896156389  bytes 1184509551679 (1.0 TiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+
+===== ethtool-all-interfaces =====
+time: 2026-06-26 10:14:09
+## lo
+Settings for lo:
+	Link detected: yes
+Features for lo:
+rx-checksumming: on [fixed]
+tx-checksumming: on
+	tx-checksum-ipv4: off [fixed]
+	tx-checksum-ip-generic: on [fixed]
+	tx-checksum-ipv6: off [fixed]
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on [fixed]
+scatter-gather: on
+	tx-scatter-gather: on [fixed]
+	tx-scatter-gather-fraglist: on [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: on
+	tx-tcp-mangleid-segmentation: on
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: off [fixed]
+tx-vlan-offload: off [fixed]
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on [fixed]
+rx-vlan-filter: off [fixed]
+vlan-challenged: on [fixed]
+tx-lockless: on [fixed]
+netns-local: on [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: off [fixed]
+tx-gre-csum-segmentation: off [fixed]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: off [fixed]
+tx-udp_tnl-csum-segmentation: off [fixed]
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: on
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off [fixed]
+loopback: on [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+## enp125s0f0
+Settings for enp125s0f0:
+	Supported ports: [ TP ]
+	Supported link modes:   10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: on
+	master-slave cfg: preferred slave
+	master-slave status: unknown
+	Port: Twisted Pair
+	PHYAD: 1
+	Transceiver: external
+	MDI-X: Unknown
+	Supports Wake-on: d
+	Wake-on: d
+        Current message level: 0x00000036 (54)
+                               probe link ifdown ifup
+	Link detected: no
+driver: hns3
+version: 5.10.0-153.56.0.134.oe2203sp2.a
+firmware-version: 1.10.0.6
+expansion-rom-version: 
+bus-info: 0000:7d:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: yes
+supports-priv-flags: yes
+Features for enp125s0f0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: on
+receive-hashing: off [fixed]
+highdma: off [fixed]
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: off [requested on]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: off [fixed]
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: on
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp125s0f0:
+Pre-set maximums:
+RX:		32760
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		32760
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		2048
+TX Push:	n/a
+Coalesce parameters for enp125s0f0:
+Adaptive RX: on  TX: on
+stats-block-usecs: n/a
+sample-interval: n/a
+pkt-rate-low: n/a
+pkt-rate-high: n/a
+
+rx-usecs: 20
+rx-frames: 0
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 20
+tx-frames: 0
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: n/a
+rx-frame-low: n/a
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 0
+rx-frame-high: n/a
+tx-usecs-high: 0
+tx-frame-high: n/a
+
+CQE mode RX: off  TX: off
+
+## enp125s0f1
+Settings for enp125s0f1:
+	Supported ports: [ TP ]
+	Supported link modes:   10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: on
+	master-slave cfg: preferred slave
+	master-slave status: unknown
+	Port: Twisted Pair
+	PHYAD: 3
+	Transceiver: external
+	MDI-X: Unknown
+	Supports Wake-on: d
+	Wake-on: d
+        Current message level: 0x00000036 (54)
+                               probe link ifdown ifup
+	Link detected: no
+driver: hns3
+version: 5.10.0-153.56.0.134.oe2203sp2.a
+firmware-version: 1.10.0.6
+expansion-rom-version: 
+bus-info: 0000:7d:00.1
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: yes
+supports-priv-flags: yes
+Features for enp125s0f1:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: on
+receive-hashing: off [fixed]
+highdma: off [fixed]
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: off [requested on]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: off [fixed]
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: on
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp125s0f1:
+Pre-set maximums:
+RX:		32760
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		32760
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		2048
+TX Push:	n/a
+Coalesce parameters for enp125s0f1:
+Adaptive RX: on  TX: on
+stats-block-usecs: n/a
+sample-interval: n/a
+pkt-rate-low: n/a
+pkt-rate-high: n/a
+
+rx-usecs: 20
+rx-frames: 0
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 20
+tx-frames: 0
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: n/a
+rx-frame-low: n/a
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 0
+rx-frame-high: n/a
+tx-usecs-high: 0
+tx-frame-high: n/a
+
+CQE mode RX: off  TX: off
+
+## enp125s0f2
+Settings for enp125s0f2:
+	Supported ports: [ TP ]
+	Supported link modes:   10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: on
+	master-slave cfg: preferred slave
+	master-slave status: unknown
+	Port: Twisted Pair
+	PHYAD: 5
+	Transceiver: external
+	MDI-X: Unknown
+	Supports Wake-on: d
+	Wake-on: d
+        Current message level: 0x00000036 (54)
+                               probe link ifdown ifup
+	Link detected: no
+driver: hns3
+version: 5.10.0-153.56.0.134.oe2203sp2.a
+firmware-version: 1.10.0.6
+expansion-rom-version: 
+bus-info: 0000:7d:00.2
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: yes
+supports-priv-flags: yes
+Features for enp125s0f2:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: on
+receive-hashing: off [fixed]
+highdma: off [fixed]
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: off [requested on]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: off [fixed]
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: on
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp125s0f2:
+Pre-set maximums:
+RX:		32760
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		32760
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		2048
+TX Push:	n/a
+Coalesce parameters for enp125s0f2:
+Adaptive RX: on  TX: on
+stats-block-usecs: n/a
+sample-interval: n/a
+pkt-rate-low: n/a
+pkt-rate-high: n/a
+
+rx-usecs: 20
+rx-frames: 0
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 20
+tx-frames: 0
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: n/a
+rx-frame-low: n/a
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 0
+rx-frame-high: n/a
+tx-usecs-high: 0
+tx-frame-high: n/a
+
+CQE mode RX: off  TX: off
+
+## enp125s0f3
+Settings for enp125s0f3:
+	Supported ports: [ TP ]
+	Supported link modes:   10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: on
+	master-slave cfg: preferred slave
+	master-slave status: unknown
+	Port: Twisted Pair
+	PHYAD: 7
+	Transceiver: external
+	MDI-X: Unknown
+	Supports Wake-on: d
+	Wake-on: d
+        Current message level: 0x00000036 (54)
+                               probe link ifdown ifup
+	Link detected: no
+driver: hns3
+version: 5.10.0-153.56.0.134.oe2203sp2.a
+firmware-version: 1.10.0.6
+expansion-rom-version: 
+bus-info: 0000:7d:00.3
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: yes
+supports-priv-flags: yes
+Features for enp125s0f3:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: on
+receive-hashing: off [fixed]
+highdma: off [fixed]
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: off [requested on]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: off [fixed]
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: on
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp125s0f3:
+Pre-set maximums:
+RX:		32760
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		32760
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		2048
+TX Push:	n/a
+Coalesce parameters for enp125s0f3:
+Adaptive RX: on  TX: on
+stats-block-usecs: n/a
+sample-interval: n/a
+pkt-rate-low: n/a
+pkt-rate-high: n/a
+
+rx-usecs: 20
+rx-frames: 0
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 20
+tx-frames: 0
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: n/a
+rx-frame-low: n/a
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 0
+rx-frame-high: n/a
+tx-usecs-high: 0
+tx-frame-high: n/a
+
+CQE mode RX: off  TX: off
+
+## enp133s0
+Settings for enp133s0:
+	Supported ports: [ FIBRE ]
+	Supported link modes:   10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        100000baseLR_ER_FR/Full
+	                        200000baseDR2/Full
+	Supported pause frame use: Symmetric
+	Supports auto-negotiation: No
+	Supported FEC modes: LLRS
+	Advertised link modes:  10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        100000baseLR_ER_FR/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: No
+	Advertised FEC modes: LLRS
+	Speed: 10000Mb/s
+	Duplex: Full
+	Auto-negotiation: off
+	Port: FIBRE
+	PHYAD: 0
+	Transceiver: internal
+        Current message level: 0x00000045 (69)
+                               drv link rx_err
+	Link detected: yes
+driver: hinic
+version: 2.3.2.17
+firmware-version: 2.3.2.4
+expansion-rom-version: 
+bus-info: 0000:85:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: no
+Features for enp133s0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: off [fixed]
+tx-gre-csum-segmentation: off [fixed]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp133s0:
+Pre-set maximums:
+RX:		4096
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		4096
+Current hardware settings:
+RX:		4096
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		4096
+RX Buf Len:		n/a
+TX Push:	n/a
+Coalesce parameters for enp133s0:
+Adaptive RX: on  TX: n/a
+stats-block-usecs: n/a
+sample-interval: 0
+pkt-rate-low: 400000
+pkt-rate-high: 1000000
+
+rx-usecs: 0
+rx-frames: 16
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 0
+tx-frames: 16
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: 180
+rx-frame-low: 16
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 2025
+rx-frame-high: 400
+tx-usecs-high: n/a
+tx-frame-high: n/a
+
+CQE mode RX: n/a  TX: n/a
+
+## enp134s0
+Settings for enp134s0:
+	Supported ports: [ FIBRE ]
+	Supported link modes:   10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        100000baseLR_ER_FR/Full
+	                        200000baseDR2/Full
+	Supported pause frame use: Symmetric
+	Supports auto-negotiation: No
+	Supported FEC modes: LLRS
+	Advertised link modes:  10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        100000baseLR_ER_FR/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: No
+	Advertised FEC modes: LLRS
+	Speed: 25000Mb/s
+	Duplex: Full
+	Auto-negotiation: off
+	Port: FIBRE
+	PHYAD: 0
+	Transceiver: internal
+        Current message level: 0x00000045 (69)
+                               drv link rx_err
+	Link detected: yes
+driver: hinic
+version: 2.3.2.17
+firmware-version: 2.3.2.4
+expansion-rom-version: 
+bus-info: 0000:86:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: no
+Features for enp134s0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: off [fixed]
+tx-gre-csum-segmentation: off [fixed]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp134s0:
+Pre-set maximums:
+RX:		4096
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		4096
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		n/a
+TX Push:	n/a
+Coalesce parameters for enp134s0:
+Adaptive RX: on  TX: n/a
+stats-block-usecs: n/a
+sample-interval: 0
+pkt-rate-low: 400000
+pkt-rate-high: 1000000
+
+rx-usecs: 288
+rx-frames: 16
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 288
+tx-frames: 16
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: 180
+rx-frame-low: 16
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 2025
+rx-frame-high: 400
+tx-usecs-high: n/a
+tx-frame-high: n/a
+
+CQE mode RX: n/a  TX: n/a
+
+## enp135s0
+Settings for enp135s0:
+	Supported ports: [  ]
+	Supported link modes:   10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        400000baseSR8/Full
+	                        100000baseLR_ER_FR/Full
+	                        200000baseDR2/Full
+	Supported pause frame use: Symmetric
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        400000baseSR8/Full
+	                        100000baseLR_ER_FR/Full
+	                        200000baseDR2/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: on
+	Port: Other
+	PHYAD: 0
+	Transceiver: internal
+        Current message level: 0x00000045 (69)
+                               drv link rx_err
+	Link detected: no
+driver: hinic
+version: 2.3.2.17
+firmware-version: 2.3.2.4
+expansion-rom-version: 
+bus-info: 0000:87:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: no
+Features for enp135s0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: off [fixed]
+tx-gre-csum-segmentation: off [fixed]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp135s0:
+Pre-set maximums:
+RX:		4096
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		4096
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		n/a
+TX Push:	n/a
+Coalesce parameters for enp135s0:
+Adaptive RX: on  TX: n/a
+stats-block-usecs: n/a
+sample-interval: 0
+pkt-rate-low: 400000
+pkt-rate-high: 1000000
+
+rx-usecs: 288
+rx-frames: 16
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 288
+tx-frames: 16
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: 180
+rx-frame-low: 16
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 2025
+rx-frame-high: 400
+tx-usecs-high: n/a
+tx-frame-high: n/a
+
+CQE mode RX: n/a  TX: n/a
+
+## enp136s0
+Settings for enp136s0:
+	Supported ports: [  ]
+	Supported link modes:   10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        400000baseSR8/Full
+	                        100000baseLR_ER_FR/Full
+	                        200000baseDR2/Full
+	Supported pause frame use: Symmetric
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10000baseKR/Full
+	                        25000baseCR/Full
+	                        25000baseKR/Full
+	                        400000baseSR8/Full
+	                        100000baseLR_ER_FR/Full
+	                        200000baseDR2/Full
+	Advertised pause frame use: Symmetric
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: on
+	Port: Other
+	PHYAD: 0
+	Transceiver: internal
+        Current message level: 0x00000045 (69)
+                               drv link rx_err
+	Link detected: no
+driver: hinic
+version: 2.3.2.17
+firmware-version: 2.3.2.4
+expansion-rom-version: 
+bus-info: 0000:88:00.0
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: no
+Features for enp136s0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: on
+	tx-checksum-ip-generic: off [fixed]
+	tx-checksum-ipv6: on
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: on
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp-mangleid-segmentation: off
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: on [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: off [fixed]
+tx-gre-csum-segmentation: off [fixed]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+Ring parameters for enp136s0:
+Pre-set maximums:
+RX:		4096
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		4096
+Current hardware settings:
+RX:		1024
+RX Mini:	n/a
+RX Jumbo:	n/a
+TX:		1024
+RX Buf Len:		n/a
+TX Push:	n/a
+Coalesce parameters for enp136s0:
+Adaptive RX: on  TX: n/a
+stats-block-usecs: n/a
+sample-interval: 0
+pkt-rate-low: 400000
+pkt-rate-high: 1000000
+
+rx-usecs: 288
+rx-frames: 16
+rx-usecs-irq: n/a
+rx-frames-irq: n/a
+
+tx-usecs: 288
+tx-frames: 16
+tx-usecs-irq: n/a
+tx-frames-irq: n/a
+
+rx-usecs-low: 180
+rx-frame-low: 16
+tx-usecs-low: n/a
+tx-frame-low: n/a
+
+rx-usecs-high: 2025
+rx-frame-high: 400
+tx-usecs-high: n/a
+tx-frame-high: n/a
+
+CQE mode RX: n/a  TX: n/a
+
+## docker0
+Settings for docker0:
+	Supported ports: [  ]
+	Supported link modes:   Not reported
+	Supported pause frame use: No
+	Supports auto-negotiation: No
+	Supported FEC modes: Not reported
+	Advertised link modes:  Not reported
+	Advertised pause frame use: No
+	Advertised auto-negotiation: No
+	Advertised FEC modes: Not reported
+	Speed: Unknown!
+	Duplex: Unknown! (255)
+	Auto-negotiation: off
+	Port: Other
+	PHYAD: 0
+	Transceiver: internal
+	Link detected: no
+driver: bridge
+version: 2.3
+firmware-version: N/A
+expansion-rom-version: 
+bus-info: N/A
+supports-statistics: no
+supports-test: no
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: no
+Features for docker0:
+rx-checksumming: off [fixed]
+tx-checksumming: on
+	tx-checksum-ipv4: off [fixed]
+	tx-checksum-ip-generic: on
+	tx-checksum-ipv6: off [fixed]
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: off [fixed]
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: on
+	tx-tcp-mangleid-segmentation: on
+	tx-tcp6-segmentation: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: off [fixed]
+tx-vlan-offload: on
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: off [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: on [fixed]
+netns-local: on [fixed]
+tx-gso-robust: on
+tx-fcoe-segmentation: on
+tx-gre-segmentation: on
+tx-gre-csum-segmentation: on
+tx-ipxip4-segmentation: on
+tx-ipxip6-segmentation: on
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-gso-partial: on
+tx-tunnel-remcsum-segmentation: on
+tx-sctp-segmentation: on
+tx-esp-segmentation: on
+tx-udp-segmentation: on
+tx-gso-list: on
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off [fixed]
+rx-all: off [fixed]
+tx-vlan-stag-hw-insert: on
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+

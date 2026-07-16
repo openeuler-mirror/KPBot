@@ -1,0 +1,2 @@
+ENV_TYPE=baremetal
+RUNTIME_HINT=none

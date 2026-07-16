@@ -1,0 +1,100 @@
+===== gcc-version =====
+time: 2026-06-26 10:14:21
+gcc (GCC) 12.3.1 (openEuler 12.3.1-99.oe2403sp2)
+Copyright (C) 2022 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+===== g++-version =====
+time: 2026-06-26 10:14:21
+g++ (GCC) 12.3.1 (openEuler 12.3.1-99.oe2403sp2)
+Copyright (C) 2022 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+===== clang-version =====
+time: 2026-06-26 10:14:21
+clang version 17.0.6 ( 17.0.6-45.oe2403sp2)
+Target: aarch64-openEuler-linux-gnu
+Thread model: posix
+InstalledDir: /usr/bin
+
+===== cmake-version =====
+time: 2026-06-26 10:14:21
+cmake version 3.27.9
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+
+===== make-version =====
+time: 2026-06-26 10:14:21
+GNU Make 4.4.1
+Built for aarch64-openEuler-linux-gnu
+Copyright (C) 1988-2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+===== ninja-version =====
+time: 2026-06-26 10:14:21
+1.11.1
+
+===== missing-command:go =====
+time: 2026-06-26 10:14:21
+command not found: go
+
+===== missing-command:rustc =====
+time: 2026-06-26 10:14:21
+command not found: rustc
+
+===== missing-command:cargo =====
+time: 2026-06-26 10:14:21
+command not found: cargo
+
+===== python3-version =====
+time: 2026-06-26 10:14:21
+Python 3.11.6
+
+===== java-version =====
+time: 2026-06-26 10:14:21
+openjdk version "1.8.0_462"
+OpenJDK Runtime Environment BiSheng (build 1.8.0_462-b08)
+OpenJDK 64-Bit Server VM BiSheng (build 25.462-b08, mixed mode)
+
+===== docker-version =====
+time: 2026-06-26 10:14:21
+Docker version 25.0.5, build 5dc9bcc
+
+===== containerd-version =====
+time: 2026-06-26 10:14:21
+containerd github.com/containerd/containerd v1.7.13 7c3aca7a610df76212171d200ca3811ff6096eb8
+
+===== runc-version =====
+time: 2026-06-26 10:14:21
+runc version 1.1.12
+commit: v1.1.12-0-g51d5e94
+spec: 1.0.2-dev
+go: go1.21.8
+libseccomp: 2.5.4
+
+===== podman-version =====
+time: 2026-06-26 10:14:21
+podman version 4.9.4
+
+===== mysql-version =====
+time: 2026-06-26 10:14:22
+mysql  Ver 15.1 Distrib 10.5.29-MariaDB, for Linux (aarch64) using  EditLine wrapper
+
+===== mysqld-version =====
+time: 2026-06-26 10:14:22
+mysqld  Ver 10.5.29-MariaDB for Linux on aarch64 (MariaDB Server)
+
+===== nginx-version =====
+time: 2026-06-26 10:14:22
+nginx version: nginx/1.24.0
+
+===== redis-server-version =====
+time: 2026-06-26 10:14:22
+Redis server v=7.2.11 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=8fe4e08aca13197b
+

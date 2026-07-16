@@ -1,0 +1,132 @@
+===== lsblk-detailed =====
+time: 2026-06-26 10:14:21
+ALIGNMENT ID-LINK                                    ID                                    DISC-ALN DAX DISC-GRAN DISK-SEQ DISC-MAX DISC-ZERO FSAVAIL FSROOTS FSSIZE FSTYPE      FSUSED FSUSE% FSVER    GROUP HCTL       HOTPLUG KNAME   LABEL LOG-SEC MAJ:MIN MIN-IO MODE       MODEL             MQ NAME               OPT-IO OWNER PARTFLAGS PARTLABEL            PARTN PARTTYPE                             PARTTYPENAME     PARTUUID                             PATH                       PHY-SEC PKNAME PTTYPE PTUUID                                 RA RAND    REV RM RO ROTA RQ-SIZE SCHED       SERIAL                SIZE   START STATE   SUBSYSTEMS     MOUNTPOINT      MOUNTPOINTS     TRAN   TYPE UUID                                   VENDOR   WSAME WWN                                       ZONED ZONE-SZ ZONE-WGRAN ZONE-APP ZONE-NR ZONE-OMAX ZONE-AMAX
+        0 wwn-0x54868340461b1180                     0x54868340461b1180                           0   0      512B        1       2G         0                                                           disk  0:0:0:0          0 sda               512   8:0      512 brw-rw---- MD619GXCLDE3TC     1 sda                     0 root                                                                                                                                  /dev/sda                       512        gpt    9135f098-4bb2-48cd-9c2f-f5538a084e76 4096    0 TCV35D  0  0    0      64 mq-deadline A0122061511080004480   59G         running block:scsi:pci                                 sata   disk                                        ATA         0B 0x54868340461b1180                        none       0B         0B       0B       0         0         0
+        0 wwn-0x54868340461b1180-part1               0x54868340461b1180-part1                     0   0      512B        1       2G         0  592.4M /       598.8M vfat          6.4M     1% FAT32    disk                   0 sda1              512   8:1      512 brw-rw----                    1 ├─sda1                  0 root            EFI System Partition     1 c12a7328-f81f-11d2-ba4b-00a0c93ec93b EFI System       11ecbcde-2c12-4e2d-8740-952a0ca3013e /dev/sda1                      512 sda    gpt    9135f098-4bb2-48cd-9c2f-f5538a084e76 4096    0         0  0    0      64 mq-deadline                       600M    2048         block:scsi:pci /boot/efi       /boot/efi              part C1E8-C8D5                                          0B 0x54868340461b1180                        none       0B         0B       0B       0         0         0
+        0 wwn-0x54868340461b1180-part2               0x54868340461b1180-part2                     0   0      512B        1       2G         0  752.5M /       973.4M ext4        153.7M    16% 1.0      disk                   0 sda2              512   8:2      512 brw-rw----                    1 ├─sda2                  0 root                                     2 0fc63daf-8483-4772-8e79-3d69d8477de4 Linux filesystem ecd79643-dadd-43b4-890f-76a447e6b5c2 /dev/sda2                      512 sda    gpt    9135f098-4bb2-48cd-9c2f-f5538a084e76 4096    0         0  0    0      64 mq-deadline                         1G 1230848         block:scsi:pci /boot           /boot                  part c4825d3f-7b51-46b4-9eb9-51d0293bb49d               0B 0x54868340461b1180                        none       0B         0B       0B       0         0         0
+        0 wwn-0x54868340461b1180-part3               0x54868340461b1180-part3                     0   0      512B        1       2G         0                        LVM2_member               LVM2 001 disk                   0 sda3              512   8:3      512 brw-rw----                    1 └─sda3                  0 root                                     3 e6d6d379-f507-44c2-a23c-238f2a3df928 Linux LVM        bb9e899b-eca6-4b03-916d-78320827bfd1 /dev/sda3                      512 sda    gpt    9135f098-4bb2-48cd-9c2f-f5538a084e76 4096    0         0  0    0      64 mq-deadline                      57.4G 3328000         block:scsi:pci                                        part BPMYYB-BfXO-tSPo-L466-qICD-GFK5-QdS96J             0B 0x54868340461b1180                        none       0B         0B       0B       0         0         0
+        0 dm-name-openeuler-root                     name-openeuler-root                          0   0      512B        2       2G         0    2.1G /          35G ext4         31.1G    89% 1.0      disk                   0 dm-0              512 253:0      512 brw-rw----                    1   ├─openeuler-root      0 root                                                                                                                                  /dev/mapper/openeuler-root     512 sda3                                               4096    0         0  0    0                                          35.9G         running block          /               /                      lvm  1b3aed42-f751-493a-b19f-6cb926966500               0B                                           none       0B         0B       0B       0         0         0
+        0 dm-name-openeuler-swap                     name-openeuler-swap                          0   0      512B        3       2G         0                        swap                      1        disk                   0 dm-1              512 253:1      512 brw-rw----                    1   ├─openeuler-swap      0 root                                                                                                                                  /dev/mapper/openeuler-swap     512 sda3                                               4096    0         0  0    0                                             4G         running block                                                 lvm  5345b007-24ab-4ada-8dfd-3bc6c324aa8d               0B                                           none       0B         0B       0B       0         0         0
+        0 dm-name-openeuler-home                     name-openeuler-home                          0   0      512B        4       2G         0    9.1G /        17.1G ext4          7.1G    42% 1.0      disk                   0 dm-2              512 253:2      512 brw-rw----                    1   └─openeuler-home      0 root                                                                                                                                  /dev/mapper/openeuler-home     512 sda3                                               4096    0         0  0    0                                          17.5G         running block          /home           /home                  lvm  b8360aa2-9941-46cf-8dd7-b257c227e643               0B                                           none       0B         0B       0B       0         0         0
+        0 nvme-HWE62P443T2M00GN_2102550479FSQ2005783 HWE62P443T2M00GN_2102550479FSQ2005783        0   0      512B        5       2T         0      2T /         2.9T ext4        707.8G    24% 1.0      disk                   0 nvme1n1           512 259:0   131072 brw-rw---- HWE62P443T2M00GN  64 nvme1n1              4096 root                                                                                                                                  /dev/nvme1n1                   512                                                    4096    0   8312  0  0    0    1023 none        2102550479FSQ2005783  2.9T         live    block:nvme:pci /ssd/data1      /ssd/data1      nvme   disk b9375d4f-b074-4685-aba8-11fbfeafa994               0B uuid.870d0000-0000-0100-ef6f-91b3ce814baf none       0B         0B       0B       0         0         0
+        0 nvme-HWE62P443T2M00GN_2102550479FSQ2004827 HWE62P443T2M00GN_2102550479FSQ2004827        0   0      512B        6       2T         0    2.1T /         2.9T ext4          588G    20% 1.0      disk                   0 nvme2n1           512 259:1   131072 brw-rw---- HWE62P443T2M00GN  64 nvme2n1              4096 root                                                                                                                                  /dev/nvme2n1                   512                                                    4096    0   8312  0  0    0    1023 none        2102550479FSQ2004827  2.9T         live    block:nvme:pci /ssd/data2      /ssd/data2      nvme   disk 1a317f4a-1f31-497b-bf7a-8d51cc406abe               0B uuid.7e0d0000-0000-0100-e30e-7a64028574c9 none       0B         0B       0B       0         0         0
+        0 nvme-HWE62P443T2M00GN_2102550479FSQ3000473 HWE62P443T2M00GN_2102550479FSQ3000473        0   0      512B        7       2T         0    2.7T /         2.9T ext4         69.4G     2% 1.0      disk                   0 nvme0n1           512 259:2   131072 brw-rw---- HWE62P443T2M00GN  64 nvme0n1              4096 root                                                                                                                                  /dev/nvme0n1                   512                                                    4096    0   8312  0  0    0    1023 none        2102550479FSQ3000473  2.9T         live    block:nvme:pci /home/bolt-test /home/bolt-test nvme   disk 30fdb0a2-4bc6-4310-957a-346234d12707               0B uuid.840d0000-0000-0100-ec50-2d7d1de4af81 none       0B         0B       0B       0         0         0
+
+===== lsblk-summary =====
+time: 2026-06-26 10:14:21
+NAME    TYPE  SIZE MODEL            SERIAL               VENDOR   ROTA TRAN   PHY-SEC LOG-SEC
+sda     disk   59G MD619GXCLDE3TC   A0122061511080004480 ATA         0 sata       512     512
+nvme1n1 disk  2.9T HWE62P443T2M00GN 2102550479FSQ2005783             0 nvme       512     512
+nvme2n1 disk  2.9T HWE62P443T2M00GN 2102550479FSQ2004827             0 nvme       512     512
+nvme0n1 disk  2.9T HWE62P443T2M00GN 2102550479FSQ3000473             0 nvme       512     512
+
+===== df-human =====
+time: 2026-06-26 10:14:21
+Filesystem                  Size  Used Avail Use% Mounted on
+/dev/mapper/openeuler-root   36G   32G  2.1G  94% /
+devtmpfs                    4.0M     0  4.0M   0% /dev
+tmpfs                       252G  1.1M  252G   1% /dev/shm
+tmpfs                       4.0M     0  4.0M   0% /sys/fs/cgroup
+efivarfs                     51K   15K   37K  28% /sys/firmware/efi/efivars
+tmpfs                       101G  1.6G   99G   2% /run
+tmpfs                       252G   30G  222G  12% /tmp
+/dev/sda2                   974M  154M  753M  17% /boot
+/dev/sda1                   599M  6.5M  593M   2% /boot/efi
+/dev/nvme1n1                2.9T  708G  2.1T  26% /ssd/data1
+/dev/nvme2n1                2.9T  589G  2.2T  22% /ssd/data2
+/dev/mapper/openeuler-home   18G  7.2G  9.1G  45% /home
+/dev/nvme0n1                2.9T   70G  2.7T   3% /home/bolt-test
+
+===== mount =====
+time: 2026-06-26 10:14:21
+/dev/mapper/openeuler-root on / type ext4 (rw,relatime)
+devtmpfs on /dev type devtmpfs (rw,nosuid,size=4096k,nr_inodes=65835484,mode=755)
+tmpfs on /dev/shm type tmpfs (rw,nosuid,nodev)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000)
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)
+securityfs on /sys/kernel/security type securityfs (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /sys/fs/cgroup type tmpfs (ro,nosuid,nodev,noexec,size=4096k,nr_inodes=1024,mode=755)
+cgroup on /sys/fs/cgroup/systemd type cgroup (rw,nosuid,nodev,noexec,relatime,xattr,release_agent=/usr/lib/systemd/systemd-cgroups-agent,name=systemd)
+cgroup on /sys/fs/cgroup/net_cls,net_prio type cgroup (rw,nosuid,nodev,noexec,relatime,net_cls,net_prio)
+cgroup on /sys/fs/cgroup/cpu,cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpu,cpuacct)
+cgroup on /sys/fs/cgroup/rdma type cgroup (rw,nosuid,nodev,noexec,relatime,rdma)
+cgroup on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,perf_event)
+cgroup on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)
+cgroup on /sys/fs/cgroup/pids type cgroup (rw,nosuid,nodev,noexec,relatime,pids)
+cgroup on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
+cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+cgroup on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)
+cgroup on /sys/fs/cgroup/misc type cgroup (rw,nosuid,nodev,noexec,relatime,misc)
+cgroup on /sys/fs/cgroup/hugetlb type cgroup (rw,nosuid,nodev,noexec,relatime,hugetlb)
+cgroup on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
+efivarfs on /sys/firmware/efi/efivars type efivarfs (rw,nosuid,nodev,noexec,relatime)
+bpf on /sys/fs/bpf type bpf (rw,nosuid,nodev,noexec,relatime,mode=700)
+configfs on /sys/kernel/config type configfs (rw,nosuid,nodev,noexec,relatime)
+proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /run type tmpfs (rw,nosuid,nodev,size=105343580k,nr_inodes=819200,mode=755)
+systemd-1 on /proc/sys/fs/binfmt_misc type autofs (rw,relatime,fd=29,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=62533)
+hugetlbfs on /dev/hugepages type hugetlbfs (rw,nosuid,nodev,relatime,pagesize=2M)
+mqueue on /dev/mqueue type mqueue (rw,nosuid,nodev,noexec,relatime)
+debugfs on /sys/kernel/debug type debugfs (rw,nosuid,nodev,noexec,relatime)
+tracefs on /sys/kernel/tracing type tracefs (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,size=263358952k,nr_inodes=1048576)
+fusectl on /sys/fs/fuse/connections type fusectl (rw,nosuid,nodev,noexec,relatime)
+/dev/sda2 on /boot type ext4 (rw,relatime)
+/dev/sda1 on /boot/efi type vfat (rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=winnt,errors=remount-ro)
+/dev/nvme1n1 on /ssd/data1 type ext4 (rw,relatime,stripe=32)
+/dev/nvme2n1 on /ssd/data2 type ext4 (rw,relatime,stripe=32)
+/dev/mapper/openeuler-home on /home type ext4 (rw,relatime)
+/dev/nvme0n1 on /home/bolt-test type ext4 (rw,relatime,stripe=32)
+tracefs on /sys/kernel/debug/tracing type tracefs (rw,nosuid,nodev,noexec,relatime)
+binfmt_misc on /proc/sys/fs/binfmt_misc type binfmt_misc (rw,nosuid,nodev,noexec,relatime)
+
+===== block-queue =====
+time: 2026-06-26 10:14:21
+## /sys/block/dm-0
+rotational=0
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/dm-1
+rotational=0
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/dm-2
+rotational=0
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/nvme0n1
+rotational=0
+scheduler=[none] mq-deadline kyber bfq 
+nr_requests=1023
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/nvme1n1
+rotational=0
+scheduler=[none] mq-deadline kyber bfq 
+nr_requests=1023
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/nvme2n1
+rotational=0
+scheduler=[none] mq-deadline kyber bfq 
+nr_requests=1023
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sda
+rotational=0
+scheduler=none [mq-deadline] kyber bfq 
+nr_requests=64
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+
+===== missing-command:smartctl =====
+time: 2026-06-26 10:14:21
+command not found: smartctl
+

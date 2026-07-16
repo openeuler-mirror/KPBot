@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill 质量评判与安全审查指南</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --paper: #ffffff;
+      --ink: #1f2933;
+      --muted: #5f6b7a;
+      --line: #d8dee8;
+      --soft: #eef4f8;
+      --blue: #1c6dd0;
+      --teal: #087f7a;
+      --amber: #9a6b05;
+      --red: #b42318;
+      --green: #18794e;
+      --code-bg: #102033;
+      --code-ink: #eef6ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+    }
+
+    .site-header {
+      background: #102033;
+      color: #f4f8fb;
+      border-bottom: 6px solid var(--teal);
+    }
+
+    .wrap {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 56px 0 40px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #91d4cf;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 840px;
+      margin: 0;
+      font-size: clamp(32px, 5vw, 54px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 860px;
+      margin: 20px 0 0;
+      color: #d7e3ee;
+      font-size: 18px;
+    }
+
+    .site-nav {
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .site-nav .wrap {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0;
+    }
+
+    .site-nav a {
+      flex: 0 0 auto;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 7px 10px;
+      border-radius: 6px;
+    }
+
+    .site-nav a:hover {
+      background: var(--soft);
+      color: var(--blue);
+    }
+
+    .main-content {
+      padding: 34px 0 64px;
+    }
+
+    .doc-section {
+      margin: 0 0 28px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 26px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      color: #102033;
+      font-size: 26px;
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      color: #243447;
+      font-size: 19px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      padding-left: 22px;
+      margin: 10px 0 18px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+      color: #203246;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    code {
+      background: #edf2f7;
+      border: 1px solid #d9e2ec;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    sup a {
+      color: var(--blue);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    pre {
+      overflow-x: auto;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: #f4f8fd;
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin: 14px 0 18px;
+    }
+
+    .callout.warning {
+      border-left-color: var(--amber);
+      background: #fff8e8;
+    }
+
+    .callout.danger {
+      border-left-color: var(--red);
+      background: #fff1f0;
+    }
+
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .tag.good {
+      background: #e5f7ef;
+      color: var(--green);
+    }
+
+    .tag.mid {
+      background: #fff3cd;
+      color: var(--amber);
+    }
+
+    .tag.bad {
+      background: #fde8e7;
+      color: var(--red);
+    }
+
+    .score {
+      font-weight: 700;
+      color: var(--teal);
+      white-space: nowrap;
+    }
+
+    .source-note {
+      margin: 8px 0 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .site-footer {
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding: 22px 0 40px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 820px) {
+      .wrap {
+        width: min(100% - 24px, 1120px);
+      }
+
+      .hero {
+        padding: 40px 0 30px;
+      }
+
+      .doc-section {
+        padding: 20px 16px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+
+    @media print {
+      .site-nav {
+        position: static;
+      }
+
+      body {
+        background: #ffffff;
+      }
+
+      .doc-section {
+        break-inside: avoid;
+        border-color: #c9d1db;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="site-header">
+    <div class="wrap hero">
+      <p class="eyebrow">Skill Quality Guide</p>
+      <h1>Skill 质量评判与安全审查指南</h1>
+      <p class="lead">
+        一份好 skill 不只是“能触发”，还要让 Agent 在正确时机加载正确上下文，
+        按可验证流程行动，并且在权限、数据和执行风险上保持克制。
+      </p>
+    </div>
+  </div>
+
+  <div class="site-nav" role="navigation" aria-label="目录">
+    <div class="wrap">
+      <a href="#current-score">本仓库评分</a>
+      <a href="#definition">好 Skill 的定义</a>
+      <a href="#rubric">评分模型</a>
+      <a href="#process">评审流程</a>
+      <a href="#tools">检测工具</a>
+      <a href="#security">安全审查</a>
+      <a href="#report">评审报告模板</a>
+      <a href="#sources">来源与口径</a>
+    </div>
+  </div>
+
+  <div class="wrap main-content">
+    <div class="doc-section" id="current-score">
+      <h2>1. Server Application Optimization 当前评分</h2>
+      <p>
+        本次评分对象为 <code>skills/server-application-optimization/</code> 主框架，
+        不评价各专项子 skill 的领域算法深度。子 skill 在本次评审中只检查是否存在
+        <code>SKILL.md</code>、名称是否与目录一致，以及是否能被主框架按候选列表和结果 JSON 契约接入。
+      </p>
+
+      <div class="grid">
+        <div class="callout">
+          <strong>综合评分：</strong>
+          <span class="tag good">94 / 100</span>
+          高质量，可作为服务器应用优化 Agent 主框架的团队标准样例。
+        </div>
+        <div class="callout warning">
+          <strong>安全结论：</strong>
+          分析和 dry-run 场景为中风险；涉及系统、网络、BIOS、重编译或生产环境执行时为高风险，
+          必须经过用户确认、<code>approved-change-id</code>、验证计划和回退计划。
+        </div>
+      </div>
+
+      <h3>评分明细</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th>得分</th>
+            <th>评审结论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>触发与定位</td>
+            <td class="score">15 / 15</td>
+            <td><code>server-application-optimization</code> 命名符合 kebab-case，展示名保留 Server Application Optimization，能清楚表达服务器应用优化主框架定位。</td>
+          </tr>
+          <tr>
+            <td>渐进披露</td>
+            <td class="score">14 / 15</td>
+            <td>主 <code>SKILL.md</code> 保持精简，细节拆入 <code>references/</code>、<code>scripts/</code> 和 <code>subskills/</code>；少量 reference 后续可继续加目录索引。</td>
+          </tr>
+          <tr>
+            <td>流程与契约</td>
+            <td class="score">15 / 15</td>
+            <td>已覆盖用户确认、环境诊断备份、基线确认、瓶颈识别、性能采集、候选优化 skill 列表、串行执行验证、报告、review、环境还原和案例归档。</td>
+          </tr>
+          <tr>
+            <td>可验证性</td>
+            <td class="score">11 / 12</td>
+            <td>已有框架级质量检查脚本、脚本语法检查、动态任务与候选池产物约束；后续建议增加一次独立新会话 forward test 记录。</td>
+          </tr>
+          <tr>
+            <td>脚本与工具质量</td>
+            <td class="score">9 / 10</td>
+            <td>脚本默认 dry-run 或只读，危险路径参数化；<code>collect_evidence_snapshot.sh</code> metadata 已改用 JSON 生成。发布前建议补跑 <code>shellcheck</code>。</td>
+          </tr>
+          <tr>
+            <td>安全性</td>
+            <td class="score">16 / 18</td>
+            <td>高风险动作要求 <code>--execute</code> 和 <code>--approved-change-id</code>，外部 clone 默认禁用并要求 <code>--allow-clone</code>；生产执行仍需人工审批和隔离验证。</td>
+          </tr>
+          <tr>
+            <td>兼容与维护</td>
+            <td class="score">8 / 8</td>
+            <td>主源、Claude Code、OpenCode、通用 Agent 入口已统一为 <code>server-application-optimization</code>，旧命名核心残留检查通过。</td>
+          </tr>
+          <tr>
+            <td>使用体验</td>
+            <td class="score">6 / 7</td>
+            <td>Agent 下一步动作清晰，但完整服务器性能优化链路天然较长；建议后续补一个最小端到端 forward-test 示例。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>自动检测结果</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>检查项</th>
+            <th>命令或依据</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>框架质量检查</td>
+            <td><code>skills/server-application-optimization/scripts/validate_skill_quality.py</code></td>
+            <td><span class="tag good">PASS</span>：frontmatter、平台入口、旧命名残留、脚本门禁和 subskill 接口契约通过。</td>
+          </tr>
+          <tr>
+            <td>Python 脚本语法</td>
+            <td><code>PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/server-application-optimization/scripts/*.py</code></td>
+            <td><span class="tag good">PASS</span></td>
+          </tr>
+          <tr>
+            <td>Shell 脚本语法</td>
+            <td><code>bash -n skills/server-application-optimization/scripts/*.sh skills/server-application-optimization/subskills/network-optimization/scripts/*.sh</code></td>
+            <td><span class="tag good">PASS</span></td>
+          </tr>
+          <tr>
+            <td>旧命名和旧流程残留</td>
+            <td>扫描旧 skill 名、旧分析汇总名、旧分析清单名、旧执行文档名和旧 BIOS/OS 合并入口名</td>
+            <td><span class="tag good">PASS</span>：核心范围无残留；历史测试日志不计入主框架评分。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Skill Vetter 安全评估</h3>
+      <p class="source-note">来源：按本地 <code>skill-vetter</code> 规范执行 Source Check、Code Review、Permission Scope 和 Risk Classification。<sup><a href="#src-s3">S3</a></sup></p>
+      <table>
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>结论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Skill</td>
+            <td><code>server-application-optimization</code></td>
+          </tr>
+          <tr>
+            <td>Source</td>
+            <td>Repo-local skill directory，主源为 <code>skills/server-application-optimization/</code></td>
+          </tr>
+          <tr>
+            <td>Author / Version</td>
+            <td>仓库内团队维护；未见独立版本号，建议发布时补充 release tag。</td>
+          </tr>
+          <tr>
+            <td>Files Reviewed</td>
+            <td>58 个 skill 主源文件，不含本地缓存目录和历史测试日志。</td>
+          </tr>
+          <tr>
+            <td>Red Flags</td>
+            <td>
+              未发现硬编码生产凭据、浏览器 cookie 访问、密钥目录读取、混淆执行或未知外传。
+              发现高风险能力包括系统参数、网络配置、防火墙、BIOS/BMC、远程执行文档和可选外部 clone；
+              当前均需只读 / dry-run / 显式批准门禁。
+            </td>
+          </tr>
+          <tr>
+            <td>Permissions Needed</td>
+            <td>
+              Files：读取证据、proc/sysfs、应用状态，写入 output、报告、任务包、候选池、回退记录。<br>
+              Network：可选 Redfish/BMC、可选 SSH/远程采集、可选经审查外部 clone。<br>
+              Commands：perf、pidstat、mpstat、sar、ethtool、mysql、readelf、ldd、sysctl、taskset、systemctl、iptables 等。
+            </td>
+          </tr>
+          <tr>
+            <td>Risk Level</td>
+            <td>
+              <span class="tag mid">MEDIUM</span> 用于只读分析和 dry-run；
+              <span class="tag bad">HIGH</span> 用于系统、网络、BIOS、重编译或生产执行。
+              不建议在生产环境直接授予自动执行权限。
+            </td>
+          </tr>
+          <tr>
+            <td>Verdict</td>
+            <td>
+              <span class="tag mid">INSTALL / USE WITH CAUTION</span>。
+              允许作为受控服务器应用优化主框架使用；真实变更必须有人审、批准编号、验证计划和回退计划。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>框架 Review 结论</h3>
+      <ul>
+        <li><strong>允许合入：</strong>是。主框架无阻塞问题，可作为 Server Application Optimization 主 skill 的当前标准版本。</li>
+        <li><strong>主框架优点：</strong>架构图自顶向下链路完整，任务包和候选池契约清晰，报告、review、还原和归档形成闭环。</li>
+        <li><strong>安全优点：</strong>真实执行默认被门禁拦住，网络优化、通用执行脚本和外部 clone 均要求显式批准。</li>
+        <li><strong>剩余非阻塞项：</strong>发布前补跑 <code>shellcheck</code>、secret scanner，并保留一次干净上下文 forward test 记录。</li>
+        <li><strong>子 skill 后续事项：</strong>编译、网络、CPU 亲和性、BIOS、OS、性能库等专项内容质量由对应 owner 后续优化；主框架只要求其满足目录、frontmatter 和输出契约。</li>
+      </ul>
+    </div>
+
+    <div class="doc-section" id="definition">
+      <h2>2. 好 Skill 的定义</h2>
+      <p>
+        Skill 的本质是给 Agent 使用的专业化操作手册。它应该把通用模型不知道、
+        容易忘、容易做错或需要稳定复用的流程沉淀下来，而不是把普通常识和长篇背景塞进上下文。<sup><a href="#src-s1">S1</a></sup>
+      </p>
+
+      <div class="grid">
+        <div class="callout">
+          <strong>核心判断：</strong>
+          这个 skill 是否能让一个新的 Agent 在少量上下文下，更稳定、更安全、更快地完成同类任务。
+        </div>
+        <div class="callout warning">
+          <strong>重要边界：</strong>
+          自动化工具只能发现结构、格式、脚本和部分安全问题，不能替代真实任务验证和人工安全评审。
+        </div>
+      </div>
+
+      <h3>好的 skill 通常具备这些特征</h3>
+      <p class="source-note">来源：主要来自通用 skill 创建规范，安全项来自 skill vetting 规范，项目维护项结合本仓库实践整理。<sup><a href="#src-s1">S1</a></sup><sup><a href="#src-s3">S3</a></sup><sup><a href="#src-s4">S4</a></sup></p>
+      <ul>
+        <li><strong>触发准确：</strong><code>name</code> 简短清晰，<code>description</code> 明确说明能力、适用场景和典型触发语。</li>
+        <li><strong>上下文节约：</strong><code>SKILL.md</code> 只保留核心流程，详细资料放入 <code>references/</code> 并按需读取。</li>
+        <li><strong>流程可执行：</strong>步骤、输入、输出、停止条件、降级路径和用户确认点都写得清楚。</li>
+        <li><strong>自由度合适：</strong>开放型判断用原则和启发式，脆弱或高风险操作用脚本和强约束。</li>
+        <li><strong>验证闭环：</strong>提供样例任务、测试命令、预期产物和报告自检项。</li>
+        <li><strong>资源克制：</strong>只包含对任务有直接帮助的脚本、引用和资产，不放无关 README、历史说明或冗余材料。</li>
+        <li><strong>安全默认：</strong>最小权限、先 dry-run、先只读采集、危险动作显式确认，敏感数据不进入报告。</li>
+        <li><strong>可维护：</strong>主源、兼容入口、子 skill、脚本和文档之间不会漂移，变更后有回归检查。</li>
+      </ul>
+
+      <h3>常见差 skill 信号</h3>
+      <p class="source-note">来源：由 skill 创建规范中的反模式、安全 vetting 红线和本仓库性能优化实践归纳。<sup><a href="#src-s1">S1</a></sup><sup><a href="#src-s3">S3</a></sup><sup><a href="#src-s4">S4</a></sup></p>
+      <ul>
+        <li><code>description</code> 含糊，Agent 不知道什么时候该触发，或者过宽导致误触发。</li>
+        <li><code>SKILL.md</code> 太长，把背景、范例、设计过程、用户文档全部混在一起。</li>
+        <li>只给原则，没有输入输出契约、检查点、失败处理和可执行命令。</li>
+        <li>脚本没有测试方式，依赖没有声明，失败时只报错不降级。</li>
+        <li>要求读取密钥、浏览器会话、SSH 目录或系统文件，但没有充分理由。</li>
+        <li>直接执行破坏性命令、远程命令或安装命令，没有权限边界和用户确认。</li>
+        <li>没有样例任务，无法判断这个 skill 是否真的能提升 Agent 表现。</li>
+      </ul>
+    </div>
+
+    <div class="doc-section" id="rubric">
+      <h2>3. 100 分评分模型</h2>
+      <p>
+        建议把 skill 质量评审拆成八个维度。80 分以上通常可进入试用，
+        60 到 79 分需要带问题试用，低于 60 分不建议合入或安装。
+        八个维度来自来源 S1、S3、S4；具体权重和分段阈值是本文为团队评审沉淀的评分模型，不是上游工具的内置标准。<sup><a href="#src-s1">S1</a></sup><sup><a href="#src-s3">S3</a></sup><sup><a href="#src-s4">S4</a></sup>
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th>权重</th>
+            <th>优秀标准</th>
+            <th>扣分信号</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>触发与定位</td>
+            <td class="score">15</td>
+            <td>名称符合 kebab-case，描述包含能力、触发场景、文件类型或任务边界。</td>
+            <td>描述像口号；适用范围过宽；与其他 skill 重叠但没有边界。</td>
+          </tr>
+          <tr>
+            <td>渐进披露</td>
+            <td class="score">15</td>
+            <td><code>SKILL.md</code> 简洁，引用文件按任务路由，长材料不默认加载。</td>
+            <td>正文堆砌大段资料；引用文件没有读取时机；重复信息散落多处。</td>
+          </tr>
+          <tr>
+            <td>流程与契约</td>
+            <td class="score">15</td>
+            <td>有清晰步骤、输入输出、门控、完成条件、失败处理和回退路径。</td>
+            <td>只有建议清单；Agent 需要自行猜测顺序和交付物。</td>
+          </tr>
+          <tr>
+            <td>可验证性</td>
+            <td class="score">12</td>
+            <td>包含样例任务、验证命令、预期文件、报告字段和回归检查方式。</td>
+            <td>无法用一个新会话独立测试；没有成功标准。</td>
+          </tr>
+          <tr>
+            <td>脚本与工具质量</td>
+            <td class="score">10</td>
+            <td>重复或脆弱动作脚本化，参数清晰，依赖少，错误信息可行动。</td>
+            <td>脚本不可执行；硬编码路径；安装依赖不说明；没有 dry-run。</td>
+          </tr>
+          <tr>
+            <td>安全性</td>
+            <td class="score">18</td>
+            <td>最小权限、敏感数据保护、外部网络可解释、危险动作需确认。</td>
+            <td>读取密钥、访问 cookie、混淆代码、未知网络请求、sudo 或系统修改。</td>
+          </tr>
+          <tr>
+            <td>兼容与维护</td>
+            <td class="score">8</td>
+            <td>主源明确，兼容入口保持同步，依赖和平台差异有说明。</td>
+            <td>多个入口内容不一致；文档指向不存在文件；命令只能在作者机器运行。</td>
+          </tr>
+          <tr>
+            <td>使用体验</td>
+            <td class="score">7</td>
+            <td>Agent 能快速判断下一步，缺信息时知道问什么，输出对用户可读。</td>
+            <td>提示语啰嗦；过度询问；输出格式不稳定；报告缺少决策口径。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>总分</th>
+            <th>结论</th>
+            <th>建议动作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag good">90-100</span></td>
+            <td>高质量，可作为团队标准样例。</td>
+            <td>合入后保留回归用例，后续重点防止文档和脚本漂移。</td>
+          </tr>
+          <tr>
+            <td><span class="tag good">80-89</span></td>
+            <td>可用，仍有局部优化空间。</td>
+            <td>允许试用，记录真实任务反馈并补齐薄弱项。</td>
+          </tr>
+          <tr>
+            <td><span class="tag mid">60-79</span></td>
+            <td>需要整改，不能直接视为稳定能力。</td>
+            <td>先修复触发、流程、验证或安全问题，再进入正式场景。</td>
+          </tr>
+          <tr>
+            <td><span class="tag bad">0-59</span></td>
+            <td>风险较高，不建议安装或合入。</td>
+            <td>重新定义任务边界，必要时拆分 skill 或删除高风险资源。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="doc-section" id="process">
+      <h2>4. 推荐评审流程</h2>
+      <p class="source-note">来源：前半段来自 skill 创建流程和验证要求，安全审查步骤来自 skill-vetter 协议。<sup><a href="#src-s1">S1</a></sup><sup><a href="#src-s3">S3</a></sup></p>
+      <ol>
+        <li><strong>先看来源：</strong>确认作者、仓库、版本、更新时间、变更记录和是否来自可信渠道。</li>
+        <li><strong>跑结构检查：</strong>验证 <code>SKILL.md</code>、frontmatter、命名、描述长度和必要目录。</li>
+        <li><strong>读触发描述：</strong>判断 Agent 仅凭 <code>name</code> 和 <code>description</code> 是否知道何时使用。</li>
+        <li><strong>读正文和引用：</strong>检查是否遵守渐进披露，是否有明确步骤、门控、输入输出和失败路径。</li>
+        <li><strong>审脚本和依赖：</strong>逐个查看脚本是否安全、可参数化、可测试，依赖是否声明。</li>
+        <li><strong>做安全扫描：</strong>搜索敏感文件访问、未知网络请求、混淆代码、危险命令和凭据泄露。</li>
+        <li><strong>做 forward test：</strong>开一个新上下文，只给 skill 和真实任务，让 Agent 按 skill 完成，观察是否能泛化。</li>
+        <li><strong>产出评审报告：</strong>给出分数、风险等级、阻塞问题、建议整改项和是否允许安装或合入。</li>
+      </ol>
+
+      <div class="callout">
+        <strong>Forward test 要点：</strong>
+        不要把预期答案、你的诊断或修复建议告诉测试 Agent。给它原始任务和 skill，
+        看它是否能独立找到正确路径，这比让它“评价 skill”更能暴露真实问题。
+      </div>
+    </div>
+
+    <div class="doc-section" id="tools">
+      <h2>5. 可以用哪些工具检测</h2>
+      <p>
+        工具检测建议分层使用：基础结构检查用于快速挡住低级错误，静态分析用于发现脚本和安全问题，
+        真实任务验证用于判断 skill 是否真的好用。<code>quick_validate.py</code> 的检查项来自 S2，其余命令是本文结合工程实践给出的辅助检测工具。<sup><a href="#src-s2">S2</a></sup>
+      </p>
+
+      <h3>基础结构检查</h3>
+      <pre><code># 检查 SKILL.md frontmatter、name、description 等基础规则
+python3 /Users/a111/.codex/skills/.system/skill-creator/scripts/quick_validate.py \
+  skills/server-application-optimization
+
+# 列出 skill 文件，确认是否有无关文件或遗漏资源
+rg --files skills/server-application-optimization
+
+# 检查引用的文件是否存在
+rg -n "references/|subskills/|scripts/" skills/server-application-optimization/SKILL.md
+</code></pre>
+
+      <h3>Markdown、YAML 和脚本检查</h3>
+      <pre><code># Shell 语法和常见错误
+bash -n skills/server-application-optimization/scripts/*.sh
+shellcheck skills/server-application-optimization/scripts/*.sh
+
+# Python 语法检查
+python3 -m py_compile skills/server-application-optimization/scripts/*.py
+
+# 可选：格式和文档风格检查
+yamllint skills/server-application-optimization/**/*.yaml
+markdownlint docs skills/server-application-optimization
+shfmt -d skills/server-application-optimization/scripts/*.sh
+</code></pre>
+
+      <h3>安全和敏感信息扫描</h3>
+      <pre><code># 快速搜索高风险模式
+rg -n "(curl|wget|nc |ncat|ssh |scp |sudo|chmod 777|eval\\(|exec\\(|base64|openssl|~/.ssh|~/.aws|cookie|token|secret|password)" \
+  skills/server-application-optimization
+
+# 可选：凭据泄露扫描
+gitleaks detect --source . --no-git
+trufflehog filesystem .
+
+# 可选：通用静态安全扫描
+semgrep scan --config auto skills/server-application-optimization
+</code></pre>
+
+      <h3>依赖和供应链检查</h3>
+      <pre><code># 如果 skill 带有依赖清单，按语言选择对应工具
+pip-audit -r requirements.txt
+npm audit
+osv-scanner -r .
+grype dir:.
+</code></pre>
+
+      <h3>真实任务验证</h3>
+      <pre><code># 示例：用一个干净任务验证 skill 是否能跑通关键路径
+skills/server-application-optimization/scripts/backup_environment.sh ./output/env
+skills/server-application-optimization/scripts/init_report.sh ./output/report demo-scenario
+skills/server-application-optimization/scripts/run_placeholder_benchmark.sh demo-scenario
+
+python3 skills/server-application-optimization/scripts/summarize_improvement.py \
+  --baseline baseline.json \
+  --candidate tuned.json \
+  --round-name round-2
+</code></pre>
+
+      <div class="callout warning">
+        <strong>工具检测结论要保守：</strong>
+        <code>quick_validate.py</code> 只能证明基础结构有效；<code>shellcheck</code> 只能发现 shell 风险；
+        secret scanner 只能发现已知模式。一个 skill 是否真的“好”，仍要看真实任务表现、输出质量和风险控制。
+      </div>
+    </div>
+
+    <div class="doc-section" id="security">
+      <h2>6. 安全审查清单</h2>
+      <p>
+        安全性应该作为独立门禁，而不是评分里的一个普通加分项。只要出现不可解释的高危行为，
+        即使其他维度分数很高，也应暂停安装、合入或执行。<sup><a href="#src-s3">S3</a></sup>
+      </p>
+
+      <h3>必须回答的问题</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>问题</th>
+            <th>期望答案</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>skill 来自哪里，作者是否可信？</td>
+            <td>来源、作者、版本、更新时间和用途都可追溯。</td>
+          </tr>
+          <tr>
+            <td>它需要读写哪些文件？</td>
+            <td>只访问完成任务所需的工作区文件或明确资源。</td>
+          </tr>
+          <tr>
+            <td>它会运行哪些命令？</td>
+            <td>命令可解释、可复现，危险命令需要用户确认。</td>
+          </tr>
+          <tr>
+            <td>它需要网络访问吗？</td>
+            <td>访问目标、协议和数据内容明确，没有未知外传。</td>
+          </tr>
+          <tr>
+            <td>它是否处理凭据、客户数据或生产环境？</td>
+            <td>最小权限、脱敏、只读优先，有审计和回退方案。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>出现以下红线时应立即拒绝</h3>
+      <ul>
+        <li>向未知 URL 或 IP 发送文件、环境变量、对话内容、密钥或日志。</li>
+        <li>读取 <code>~/.ssh</code>、<code>~/.aws</code>、浏览器 cookie、token、密码文件，且没有明确任务必要性。</li>
+        <li>使用 <code>eval</code>、<code>exec</code>、<code>base64</code> 解码或混淆脚本来执行外部输入。</li>
+        <li>请求 <code>sudo</code>、修改系统目录、安装未知包或改变安全配置。</li>
+        <li>默认执行删除、格式化、重启、远程写入、生产变更等破坏性动作。</li>
+        <li>把客户路径、IP、账号、业务数据或压测原始日志直接写入对外报告。</li>
+      </ul>
+
+      <h3>风险分级</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>等级</th>
+            <th>特征</th>
+            <th>处理建议</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag good">低风险</span></td>
+            <td>纯文档、格式转换、只读分析，无外部网络和敏感数据。</td>
+            <td>基础审查通过后可试用。</td>
+          </tr>
+          <tr>
+            <td><span class="tag mid">中风险</span></td>
+            <td>读写工作区文件、调用本地脚本、访问公开 API 或处理内部资料。</td>
+            <td>完整代码审查，限制权限，保留验证记录。</td>
+          </tr>
+          <tr>
+            <td><span class="tag bad">高风险</span></td>
+            <td>涉及凭据、SSH、数据库、生产系统、远程执行或系统参数。</td>
+            <td>必须人工批准，默认 dry-run，变更前写明回退方案。</td>
+          </tr>
+          <tr>
+            <td><span class="tag bad">极高风险</span></td>
+            <td>要求 root、安全配置变更、密钥读取、未知网络外传或混淆执行。</td>
+            <td>默认拒绝，除非完成专门安全评审和隔离验证。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout danger">
+        <strong>安全门禁建议：</strong>
+        对服务器性能优化类 skill，任何真实环境变更都应区分只读采集、dry-run、低风险在线变更、
+        需重启变更和需重新编译变更。不能把候选动作直接当成可执行命令。
+      </div>
+    </div>
+
+    <div class="doc-section" id="report">
+      <h2>7. Skill 评审报告模板</h2>
+      <p>团队评审或安装外部 skill 前，可以直接复制以下模板。模板结构参考 skill-vetter 的报告格式，并补充了质量评分、自动检测和本仓库回归项。<sup><a href="#src-s3">S3</a></sup><sup><a href="#src-s4">S4</a></sup></p>
+
+      <pre><code>SKILL 质量与安全评审报告
+
+Skill 名称：
+来源 / 作者 / 版本：
+评审日期：
+评审人：
+
+一、基础信息
+- 文件数量：
+- 是否存在 SKILL.md：
+- quick_validate 结果：
+- 主要能力：
+- 适用场景：
+- 不适用场景：
+
+二、质量评分
+- 触发与定位：__/15
+- 渐进披露：__/15
+- 流程与契约：__/15
+- 可验证性：__/12
+- 脚本与工具质量：__/10
+- 安全性：__/18
+- 兼容与维护：__/8
+- 使用体验：__/7
+- 总分：__/100
+
+三、自动检测结果
+- frontmatter / 命名检查：
+- Markdown / YAML 检查：
+- Shell / Python 检查：
+- 安全模式扫描：
+- secret scanner：
+- 依赖扫描：
+- 真实任务验证：
+
+四、安全结论
+- 需要读的文件：
+- 需要写的文件：
+- 需要执行的命令：
+- 是否需要网络：
+- 是否涉及凭据或敏感数据：
+- 风险等级：低 / 中 / 高 / 极高
+- 红线问题：无 / 有，具体为：
+
+五、最终结论
+- 允许安装或合入：是 / 否 / 整改后再评审
+- 阻塞问题：
+- 建议整改项：
+- 后续回归用例：
+</code></pre>
+    </div>
+
+    <div class="doc-section" id="sources">
+      <h2>8. 标准来源与引用口径</h2>
+      <p>
+        本文不是外部认证标准，也不是某个工具自动生成的官方评分表。它是基于下列本地规范、
+        检测脚本和本仓库实践整理出的团队评审口径。自动化命令只能覆盖一部分结构和安全问题，
+        最终是否合入或安装仍需要人工评审和真实任务验证。
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>编号</th>
+            <th>来源</th>
+            <th>本文采用的标准</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="src-s1">
+            <td><strong>S1</strong></td>
+            <td>
+              <code>/Users/a111/.codex/skills/.system/skill-creator/SKILL.md</code><br>
+              重点章节：Core Principles、Anatomy of a Skill、Progressive Disclosure、Skill Creation Process、Validate the Skill。
+            </td>
+            <td>
+              skill 是自包含能力模块；只写模型不知道且任务需要的上下文；用 <code>name</code> 和
+              <code>description</code> 做触发；正文保持精简；按需加载 <code>references/</code>；
+              反复或脆弱动作脚本化；通过真实任务和 <code>quick_validate.py</code> 验证。
+            </td>
+          </tr>
+          <tr id="src-s2">
+            <td><strong>S2</strong></td>
+            <td>
+              <code>/Users/a111/.codex/skills/.system/skill-creator/scripts/quick_validate.py</code>
+            </td>
+            <td>
+              基础可检测规则：必须存在 <code>SKILL.md</code>；frontmatter 必须是合法 YAML；
+              必须包含 <code>name</code> 和 <code>description</code>；名称使用小写字母、数字和连字符；
+              名称长度不超过 64；描述不超过 1024 字符；frontmatter 只允许规定字段。
+            </td>
+          </tr>
+          <tr id="src-s3">
+            <td><strong>S3</strong></td>
+            <td>
+              <code>/Users/a111/.codex/skills/skill-vetter/SKILL.md</code><br>
+              重点章节：Source Check、Code Review、RED FLAGS、Permission Scope、Risk Classification、Output Format。
+            </td>
+            <td>
+              安装或运行外部 skill 前要检查来源、作者、更新时间和声誉；必须审查所有文件；
+              识别未知网络请求、凭据读取、混淆执行、系统修改、sudo、cookie 访问等红线；
+              明确文件、命令和网络权限；按低、中、高、极高风险分级；输出结构化 vetting 报告。
+            </td>
+          </tr>
+          <tr id="src-s4">
+            <td><strong>S4</strong></td>
+            <td>
+              本仓库项目实践与规范：<code>AGENTS.md</code>、
+              <code>docs/architecture-4plus1.md</code>、<code>docs/server-application-optimization-skill.md</code>。
+            </td>
+            <td>
+              服务器应用优化 skill 需要单一主源、兼容入口同步、证据驱动、可降级执行、
+              报告自检、风险和回退建议；脚本变更要做目标验证；对外报告要区分配置收益、
+              运行点收益、诊断发现和 workload 变化，避免把候选动作直接当成生产变更。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>评分模型说明：</strong>
+        100 分权重是本文为评审方便做的二次整理。S1、S2、S3 提供规则和审查依据，
+        S4 提供本仓库的工程约束；权重本身可按团队风险偏好调整。
+      </div>
+    </div>
+  </div>
+
+  <div class="site-footer">
+    <div class="wrap">
+      本指南适用于本仓库的服务器应用优化 skill 及其他 AI Agent skill 的设计、评审、安装前审查和维护回归。
+    </div>
+  </div>
+</body>
+</html>

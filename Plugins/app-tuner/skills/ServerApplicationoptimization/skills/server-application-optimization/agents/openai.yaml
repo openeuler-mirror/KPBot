@@ -1,0 +1,7 @@
+interface:
+  display_name: "Server Application Optimization Agent / 服务器应用优化 Agent"
+  short_description: "自顶向下的服务器应用优化编排框架，强制场景摘要确认、多节点/容器环境诊断、基线确认、性能采集、候选优化、耗时统计、review 和案例归档。"
+  default_prompt: "Use $server-application-optimization to summarize and confirm the scenario/environment first, explain every mode option when asking the user to choose, confirm node inventory and BMC/Redfish collection or skip per physical node, collect and diagnose every client/server node with container-first application evidence, confirm diagnosis and baseline data before downstream tuning, then execute skills through analysis/execution subagents within the confirmed authorization scope without per-skill approval prompts, record per-stage/per-skill timing, then review, restore, report, and archive the case. / 使用 $server-application-optimization 先概括并确认场景/环境，向用户询问模式时必须解释各模式含义，逐台确认节点清单和 BMC/Redfish 采集或跳过，对客户端/服务端全部执行环境采集诊断，容器场景优先进入容器内采应用证据；环境诊断和基线未确认前不得下游调优；基线确认后在已确认授权范围内通过分析/执行 subagent 执行各 skill，不逐个 skill 询问批准；记录各阶段和各 skill 耗时，最后 review、还原、报告和归档。"
+
+policy:
+  allow_implicit_invocation: true

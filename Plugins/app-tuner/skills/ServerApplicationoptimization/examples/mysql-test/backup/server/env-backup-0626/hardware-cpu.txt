@@ -1,0 +1,291 @@
+===== uname-m =====
+time: 2026-06-26 10:14:07
+aarch64
+
+===== lscpu =====
+time: 2026-06-26 10:14:07
+Architecture:                       aarch64
+CPU op-mode(s):                     64-bit
+Byte Order:                         Little Endian
+CPU(s):                             128
+On-line CPU(s) list:                0-127
+Vendor ID:                          HiSilicon
+BIOS Vendor ID:                     HiSilicon
+Model name:                         Kunpeng-920
+BIOS Model name:                    HUAWEI Kunpeng 920 7260
+Model:                              0
+Thread(s) per core:                 1
+Core(s) per socket:                 64
+Socket(s):                          2
+Stepping:                           0x1
+BogoMIPS:                           200.00
+Flags:                              fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma dcpop asimddp asimdfhm
+L1d cache:                          8 MiB (128 instances)
+L1i cache:                          8 MiB (128 instances)
+L2 cache:                           64 MiB (128 instances)
+L3 cache:                           128 MiB (4 instances)
+NUMA node(s):                       4
+NUMA node0 CPU(s):                  0-31
+NUMA node1 CPU(s):                  32-63
+NUMA node2 CPU(s):                  64-95
+NUMA node3 CPU(s):                  96-127
+Vulnerability Gather data sampling: Not affected
+Vulnerability Itlb multihit:        Not affected
+Vulnerability L1tf:                 Not affected
+Vulnerability Mds:                  Not affected
+Vulnerability Meltdown:             Not affected
+Vulnerability Mmio stale data:      Not affected
+Vulnerability Retbleed:             Not affected
+Vulnerability Spec rstack overflow: Not affected
+Vulnerability Spec store bypass:    Not affected
+Vulnerability Spectre v1:           Mitigation; __user pointer sanitization
+Vulnerability Spectre v2:           Not affected
+Vulnerability Srbds:                Not affected
+Vulnerability Tsx async abort:      Not affected
+
+===== lscpu-extended =====
+time: 2026-06-26 10:14:07
+CPU NODE SOCKET CORE L1d:L1i:L2:L3 ONLINE
+  0    0      0    0 0:0:0:0          yes
+  1    0      0    1 1:1:1:0          yes
+  2    0      0    2 2:2:2:0          yes
+  3    0      0    3 3:3:3:0          yes
+  4    0      0    4 4:4:4:0          yes
+  5    0      0    5 5:5:5:0          yes
+  6    0      0    6 6:6:6:0          yes
+  7    0      0    7 7:7:7:0          yes
+  8    0      0    8 8:8:8:0          yes
+  9    0      0    9 9:9:9:0          yes
+ 10    0      0   10 10:10:10:0       yes
+ 11    0      0   11 11:11:11:0       yes
+ 12    0      0   12 12:12:12:0       yes
+ 13    0      0   13 13:13:13:0       yes
+ 14    0      0   14 14:14:14:0       yes
+ 15    0      0   15 15:15:15:0       yes
+ 16    0      0   16 16:16:16:0       yes
+ 17    0      0   17 17:17:17:0       yes
+ 18    0      0   18 18:18:18:0       yes
+ 19    0      0   19 19:19:19:0       yes
+ 20    0      0   20 20:20:20:0       yes
+ 21    0      0   21 21:21:21:0       yes
+ 22    0      0   22 22:22:22:0       yes
+ 23    0      0   23 23:23:23:0       yes
+ 24    0      0   24 24:24:24:0       yes
+ 25    0      0   25 25:25:25:0       yes
+ 26    0      0   26 26:26:26:0       yes
+ 27    0      0   27 27:27:27:0       yes
+ 28    0      0   28 28:28:28:0       yes
+ 29    0      0   29 29:29:29:0       yes
+ 30    0      0   30 30:30:30:0       yes
+ 31    0      0   31 31:31:31:0       yes
+ 32    1      0   32 32:32:32:1       yes
+ 33    1      0   33 33:33:33:1       yes
+ 34    1      0   34 34:34:34:1       yes
+ 35    1      0   35 35:35:35:1       yes
+ 36    1      0   36 36:36:36:1       yes
+ 37    1      0   37 37:37:37:1       yes
+ 38    1      0   38 38:38:38:1       yes
+ 39    1      0   39 39:39:39:1       yes
+ 40    1      0   40 40:40:40:1       yes
+ 41    1      0   41 41:41:41:1       yes
+ 42    1      0   42 42:42:42:1       yes
+ 43    1      0   43 43:43:43:1       yes
+ 44    1      0   44 44:44:44:1       yes
+ 45    1      0   45 45:45:45:1       yes
+ 46    1      0   46 46:46:46:1       yes
+ 47    1      0   47 47:47:47:1       yes
+ 48    1      0   48 48:48:48:1       yes
+ 49    1      0   49 49:49:49:1       yes
+ 50    1      0   50 50:50:50:1       yes
+ 51    1      0   51 51:51:51:1       yes
+ 52    1      0   52 52:52:52:1       yes
+ 53    1      0   53 53:53:53:1       yes
+ 54    1      0   54 54:54:54:1       yes
+ 55    1      0   55 55:55:55:1       yes
+ 56    1      0   56 56:56:56:1       yes
+ 57    1      0   57 57:57:57:1       yes
+ 58    1      0   58 58:58:58:1       yes
+ 59    1      0   59 59:59:59:1       yes
+ 60    1      0   60 60:60:60:1       yes
+ 61    1      0   61 61:61:61:1       yes
+ 62    1      0   62 62:62:62:1       yes
+ 63    1      0   63 63:63:63:1       yes
+ 64    2      1   64 64:64:64:2       yes
+ 65    2      1   65 65:65:65:2       yes
+ 66    2      1   66 66:66:66:2       yes
+ 67    2      1   67 67:67:67:2       yes
+ 68    2      1   68 68:68:68:2       yes
+ 69    2      1   69 69:69:69:2       yes
+ 70    2      1   70 70:70:70:2       yes
+ 71    2      1   71 71:71:71:2       yes
+ 72    2      1   72 72:72:72:2       yes
+ 73    2      1   73 73:73:73:2       yes
+ 74    2      1   74 74:74:74:2       yes
+ 75    2      1   75 75:75:75:2       yes
+ 76    2      1   76 76:76:76:2       yes
+ 77    2      1   77 77:77:77:2       yes
+ 78    2      1   78 78:78:78:2       yes
+ 79    2      1   79 79:79:79:2       yes
+ 80    2      1   80 80:80:80:2       yes
+ 81    2      1   81 81:81:81:2       yes
+ 82    2      1   82 82:82:82:2       yes
+ 83    2      1   83 83:83:83:2       yes
+ 84    2      1   84 84:84:84:2       yes
+ 85    2      1   85 85:85:85:2       yes
+ 86    2      1   86 86:86:86:2       yes
+ 87    2      1   87 87:87:87:2       yes
+ 88    2      1   88 88:88:88:2       yes
+ 89    2      1   89 89:89:89:2       yes
+ 90    2      1   90 90:90:90:2       yes
+ 91    2      1   91 91:91:91:2       yes
+ 92    2      1   92 92:92:92:2       yes
+ 93    2      1   93 93:93:93:2       yes
+ 94    2      1   94 94:94:94:2       yes
+ 95    2      1   95 95:95:95:2       yes
+ 96    3      1   96 96:96:96:3       yes
+ 97    3      1   97 97:97:97:3       yes
+ 98    3      1   98 98:98:98:3       yes
+ 99    3      1   99 99:99:99:3       yes
+100    3      1  100 100:100:100:3    yes
+101    3      1  101 101:101:101:3    yes
+102    3      1  102 102:102:102:3    yes
+103    3      1  103 103:103:103:3    yes
+104    3      1  104 104:104:104:3    yes
+105    3      1  105 105:105:105:3    yes
+106    3      1  106 106:106:106:3    yes
+107    3      1  107 107:107:107:3    yes
+108    3      1  108 108:108:108:3    yes
+109    3      1  109 109:109:109:3    yes
+110    3      1  110 110:110:110:3    yes
+111    3      1  111 111:111:111:3    yes
+112    3      1  112 112:112:112:3    yes
+113    3      1  113 113:113:113:3    yes
+114    3      1  114 114:114:114:3    yes
+115    3      1  115 115:115:115:3    yes
+116    3      1  116 116:116:116:3    yes
+117    3      1  117 117:117:117:3    yes
+118    3      1  118 118:118:118:3    yes
+119    3      1  119 119:119:119:3    yes
+120    3      1  120 120:120:120:3    yes
+121    3      1  121 121:121:121:3    yes
+122    3      1  122 122:122:122:3    yes
+123    3      1  123 123:123:123:3    yes
+124    3      1  124 124:124:124:3    yes
+125    3      1  125 125:125:125:3    yes
+126    3      1  126 126:126:126:3    yes
+127    3      1  127 127:127:127:3    yes
+
+===== proc-cpuinfo-summary =====
+time: 2026-06-26 10:14:07
+processor	: 0
+processor	: 1
+processor	: 2
+processor	: 3
+processor	: 4
+processor	: 5
+processor	: 6
+processor	: 7
+processor	: 8
+processor	: 9
+processor	: 10
+processor	: 11
+processor	: 12
+processor	: 13
+processor	: 14
+processor	: 15
+processor	: 16
+processor	: 17
+processor	: 18
+processor	: 19
+processor	: 20
+processor	: 21
+processor	: 22
+processor	: 23
+processor	: 24
+processor	: 25
+processor	: 26
+processor	: 27
+processor	: 28
+processor	: 29
+processor	: 30
+processor	: 31
+processor	: 32
+processor	: 33
+processor	: 34
+processor	: 35
+processor	: 36
+processor	: 37
+processor	: 38
+processor	: 39
+processor	: 40
+processor	: 41
+processor	: 42
+processor	: 43
+processor	: 44
+processor	: 45
+processor	: 46
+processor	: 47
+processor	: 48
+processor	: 49
+processor	: 50
+processor	: 51
+processor	: 52
+processor	: 53
+processor	: 54
+processor	: 55
+processor	: 56
+processor	: 57
+processor	: 58
+processor	: 59
+processor	: 60
+processor	: 61
+processor	: 62
+processor	: 63
+processor	: 64
+processor	: 65
+processor	: 66
+processor	: 67
+processor	: 68
+processor	: 69
+processor	: 70
+processor	: 71
+processor	: 72
+processor	: 73
+processor	: 74
+processor	: 75
+processor	: 76
+processor	: 77
+processor	: 78
+processor	: 79
+
+===== cpu-cache-sysfs =====
+time: 2026-06-26 10:14:07
+/sys/devices/system/cpu/cpu0/cache/index0/level=1
+/sys/devices/system/cpu/cpu0/cache/index0/size=64K
+/sys/devices/system/cpu/cpu0/cache/index0/type=Data
+/sys/devices/system/cpu/cpu0/cache/index1/level=1
+/sys/devices/system/cpu/cpu0/cache/index1/size=64K
+/sys/devices/system/cpu/cpu0/cache/index1/type=Instruction
+/sys/devices/system/cpu/cpu0/cache/index2/level=2
+/sys/devices/system/cpu/cpu0/cache/index2/size=512K
+/sys/devices/system/cpu/cpu0/cache/index2/type=Unified
+/sys/devices/system/cpu/cpu0/cache/index3/level=3
+/sys/devices/system/cpu/cpu0/cache/index3/size=32768K
+/sys/devices/system/cpu/cpu0/cache/index3/type=Unified
+
+===== cpufreq-policy =====
+time: 2026-06-26 10:14:07
+
+===== cpupower-frequency-info =====
+time: 2026-06-26 10:14:07
+analyzing CPU 0:
+  no or unknown cpufreq driver is active on this CPU
+  CPUs which run at the same hardware frequency: Not Available
+  CPUs which need to have their frequency coordinated by software: Not Available
+  maximum transition latency:  Cannot determine or is not supported.
+Not Available
+  available cpufreq governors: Not Available
+  Unable to determine current policy
+  current CPU frequency: Unable to call hardware
+  current CPU frequency:  Unable to call to kernel
+

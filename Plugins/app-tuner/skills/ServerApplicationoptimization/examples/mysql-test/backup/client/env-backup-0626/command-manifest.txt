@@ -1,0 +1,156 @@
+[2026-06-26 10:14:17] START environment backup output_dir=/tmp/env-backup-0626
+[2026-06-26 10:14:17] OK  environment-detection env_type=baremetal
+[2026-06-26 10:14:17] RUN dmidecode-bios: dmidecode -t bios
+[2026-06-26 10:14:17] OK  dmidecode-bios
+[2026-06-26 10:14:17] RUN dmidecode-system: dmidecode -t system
+[2026-06-26 10:14:17] OK  dmidecode-system
+[2026-06-26 10:14:17] RUN dmidecode-baseboard: dmidecode -t baseboard
+[2026-06-26 10:14:17] OK  dmidecode-baseboard
+[2026-06-26 10:14:17] SKIP missing-command:system_profiler
+[2026-06-26 10:14:17] RUN sysfs-bios-version: cat /sys/class/dmi/id/bios_version
+[2026-06-26 10:14:17] OK  sysfs-bios-version
+[2026-06-26 10:14:17] RUN sysfs-product: for f in /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name /sys/class/dmi/id/product_version /sys/class/dmi/id/board_vendor /sys/class/dmi/id/board_name; do [ -r "$f" ] && printf '%s=%s\n' "$f" "$(cat "$f")"; done
+[2026-06-26 10:14:17] OK  sysfs-product
+[2026-06-26 10:14:17] SKIP redfish-bios missing-bmc-credentials
+[2026-06-26 10:14:17] RUN uname-m: uname -m
+[2026-06-26 10:14:17] OK  uname-m
+[2026-06-26 10:14:17] RUN lscpu: lscpu
+[2026-06-26 10:14:17] OK  lscpu
+[2026-06-26 10:14:17] RUN lscpu-extended: lscpu -e
+[2026-06-26 10:14:17] OK  lscpu-extended
+[2026-06-26 10:14:17] RUN proc-cpuinfo-summary: awk -F: '/^processor|^model name|^cpu cores|^siblings|^cache size|^cpu MHz/ {print}' /proc/cpuinfo | head -n 80
+[2026-06-26 10:14:17] OK  proc-cpuinfo-summary
+[2026-06-26 10:14:17] RUN cpu-cache-sysfs: find /sys/devices/system/cpu/cpu0/cache -maxdepth 2 -type f -name 'level' -o -name 'type' -o -name 'size' 2>/dev/null | sort | xargs -r -n1 sh -c 'printf "%s=" "$1"; cat "$1"' sh
+[2026-06-26 10:14:17] OK  cpu-cache-sysfs
+[2026-06-26 10:14:17] RUN cpufreq-policy: find /sys/devices/system/cpu/cpufreq -maxdepth 2 -type f \( -name scaling_governor -o -name scaling_cur_freq -o -name cpuinfo_max_freq -o -name cpuinfo_min_freq \) 2>/dev/null | sort | xargs -r -n1 sh -c 'printf "%s=" "$1"; cat "$1"' sh
+[2026-06-26 10:14:17] OK  cpufreq-policy
+[2026-06-26 10:14:17] RUN cpupower-frequency-info: cpupower frequency-info
+[2026-06-26 10:14:17] OK  cpupower-frequency-info
+[2026-06-26 10:14:17] RUN dmidecode-memory: dmidecode -t memory
+[2026-06-26 10:14:17] OK  dmidecode-memory
+[2026-06-26 10:14:17] RUN lshw-memory: lshw -class memory
+[2026-06-26 10:14:21] OK  lshw-memory
+[2026-06-26 10:14:21] RUN free-human: free -h
+[2026-06-26 10:14:21] OK  free-human
+[2026-06-26 10:14:21] RUN proc-meminfo: cat /proc/meminfo
+[2026-06-26 10:14:21] OK  proc-meminfo
+[2026-06-26 10:14:21] RUN lsblk-detailed: lsblk -O
+[2026-06-26 10:14:21] OK  lsblk-detailed
+[2026-06-26 10:14:21] RUN lsblk-summary: lsblk -d -o NAME,TYPE,SIZE,MODEL,SERIAL,VENDOR,ROTA,TRAN,PHY-SeC,LOG-SEC
+[2026-06-26 10:14:21] OK  lsblk-summary
+[2026-06-26 10:14:21] RUN df-human: df -h
+[2026-06-26 10:14:21] OK  df-human
+[2026-06-26 10:14:21] RUN mount: mount
+[2026-06-26 10:14:21] OK  mount
+[2026-06-26 10:14:21] RUN block-queue: for d in /sys/block/*; do [ -d "$d/queue" ] || continue; echo "## $d"; for f in rotational scheduler nr_requests read_ahead_kb logical_block_size physical_block_size; do [ -r "$d/queue/$f" ] && printf '%s=%s\n' "$f" "$(cat "$d/queue/$f")"; done; done
+[2026-06-26 10:14:21] OK  block-queue
+[2026-06-26 10:14:21] SKIP missing-command:smartctl
+[2026-06-26 10:14:21] RUN lspci-network: lspci -nn | grep -Ei 'ethernet|network|infiniband'
+[2026-06-26 10:14:21] OK  lspci-network
+[2026-06-26 10:14:21] RUN ip-link-brief: ip -br link
+[2026-06-26 10:14:21] OK  ip-link-brief
+[2026-06-26 10:14:21] RUN ip-address-brief: ip -br address
+[2026-06-26 10:14:21] OK  ip-address-brief
+[2026-06-26 10:14:21] SKIP missing-command:ifconfig
+[2026-06-26 10:14:21] RUN ethtool-all-interfaces: run_ethtool() { if command -v timeout >/dev/null 2>&1; then timeout 5 ethtool "$@" 2>/dev/null || true; else ethtool "$@" 2>/dev/null || true; fi; }; for iface in $(ip -o link show | awk -F': ' '{print $2}' | cut -d@ -f1); do echo "## ${iface}"; run_ethtool "${iface}"; run_ethtool -i "${iface}"; run_ethtool -k "${iface}"; run_ethtool -g "${iface}"; run_ethtool -c "${iface}"; done
+[2026-06-26 10:14:21] OK  ethtool-all-interfaces
+[2026-06-26 10:14:21] RUN gcc-version: gcc --version
+[2026-06-26 10:14:21] OK  gcc-version
+[2026-06-26 10:14:21] RUN g++-version: g++ --version
+[2026-06-26 10:14:21] OK  g++-version
+[2026-06-26 10:14:21] RUN clang-version: clang --version
+[2026-06-26 10:14:21] OK  clang-version
+[2026-06-26 10:14:21] RUN cmake-version: cmake --version
+[2026-06-26 10:14:21] OK  cmake-version
+[2026-06-26 10:14:21] RUN make-version: make --version
+[2026-06-26 10:14:21] OK  make-version
+[2026-06-26 10:14:21] RUN ninja-version: ninja --version
+[2026-06-26 10:14:21] OK  ninja-version
+[2026-06-26 10:14:21] SKIP missing-command:go
+[2026-06-26 10:14:21] SKIP missing-command:rustc
+[2026-06-26 10:14:21] SKIP missing-command:cargo
+[2026-06-26 10:14:21] RUN python3-version: python3 --version
+[2026-06-26 10:14:21] OK  python3-version
+[2026-06-26 10:14:21] RUN java-version: java -version
+[2026-06-26 10:14:21] OK  java-version
+[2026-06-26 10:14:21] RUN docker-version: docker --version
+[2026-06-26 10:14:21] OK  docker-version
+[2026-06-26 10:14:21] RUN containerd-version: containerd --version
+[2026-06-26 10:14:21] OK  containerd-version
+[2026-06-26 10:14:21] RUN runc-version: runc --version
+[2026-06-26 10:14:21] OK  runc-version
+[2026-06-26 10:14:21] RUN podman-version: podman --version
+[2026-06-26 10:14:22] OK  podman-version
+[2026-06-26 10:14:22] RUN mysql-version: mysql --version
+[2026-06-26 10:14:22] OK  mysql-version
+[2026-06-26 10:14:22] RUN mysqld-version: mysqld --version
+[2026-06-26 10:14:22] OK  mysqld-version
+[2026-06-26 10:14:22] RUN nginx-version: nginx -v
+[2026-06-26 10:14:22] OK  nginx-version
+[2026-06-26 10:14:22] RUN redis-server-version: redis-server --version
+[2026-06-26 10:14:22] OK  redis-server-version
+[2026-06-26 10:14:22] RUN cmake-version: cmake --version
+[2026-06-26 10:14:22] OK  cmake-version
+[2026-06-26 10:14:22] RUN gcc-version: gcc --version
+[2026-06-26 10:14:22] OK  gcc-version
+[2026-06-26 10:14:22] SKIP missing-command:go
+[2026-06-26 10:14:22] RUN docker-version: docker --version
+[2026-06-26 10:14:22] OK  docker-version
+[2026-06-26 10:14:22] RUN make-version: make --version
+[2026-06-26 10:14:22] OK  make-version
+[2026-06-26 10:14:22] RUN ninja-version: ninja --version
+[2026-06-26 10:14:22] OK  ninja-version
+[2026-06-26 10:14:22] RUN perf-version: perf --version
+[2026-06-26 10:14:22] OK  perf-version
+[2026-06-26 10:14:22] RUN perf-event-paranoid: cat /proc/sys/kernel/perf_event_paranoid
+[2026-06-26 10:14:22] OK  perf-event-paranoid
+[2026-06-26 10:14:22] RUN kptr-restrict: cat /proc/sys/kernel/kptr_restrict
+[2026-06-26 10:14:22] OK  kptr-restrict
+[2026-06-26 10:14:22] RUN perf-list-hardware-events: perf list 2>&1 | grep -E '(^|[[:space:]])(cycles|instructions|cache-misses|branches)([[:space:]]|$)' | head -n 40
+[2026-06-26 10:14:22] OK  perf-list-hardware-events
+[2026-06-26 10:14:22] RUN perf-stat-smoke: if command -v timeout >/dev/null 2>&1; then timeout 10 perf stat -e cycles,instructions -- true; else perf stat -e cycles,instructions -- true; fi
+[2026-06-26 10:14:22] OK  perf-stat-smoke
+[2026-06-26 10:14:22] RUN uname-all: uname -a
+[2026-06-26 10:14:22] OK  uname-all
+[2026-06-26 10:14:22] RUN proc-version: cat /proc/version
+[2026-06-26 10:14:22] OK  proc-version
+[2026-06-26 10:14:22] SKIP missing-command:sw_vers
+[2026-06-26 10:14:22] RUN os-release: cat /etc/os-release
+[2026-06-26 10:14:22] OK  os-release
+[2026-06-26 10:14:22] RUN sysctl-all: sysctl -a
+[2026-06-26 10:14:22] OK  sysctl-all
+[2026-06-26 10:14:22] RUN numa-balancing: cat /proc/sys/kernel/numa_balancing
+[2026-06-26 10:14:22] OK  numa-balancing
+[2026-06-26 10:14:22] RUN thp-enabled: cat /sys/kernel/mm/transparent_hugepage/enabled
+[2026-06-26 10:14:22] OK  thp-enabled
+[2026-06-26 10:14:22] RUN thp-defrag: cat /sys/kernel/mm/transparent_hugepage/defrag
+[2026-06-26 10:14:22] OK  thp-defrag
+[2026-06-26 10:14:22] RUN hugepages: grep -E 'Huge|AnonHuge' /proc/meminfo
+[2026-06-26 10:14:22] OK  hugepages
+[2026-06-26 10:14:22] RUN ulimit-all: ulimit -a
+[2026-06-26 10:14:22] OK  ulimit-all
+[2026-06-26 10:14:22] RUN rps-xps: find /sys/class/net -path '*/queues/*/rps_cpus' -o -path '*/queues/*/xps_cpus' 2>/dev/null | sort | xargs -r -n1 sh -c 'printf "%s=" "$1"; cat "$1"' sh
+[2026-06-26 10:14:22] OK  rps-xps
+[2026-06-26 10:14:22] RUN irq-affinity: find /proc/irq -maxdepth 2 -name smp_affinity_list 2>/dev/null | sort | head -n 200 | xargs -r -n1 sh -c 'printf "%s=" "$1"; cat "$1"' sh
+[2026-06-26 10:14:23] OK  irq-affinity
+[2026-06-26 10:14:23] RUN systemctl-irqbalance: systemctl status irqbalance --no-pager
+[2026-06-26 10:14:23] OK  systemctl-irqbalance
+[2026-06-26 10:14:23] RUN tuned-adm-active: tuned-adm active
+[2026-06-26 10:14:23] OK  tuned-adm-active
+[2026-06-26 10:14:23] RUN uname-all: uname -a
+[2026-06-26 10:14:23] OK  uname-all
+[2026-06-26 10:14:23] RUN proc-cmdline: cat /proc/cmdline
+[2026-06-26 10:14:23] OK  proc-cmdline
+[2026-06-26 10:14:23] RUN kernel-config-proc-gz: zcat /proc/config.gz
+[2026-06-26 10:14:23] OK  kernel-config-proc-gz
+[2026-06-26 10:14:23] RUN kernel-config-boot: release=$(uname -r); [ -r "/boot/config-${release}" ] && cat "/boot/config-${release}" || [ -r /boot/config ] && cat /boot/config || echo 'kernel config file not found'
+[2026-06-26 10:14:23] OK  kernel-config-boot
+[2026-06-26 10:14:23] RUN lsmod: lsmod
+[2026-06-26 10:14:23] OK  lsmod
+[2026-06-26 10:14:23] RUN systemd-detect-virt: systemd-detect-virt
+[2026-06-26 10:14:23] FAIL systemd-detect-virt exit=1
+[2026-06-26 10:14:23] RUN proc-cpuinfo-hypervisor: grep -i hypervisor /proc/cpuinfo
+[2026-06-26 10:14:23] FAIL proc-cpuinfo-hypervisor exit=1
+[2026-06-26 10:14:23] RUN proc-1-cgroup: cat /proc/1/cgroup
+[2026-06-26 10:14:23] OK  proc-1-cgroup
+[2026-06-26 10:14:23] END environment backup output_dir=/tmp/env-backup-0626

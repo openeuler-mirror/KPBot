@@ -1,0 +1,4 @@
+backup_start=2026-06-26 10:14:07
+backup_end=2026-06-26 10:14:16
+manifest=/tmp/env-backup-0626/command-manifest.txt
+report=/tmp/env-backup-0626/environment-backup-report.html

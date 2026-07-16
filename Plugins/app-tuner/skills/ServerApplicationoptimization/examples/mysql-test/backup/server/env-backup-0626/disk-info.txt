@@ -1,0 +1,216 @@
+===== lsblk-detailed =====
+time: 2026-06-26 10:14:09
+NAME               KNAME   PATH                       MAJ:MIN FSAVAIL FSSIZE FSTYPE      FSUSED FSUSE% FSROOTS FSVER    MOUNTPOINT  MOUNTPOINTS LABEL UUID                                   PTUUID                               PTTYPE PARTTYPE                             PARTTYPENAME     PARTLABEL            PARTUUID                             PARTFLAGS   RA RO RM HOTPLUG MODEL               SERIAL            SIZE STATE   OWNER GROUP MODE       ALIGNMENT MIN-IO OPT-IO PHY-SEC LOG-SEC ROTA SCHED       RQ-SIZE TYPE DISC-ALN DISC-GRAN DISC-MAX DISC-ZERO WSAME WWN                                  RAND PKNAME HCTL       TRAN   SUBSYSTEMS      REV VENDOR   ZONED DAX
+sda                sda     /dev/sda                     8:0                                                                                                                                                                                                                                                                                                        4096  0  0       0 ST4000NM0035-1V4107 ZC18JCLQ          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b3257ab1                      1        6:0:1:0    sas    block:scsi:pci TN03 ATA      none    0
+sdb                sdb     /dev/sdb                     8:16                                                                                                                                                                                                                                                                                                       4096  0  0       0 ST4000NM0035-1V4107 ZC18JJQ7          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32f33c0                      1        6:0:0:0    sas    block:scsi:pci TN03 ATA      none    0
+sdc                sdc     /dev/sdc                     8:32                                                                                                                                                                                                                                                                                                       4096  0  0       0 ST4000NM0035-1V4107 ZC18JLQX          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32f2e36                      1        6:0:2:0    sas    block:scsi:pci TN03 ATA      none    0
+sdd                sdd     /dev/sdd                     8:48                                                                                                                                                                                                                                                                                                       4096  0  0       0 ST4000NM0035-1V4107 ZC18JLXY          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32f3c29                      1        6:0:4:0    sas    block:scsi:pci TN03 ATA      none    0
+sde                sde     /dev/sde                     8:64                                                                                                                                                                                                                                                                                                       4096  0  0       0 ST4000NM0035-1V4107 ZC18JCLA          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b3258ff2                      1        6:0:3:0    sas    block:scsi:pci TN03 ATA      none    0
+sdf                sdf     /dev/sdf                     8:80                                                                                                                                                                                                                                                                                                       4096  0  0       0 ST4000NM0035-1V4107 ZC18JL45          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32f3c71                      1        6:0:5:0    sas    block:scsi:pci TN03 ATA      none    0
+sdg                sdg     /dev/sdg                     8:96                                                                                                                                 11b756fc-03c3-4ee4-9e86-ee754e91f21e gpt                                                                                                                              4096  0  0       0 ST4000NM0035-1V4107 ZC18KSZ6          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b3306dda                      1        6:0:6:0    sas    block:scsi:pci TN03 ATA      none    0
+├─sdg1             sdg1    /dev/sdg1                    8:97   592.4M 598.8M vfat          6.4M     1% /       FAT32    /boot/efi   /boot/efi         2FF4-430B                              11b756fc-03c3-4ee4-9e86-ee754e91f21e gpt    c12a7328-f81f-11d2-ba4b-00a0c93ec93b EFI System       EFI System Partition 50e93146-d628-4cbb-9e3b-e97a2736211c           4096  0  0       0                                       600M         root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 part        0        0B       0B         0    0B 0x5000c500b3306dda                      1 sdg                      block:scsi:pci               none    0
+├─sdg2             sdg2    /dev/sdg2                    8:98     511M 973.4M ext4        395.2M    41% /       1.0      /boot       /boot             9af502b0-43f4-4309-ae69-f87d203ff14b   11b756fc-03c3-4ee4-9e86-ee754e91f21e gpt    0fc63daf-8483-4772-8e79-3d69d8477de4 Linux filesystem                      4046711b-07bd-4105-b4c6-b2be82aead56           4096  0  0       0                                         1G         root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 part        0        0B       0B         0    0B 0x5000c500b3306dda                      1 sdg                      block:scsi:pci               none    0
+└─sdg3             sdg3    /dev/sdg3                    8:99                 LVM2_member                       LVM2 001                               Jfd9XO-TDbV-becW-MduU-AXQQ-nUog-PT50hn 11b756fc-03c3-4ee4-9e86-ee754e91f21e gpt    e6d6d379-f507-44c2-a23c-238f2a3df928 Linux LVM                             a1fd952a-e945-413d-997e-eb0371924c65           4096  0  0       0                                       3.6T         root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 part        0        0B       0B         0    0B 0x5000c500b3306dda                      1 sdg                      block:scsi:pci               none    0
+  ├─openeuler-root dm-0    /dev/mapper/openeuler-root 253:0    558.8G     1T ext4        421.1G    41% /       1.0      /           /                 4279b6c2-2d29-4f05-a038-b1ee58d91f9d                                                                                                                                                                         4096  0  0       0                                         1T running root  disk  brw-rw----         0    512      0     512     512    1                 128 lvm         0        0B       0B         0    0B                                         0 sdg3                     block                        none    0
+  ├─openeuler-swap dm-1    /dev/mapper/openeuler-swap 253:1                  swap                              1        [SWAP]      [SWAP]            5ef4a39a-a2b5-42b9-b7ea-b80ca217dd1a                                                                                                                                                                         4096  0  0       0                                         4G running root  disk  brw-rw----         0    512      0     512     512    1                 128 lvm         0        0B       0B         0    0B                                         0 sdg3                     block                        none    0
+  └─openeuler-home dm-2    /dev/mapper/openeuler-home 253:2      1.1T   2.5T ext4          1.3T    51% /       1.0      /home       /home             626fa3eb-0c06-446e-a02b-bbf06fd07974                                                                                                                                                                         4096  0  0       0                                       2.6T running root  disk  brw-rw----         0    512      0     512     512    1                 128 lvm         0        0B       0B         0    0B                                         0 sdg3                     block                        none    0
+sdh                sdh     /dev/sdh                     8:112                                                                                                                                                                                                                                                                                                      4096  0  0       0 HUS726T4TALA600     V6JG883V          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000cca097e2ab37                      1        7:0:0:0    sas    block:scsi:pci T010 ATA      none    0
+sdi                sdi     /dev/sdi                     8:128                                                                                                                                                                                                                                                                                                      4096  0  0       0 ST4000NM0035-1V4107 ZC18JFLY          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32ce199                      1        7:0:1:0    sas    block:scsi:pci TN03 ATA      none    0
+sdj                sdj     /dev/sdj                     8:144                                                                                                                                                                                                                                                                                                      4096  0  0       0 ST4000NM0035-1V4107 ZC18JKDD          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32ebb4f                      1        7:0:2:0    sas    block:scsi:pci TN03 ATA      none    0
+sdk                sdk     /dev/sdk                     8:160                                                                                                                                                                                                                                                                                                      4096  0  0       0 ST4000NM0035-1V4107 ZC18JFQS          3.6T running root  disk  brw-rw----         0    512      0     512     512    1 mq-deadline     256 disk        0        0B       0B         0    0B 0x5000c500b32cdffb                      1        7:0:3:0    sas    block:scsi:pci TN03 ATA      none    0
+nvme0n1            nvme0n1 /dev/nvme0n1               259:0      3.7T   5.8T xfs           2.1T    37% /                /home/mysql /home/mysql       e6f2bc50-cdec-430d-bc95-a31cb2df6706                                                                                                                                                                         4096  0  0       0 HWE56P436T4M005N    033GJSFSKB000109  5.8T live    root  disk  brw-rw----         0    512      0     512     512    0 none           1023 disk        0      512B       2T         0    0B eui.01000000000000000022a1007019cd55    0                   nvme   block:nvme:pci               none    0
+
+===== lsblk-summary =====
+time: 2026-06-26 10:14:09
+NAME    TYPE  SIZE MODEL               SERIAL           VENDOR   ROTA TRAN   PHY-SEC LOG-SEC
+sda     disk  3.6T ST4000NM0035-1V4107 ZC18JCLQ         ATA         1 sas        512     512
+sdb     disk  3.6T ST4000NM0035-1V4107 ZC18JJQ7         ATA         1 sas        512     512
+sdc     disk  3.6T ST4000NM0035-1V4107 ZC18JLQX         ATA         1 sas        512     512
+sdd     disk  3.6T ST4000NM0035-1V4107 ZC18JLXY         ATA         1 sas        512     512
+sde     disk  3.6T ST4000NM0035-1V4107 ZC18JCLA         ATA         1 sas        512     512
+sdf     disk  3.6T ST4000NM0035-1V4107 ZC18JL45         ATA         1 sas        512     512
+sdg     disk  3.6T ST4000NM0035-1V4107 ZC18KSZ6         ATA         1 sas        512     512
+sdh     disk  3.6T HUS726T4TALA600     V6JG883V         ATA         1 sas        512     512
+sdi     disk  3.6T ST4000NM0035-1V4107 ZC18JFLY         ATA         1 sas        512     512
+sdj     disk  3.6T ST4000NM0035-1V4107 ZC18JKDD         ATA         1 sas        512     512
+sdk     disk  3.6T ST4000NM0035-1V4107 ZC18JFQS         ATA         1 sas        512     512
+nvme0n1 disk  5.8T HWE56P436T4M005N    033GJSFSKB000109             0 nvme       512     512
+
+===== df-human =====
+time: 2026-06-26 10:14:09
+Filesystem                  Size  Used Avail Use% Mounted on
+devtmpfs                    4.0M     0  4.0M   0% /dev
+tmpfs                       189G     0  189G   0% /dev/shm
+tmpfs                        76G  2.4G   73G   4% /run
+tmpfs                       4.0M     0  4.0M   0% /sys/fs/cgroup
+/dev/mapper/openeuler-root  1.1T  422G  559G  43% /
+tmpfs                       189G  2.1G  187G   2% /tmp
+/dev/sdg2                   974M  396M  512M  44% /boot
+/dev/sdg1                   599M  6.5M  593M   2% /boot/efi
+/dev/mapper/openeuler-home  2.6T  1.3T  1.1T  55% /home
+/dev/nvme0n1                5.9T  2.2T  3.7T  37% /home/mysql
+overlay                     1.1T  422G  559G  43% /var/lib/docker/overlay2/0e8bcc196114d5af4a34db8210bb026e465188979ae3517efb429021a9fdedb8/merged
+shm                          64M     0   64M   0% /var/lib/docker/containers/06693868190f6447e0b1452fea3549a6a54e307af53638d92e865f0094f4804a/mounts/shm
+tmpfs                        38G     0   38G   0% /run/user/0
+overlay                     1.1T  422G  559G  43% /var/lib/docker/overlay2/c19beff4a5751744899fc0a60ec3dad9f665d3bff27fb1f04f589b90456fdaf2/merged
+shm                          64M     0   64M   0% /var/lib/docker/containers/ca6251d999c87adeff0c950d574f9c320e9f343b5f3fe413bec7f80b852ff70b/mounts/shm
+
+===== mount =====
+time: 2026-06-26 10:14:09
+proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)
+devtmpfs on /dev type devtmpfs (rw,nosuid,size=4096k,nr_inodes=1048576,mode=755)
+securityfs on /sys/kernel/security type securityfs (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /dev/shm type tmpfs (rw,nosuid,nodev)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000)
+tmpfs on /run type tmpfs (rw,nosuid,nodev,size=78928680k,nr_inodes=819200,mode=755)
+tmpfs on /sys/fs/cgroup type tmpfs (ro,nosuid,nodev,noexec,size=4096k,nr_inodes=1024,mode=755)
+cgroup on /sys/fs/cgroup/systemd type cgroup (rw,nosuid,nodev,noexec,relatime,xattr,release_agent=/usr/lib/systemd/systemd-cgroups-agent,name=systemd)
+efivarfs on /sys/firmware/efi/efivars type efivarfs (rw,nosuid,nodev,noexec,relatime)
+none on /sys/fs/bpf type bpf (rw,nosuid,nodev,noexec,relatime,mode=700)
+cgroup on /sys/fs/cgroup/rdma type cgroup (rw,nosuid,nodev,noexec,relatime,rdma)
+cgroup on /sys/fs/cgroup/hugetlb type cgroup (rw,nosuid,nodev,noexec,relatime,hugetlb)
+cgroup on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
+cgroup on /sys/fs/cgroup/net_cls,net_prio type cgroup (rw,nosuid,nodev,noexec,relatime,net_cls,net_prio)
+cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+cgroup on /sys/fs/cgroup/cpu,cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpu,cpuacct)
+cgroup on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,perf_event)
+cgroup on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
+cgroup on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)
+cgroup on /sys/fs/cgroup/pids type cgroup (rw,nosuid,nodev,noexec,relatime,pids)
+cgroup on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)
+/dev/mapper/openeuler-root on / type ext4 (rw,relatime)
+systemd-1 on /proc/sys/fs/binfmt_misc type autofs (rw,relatime,fd=35,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=132121)
+mqueue on /dev/mqueue type mqueue (rw,nosuid,nodev,noexec,relatime)
+hugetlbfs on /dev/hugepages type hugetlbfs (rw,relatime,pagesize=2M)
+debugfs on /sys/kernel/debug type debugfs (rw,nosuid,nodev,noexec,relatime)
+tracefs on /sys/kernel/tracing type tracefs (rw,nosuid,nodev,noexec,relatime)
+fusectl on /sys/fs/fuse/connections type fusectl (rw,nosuid,nodev,noexec,relatime)
+configfs on /sys/kernel/config type configfs (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,nr_inodes=1048576)
+ramfs on /run/credentials/systemd-sysusers.service type ramfs (ro,nosuid,nodev,noexec,relatime,mode=700)
+/dev/sdg2 on /boot type ext4 (rw,relatime)
+/dev/sdg1 on /boot/efi type vfat (rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=winnt,errors=remount-ro)
+/dev/mapper/openeuler-home on /home type ext4 (rw,relatime)
+/dev/nvme0n1 on /home/mysql type xfs (rw,relatime,attr2,inode64,logbufs=8,logbsize=32k,noquota)
+nsfs on /run/docker/netns/default type nsfs (rw)
+overlay on /var/lib/docker/overlay2/0e8bcc196114d5af4a34db8210bb026e465188979ae3517efb429021a9fdedb8/merged type overlay (rw,relatime,lowerdir=/var/lib/docker/overlay2/l/2SSPIFSBVJAAH2KBP3P73YYH77:/var/lib/docker/overlay2/l/6E2X2SC7BSLC3VVDT4L2TPZOI5:/var/lib/docker/overlay2/l/5445Y7FWIGLNQZRT6VIE2X73OJ,upperdir=/var/lib/docker/overlay2/0e8bcc196114d5af4a34db8210bb026e465188979ae3517efb429021a9fdedb8/diff,workdir=/var/lib/docker/overlay2/0e8bcc196114d5af4a34db8210bb026e465188979ae3517efb429021a9fdedb8/work)
+shm on /var/lib/docker/containers/06693868190f6447e0b1452fea3549a6a54e307af53638d92e865f0094f4804a/mounts/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k)
+binfmt_misc on /proc/sys/fs/binfmt_misc type binfmt_misc (rw,nosuid,nodev,noexec,relatime)
+tracefs on /sys/kernel/debug/tracing type tracefs (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /run/user/0 type tmpfs (rw,nosuid,nodev,relatime,size=39464336k,nr_inodes=9866084,mode=700)
+overlay on /var/lib/docker/overlay2/c19beff4a5751744899fc0a60ec3dad9f665d3bff27fb1f04f589b90456fdaf2/merged type overlay (rw,relatime,lowerdir=/var/lib/docker/overlay2/l/6C7O4DMOZPHM5473B7J2TDMPSR:/var/lib/docker/overlay2/l/F2W3XCKNPRHEDQ2W4Q4FYE43SQ:/var/lib/docker/overlay2/l/6E2X2SC7BSLC3VVDT4L2TPZOI5:/var/lib/docker/overlay2/l/5445Y7FWIGLNQZRT6VIE2X73OJ,upperdir=/var/lib/docker/overlay2/c19beff4a5751744899fc0a60ec3dad9f665d3bff27fb1f04f589b90456fdaf2/diff,workdir=/var/lib/docker/overlay2/c19beff4a5751744899fc0a60ec3dad9f665d3bff27fb1f04f589b90456fdaf2/work)
+shm on /var/lib/docker/containers/ca6251d999c87adeff0c950d574f9c320e9f343b5f3fe413bec7f80b852ff70b/mounts/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k)
+
+===== block-queue =====
+time: 2026-06-26 10:14:09
+## /sys/block/dm-0
+rotational=1
+scheduler=none
+nr_requests=128
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/dm-1
+rotational=1
+scheduler=none
+nr_requests=128
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/dm-2
+rotational=1
+scheduler=none
+nr_requests=128
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/nvme0n1
+rotational=0
+scheduler=[none] mq-deadline kyber bfq 
+nr_requests=1023
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sda
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdb
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdc
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdd
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sde
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdf
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdg
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdh
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdi
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdj
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+## /sys/block/sdk
+rotational=1
+scheduler=[mq-deadline] kyber bfq none
+nr_requests=256
+read_ahead_kb=4096
+logical_block_size=512
+physical_block_size=512
+
+===== missing-command:smartctl =====
+time: 2026-06-26 10:14:09
+command not found: smartctl
+

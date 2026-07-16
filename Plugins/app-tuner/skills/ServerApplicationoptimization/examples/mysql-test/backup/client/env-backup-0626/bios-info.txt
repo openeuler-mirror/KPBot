@@ -1,0 +1,34 @@
+===== dmidecode-bios =====
+time: 2026-06-26 10:14:17
+# dmidecode 3.5
+/sys/firmware/dmi/tables/smbios_entry_point: Permission denied
+# No SMBIOS nor DMI entry point found, sorry.
+
+===== dmidecode-system =====
+time: 2026-06-26 10:14:17
+# dmidecode 3.5
+/sys/firmware/dmi/tables/smbios_entry_point: Permission denied
+# No SMBIOS nor DMI entry point found, sorry.
+
+===== dmidecode-baseboard =====
+time: 2026-06-26 10:14:17
+# dmidecode 3.5
+/sys/firmware/dmi/tables/smbios_entry_point: Permission denied
+# No SMBIOS nor DMI entry point found, sorry.
+
+===== missing-command:system_profiler =====
+time: 2026-06-26 10:14:17
+command not found: system_profiler
+
+===== sysfs-bios-version =====
+time: 2026-06-26 10:14:17
+HixxxxEVB V2.7.7
+
+===== sysfs-product =====
+time: 2026-06-26 10:14:17
+/sys/class/dmi/id/sys_vendor=To be filled by O.E.M.
+/sys/class/dmi/id/product_name=To be filled by O.E.M.
+/sys/class/dmi/id/product_version=To be filled by O.E.M.
+/sys/class/dmi/id/board_vendor=To be filled by O.E.M.
+/sys/class/dmi/id/board_name=To be filled by O.E.M.
+
