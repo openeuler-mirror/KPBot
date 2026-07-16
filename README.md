@@ -6,8 +6,8 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline |
-| **[app-tuner](plugins/app-tuner/)** | performance | 应用级调优 - 针对具体应用场景的深度性能调优 |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline |
+| **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 - 针对具体应用场景的深度性能调优 |
 
 ### 即将推出
 
