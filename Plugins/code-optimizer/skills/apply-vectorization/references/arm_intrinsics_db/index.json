@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0.0",
+  "retrieved_at": "2026-05-12",
+  "scope": "Curated vectorization-focused Arm intrinsics and attributes for apply-vectorization.",
+  "automation_policy": {
+    "fetched_sources": [
+      "https://arm-software.github.io/acle/main/acle.html",
+      "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html"
+    ],
+    "optional_official_sources": [
+      "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction",
+      "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2"
+    ],
+    "reference_only_sources": [
+      "https://developer.arm.com/servers-and-cloud-computing/arm-simd",
+      "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/scalable-matrix-extension-expanding-the-arm-intrinsics-search-engine",
+      "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions"
+    ]
+  },
+  "snapshots": [
+    {
+      "file": "neon.json",
+      "count": 7
+    },
+    {
+      "file": "sve.json",
+      "count": 10
+    },
+    {
+      "file": "sme.json",
+      "count": 14
+    },
+    {
+      "file": "attributes.json",
+      "count": 15
+    }
+  ],
+  "counts_by_isa": {
+    "neon": 8,
+    "sme": 24,
+    "sme2": 1,
+    "sve": 12,
+    "sve2": 1
+  },
+  "counts_by_kind": {
+    "intrinsic": 20,
+    "rule": 10,
+    "attribute": 5,
+    "instruction": 11
+  },
+  "sources": [
+    {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "fetch_mode": "html-scraped",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "fetch_mode": "html-scraped",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Arm SIMD: Optimize, Migrate, and Accelerate C/C++ for Peak Performance",
+      "url": "https://developer.arm.com/servers-and-cloud-computing/arm-simd",
+      "fetch_mode": "reference-only",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Scalable Matrix Extension: Expanding the Arm Intrinsics Search Engine",
+      "url": "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/scalable-matrix-extension-expanding-the-arm-intrinsics-search-engine",
+      "fetch_mode": "reference-only",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Part 1: Arm Scalable Matrix Extension (SME) Introduction",
+      "url": "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction",
+      "fetch_mode": "optional-html; reference-only when developer.arm.com returns 403",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Part 2: Arm Scalable Matrix Extension (SME) Instructions",
+      "url": "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2",
+      "fetch_mode": "optional-html; reference-only when developer.arm.com returns 403",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Arm A-profile A64 Instruction Set Architecture / SME Instructions",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "fetch_mode": "reference-only; direct scripted access can return 403",
+      "retrieved_at": "2026-05-12"
+    },
+    {
+      "title": "Arm A-profile A64 Instruction Set Architecture / SVE Instructions",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions",
+      "fetch_mode": "reference-only; direct scripted access can return 403",
+      "retrieved_at": "2026-05-12"
+    }
+  ]
+}

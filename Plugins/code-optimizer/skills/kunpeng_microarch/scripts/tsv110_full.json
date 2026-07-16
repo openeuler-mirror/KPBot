@@ -1,0 +1,3056 @@
+{
+  "resources": {
+    "ALU": 1,
+    "AB": 2,
+    "MDU": 1,
+    "FSU1": 1,
+    "FSU2": 1,
+    "Ld0St": 1,
+    "Ld1": 1,
+    "Ld": 2,
+    "F": 2,
+    "ALUAB": 3
+  },
+  "port_map": {
+    "0": "ALU (P0)",
+    "1": "AB (P1: ALU+BRU)",
+    "2": "AB (P2: ALU+BRU)",
+    "3": "MDU (P3)",
+    "4": "FSU1 (P4: FP/ASIMD)",
+    "5": "FSU2 (P5: FP/ASIMD)",
+    "6": "Ld1 (P6: Load)",
+    "7": "Ld0St (P7: Load/Store)"
+  },
+  "instructions": [
+    {
+      "pattern": "COPY",
+      "match_type": "instrs",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "copy"
+    },
+    {
+      "pattern": "^AES[DE]",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^AESI?MC",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^SHA1SU1",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^SHA1(H|SU0)",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 2.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^SHA1[CMP]",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^SHA256SU0",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^SHA256SU1",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^SHA256(H|H2)",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^CRC32.*$",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^PMULL(v8i8|v16i8)",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "^PMULL(v1i64|v2i64)",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "crypto"
+    },
+    {
+      "pattern": "BLR",
+      "match_type": "instrs",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "int_branch"
+    },
+    {
+      "pattern": "^(BR|RET|(CBZ|CBNZ|TBZ|TBNZ))$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "int_branch"
+    },
+    {
+      "pattern": "^(CCMN|CCMP)(W|X)(r|i)$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "int_csel"
+    },
+    {
+      "pattern": "^(CSEL|CSINC|CSINV|CSNEG)(W|X)r$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "int_csel"
+    },
+    {
+      "pattern": "^FCCMP(E)?(S|D)rr$",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "int_csel"
+    },
+    {
+      "pattern": "^FCSEL(S|D)rrr$",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "int_csel"
+    },
+    {
+      "pattern": "^(S|U)DIVWr$",
+      "match_type": "instregex",
+      "latency": 12,
+      "throughput": 0.0833,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 12.0
+      },
+      "category": "int_div"
+    },
+    {
+      "pattern": "^(S|U)DIVXr$",
+      "match_type": "instregex",
+      "latency": 20,
+      "throughput": 0.05,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 20.0
+      },
+      "category": "int_div"
+    },
+    {
+      "pattern": "MADDWrrr, MSUBWrrr",
+      "match_type": "instrs",
+      "latency": 3,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 1.0
+      },
+      "category": "int_mul"
+    },
+    {
+      "pattern": "MADDXrrr, MSUBXrrr",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 1.0
+      },
+      "category": "int_mul"
+    },
+    {
+      "pattern": "(S|U)(MADDL|MSUBL)rrr",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 1.0
+      },
+      "category": "int_mul"
+    },
+    {
+      "pattern": "^(S|U)MULHrr$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "MDU"
+      ],
+      "resource_cycles": {
+        "MDU": 1.0
+      },
+      "category": "int_mul"
+    },
+    {
+      "pattern": "^LDR(W|X)l$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "LDRSWl",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDR(BB|HH|W|X)ui$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDRS(BW|BX|HW|HX|W)ui$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDR(BB|HH|W|X)(post|pre)$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDRS(BW|BX|HW|HX|W)(post|pre)$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDTR(B|H|W|X)i$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDUR(BB|HH|W|X)i$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDTRS(BW|BX|HW|HX|W)i$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDURS(BW|BX|HW|HX|W)i$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDNP(W|X)i$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDP(W|X)i$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDP(W|X)(post|pre)$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.5,
+      "uops": 4,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 2.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "LDPSWi",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "LDPSWpost",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 3,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "LDPSWpre",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 3,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "PRFMl",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "PRFUMi",
+      "match_type": "instrs",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^PRFMui$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^PRFMro(W|X)$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDR[DSQ]l",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDUR[BDHSQ]i",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDR[BDHSQ](post|pre)",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDR[BDHSQ]ui",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDR(Q|D|H|S|B)ro(W|X)$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDN?P[DQS]i",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "^LDP[DQS](post|pre)",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 3,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "load"
+    },
+    {
+      "pattern": "B",
+      "match_type": "instrs",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "BL",
+      "match_type": "instrs",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "(BIC|EON|ORN)[WX]rr",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "(BIC)S[WX]rr",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "(ADD|AND|EOR|ORR|SUB)[WX]r(r|i)",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "(ADD|AND|EOR|ORR|SUB)S[WX]r(r|i)",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^(ADC|SBC|BIC)[WX]r$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^(ADC|SBC)S[WX]r$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "AB"
+      ],
+      "resource_cycles": {
+        "AB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^(ADD|AND|BIC|EON|EOR|ORN|ORR|SUB)[WX]rs$",
+      "match_type": "instregex",
+      "latency": 0,
+      "throughput": 0.0,
+      "uops": 0,
+      "ports": [],
+      "resource_cycles": {},
+      "category": "other"
+    },
+    {
+      "pattern": "^(ADD|AND|BIC|EON|EOR|ORN|ORR|SUB)S[WX]rs$",
+      "match_type": "instregex",
+      "latency": 0,
+      "throughput": 0.0,
+      "uops": 0,
+      "ports": [],
+      "resource_cycles": {},
+      "category": "other"
+    },
+    {
+      "pattern": "^(ADD|SUB)[WX]r(x|x64)$",
+      "match_type": "instregex",
+      "latency": 0,
+      "throughput": 0.0,
+      "uops": 0,
+      "ports": [],
+      "resource_cycles": {},
+      "category": "other"
+    },
+    {
+      "pattern": "^(ADD|SUB)S[WX]r(x|x64)$",
+      "match_type": "instregex",
+      "latency": 0,
+      "throughput": 0.0,
+      "uops": 0,
+      "ports": [],
+      "resource_cycles": {},
+      "category": "other"
+    },
+    {
+      "pattern": "ADR, ADRP",
+      "match_type": "instrs",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^MOV[NZK][WX]i",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "(LSLV|LSRV|ASRV|RORV)(W|X)r",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^EXTR(W|X)rri$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^(S|U)?BFM(W|X)ri$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^(CLS|CLZ|RBIT|REV(16|32)?)(W|X)r$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 3.0,
+      "uops": 1,
+      "ports": [
+        "ALUAB"
+      ],
+      "resource_cycles": {
+        "ALUAB": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^FCMP(E)?(S|D)r(r|i)$",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^F(N)?MULHrr$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^F(N)?MULSrr$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^F(N)?MULDrr$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^FRINT.+r",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^[SU]?(Q|R){1,2}SHR",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^[SU][QR]{1,2}SHL(v1i8|v1i16|v1i32|v1i64|v8i8|v4i16|v2i32|b|d|h|s)",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^[SU][QR]{1,2}SHL(v16i8|v8i16|v4i32|v2i64)",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^FCVT[AMNPZ][SU]v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^FCVT(L)v",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^FCVT(N|XN)v",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^F(MAX|MIN)(NM)?v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^F(MAX|MIN)(NM)?Pv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^F(MAX|MIN)(NM)?Vv",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^FRINT[AIMNPXZ]v",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^[FU](RECP|RSQRT)(E|X)v",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "other"
+    },
+    {
+      "pattern": "^[SU]CVTF[SU][WX][SD]ri",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "ALU",
+        "F"
+      ],
+      "resource_cycles": {
+        "ALU": 1.0,
+        "F": 1.0
+      },
+      "category": "scalar_cvt"
+    },
+    {
+      "pattern": "F(ABS|NEG)(D|S)r",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "FDIVSrr",
+      "match_type": "instrs",
+      "latency": 11,
+      "throughput": 0.0909,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 11.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "FDIVDrr",
+      "match_type": "instrs",
+      "latency": 18,
+      "throughput": 0.0556,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 18.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "FSQRTSr",
+      "match_type": "instrs",
+      "latency": 17,
+      "throughput": 0.0588,
+      "uops": 1,
+      "ports": [
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU2": 17.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "FSQRTDr",
+      "match_type": "instrs",
+      "latency": 31,
+      "throughput": 0.0323,
+      "uops": 1,
+      "ports": [
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU2": 31.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^F(MAX|MIN).+rr",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^F(ADD|SUB)Hrr",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^F(ADD|SUB)Srr",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^F(ADD|SUB)Drr",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^FCVT(A|M|N|P|Z)(S|U)U(W|X)(S|D)r$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^FCVT[HSD][HSD]r",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^FMOV(DX|WS|XD|SW|DXHigh|XDHigh)r$",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^FMOV[SD][ir]$",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "scalar_float"
+    },
+    {
+      "pattern": "^[SU]ABAL?v",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_abal"
+    },
+    {
+      "pattern": "^[SU]ABDL?v",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_abal"
+    },
+    {
+      "pattern": "^[SU]ADALPv",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_adalp"
+    },
+    {
+      "pattern": "^(ABS|ADD(P)?|NEG|SUB)v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^[SU]H(ADD|SUB)v",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^R?(ADD|SUB)HN2?v",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^[SU]Q(ADD|SUB)v",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^(SU|US)QADDv",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^[SU]RHADDv",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^((SQ)(ABS|NEG))v",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^FABSv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^FNEGv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^F(ADD|ADDP|SUB)v",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_arith"
+    },
+    {
+      "pattern": "^(CLS|CLZ|CNT)v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_cls"
+    },
+    {
+      "pattern": "^CM(EQ|GE|GT|HI|HS|LE|LT|TST)v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_cmp"
+    },
+    {
+      "pattern": "^F(AC|CM)(EQ|GE|GT|LE|LT)v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_cmp"
+    },
+    {
+      "pattern": "^[SU]CVTFv",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_float_cvt"
+    },
+    {
+      "pattern": "FDIVv2f32",
+      "match_type": "instregex",
+      "latency": 11,
+      "throughput": 0.0909,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 11.0
+      },
+      "category": "simd_float_div"
+    },
+    {
+      "pattern": "FDIVv4f32",
+      "match_type": "instregex",
+      "latency": 24,
+      "throughput": 0.0417,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 24.0
+      },
+      "category": "simd_float_div"
+    },
+    {
+      "pattern": "FDIVv2f64",
+      "match_type": "instregex",
+      "latency": 38,
+      "throughput": 0.0263,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 38.0
+      },
+      "category": "simd_float_div"
+    },
+    {
+      "pattern": "^FN?M(ADD|SUB)Hrrr",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_float_mul"
+    },
+    {
+      "pattern": "^FN?M(ADD|SUB)Srrr",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_float_mul"
+    },
+    {
+      "pattern": "^FN?M(ADD|SUB)Drrr",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_float_mul"
+    },
+    {
+      "pattern": "FSQRTv2f32",
+      "match_type": "instrs",
+      "latency": 17,
+      "throughput": 0.0588,
+      "uops": 1,
+      "ports": [
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU2": 17.0
+      },
+      "category": "simd_float_sqrt"
+    },
+    {
+      "pattern": "FSQRTv4f32",
+      "match_type": "instrs",
+      "latency": 36,
+      "throughput": 0.0278,
+      "uops": 1,
+      "ports": [
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU2": 36.0
+      },
+      "category": "simd_float_sqrt"
+    },
+    {
+      "pattern": "FSQRTv2f64",
+      "match_type": "instrs",
+      "latency": 64,
+      "throughput": 0.0156,
+      "uops": 1,
+      "ports": [
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU2": 64.0
+      },
+      "category": "simd_float_sqrt"
+    },
+    {
+      "pattern": "^LD1Rv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "Ld": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Rv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 2.0,
+      "uops": 3,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Onev(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Onev(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Twov(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Twov(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Threev(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 0.6667,
+      "uops": 3,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 3.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Threev(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 0.6667,
+      "uops": 4,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 3.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Fourv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 2.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD1Fourv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 1.0,
+      "uops": 3,
+      "ports": [
+        "ALUAB",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "Ld": 2.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld1"
+    },
+    {
+      "pattern": "^LD2Rv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 1.0,
+      "uops": 3,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 2.0,
+        "Ld": 1.0
+      },
+      "category": "simd_ld2"
+    },
+    {
+      "pattern": "^LD2Rv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 1.0,
+      "uops": 4,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 2.0,
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld2"
+    },
+    {
+      "pattern": "^LD2Twov(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 1.0,
+      "uops": 3,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 2.0,
+        "Ld": 1.0
+      },
+      "category": "simd_ld2"
+    },
+    {
+      "pattern": "^LD2Twov(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 7,
+      "throughput": 1.0,
+      "uops": 4,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 2.0,
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld2"
+    },
+    {
+      "pattern": "^LD3Rv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.6667,
+      "uops": 4,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 3.0,
+        "Ld": 1.0
+      },
+      "category": "simd_ld3"
+    },
+    {
+      "pattern": "^LD3Rv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.6667,
+      "uops": 5,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 3.0,
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld3"
+    },
+    {
+      "pattern": "^LD3Threev(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.6667,
+      "uops": 4,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 3.0,
+        "Ld": 1.0
+      },
+      "category": "simd_ld3"
+    },
+    {
+      "pattern": "^LD3Threev(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.6667,
+      "uops": 5,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 3.0,
+        "Ld": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld3"
+    },
+    {
+      "pattern": "^LD4Rv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.6667,
+      "uops": 5,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 3.0,
+        "Ld": 2.0
+      },
+      "category": "simd_ld4"
+    },
+    {
+      "pattern": "^LD4Rv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.6667,
+      "uops": 6,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 3.0,
+        "Ld": 2.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld4"
+    },
+    {
+      "pattern": "^LD4Fourv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 10,
+      "throughput": 0.5,
+      "uops": 8,
+      "ports": [
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 4.0,
+        "Ld": 4.0
+      },
+      "category": "simd_ld4"
+    },
+    {
+      "pattern": "^LD4Fourv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 10,
+      "throughput": 0.5,
+      "uops": 9,
+      "ports": [
+        "ALUAB",
+        "F",
+        "Ld"
+      ],
+      "resource_cycles": {
+        "F": 4.0,
+        "Ld": 4.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_ld4"
+    },
+    {
+      "pattern": "^(AND|BIC|BIF|BIT|BSL|EOR|MVN|NOT|ORN|ORR)v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_logic"
+    },
+    {
+      "pattern": "^RBITv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_logic"
+    },
+    {
+      "pattern": "^[SU](MIN|MAX)P?v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_minmax"
+    },
+    {
+      "pattern": "^[SU](MIN|MAX)V(v4i16|v4i32)v$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_minmax"
+    },
+    {
+      "pattern": "^[SU](MIN|MAX)V(v8i8|v8i16)v$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_minmax"
+    },
+    {
+      "pattern": "^[SU](MIN|MAX)Vv16i8v$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_minmax"
+    },
+    {
+      "pattern": "^[SU]MOVv",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "simd_mov"
+    },
+    {
+      "pattern": "^FMOVv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_mov"
+    },
+    {
+      "pattern": "^(MUL|ML[AS]|SQR?D(MULH))(v8i8|v4i16|v2i32|v1i8|v1i16|v1i32|v1i64)",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "simd_mul"
+    },
+    {
+      "pattern": "^(MUL|ML[AS]|SQR?D(MULH))(v16i8|v8i16|v4i32)",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.5,
+      "uops": 2,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 2.0
+      },
+      "category": "simd_mul"
+    },
+    {
+      "pattern": "(S|U|SQD)(MLAL|MLSL|MULL)v.*",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "simd_mul"
+    },
+    {
+      "pattern": "^FMULX?v",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_mul"
+    },
+    {
+      "pattern": "^(DUP|INS)v.+lane",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_permute"
+    },
+    {
+      "pattern": "^REV(16|32|64)v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_permute"
+    },
+    {
+      "pattern": "^(UZP|ZIP)[12]v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_permute"
+    },
+    {
+      "pattern": "^EXTv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_permute"
+    },
+    {
+      "pattern": "^XTNv",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_permute"
+    },
+    {
+      "pattern": "^(INS|DUP)v.+gpr",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_permute"
+    },
+    {
+      "pattern": "^(S|SR|U|UR)SRA",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "simd_shift"
+    },
+    {
+      "pattern": "^SQSHLU",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "simd_shift"
+    },
+    {
+      "pattern": "^[SU]SHL(v16i8|v8i16|v4i32|v2i64)",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "FSU1"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0
+      },
+      "category": "simd_shift"
+    },
+    {
+      "pattern": "^ST1Onev(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Onev(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 3,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Twov(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Twov(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Threev(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Threev(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Fourv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST1Fourv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st1"
+    },
+    {
+      "pattern": "^ST2Twov(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st2"
+    },
+    {
+      "pattern": "^ST2Twov(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st2"
+    },
+    {
+      "pattern": "^ST3Threev(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st3"
+    },
+    {
+      "pattern": "^ST3Threev(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 5,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st3"
+    },
+    {
+      "pattern": "^ST4Fourv(8b|4h|2s|1d|16b|8h|4s|2d)$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_st4"
+    },
+    {
+      "pattern": "^ST4Fourv(8b|4h|2s|1d|16b|8h|4s|2d)_POST$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 2.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "simd_st4"
+    },
+    {
+      "pattern": "^TB[LX]v8i8One",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v8i8Two",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 2.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v8i8Three",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 0.6667,
+      "uops": 3,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 3.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v8i8Four",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.5,
+      "uops": 4,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 4.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v16i8One",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 2.0,
+      "uops": 1,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 1.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v16i8Two",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 2.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v16i8Three",
+      "match_type": "instregex",
+      "latency": 6,
+      "throughput": 0.6667,
+      "uops": 3,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 3.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^TB[LX]v16i8Four",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 0.5,
+      "uops": 4,
+      "ports": [
+        "F"
+      ],
+      "resource_cycles": {
+        "F": 4.0
+      },
+      "category": "simd_tbl"
+    },
+    {
+      "pattern": "^[SU](ADD(L|LP|W)|SUB(L|W))v",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_widen"
+    },
+    {
+      "pattern": "^[SU]?ADDL?V(v8i8|v4i16|v2i32)v$",
+      "match_type": "instregex",
+      "latency": 4,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_widen"
+    },
+    {
+      "pattern": "^[SU]?ADDL?V(v8i16|v4i32)v$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_widen"
+    },
+    {
+      "pattern": "^[SU]?ADDL?Vv16i8v$",
+      "match_type": "instregex",
+      "latency": 8,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "FSU1",
+        "FSU2"
+      ],
+      "resource_cycles": {
+        "FSU1": 1.0,
+        "FSU2": 1.0
+      },
+      "category": "simd_widen"
+    },
+    {
+      "pattern": "^STN?P(W|X)i$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STP(W|X)(post|pre)$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STUR(BB|HH|W|X)i$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STTR(B|H|W|X)i$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STR(BB|HH|W|X)ui$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STR(BB|HH|W|X)(post|pre)$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STR(BB|HH|W|X)ro(W|X)$",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STUR[BHSDQ]i",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STR[BHSDQ](post|pre)",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STR[BHSDQ]ui",
+      "match_type": "instregex",
+      "latency": 1,
+      "throughput": 1.0,
+      "uops": 1,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STR[BHSDQ]ro[WX]",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 1.0,
+      "uops": 2,
+      "ports": [
+        "ALUAB",
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 1.0,
+        "ALUAB": 1.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STN?P[SDQ]i",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 0.5,
+      "uops": 2,
+      "ports": [
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 2.0
+      },
+      "category": "store"
+    },
+    {
+      "pattern": "^STP[SDQ](post|pre)",
+      "match_type": "instregex",
+      "latency": 2,
+      "throughput": 0.5,
+      "uops": 3,
+      "ports": [
+        "ALUAB",
+        "Ld0St"
+      ],
+      "resource_cycles": {
+        "Ld0St": 2.0,
+        "ALUAB": 1.0
+      },
+      "category": "store"
+    }
+  ]
+}

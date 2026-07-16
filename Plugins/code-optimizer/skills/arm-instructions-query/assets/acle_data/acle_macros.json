@@ -1,0 +1,506 @@
+[
+  {
+    "name": "__ARM_32BIT_STATE",
+    "meaning": "Code is for AArch32 state"
+  },
+  {
+    "name": "__ARM_64BIT_STATE",
+    "meaning": "Code is for AArch64 state"
+  },
+  {
+    "name": "__ARM_ACLE",
+    "meaning": "Indicates ACLE implemented"
+  },
+  {
+    "name": "__ARM_ALIGN_MAX_PWR",
+    "meaning": "Log of maximum alignment of static object"
+  },
+  {
+    "name": "__ARM_ALIGN_MAX_STACK_PWR",
+    "meaning": "Log of maximum alignment of stack object"
+  },
+  {
+    "name": "__ARM_ARCH",
+    "meaning": "Arm architecture level"
+  },
+  {
+    "name": "__ARM_ARCH_ISA_A64",
+    "meaning": "AArch64 ISA present"
+  },
+  {
+    "name": "__ARM_ARCH_ISA_ARM",
+    "meaning": "Arm instruction set present"
+  },
+  {
+    "name": "__ARM_ARCH_ISA_THUMB",
+    "meaning": "T32 instruction set present"
+  },
+  {
+    "name": "__ARM_ARCH_PROFILE",
+    "meaning": "Architecture profile"
+  },
+  {
+    "name": "__ARM_BF16_FORMAT_ALTERNATIVE",
+    "meaning": "16-bit brain floating-point, alternative format"
+  },
+  {
+    "name": "__ARM_BIG_ENDIAN",
+    "meaning": "Memory is big-endian"
+  },
+  {
+    "name": "__ARM_FEATURE_AES",
+    "meaning": "AES Crypto extension (Arm v8-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_ATOMICS",
+    "meaning": "Large System Extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_BF16",
+    "meaning": "16-bit brain floating-point, vector instruction"
+  },
+  {
+    "name": "__ARM_FEATURE_BTI_DEFAULT",
+    "meaning": "Branch Target Identification"
+  },
+  {
+    "name": "__ARM_FEATURE_CDE",
+    "meaning": "Custom Datapath Extension"
+  },
+  {
+    "name": "__ARM_FEATURE_CDE_COPROC",
+    "meaning": "Custom Datapath Extension"
+  },
+  {
+    "name": "__ARM_FEATURE_CLZ",
+    "meaning": "CLZ instruction"
+  },
+  {
+    "name": "__ARM_FEATURE_COMPLEX",
+    "meaning": "Armv8.3-A extension"
+  },
+  {
+    "name": "__ARM_FEATURE_COPROC",
+    "meaning": "Coprocessor Intrinsics"
+  },
+  {
+    "name": "__ARM_FEATURE_CRC32",
+    "meaning": "CRC32 extension"
+  },
+  {
+    "name": "__ARM_FEATURE_CRYPTO",
+    "meaning": "Crypto extension"
+  },
+  {
+    "name": "__ARM_FEATURE_CSSC",
+    "meaning": "CSSC extension"
+  },
+  {
+    "name": "__ARM_FEATURE_DIRECTED_ROUNDING",
+    "meaning": "Directed Rounding"
+  },
+  {
+    "name": "__ARM_FEATURE_DOTPROD",
+    "meaning": "Dot product extension (ARM v8.2-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_DSP",
+    "meaning": "DSP instructions (Arm v5E) (32-bit-only)"
+  },
+  {
+    "name": "__ARM_FEATURE_FAMINMAX",
+    "meaning": "Floating-point absolute minimum and maximum extension"
+  },
+  {
+    "name": "__ARM_FEATURE_FMA",
+    "meaning": "Floating-point fused multiply-accumulate"
+  },
+  {
+    "name": "__ARM_FEATURE_FP16_FML",
+    "meaning": "FP16 FML extension (Arm v8.4-A, optional Armv8.2-A, Armv8.3-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_FP8",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_FP8DOT2",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_FP8DOT4",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_FP8FMA",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_FPRCVT",
+    "meaning": "FPRCVT extension"
+  },
+  {
+    "name": "__ARM_FEATURE_FRINT",
+    "meaning": "Floating-point rounding extension (Arm v8.5-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_GCS",
+    "meaning": "Guarded Control Stack"
+  },
+  {
+    "name": "__ARM_FEATURE_GCS_DEFAULT",
+    "meaning": "Guarded Control Stack protection can be enabled"
+  },
+  {
+    "name": "__ARM_FEATURE_IDIV",
+    "meaning": "Hardware Integer Divide"
+  },
+  {
+    "name": "__ARM_FEATURE_JCVT",
+    "meaning": "Javascript conversion (ARMv8.3-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_LDREX",
+    "meaning": "Load/store exclusive instructions"
+  },
+  {
+    "name": "__ARM_FEATURE_LUT",
+    "meaning": "Lookup table extensions (FEAT_LUT)"
+  },
+  {
+    "name": "__ARM_FEATURE_MATMUL_INT8",
+    "meaning": "Integer Matrix Multiply extension (Armv8.6-A, optional Armv8.2-A, Armv8.3-A, Armv8.4-A, Armv8.5-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_MEMORY_TAGGING",
+    "meaning": "Memory Tagging (Armv8.5-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_MOPS",
+    "meaning": "`memcpy`, `memset`, and `memmove` family of operations standardization instructions"
+  },
+  {
+    "name": "__ARM_FEATURE_MVE",
+    "meaning": "M-profile Vector Extension"
+  },
+  {
+    "name": "__ARM_FEATURE_NUMERIC_MAXMIN",
+    "meaning": "Numeric Maximum and Minimum"
+  },
+  {
+    "name": "__ARM_FEATURE_PAC_DEFAULT",
+    "meaning": "Pointer authentication protection"
+  },
+  {
+    "name": "__ARM_FEATURE_PAUTH",
+    "meaning": "Pointer Authentication Extension (FEAT_PAuth)"
+  },
+  {
+    "name": "__ARM_FEATURE_PAUTH_LR",
+    "meaning": "Armv9.5-A Enhancements to Pointer Authentication Extension (FEAT_PAuth_LR)"
+  },
+  {
+    "name": "__ARM_FEATURE_PCDPHINT",
+    "meaning": "Producer-consumer data placement hint instructions (FEAT_PCDPHINT)"
+  },
+  {
+    "name": "__ARM_FEATURE_QBIT",
+    "meaning": "Q (saturation) flag (32-bit-only)"
+  },
+  {
+    "name": "__ARM_FEATURE_QRDMX",
+    "meaning": "SQRDMLxH instructions and associated intrinsics availability"
+  },
+  {
+    "name": "__ARM_FEATURE_RCPC",
+    "meaning": "Release Consistent processor consistent Model (64-bit-only)"
+  },
+  {
+    "name": "__ARM_FEATURE_RNG",
+    "meaning": "Random Number Generation Extension (Armv8.5-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_SAT",
+    "meaning": "Width-specified saturation instructions (32-bit-only)"
+  },
+  {
+    "name": "__ARM_FEATURE_SHA2",
+    "meaning": "SHA2 Crypto extension (Arm v8-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_SHA3",
+    "meaning": "SHA3 Crypto extension (Arm v8.4-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_SHA512",
+    "meaning": "SHA2 Crypto ext. (Arm v8.4-A, optional Armv8.2-A, Armv8.3-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_SIMD32",
+    "meaning": "32-bit SIMD instructions (Armv6) (32-bit-only)"
+  },
+  {
+    "name": "__ARM_FEATURE_SM3",
+    "meaning": "SM3 Crypto extension (Arm v8.4-A, optional Armv8.2-A, Armv8.3-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_SM4",
+    "meaning": "SM4 Crypto extension (Arm v8.4-A, optional Armv8.2-A, Armv8.3-A)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME",
+    "meaning": "Scalable Matrix Extension (FEAT_SME)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME2",
+    "meaning": "Scalable Matrix Extension (FEAT_SME2)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_B16B16",
+    "meaning": "Non-widening brain 16-bit floating-point SME intrinsics (FEAT_SME_B16B16)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_F16F16",
+    "meaning": "Half-precision floating-point SME intrinsics (FEAT_SME_F16F16)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_F64F64",
+    "meaning": "Double precision floating-point outer product intrinsics (FEAT_SME_F64F64)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_F8F16",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_F8F32",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_I16I64",
+    "meaning": "16-bit to 64-bit integer widening outer product intrinsics (FEAT_SME_I16I64)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_TMOP",
+    "meaning": "Structured sparsity outer product intrinsics (FEAT_SME_TMOP)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_MOP4",
+    "meaning": "quarter-tile outer product intrinsics (FEAT_SME_MOP4)"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_LOCALLY_STREAMING",
+    "meaning": "Support for the `arm_locally_streaming` attribute"
+  },
+  {
+    "name": "__ARM_FEATURE_SME_LUTv2",
+    "meaning": "Lookup table extensions (FEAT_SME_LUTv2)"
+  },
+  {
+    "name": "__ARM_FEATURE_SSVE_FP8DOT2",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_SSVE_FP8DOT4",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_SSVE_FP8FMA",
+    "meaning": "Modal 8-bit floating-point extensions"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE",
+    "meaning": "Scalable Vector Extension (FEAT_SVE)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_B16B16",
+    "meaning": "Non-widening brain 16-bit floating-point intrinsics (FEAT_SVE_B16B16)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_BF16",
+    "meaning": "SVE support for the 16-bit brain floating-point extension (FEAT_BF16)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_BFSCALE",
+    "meaning": "SVE support for the 16-bit brain floating-point vector multiplication extension (FEAT_SVE_BFSCALE)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_BITS",
+    "meaning": "The number of bits in an SVE vector, when known in advance"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_MATMUL_FP32",
+    "meaning": "32-bit floating-point matrix multiply extension (FEAT_F32MM)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_MATMUL_FP64",
+    "meaning": "64-bit floating-point matrix multiply extension (FEAT_F64MM)"
+  },
+  {
+    "name": "__ARM_FEATURE_F8F16MM",
+    "meaning": "Modal 8-bit floating-point matrix multiply-accumulate to half-precision extension (FEAT_F8F16MM)"
+  },
+  {
+    "name": "__ARM_FEATURE_F8F32MM",
+    "meaning": "Modal 8-bit floating-point matrix multiply-accumulate to single-precision extension (FEAT_F8F32MM)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_F16F32MM",
+    "meaning": "16-bit floating-point matrix multiply-accumulate to single-precision extension (FEAT_SVE_F16F32MM)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_MATMUL_INT8",
+    "meaning": "SVE support for the integer matrix multiply extension (FEAT_I8MM)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_PREDICATE_OPERATORS",
+    "meaning": "Level of support for C and C++ operators on SVE vector types"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_VECTOR_OPERATORS",
+    "meaning": "Level of support for C and C++ operators on SVE predicate types"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2",
+    "meaning": "SVE version 2 (FEAT_SVE2)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2_AES",
+    "meaning": "SVE2 support for the AES cryptographic extension (FEAT_SVE_AES)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE_AES2",
+    "meaning": "SVE support for the multi-vector AES cryptographic and 128-bit polynomial multiply long extension (FEAT_SVE_AES2)"
+  },
+  {
+    "name": "__ARM_FEATURE_SSVE_AES",
+    "meaning": "Streaming SVE support for the multi-vector AES cryptographic and 128-bit polynomial multiply long extension (FEAT_SSVE_AES)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2_BITPERM",
+    "meaning": "SVE2 bit permute extension"
+  },
+  {
+    "name": "__ARM_FEATURE_SSVE_BITPERM",
+    "meaning": "SVE2 bit permute extension"
+  },
+  {
+    "name": "__ARM_FEATURE_SSVE_FEXPA",
+    "meaning": "Streaming SVE FEXPA extension"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2_SHA3",
+    "meaning": "SVE2 support for the SHA3 cryptographic extension (FEAT_SVE_SHA3)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2_SM3",
+    "meaning": "SVE2 support for the SM3 cryptographic extension (FEAT_SVE_SM3)"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2_SM4",
+    "meaning": "SVE2 support for the SM4 cryptographic extension (FEAT_SVE_SM4)"
+  },
+  {
+    "name": "__ARM_FEATURE_SYSREG128",
+    "meaning": "Support for 128-bit system registers (FEAT_SYSREG128)"
+  },
+  {
+    "name": "__ARM_FEATURE_UNALIGNED",
+    "meaning": "Hardware support for unaligned access"
+  },
+  {
+    "name": "__ARM_FP",
+    "meaning": "Hardware floating-point"
+  },
+  {
+    "name": "__ARM_FP16_ARGS",
+    "meaning": "`__fp16` argument and result"
+  },
+  {
+    "name": "__ARM_FP16_FORMAT_ALTERNATIVE",
+    "meaning": "16-bit floating-point, alternative format"
+  },
+  {
+    "name": "__ARM_FP16_FORMAT_IEEE",
+    "meaning": "16-bit floating-point, IEEE format"
+  },
+  {
+    "name": "__ARM_FP_FAST",
+    "meaning": "Accuracy-losing optimizations"
+  },
+  {
+    "name": "__ARM_FP_FENV_ROUNDING",
+    "meaning": "Rounding is configurable at runtime"
+  },
+  {
+    "name": "__ARM_NEON",
+    "meaning": "Advanced SIMD (Neon) extension"
+  },
+  {
+    "name": "__ARM_NEON_FP",
+    "meaning": "Advanced SIMD (Neon) floating-point"
+  },
+  {
+    "name": "__ARM_NEON_SVE_BRIDGE",
+    "meaning": "Availability of"
+  },
+  {
+    "name": "__ARM_PCS",
+    "meaning": "Arm procedure call standard (32-bit-only)"
+  },
+  {
+    "name": "__ARM_PCS_AAPCS64",
+    "meaning": "Arm PCS for AArch64."
+  },
+  {
+    "name": "__ARM_PCS_VFP",
+    "meaning": "Arm PCS hardware FP variant in use (32-bit-only)"
+  },
+  {
+    "name": "__ARM_ROPI",
+    "meaning": "Read-only PIC in use"
+  },
+  {
+    "name": "__ARM_RWPI",
+    "meaning": "Read-write PIC in use"
+  },
+  {
+    "name": "__ARM_SIZEOF_MINIMAL_ENUM",
+    "meaning": "Size of minimal enumeration type: 1 or 4"
+  },
+  {
+    "name": "__ARM_SIZEOF_WCHAR_T",
+    "meaning": "Size of `wchar_t`: 2 or 4"
+  },
+  {
+    "name": "__ARM_WMMX",
+    "meaning": "Wireless MMX extension (32-bit-only)"
+  },
+  {
+    "name": "__ARM_FEATURE_BTI",
+    "meaning": "extension is available on the target. It is undefined otherwise."
+  },
+  {
+    "name": "__ARM_FEATURE_LS64",
+    "meaning": "`ST64B`, `ST64BV` and `ST64BV0` instructions for atomic 64-byte access to device memory are supported. This macro may only ever be defined in the AArch64 execution state. Intrinsics for using these instructions are specified in"
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2p1",
+    "meaning": "are available and if the associated [ACLE features] (#sme-language-extensions-and-intrinsics) are supported."
+  },
+  {
+    "name": "__ARM_FEATURE_SVE2p2",
+    "meaning": "are available and if the associated [ACLE features] (#sme-language-extensions-and-intrinsics) are supported."
+  },
+  {
+    "name": "__ARM_FEATURE_FP16_SCALAR_ARITHMETIC",
+    "meaning": "16-bit floating-point arithmetic instructions are supported in hardware and the associated scalar intrinsics defined by ACLE are available. Note that this implies:"
+  },
+  {
+    "name": "__ARM_FEATURE_FP16_VECTOR_ARITHMETIC",
+    "meaning": "floating-point arithmetic instructions are supported in hardware and the associated vector intrinsics defined by ACLE are available. Note that this implies:"
+  },
+  {
+    "name": "__ARM_FEATURE_BF16_VECTOR_ARITHMETIC",
+    "meaning": "hardware support for the Advanced SIMD brain 16-bit floating-point arithmetic instructions and if the associated ACLE vector intrinsics are available. This implies:"
+  }
+]

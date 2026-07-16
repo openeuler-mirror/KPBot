@@ -1,0 +1,756 @@
+[
+  {
+    "id": "instruction.sme.inline_asm.fadd_f32_predicated",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "beta-path"
+    ],
+    "display_name": "FADD Z.S predicated",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "FADD"
+    ],
+    "prototype": "fadd <Zdn>.S, <Pg>/M, <Zdn>.S, <Zm>.S",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME",
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Use Pg/M so inactive lanes preserve the destination vector."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-beta",
+    "tail_policy": "Pg must match active columns in the C row being updated.",
+    "usage_template": "__asm__ volatile(\n    \"fadd z2.s, p1/m, z2.s, z3.s\\n\"\n    :\n    :\n    : \"z2\", \"z3\", \"p1\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Use for beta == 1 or explicit C += ZA-row style paths after MOVA reads a ZA slice."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Using fadd when the BLAS beta coefficient is neither 0 nor 1."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.mova_za0h_to_z",
+      "instruction.sme.inline_asm.fmla_f32_predicated"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions",
+      "section": "FADD (SVE predicated vector form usable in Streaming SVE mode); DDI0602 reference-only when developer.arm.com blocks scripted access.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.fmla_f32_predicated",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "beta-path"
+    ],
+    "display_name": "FMLA Z.S predicated",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "FMLA"
+    ],
+    "prototype": "fmla <Zda>.S, <Pg>/M, <Zn>.S, <Zm>.S",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME",
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Use Pg/M to update only active C columns after loading old C and reading ZA."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-beta",
+    "tail_policy": "Pg must match active columns in the C row being updated.",
+    "usage_template": "__asm__ volatile(\n    \"mova z2.s, p1/m, za0h.s[w12, 0]\\n\"\n    \"ld1w { z3.s }, p1/z, [%[c_row]]\\n\"\n    \"dup z4.s, %w[beta_bits]\\n\"\n    \"fmla z2.s, p1/m, z3.s, z4.s\\n\"\n    \"st1w { z2.s }, p1, [%[c_row]]\\n\"\n    :\n    : [c_row] \"r\"(c_row),\n      [beta_bits] \"r\"(beta_bits)\n    : \"memory\", \"z2\", \"z3\", \"z4\", \"p1\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Use for beta != 0 paths as C = ZA + beta * C after MOVA reads the ZA slice.",
+      "Preserve beta as an FP32 bit pattern when duplicating it through an integer inline-asm operand."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Replacing the direct st1w beta == 0 path with an unnecessary old-C load."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.mova_za0h_to_z",
+      "instruction.sme.inline_asm.st1w_za0h_s32"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions",
+      "section": "FMLA (SVE predicated vector form usable in Streaming SVE mode); DDI0602 reference-only when developer.arm.com blocks scripted access.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.ld1w_f32",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "load"
+    ],
+    "display_name": "LD1W Z.S predicated",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "LD1W"
+    ],
+    "prototype": "ld1w { <Zt>.S }, <Pg>/Z, [<Xn|SP>]",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME",
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Pg/Z controls active 32-bit lanes and zeroes inactive lanes."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-load",
+    "tail_policy": "Inactive lanes are zeroed; keep Pg aligned with the corresponding fmopa predicate.",
+    "usage_template": "__asm__ volatile(\n    \"ld1w { z0.s }, p0/z, [%[a_work]]\\n\"\n    \"ld1w { z1.s }, p1/z, [%[b_ptr]]\\n\"\n    :\n    : [a_work] \"r\"(a_work),\n      [b_ptr] \"r\"(b_ptr)\n    : \"memory\", \"z0\", \"z1\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Load contiguous temporary A and B vectors; make non-unit-stride A columns contiguous before entering the inline asm K loop.",
+      "Use the same p0/p1 predicates that drive fmopa row and column participation."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Using ld1w with a stride that does not match the packed or contiguous source vector."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.fmopa_f32",
+      "instruction.sme.inline_asm.whilelo_b32"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions",
+      "section": "LD1W (SVE predicated load usable in Streaming SVE mode); DDI0602 reference-only when developer.arm.com blocks scripted access.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.fmopa_f32",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "outer-product"
+    ],
+    "display_name": "FMOPA ZA.S",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "FMOPA"
+    ],
+    "prototype": "fmopa <ZAda>.S, <Pn>/M, <Pm>/M, <Zn>.S, <Zm>.S",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "ZAda is the destination FP32 ZA tile accumulator.",
+      "Pn and Pm independently predicate the row and column source vectors.",
+      "Zn.S and Zm.S hold the FP32 source vectors for one K/outer-product step."
+    ],
+    "immediate_constraints": [
+      "The tile selector in za0.s / za1.s must be architectural and assembler-legal."
+    ],
+    "vectorization_role": "sme-inline-outer-product",
+    "tail_policy": "Express M/N tails through Pn/Pm predicates; express K tail by guarding the source loads before fmopa.",
+    "usage_template": "__asm__ volatile(\n    \"whilelo p0.s, xzr, %x[row_count]\\n\"\n    \"whilelo p1.s, xzr, %x[col_count]\\n\"\n    \"ld1w { z0.s }, p0/z, [%[a_work]]\\n\"\n    \"ld1w { z1.s }, p1/z, [%[b_ptr]]\\n\"\n    \"fmopa za0.s, p0/m, p1/m, z0.s, z1.s\\n\"\n    :\n    : [a_work] \"r\"(a_work),\n      [b_ptr] \"r\"(b_ptr),\n      [row_count] \"r\"(row_count),\n      [col_count] \"r\"(col_count)\n    : \"memory\", \"p0\", \"p1\", \"z0\", \"z1\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Only use for GEMM, rank-k or explicit outer-product semantics with a documented ZA tile-to-C mapping.",
+      "The row predicate must describe active C rows and the column predicate active C columns for the current tile."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Using fmopa for plain elementwise FMA or GEMV without a two-dimensional tile accumulation."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.ld1w_f32",
+      "instruction.sme.inline_asm.whilelo_b32",
+      "instruction.sme.inline_asm.st1w_za0h_s32",
+      "intrinsic.sme.svmopa_za32_s8_m"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "section": "FMOPA (non-widening), FP32 form; DDI0602 reference-only when developer.arm.com blocks scripted access; Arm SME Instructions blog gives FMOPA <ZAda>.S, <Pn>/M, <Pm>/M, <Zn>.S, <Zm>.S.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.ptrue_b32",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "predicate"
+    ],
+    "display_name": "PTRUE Pd.S",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "PTRUE"
+    ],
+    "prototype": "ptrue <Pd>.S",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME",
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Creates an all-active predicate for the current streaming vector length and element width."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-predicate",
+    "tail_policy": "Use only for full tiles or known-full dimensions; use whilelo for edges.",
+    "usage_template": "__asm__ volatile(\n    \"ptrue p1.s\\n\"\n    :\n    :\n    : \"p1\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Use ptrue only when the active dimension is exactly a full streaming vector, or when over-store/over-read cannot occur."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Using ptrue on the final partial C tile."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.whilelo_b32",
+      "instruction.sme.inline_asm.ld1w_f32"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions",
+      "section": "PTRUE (SVE predicate generation usable in Streaming SVE mode); DDI0602 reference-only when developer.arm.com blocks scripted access.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.whilelo_b32",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "predicate"
+    ],
+    "display_name": "WHILELO Pd.S",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "WHILELO"
+    ],
+    "prototype": "whilelo <Pd>.S, <Xn|SP>, <Xm>",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME",
+      "__ARM_FEATURE_SVE"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Builds a predicate for active 32-bit elements from start < end."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-predicate",
+    "tail_policy": "Use for M/N partial tile predicates and for vector-length agnostic tails.",
+    "usage_template": "__asm__ volatile(\n    \"whilelo p0.s, xzr, %x[row_count]\\n\"\n    \"whilelo p1.s, xzr, %x[col_count]\\n\"\n    :\n    : [row_count] \"r\"(row_count),\n      [col_count] \"r\"(col_count)\n    : \"p0\", \"p1\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Use row and column predicates consistently across ld1w, fmopa, mova and st1w for a tile."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Using ptrue for a partial edge tile that requires masking."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.ptrue_b32",
+      "instruction.sme.inline_asm.fmopa_f32"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SVE-Instructions",
+      "section": "WHILELO (SVE predicate generation usable in Streaming SVE mode); DDI0602 reference-only when developer.arm.com blocks scripted access.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.smstart_za",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "state"
+    ],
+    "display_name": "SMSTART ZA",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "SMSTART"
+    ],
+    "prototype": "smstart za",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Enables access to ZA storage for the current streaming kernel scope."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-state",
+    "tail_policy": "Not applicable; pair the ZA enable range with a matching smstop za.",
+    "usage_template": "__asm__ volatile(\n    \"smstart za\\n\"\n    :\n    :\n    : \"memory\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Place smstart za before zero {za}, fmopa, mova or ZA tile store instructions.",
+      "Keep smstart za and smstop za in the same generated kernel unless a verified ABI wrapper owns ZA outside it."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Starting ZA access and returning before smstop za on any generated control-flow path."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.smstop_za",
+      "instruction.sme.inline_asm.zero_za",
+      "attribute.sme.__arm_streaming"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "section": "SMSTART ZA; DDI0602 reference-only when developer.arm.com blocks scripted access; Arm SME introduction blog cross-checks SMSTART/SMSTOP semantics.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.smstop_za",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "state"
+    ],
+    "display_name": "SMSTOP ZA",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "SMSTOP"
+    ],
+    "prototype": "smstop za",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Disables access to ZA storage after the inline-asm tile write-back is complete."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-state",
+    "tail_policy": "Not applicable; execute after all ZA tile stores for the current kernel.",
+    "usage_template": "__asm__ volatile(\n    \"smstop za\\n\"\n    :\n    :\n    : \"memory\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Emit smstop za after the final ZA store and before returning from a standalone inline-asm ZA kernel."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Calling C helpers that may clobber streaming state between smstart za and smstop za."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.smstart_za",
+      "instruction.sme.inline_asm.st1w_za0h_s32"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "section": "SMSTOP ZA; DDI0602 reference-only when developer.arm.com blocks scripted access; Arm SME introduction blog cross-checks SMSTART/SMSTOP semantics.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.zero_za",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "za-init"
+    ],
+    "display_name": "ZERO {ZA}",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "ZERO"
+    ],
+    "prototype": "zero {za}",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Zeros the whole ZA array before a fresh outer-product accumulation."
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "sme-inline-za-init",
+    "tail_policy": "Not applicable; execute once per fresh output tile before the K loop.",
+    "usage_template": "__asm__ volatile(\n    \"zero {za}\\n\"\n    :\n    :\n    : \"memory\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Run zero {za} after smstart za and before the first fmopa for each fresh output tile.",
+      "Do not zero ZA when the kernel is meant to continue caller-owned accumulation."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Zeroing ZA inside the K loop and erasing previous outer-product accumulation."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.smstart_za",
+      "instruction.sme.inline_asm.fmopa_f32",
+      "intrinsic.sme.svzero_za"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "section": "ZERO {ZA}; DDI0602 reference-only when developer.arm.com blocks scripted access; Arm SME Instructions blog describes ZERO {ZA} as the whole-ZA alias.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.mova_za0h_to_z",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "za-read"
+    ],
+    "display_name": "MOVA ZA0H.S slice to Z",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "MOVA"
+    ],
+    "prototype": "mova <Zd>.S, <Pg>/M, ZA0H.S[<Wv>, #<imm>]",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Zd receives one predicated ZA horizontal slice.",
+      "Pg must match the active columns in the destination C row.",
+      "Wv and #imm select the same tile row slice used by the store-back path."
+    ],
+    "immediate_constraints": [
+      "Use #0 in the canonical single-slice template."
+    ],
+    "vectorization_role": "sme-inline-za-read",
+    "tail_policy": "Use the same Pg as the beta-path load and final vector store.",
+    "usage_template": "__asm__ volatile(\n    \"whilelo p1.s, xzr, %x[col_count]\\n\"\n    \"mov w12, %w[tile_row]\\n\"\n    \"mova z2.s, p1/m, za0h.s[w12, 0]\\n\"\n    :\n    : [col_count] \"r\"(col_count),\n      [tile_row] \"r\"(tile_row)\n    : \"memory\", \"p1\", \"z2\", \"w12\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "Use MOVA when beta != 0 requires combining the ZA result with the old C value in a vector register.",
+      "The compiler may print the MOVA alias as mov in the emitted assembly; scan for a ZA slice operand as well as the mnemonic."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Reading a different ZA slice than the one corresponding to the C row being updated."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.fmla_f32_predicated",
+      "instruction.sme.inline_asm.st1w_za0h_s32"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "section": "MOVA (ZA tile slice move); DDI0602 reference-only when developer.arm.com blocks scripted access; Arm SME Instructions blog describes vector-to/from-tile slice moves.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "instruction.sme.inline_asm.st1w_za0h_s32",
+    "kind": "instruction",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "inline-asm",
+      "za-store"
+    ],
+    "display_name": "ST1W ZA0H.S slice",
+    "intrinsic_names": [],
+    "instruction_names": [
+      "ST1W"
+    ],
+    "prototype": "st1w { za0h.s[<Wv>, #<imm>] }, <Pg>, [<Xn|SP>]",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming"
+    ],
+    "operand_constraints": [
+      "Pg predicates the active columns written from one ZA horizontal slice.",
+      "Wv selects the runtime tile row slice; the immediate offset must be assembler-legal.",
+      "Xn points at the destination C row or tile-slice base."
+    ],
+    "immediate_constraints": [
+      "Use #0 for the canonical template unless a verified multi-slice layout requires another immediate."
+    ],
+    "vectorization_role": "sme-inline-za-store",
+    "tail_policy": "Use Pg for column tails; loop over Wv-selected rows for row tails.",
+    "usage_template": "__asm__ volatile(\n    \"whilelo p1.s, xzr, %x[col_count]\\n\"\n    \"mov w12, %w[tile_row]\\n\"\n    \"st1w {za0h.s[w12, 0]}, p1, [%[c_row]]\\n\"\n    :\n    : [col_count] \"r\"(col_count),\n      [tile_row] \"r\"(tile_row),\n      [c_row] \"r\"(c_row)\n    : \"memory\", \"p1\", \"w12\", \"za\"\n);",
+    "correctness_rules": [
+      "Use inside an SME streaming function; prefer __arm_streaming on both declaration and definition.",
+      "Standalone generated code must not rely on __arm_new(\"za\") unless the target link environment has proven SME ABI support routines.",
+      "Compile to assembly and scan for smstart za, zero {za}, fmopa, st1w and smstop za; scan linked output for unresolved __arm_tpidr2_* or __arm_za_disable symbols.",
+      "For beta == 0 paths, st1w may directly write the ZA slice to C after fmopa accumulation.",
+      "Do not store inactive lanes; build Pg from the same active column count used by the tile."
+    ],
+    "anti_patterns": [
+      "Adding weak __arm_tpidr2_* or __arm_za_disable stubs to hide missing SME ABI runtime support.",
+      "Mixing the inline-asm ZA ownership model with __arm_new(\"za\") in an unverified standalone benchmark.",
+      "Using an unpredicated C store for a partial N tile."
+    ],
+    "related_items": [
+      "instruction.sme.inline_asm.mova_za0h_to_z",
+      "instruction.sme.inline_asm.smstop_za"
+    ],
+    "source": {
+      "title": "Arm A-profile A64 Instruction Set Architecture / DDI0602",
+      "url": "https://developer.arm.com/documentation/ddi0602/latest/SME-Instructions",
+      "section": "ST1W (ZA tile slice store); DDI0602 reference-only when developer.arm.com blocks scripted access; Arm ACLE exposes SME ST1W instruction intrinsics.",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sme.svzero_za",
+    "kind": "intrinsic",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "za",
+      "initialization"
+    ],
+    "display_name": "svzero_za()",
+    "intrinsic_names": [
+      "svzero_za"
+    ],
+    "instruction_names": [
+      "ZERO"
+    ],
+    "prototype": "void svzero_za(void) __arm_streaming_compatible __arm_out(\"za\")",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming_compatible",
+      "__arm_out(\"za\")"
+    ],
+    "operand_constraints": [
+      "Resets ZA state to zero before a fresh accumulation sequence"
+    ],
+    "immediate_constraints": [],
+    "vectorization_role": "za-init",
+    "tail_policy": "No direct tail behavior; use before a fresh ZA accumulation path only.",
+    "usage_template": "svzero_za();",
+    "correctness_rules": [
+      "Use only when the function owns a fresh ZA state or explicitly outputs a new ZA result.",
+      "Do not call svzero_za() in a path that should preserve incoming ZA accumulation."
+    ],
+    "anti_patterns": [
+      "Calling svzero_za() inside a streaming kernel that should reuse caller-owned ZA state.",
+      "Using svzero_za() as a substitute for missing ZA ownership attributes."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_new_za",
+      "attribute.sme.__arm_out_za",
+      "rule.sme.zero-za-fresh-za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME instruction intrinsics / ZERO",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sme.svmopa_za32_s8_m",
+    "kind": "intrinsic",
+    "isa": "sme",
+    "group_path": [
+      "sme",
+      "za",
+      "outer-product",
+      "mopa"
+    ],
+    "display_name": "svmopa_za32_s8_m",
+    "intrinsic_names": [
+      "svmopa_za32_s8_m"
+    ],
+    "instruction_names": [
+      "SMOPA",
+      "FMOPA"
+    ],
+    "prototype": "void svmopa_za32_s8_m(uint64_t tile, svbool_t pn, svbool_t pm, svint8_t zn, svint8_t zm) __arm_streaming __arm_inout(\"za\")",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming",
+      "__arm_inout(\"za\")"
+    ],
+    "operand_constraints": [
+      "tile must identify a valid ZA tile",
+      "pn and pm must describe the active rows and columns for the outer product"
+    ],
+    "immediate_constraints": [
+      "tile must be an integer constant in the architectural tile range"
+    ],
+    "vectorization_role": "matrix-outer-product",
+    "tail_policy": "Tail handling must be expressed through tile-slice predication, not a scalar remainder loop.",
+    "usage_template": "svmopa_za32_s8_m(tile, pn, pm, lhs_i8, rhs_i8);",
+    "correctness_rules": [
+      "Only enter this path when tile layout, ZA ownership and write-back boundaries are explicit.",
+      "Keep the kernel in streaming mode and mark ZA as an inout architectural state."
+    ],
+    "anti_patterns": [
+      "Using svmopa_za32_s8_m in an elementwise add/mul kernel.",
+      "Calling an SME ZA intrinsic without a tile ownership story."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_streaming",
+      "attribute.sme.__arm_inout_za",
+      "intrinsic.sme.svzero_za"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME instruction intrinsics / BFMOPA, FMOPA (widening), SMOPA, UMOPA",
+      "retrieved_at": "2026-05-12"
+    }
+  },
+  {
+    "id": "intrinsic.sme2.svadd_write_za32_s32_vg1x2",
+    "kind": "intrinsic",
+    "isa": "sme2",
+    "group_path": [
+      "sme",
+      "sme2",
+      "za-accumulate",
+      "add-write"
+    ],
+    "display_name": "svadd_write_za32_s32_vg1x2",
+    "intrinsic_names": [
+      "svadd_write_za32_s32_vg1x2"
+    ],
+    "instruction_names": [
+      "ADD"
+    ],
+    "prototype": "void svadd_write_za32_s32_vg1x2(uint32_t slice, svint32x2_t zn, svint32x2_t zm) __arm_streaming __arm_inout(\"za\")",
+    "header": "<arm_sme.h>",
+    "feature_macros": [
+      "__ARM_FEATURE_SME2"
+    ],
+    "required_function_attributes": [
+      "__arm_streaming",
+      "__arm_inout(\"za\")"
+    ],
+    "operand_constraints": [
+      "slice selects the ZA tile slice to update",
+      "zn and zm are vg1x2 multi-vector operands with matching element types"
+    ],
+    "immediate_constraints": [
+      "slice must be a valid ZA slice index for the selected tile shape"
+    ],
+    "vectorization_role": "za-accumulate",
+    "tail_policy": "Use slice-level predication and ZA slice boundaries instead of scalar cleanup code.",
+    "usage_template": "svadd_write_za32_s32_vg1x2(slice, lhs_group, rhs_group);",
+    "correctness_rules": [
+      "Gate the path on __ARM_FEATURE_SME2 and keep the function in streaming mode.",
+      "Use only when the algorithm is already organized around ZA slices or tiles."
+    ],
+    "anti_patterns": [
+      "Using SME2 ZA slice intrinsics in a plain SVE streaming loop with no ZA state.",
+      "Treating slice-based ZA writes like a scalar store replacement."
+    ],
+    "related_items": [
+      "attribute.sme.__arm_streaming",
+      "attribute.sme.__arm_inout_za",
+      "intrinsic.sme.svmopa_za32_s8_m"
+    ],
+    "source": {
+      "title": "Arm C Language Extensions",
+      "url": "https://arm-software.github.io/acle/main/acle.html",
+      "section": "SME language extensions and intrinsics / SME2 instruction intrinsics / ADD, SUB (store into ZA, multi)",
+      "retrieved_at": "2026-05-12"
+    }
+  }
+]

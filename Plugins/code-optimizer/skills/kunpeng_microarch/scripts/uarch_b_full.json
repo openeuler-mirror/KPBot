@@ -1,0 +1,6054 @@
+[
+  {
+    "table_num": "001",
+    "title": "Table 3-2 AArch64 Branch instructions",
+    "instructions": [
+      {
+        "instruction_group": "Branch, immed",
+        "instructions": [
+          "B",
+          "B.cond"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "B",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Branch, register",
+        "instructions": [
+          "BR",
+          "RET"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "B",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Branch and link, immed",
+        "instructions": [
+          "BL"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "B, ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Branch and link, register",
+        "instructions": [
+          "BLR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "B, ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Compare and branch",
+        "instructions": [
+          "CBZ",
+          "CBNZ",
+          "TBZ",
+          "TBNZ"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "B",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "002",
+    "title": "Table 3-3 AArch64 Arithmetic and Logical Instructions",
+    "instructions": [
+      {
+        "instruction_group": "ALU, basic",
+        "instructions": [
+          "ADD",
+          "AND",
+          "BIC",
+          "EON",
+          "EOR",
+          "ORN",
+          "ORR",
+          "SUB"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "6",
+        "utilized_pipelines": "ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ALU, basic",
+        "instructions": [
+          "ADC",
+          "SBC"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ALU, basic, flagset",
+        "instructions": [
+          "ADDS",
+          "ADCS",
+          "ANDS",
+          "BICS",
+          "SUBS",
+          "SBCS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "ALU1425",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ALU, extend and shift (shift!=0)",
+        "instructions": [
+          "ADD{S}",
+          "SUB{S}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Arithmetic, shift =0",
+        "instructions": [
+          "ADD",
+          "SUB"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "6",
+        "utilized_pipelines": "ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Arithmetic flagset, shift =0",
+        "instructions": [
+          "ADDS",
+          "SUBS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "ALU14, ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Conditional compare",
+        "instructions": [
+          "CCMN",
+          "CCMP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Conditional select",
+        "instructions": [
+          "CSEL",
+          "CSINC",
+          "CSINV",
+          "CSNEG"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Convert floating-point condition flags",
+        "instructions": [
+          "AXFLAG",
+          "XAFLAG"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Flag manipulation instructions",
+        "instructions": [
+          "SETF8",
+          "SETF16",
+          "RMIF",
+          "CFINV"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Logical, shift(imm=0) no flagset",
+        "instructions": [
+          "AND",
+          "BIC",
+          "EON",
+          "EOR",
+          "ORN",
+          "ORR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "6",
+        "utilized_pipelines": "ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Logical, shift(imm!=0) no flagset",
+        "instructions": [
+          "AND",
+          "BIC",
+          "EON",
+          "EOR",
+          "ORN",
+          "ORR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Logical, shift(imm=0), flagset",
+        "instructions": [
+          "ANDS",
+          "BICS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "ALU1425",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Logical, shift(imm!=0), flagset",
+        "instructions": [
+          "ANDS",
+          "BICS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "003",
+    "title": "Table 3-4 AArch64 divide and multiply instructions",
+    "instructions": [
+      {
+        "instruction_group": "Divide, W-form",
+        "instructions": [
+          "SDIV",
+          "UDIV"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Divide, X-form",
+        "instructions": [
+          "SDIV",
+          "UDIV"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Multiply, W-form",
+        "instructions": [
+          "MUL",
+          "MNEG"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Multiply, X-form",
+        "instructions": [
+          "MUL",
+          "MNEG"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Multiply accumulate, W-form",
+        "instructions": [
+          "MADD",
+          "MSUB"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Multiply accumulate, X-form",
+        "instructions": [
+          "MADD",
+          "MSUB"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Multiply accumulate long",
+        "instructions": [
+          "SMADDL",
+          "SMSUBL",
+          "UMADDL",
+          "UMSUBL"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Multiply high",
+        "instructions": [
+          "SMULH",
+          "UMULH"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Multiply long",
+        "instructions": [
+          "SMNEGL",
+          "SMULL",
+          "UMNEGL",
+          "UMULL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "004",
+    "title": "Table 3-5 AArch64 pointer authentication instructions",
+    "instructions": [
+      {
+        "instruction_group": "Authenticate data address",
+        "instructions": [
+          "AUTDA",
+          "AUTDB",
+          "AUTDZA",
+          "AUTDZB"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Authenticate instruction address",
+        "instructions": [
+          "AUTIA",
+          "AUTIB",
+          "AUTIA1716",
+          "AUTIB1716",
+          "AUTIASP",
+          "AUTIBSP",
+          "AUTIAZ",
+          "AUTIBZ",
+          "AUTIZA",
+          "AUTIZB"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Branch and link, register, with pointer authentication",
+        "instructions": [
+          "BLRAA",
+          "BLRAAZ",
+          "BLRAB",
+          "BLRABZ"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25, B",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Branch, register, with pointer authentication",
+        "instructions": [
+          "BRAA",
+          "BRAAZ",
+          "BRAB",
+          "BRABZ"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25, B",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Branch, return, with pointer authentication",
+        "instructions": [
+          "RETA",
+          "RETB"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25, B",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Compute pointer authentication code for data address",
+        "instructions": [
+          "PACDA",
+          "PACDB",
+          "PACDZA",
+          "PACDZB"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Compute pointer authentication code, using generic key",
+        "instructions": [
+          "PACGA"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Compute pointer authentication code for instruction address",
+        "instructions": [
+          "PACIA",
+          "PACIB",
+          "PACIA1716",
+          "PACIB1716",
+          "PACIASP",
+          "PACIBSP",
+          "PACIAZ",
+          "PACIBZ",
+          "PACIZA",
+          "PACIZB"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Load register, with pointer authentication",
+        "instructions": [
+          "LDRAA",
+          "LDRAB"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "1",
+        "utilized_pipelines": "LD, ALU25",
+        "notes": "1,2"
+      },
+      {
+        "instruction_group": "Strip pointer authentication code",
+        "instructions": [
+          "XPACD",
+          "XPACI",
+          "XPACLRI"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ALU25",
+        "notes": "1,2"
+      }
+    ]
+  },
+  {
+    "table_num": "005",
+    "title": "Table 3-6 AArch64 miscellaneous data-processing instructions",
+    "instructions": [
+      {
+        "instruction_group": "Address generation",
+        "instructions": [
+          "ADR",
+          "ADRP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Bitfield extract, one reg",
+        "instructions": [
+          "EXTR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Bitfield extract, two regs",
+        "instructions": [
+          "EXTR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Bitfield move, basic",
+        "instructions": [
+          "SBFM",
+          "UBFM"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Bitfield move, insert",
+        "instructions": [
+          "BFM"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Move immed",
+        "instructions": [
+          "MOVN",
+          "MOVK",
+          "MOVZ"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "6",
+        "utilized_pipelines": "ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Count leading",
+        "instructions": [
+          "CLS",
+          "CLZ"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Reverse bits/bytes",
+        "instructions": [
+          "RBIT",
+          "REV",
+          "REV16",
+          "REV32"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Variable shift",
+        "instructions": [
+          "ASRV",
+          "LSLV",
+          "LSRV",
+          "RORV"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "006",
+    "title": "Table 3-7 AArch64 load instructions",
+    "instructions": [
+      {
+        "instruction_group": "Load register, literal",
+        "instructions": [
+          "LDR",
+          "LDRSW",
+          "PRFM"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load register, unscaled immed",
+        "instructions": [
+          "LDUR",
+          "LDURB",
+          "LDURH",
+          "LDURSB",
+          "LDURSH",
+          "LDURSW",
+          "PRFUM"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load register, immed post-index",
+        "instructions": [
+          "LDR",
+          "LDRB",
+          "LDRH",
+          "LDRSB",
+          "LDRSH",
+          "LDRSW"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load register, immed pre-index",
+        "instructions": [
+          "LDR",
+          "LDRB",
+          "LDRH",
+          "LDRSB",
+          "LDRSH",
+          "LDRSW"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load register, immed unprivileged",
+        "instructions": [
+          "LDTR",
+          "LDTRB",
+          "LDTRH",
+          "LDTRSB",
+          "LDTRSH",
+          "LDTRSW"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load register, unsigned immed",
+        "instructions": [
+          "LDR",
+          "LDRB",
+          "LDRH",
+          "LDRSB",
+          "LDRSH",
+          "LDRSW",
+          "PRFM"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load register, register offset, no-extend, basic",
+        "instructions": [
+          "LDR",
+          "LDRB",
+          "LDRH",
+          "LDRSB",
+          "LDRSH",
+          "LDRSW",
+          "PRFM"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "LDRH, LDRSH",
+        "instructions": [
+          "4"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "LD",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Load register, register offset, extend, basic",
+        "instructions": [
+          "LDR",
+          "LDRB",
+          "LDRH",
+          "LDRSB",
+          "LDRSH",
+          "LDRSW",
+          "PRFM"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "LDRH, LDRSH",
+        "instructions": [
+          "4"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "LD",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Load pair, immed offset, normal",
+        "instructions": [
+          "LDP",
+          "LDNP"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load pair, immed offset, signed words",
+        "instructions": [
+          "LDPSW"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load pair, immed post-index, normal",
+        "instructions": [
+          "LDP"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load pair, immed post-index, signed words",
+        "instructions": [
+          "LDPSW"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load pair, immed pre-index, normal",
+        "instructions": [
+          "LDP"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load pair, immed pre-index, signed words",
+        "instructions": [
+          "LDPSW"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Single-copy atomic 64-byte load",
+        "instructions": [
+          "LD64B"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "3/8",
+        "utilized_pipelines": "LD",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Range Prefetch Memory",
+        "instructions": [
+          "RPRFM"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "LD, HWP",
+        "notes": "2"
+      }
+    ]
+  },
+  {
+    "table_num": "007",
+    "title": "Table 3-8 AArch64 store instructions",
+    "instructions": [
+      {
+        "instruction_group": "\u001bOB\u001bOB\u001bOBStore register, unscaled immed",
+        "instructions": [
+          "STUR",
+          "STURB",
+          "STURH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, immed post-index",
+        "instructions": [
+          "STR",
+          "STRB",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, immed pre-index",
+        "instructions": [
+          "STR",
+          "STRB",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, immed unprivileged",
+        "instructions": [
+          "STTR",
+          "STTRB",
+          "STTRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, unsigned immed",
+        "instructions": [
+          "STR",
+          "STRB",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, register offset, no-extend, basic",
+        "instructions": [
+          "STR",
+          "STRB",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, register offset, no-extend, scaled by 2/4/8",
+        "instructions": [
+          "STR",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, register offset, extend, basic",
+        "instructions": [
+          "STR",
+          "STRB",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store register, register offset, extend, scale by 2/4/8",
+        "instructions": [
+          "STR",
+          "STRH"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store pair, immed offset",
+        "instructions": [
+          "STP",
+          "STNP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store pair, immed post-index",
+        "instructions": [
+          "STP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store pair, immed pre-index",
+        "instructions": [
+          "STP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Single-copy atomic 64-byte store",
+        "instructions": [
+          "ST64B",
+          "ST64BV",
+          "ST64BV0"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "1/4",
+        "utilized_pipelines": "ST, STD",
+        "notes": "1"
+      }
+    ]
+  },
+  {
+    "table_num": "008",
+    "title": "Table 3-9 AArch64 FP data processing instructions",
+    "instructions": [
+      {
+        "instruction_group": "FP absolute value",
+        "instructions": [
+          "FABS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP absolute value",
+        "instructions": [
+          "FABD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP negate",
+        "instructions": [
+          "FNEG"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP compare",
+        "instructions": [
+          "FCMP{E}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02, ALU0134",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP conditional compare",
+        "instructions": [
+          "FCCMP{E}"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14, V",
+        "notes": "1, 2"
+      },
+      {
+        "instruction_group": "FP conditional select",
+        "instructions": [
+          "FCSEL"
+        ],
+        "exec_latency": "6(2)",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14, V",
+        "notes": "1, 5"
+      },
+      {
+        "instruction_group": "FP divide, H-form",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP divide, S-form",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP divide, D-form",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP square root, H-form",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP square root, S-form",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP square root, D-form",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP fused multiply-add",
+        "instructions": [
+          "FMADD",
+          "FMSUB",
+          "FNMADD",
+          "FNMSUB"
+        ],
+        "exec_latency": "4 (2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "4"
+      },
+      {
+        "instruction_group": "FP max/min",
+        "instructions": [
+          "FMAX",
+          "FMAXNM",
+          "FMIN",
+          "FMINNM"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP add",
+        "instructions": [
+          "FADD",
+          "FSUB"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP multiply",
+        "instructions": [
+          "FMUL",
+          "FNMUL"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "3"
+      },
+      {
+        "instruction_group": "FP round to FP integral",
+        "instructions": [
+          "FRINTA",
+          "FRINTI",
+          "FRINTM",
+          "FRINTN",
+          "FRINTP",
+          "FRINTX",
+          "FRINTZ",
+          "FRINT32Z",
+          "FRINT32X",
+          "FRINT64Z",
+          "FRINT64X"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "009",
+    "title": "Table 3-10 AArch64 FP miscellaneous instructions",
+    "instructions": [
+      {
+        "instruction_group": "FP covert, from gen to vec reg",
+        "instructions": [
+          "SCVTF",
+          "UCVTF"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14, V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "FP covert, from vec to gen reg",
+        "instructions": [
+          "FCVTAS",
+          "FCVTAU",
+          "FCVTMS",
+          "FCVTMU",
+          "FCVTNS",
+          "FCVTNU",
+          "FCVTPS",
+          "FCVTPU",
+          "FCVTZS",
+          "FCVTZU"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "FP convert, Javascript from to gen reg",
+        "instructions": [
+          "FJCVTZS"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "FP convert, from vec to vec reg",
+        "instructions": [
+          "FCVT",
+          "FCVTXN"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP move, immed",
+        "instructions": [
+          "FMOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP move, register",
+        "instructions": [
+          "FMOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "FP transfer, from gen to low half of vec reg",
+        "instructions": [
+          "FMOV"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "FP transfer, from gen to high half of vec reg",
+        "instructions": [
+          "FMOV"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14, V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "FP transfer, from vec to gen reg",
+        "instructions": [
+          "FMOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "010",
+    "title": "Table 3-11 AArch64 FP load instructions",
+    "instructions": [
+      {
+        "instruction_group": "Load vector reg, literal",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, unscaled immed",
+        "instructions": [
+          "LDUR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD&FP",
+        "instructions": [
+          "LDAPUR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, immed post-index",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, immed pre-index",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, immed unprivileged",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, unsigned immed",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, register offset, no-extend, basic",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, register offset, no-extend, scale by 2/4/8",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, register offset, no-extend, scale by 16",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, register offset, extend",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "3",
+        "utilized_pipelines": "ALU, LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load vector reg, register offset, extend, scale by 2/4/8/16",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "3",
+        "utilized_pipelines": "ALU, LD",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "011",
+    "title": "Table 3-12 AArch64 store instructions",
+    "instructions": [
+      {
+        "instruction_group": "Store vector reg, unscaled immed",
+        "instructions": [
+          "STUR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD&FP",
+        "instructions": [
+          "STULR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg, immed post-index",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg, immed pre-index",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg, immed unprivileged",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg, unsigned immed",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg, reg offset, no-extend, basic",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg offset, no-extend, scaled by 2/4/8",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector reg offset, no-extend, scaled by 16",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Store vector reg, reg offset, extend",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU, ST, STD",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Store vector reg, reg offset, extend, scale by 2/4/8/16",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU, ST, STD",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "Store vector pair, immed offset, S/D-form",
+        "instructions": [
+          "STP",
+          "STNP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector pair, immed post-index, S/D-form",
+        "instructions": [
+          "STP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store vector pair, immed pre-index, S/D-form",
+        "instructions": [
+          "STP"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST, STD, ALU",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "012",
+    "title": "Table 3-13 AArch64 ASIMD integer instructions",
+    "instructions": [
+      {
+        "instruction_group": "ASIMD absolute diff",
+        "instructions": [
+          "SABD",
+          "UABD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD absolute diff accum",
+        "instructions": [
+          "SABA",
+          "UABA"
+        ],
+        "exec_latency": "2(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD absolute diff accum long",
+        "instructions": [
+          "SABAL{2}",
+          "UABAL{2}"
+        ],
+        "exec_latency": "2(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "UABDL{2}",
+        "instructions": [
+          "2"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ASIMD arith, basic",
+        "instructions": [
+          "ABS",
+          "ADD",
+          "NEG",
+          "SUB"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith, basic",
+        "instructions": [
+          "SADDL{2}",
+          "SHADD",
+          "SHSUB",
+          "SSUBL{2}",
+          "UADDL{2}",
+          "UHADD",
+          "UHSUB",
+          "USUBL{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith wide",
+        "instructions": [
+          "SADDW{2}",
+          "SSUBW{2}",
+          "UADDW{2}",
+          "USUBW{2}"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "Mxi2"
+      },
+      {
+        "instruction_group": "ASIMD arith, complex",
+        "instructions": [
+          "ADDHN{2}",
+          "SQABS",
+          "SQADD",
+          "SQNEG",
+          "SQSUB",
+          "SUBHN{2}",
+          "SUQADD",
+          "UQADD",
+          "UQSUB",
+          "USQADD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith, complex",
+        "instructions": [
+          "RADDHN{2}",
+          "RSUBHN{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith, complex",
+        "instructions": [
+          "SRHADD",
+          "URHADD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith, pair-wise",
+        "instructions": [
+          "ADDP"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith, pair-wise",
+        "instructions": [
+          "SADDLP",
+          "UADDLP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD arith, reduce",
+        "instructions": [
+          "ADDV",
+          "SADDLV",
+          "UADDLV"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD compare",
+        "instructions": [
+          "CMGT",
+          "CMEQ",
+          "CMGE",
+          "CMLT",
+          "CMLE",
+          "CMTST",
+          "CMHI",
+          "CMHS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD dot product",
+        "instructions": [
+          "SDOT",
+          "UDOT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD dot product using signed and unsigned integers",
+        "instructions": [
+          "SUDOT",
+          "USDOT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD logical",
+        "instructions": [
+          "AND",
+          "NOT",
+          "ORN",
+          "ORR",
+          "MOV",
+          "BIC",
+          "EOR",
+          "MVN"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD matrix multiply-accumulate",
+        "instructions": [
+          "SMMLA",
+          "UMMLA",
+          "USMMLA"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD max/min",
+        "instructions": [
+          "SMAX",
+          "SMIN",
+          "UMAX",
+          "UMIN"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD max/min pair-wise",
+        "instructions": [
+          "SMAXP",
+          "SMINP",
+          "UMAXP",
+          "UMINP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD max/min, reduce",
+        "instructions": [
+          "SMAXV",
+          "SMINV",
+          "UMAXV",
+          "UMINV"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD multiply, B/H/S form",
+        "instructions": [
+          "MUL",
+          "SQDMULH",
+          "SQRDMULH"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD multiply accumulate, B/H/S form",
+        "instructions": [
+          "MLA",
+          "MLS"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD multiply accumulate high",
+        "instructions": [
+          "SQRDMLAH",
+          "SQRDMLSH"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "ASIMD multiply long",
+        "instructions": [
+          "SMULL{2}",
+          "SQDMULL{2}",
+          "UMULL{2}"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD multiply accumulate long",
+        "instructions": [
+          "SMLAL{2}",
+          "SMLSL{2}",
+          "UMLAL{2}",
+          "UMLSL{2}"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD multiply accumulate saturating long",
+        "instructions": [
+          "SQDMLAL{2}",
+          "SQDMLSL{2}"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "ASIMD multiply/multiply long (8x8) polynomial",
+        "instructions": [
+          "PMUL",
+          "PMULL{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD pairwise add and accumulate long",
+        "instructions": [
+          "SADALP",
+          "UADALP"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD shift accumulate",
+        "instructions": [
+          "SSRA",
+          "SRSRA",
+          "USRA",
+          "URSRA"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "UXTL{2}",
+        "instructions": [
+          "2"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ASIMD shift by immed and insert, basic",
+        "instructions": [
+          "SLI",
+          "SRI"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD shift by immed, complex",
+        "instructions": [
+          "RSHRN{2}",
+          "SQRSHRN{2}",
+          "SQRSHRUN{2}",
+          "SRSHR",
+          "UQRSHRN{2}",
+          "URSHR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD shift by immed, complex",
+        "instructions": [
+          "SQSHRN{2}",
+          "SQSHRUN{2}",
+          "SQSHLU",
+          "UQSHRN{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD shift by immed, complex",
+        "instructions": [
+          "SQSHL",
+          "UQSHL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD shift by register, basic",
+        "instructions": [
+          "SSHL",
+          "USHL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "Mxi2"
+      },
+      {
+        "instruction_group": "ASMID shift by register, complex",
+        "instructions": [
+          "SRSHL",
+          "SQRSHL",
+          "URSHL",
+          "UQRSHL"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "Mxi2"
+      },
+      {
+        "instruction_group": "ASMID shift by register, complex",
+        "instructions": [
+          "SQSHL",
+          "UQSHL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "Mxi2"
+      }
+    ]
+  },
+  {
+    "table_num": "013",
+    "title": "Table 3-14 Aarch64 ASIMD floating-point instructions",
+    "instructions": [
+      {
+        "instruction_group": "ASIMD FP absolute value",
+        "instructions": [
+          "FABS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP negative value",
+        "instructions": [
+          "FNEG"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP absolute difference",
+        "instructions": [
+          "FABD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP arith",
+        "instructions": [
+          "FADD",
+          "FSUB"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP add pairwise",
+        "instructions": [
+          "FADDP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP compare",
+        "instructions": [
+          "FACGE",
+          "FACGT",
+          "FCMEQ",
+          "FCMGE",
+          "FCMGT",
+          "FCMLE",
+          "FCMLT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP convert long",
+        "instructions": [
+          "FCVTL{2}"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP convert narrow",
+        "instructions": [
+          "FCVTXN{2}"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP convert narrow D-form",
+        "instructions": [
+          "FCVTN{2}"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ASIMD FP convert narrow Q-form",
+        "instructions": [
+          "FCVTN{2}"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ASIMD FP convert to Integer/Fixed point, D-form",
+        "instructions": [
+          "FCVTNS",
+          "FCVTNU",
+          "FCVTMS",
+          "FCVTMU",
+          "FCVTAS",
+          "FCVTAU",
+          "FCVTPS",
+          "FCVTPU",
+          "FCVTZS",
+          "FCVTZU"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP convert to Integer/Fixed point, Q-form",
+        "instructions": [
+          "FCVTNS",
+          "FCVTNU",
+          "FCVTMS",
+          "FCVTMU",
+          "FCVTAS",
+          "FCVTAU",
+          "FCVTPS",
+          "FCVTPU",
+          "FCVTZS",
+          "FCVTZU"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP convert from Integer/Fixed-point to FP, D-form",
+        "instructions": [
+          "SCVTF",
+          "UCVTF"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP convert from Integer/Fixed-point to FP, Q-form",
+        "instructions": [
+          "SCVTF",
+          "UCVTF"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP divide, D-form, F16",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP divide, D-form, F32",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP divide, Q-form, F16",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP divide, Q-form, F32",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP divide, Q-form, F64",
+        "instructions": [
+          "FDIV"
+        ],
+        "exec_latency": "9",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP square root, D-form, F16",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP square root, D-form, F32",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP square root, Q-form, F16",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP square root, Q-form, F32",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP square root, Q-form, F64",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "9",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP complex multiply-add",
+        "instructions": [
+          "FCMLA"
+        ],
+        "exec_latency": "4 (2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2,mxi1"
+      },
+      {
+        "instruction_group": "ASIMD FP complex add",
+        "instructions": [
+          "FCADD"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ASIMD FP max/min",
+        "instructions": [
+          "FMAX",
+          "FMAXNM",
+          "FMIN",
+          "FMINNM"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP max/min, pairwise",
+        "instructions": [
+          "FMAXP",
+          "FMAXNMP",
+          "FMINP",
+          "FMINNMP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP max/min reduce, F16",
+        "instructions": [
+          "FMAXV",
+          "FMAXNMV",
+          "FMINV",
+          "FMINNMV"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP max/min reduce, F32, F64",
+        "instructions": [
+          "FMAXV",
+          "FMAXNMV",
+          "FMINV",
+          "FMINNMV"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP multiply",
+        "instructions": [
+          "FMUL",
+          "FMULX"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD FP fused multiply-add",
+        "instructions": [
+          "FMLA",
+          "FMLS"
+        ],
+        "exec_latency": "4 (2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "ASIMD FP fused multiply-add long",
+        "instructions": [
+          "FMLAL{2}",
+          "FMLSL{2}"
+        ],
+        "exec_latency": "4 (2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2,mxi1"
+      },
+      {
+        "instruction_group": "ASIMID FP round to FP integral, D-form",
+        "instructions": [
+          "FRINTN",
+          "FRINTM",
+          "FRINTP",
+          "FRINTZ",
+          "FRINTA",
+          "FRINTX",
+          "FRINTI",
+          "FRINT32X",
+          "FRINT64X",
+          "FRINT32Z",
+          "FRINT64Z"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMDI FP round to FP integral, Q-form",
+        "instructions": [
+          "FRINTN",
+          "FRINTM",
+          "FRINTP",
+          "FRINTZ",
+          "FRINTA",
+          "FRINTX",
+          "FRINTI",
+          "FRINT32X",
+          "FRINT64X",
+          "FRINT32Z",
+          "FRINT64Z"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "014",
+    "title": "Table 3-15 Aarch64 ASIMD Bfloat16 (BF16) instructions",
+    "instructions": [
+      {
+        "instruction_group": "ASIMD convert, F32 to BF16",
+        "instructions": [
+          "BFCVTN{2}"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD dot product",
+        "instructions": [
+          "BFDOT"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": ""
+      },
+      {
+        "instruction_group": "ASIMD matrix multiply accumulate",
+        "instructions": [
+          "BFMMLA"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "1",
+        "utilized_pipelines": "V",
+        "notes": "Mxi1"
+      },
+      {
+        "instruction_group": "ASIMD multiply accumulate long",
+        "instructions": [
+          "BFMLALB",
+          "BFMLALT"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1, Mxi1"
+      },
+      {
+        "instruction_group": "Scalar convert, F32 to BF16",
+        "instructions": [
+          "BFCVT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "015",
+    "title": "Table 3-16 Aarch64 ASIMD miscellaneous instructions",
+    "instructions": [
+      {
+        "instruction_group": "ASIMD bit reverse",
+        "instructions": [
+          "RBIT"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD bitwise insert",
+        "instructions": [
+          "BIF",
+          "BIT",
+          "BSL"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD count",
+        "instructions": [
+          "CLZ",
+          "CLS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD count, D/S",
+        "instructions": [
+          "CNT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD count, B/H",
+        "instructions": [
+          "CNT"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD duplicate, gen reg",
+        "instructions": [
+          "DUP"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU0134, V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD duplicate, element",
+        "instructions": [
+          "DUP"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD extract",
+        "instructions": [
+          "EXT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD extract narrow",
+        "instructions": [
+          "XTN{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD extract narrow, saturating",
+        "instructions": [
+          "SQXTN{2}",
+          "SQXTUN{2}",
+          "UQXTN{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD insert, element to element",
+        "instructions": [
+          "INS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD FP move, immed",
+        "instructions": [
+          "FMOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD move, integer immediate",
+        "instructions": [
+          "MOVI"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD move, integer immediate",
+        "instructions": [
+          "MVNI"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD reciprocal and square root estimate, D-form",
+        "instructions": [
+          "URECPE",
+          "URSQRTE"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD reciprocal and square root estimate, Q-form",
+        "instructions": [
+          "URECPE",
+          "URSQRTE"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP reciprocal and square root estimate, D-form",
+        "instructions": [
+          "FRECPE",
+          "FRSQRTE"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP reciprocal and square root estimate, Q-form",
+        "instructions": [
+          "FRECPE",
+          "FRSQRTE"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP reciprocal exponent",
+        "instructions": [
+          "FRECPX"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD FP reciprocal step",
+        "instructions": [
+          "FRECPS",
+          "FRSQRTS"
+        ],
+        "exec_latency": "4 (2)",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "2"
+      },
+      {
+        "instruction_group": "ASIMD reverse",
+        "instructions": [
+          "REV16",
+          "REV32",
+          "REV64"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup，1 or 2 table regs",
+        "instructions": [
+          "TBL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup，3 table regs",
+        "instructions": [
+          "TBL"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup，4 table regs",
+        "instructions": [
+          "TBL"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "4/3",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup extension，1 table reg",
+        "instructions": [
+          "TBX"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup extension，2 table reg",
+        "instructions": [
+          "TBX"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup extension，3 table reg",
+        "instructions": [
+          "TBX"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "4/3",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD table lookup extension，4 table reg",
+        "instructions": [
+          "TBX"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "1",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD move FP to general register",
+        "instructions": [
+          "SMOV",
+          "UMOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD transfer, gen reg to element",
+        "instructions": [
+          "INS"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V, ALU0134",
+        "notes": "1"
+      },
+      {
+        "instruction_group": "ASIMD transpose",
+        "instructions": [
+          "TRN1",
+          "TRN2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "ASIMD uzip/zip",
+        "instructions": [
+          "UZP1",
+          "UZP2",
+          "ZIP1",
+          "ZIP2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "016",
+    "title": "Table 3-17 AArch64 ASIMD load instructions",
+    "instructions": [
+      {
+        "instruction_group": "SIMD load, 1-element, multiple, 1-reg",
+        "instructions": [
+          "LD1"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 1-element, multiple, 2-reg",
+        "instructions": [
+          "LD1"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 1-element, multiple, 3-reg",
+        "instructions": [
+          "LD1"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "3/2",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 1-element, multiple, 4-reg",
+        "instructions": [
+          "LD1"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "3/2",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 1-element, single, 1 lane",
+        "instructions": [
+          "LD1"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD&FP",
+        "instructions": [
+          "LDAP1"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD,V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 1-element, single, replicate to all lanes",
+        "instructions": [
+          "LD1R"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 2-elements, multiple, D form",
+        "instructions": [
+          "LD2"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "2",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 2-element, single, 1 lane",
+        "instructions": [
+          "LD2"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "2",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 2-element, single, replicate to all lanes",
+        "instructions": [
+          "LD2R"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "2",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load LD3 (multiple structures), Q-form, B/H/S",
+        "instructions": [
+          "LD3"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "2/3",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load LD3 (multiple structures), D-form",
+        "instructions": [
+          "LD3"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "4/3",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 3-element, single, 1 lane",
+        "instructions": [
+          "LD3"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "4/3",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 3-element, single, replicate to all lanes",
+        "instructions": [
+          "LD3R"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "4/3",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 4-element, multiple, D-form",
+        "instructions": [
+          "LD4"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "1",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 4-element, single, 1 lane",
+        "instructions": [
+          "LD4"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "1",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD load, 4-element, single, replicate to all lanes",
+        "instructions": [
+          "LD4R"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "1",
+        "utilized_pipelines": "LD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "(SIMD load, writeback form)",
+        "instructions": [
+          "-"
+        ],
+        "exec_latency": "(1)",
+        "exec_throughput": "Same as before",
+        "utilized_pipelines": "ALU",
+        "notes": "1"
+      }
+    ]
+  },
+  {
+    "table_num": "017",
+    "title": "Table 3-18 AArch64 ASIMD store Instructions",
+    "instructions": [
+      {
+        "instruction_group": "SIMD store, 1-element, multiple, 1 reg, Q-form",
+        "instructions": [
+          "ST1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 1-element, multiple, 1 reg, D-form",
+        "instructions": [
+          "ST1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 1-element, multiple, 2 reg, D-form",
+        "instructions": [
+          "ST1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 1-element, multiple, 3 reg, D-form",
+        "instructions": [
+          "ST1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "1",
+        "utilized_pipelines": "ST,STD, V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 1-element, single, 1 lane",
+        "instructions": [
+          "ST1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD&FP",
+        "instructions": [
+          "STL1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 2-element, multiple, D-form",
+        "instructions": [
+          "ST2"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 2-element, single, 1lane",
+        "instructions": [
+          "ST2"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 3-element, multiple, D-form",
+        "instructions": [
+          "ST3"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "V, ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 3-element, single, 1 lane",
+        "instructions": [
+          "ST3"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "1",
+        "utilized_pipelines": "V, ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "SIMD store, 4-element, single, 1 lane,B/H/S",
+        "instructions": [
+          "ST4"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V, ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "(SIMD store, writeback form)",
+        "instructions": [
+          "-"
+        ],
+        "exec_latency": "(1)",
+        "exec_throughput": "Same as before",
+        "utilized_pipelines": "ALU0134",
+        "notes": "1"
+      }
+    ]
+  },
+  {
+    "table_num": "018",
+    "title": "Table 3-19 AArch64 cryptography extensions",
+    "instructions": [
+      {
+        "instruction_group": "crypto AES ops",
+        "instructions": [
+          "AESD",
+          "AESE",
+          "AESMC",
+          "AESIMC"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto polynomial (64x64) multiply long",
+        "instructions": [
+          "PMULL{2}"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA1 hash acceleration ops",
+        "instructions": [
+          "SHA1H"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA1 hash acceleration ops",
+        "instructions": [
+          "SHA1C",
+          "SHA1M",
+          "SHA1P"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA1 schedule acceleration ops",
+        "instructions": [
+          "SHA1SU0",
+          "SHA1SU1"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA256 hash acceleration ops",
+        "instructions": [
+          "SHA256H",
+          "SHA256H2"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA256 schedule acceleration ops",
+        "instructions": [
+          "SHA256SU0",
+          "SHA256SU1"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA512 hash acceleration ops",
+        "instructions": [
+          "SHA512H",
+          "SHA512H2",
+          "SHA512SU0",
+          "SHA512SU1"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA3 ops",
+        "instructions": [
+          "BCAX",
+          "EOR3",
+          "RAX1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SHA3 ops",
+        "instructions": [
+          "XAR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SM3 ops",
+        "instructions": [
+          "SM3PARTW1",
+          "SM3PARTW2",
+          "SM3SS1",
+          "SM3TT1A",
+          "SM3TT1B",
+          "SM3TT2A",
+          "SM3TT2B"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Crypto SM4 ops",
+        "instructions": [
+          "SM4E",
+          "SM4EKEY"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "4",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "019",
+    "title": "Table 3-20 AArch64 CRC",
+    "instructions": [
+      {
+        "instruction_group": "CRC checksum ops",
+        "instructions": [
+          "CRC32",
+          "CRC32C"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "020",
+    "title": "Table 3-21 SVE predicate instructions",
+    "instructions": [
+      {
+        "instruction_group": "Loop control, based on predicate",
+        "instructions": [
+          "BRKA",
+          "BRKB"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Loop control, based on predicate and flag setting",
+        "instructions": [
+          "BRKAS",
+          "BRKBS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Loop control, propagating",
+        "instructions": [
+          "BRKN",
+          "BRKPA",
+          "BRKPB"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Loop control, propagating and flag setting",
+        "instructions": [
+          "BRKNS",
+          "BRKPAS",
+          "BRKPBS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Loop control, based on GPR",
+        "instructions": [
+          "WHILEGE",
+          "WHILEGT",
+          "WHILEHI",
+          "WHILEHS",
+          "WHILELE",
+          "WHILELO",
+          "WHILELS",
+          "WHILELT",
+          "WHILERW",
+          "WHILEWR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Loop terminate",
+        "instructions": [
+          "CTERMEQ",
+          "CTERMNE"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU14",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting scalar",
+        "instructions": [
+          "ADDPL",
+          "ADDVL",
+          "CNTB",
+          "CNTH",
+          "CNTW",
+          "CNTD",
+          "DECB",
+          "DECH",
+          "DECW",
+          "DECD",
+          "INCB",
+          "INCH",
+          "INCW",
+          "INCD",
+          "RDVL"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "6",
+        "utilized_pipelines": "ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting scalar",
+        "instructions": [
+          "SQDECB",
+          "SQDECH",
+          "SQDECW",
+          "SQDECD",
+          "SQINCB",
+          "SQINCH",
+          "SQINCW",
+          "SQINCD",
+          "UQDECB",
+          "UQDECH",
+          "UQDECW",
+          "UQDECD",
+          "UQINCB",
+          "UQINCH",
+          "UQINCW",
+          "UQINCD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting scalar, active predicate",
+        "instructions": [
+          "DECP",
+          "INCP"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02, ALU",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting scalar, active predicate",
+        "instructions": [
+          "CNTP"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting scalar, active predicate",
+        "instructions": [
+          "SQDECP",
+          "SQINCP",
+          "UQDECP",
+          "UQINCP"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V02 ALU25",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting vector, active predicate",
+        "instructions": [
+          "DECP",
+          "INCP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate counting vector, active predicate",
+        "instructions": [
+          "SQDECP",
+          "SQINCP",
+          "UQDECP",
+          "UQINCP"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate logical",
+        "instructions": [
+          "AND",
+          "BIC",
+          "EOR",
+          "MOV",
+          "NAND",
+          "NOR",
+          "NOT",
+          "ORN",
+          "ORR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate logical, flag setting",
+        "instructions": [
+          "ANDS",
+          "BICS",
+          "EORS",
+          "NANDS",
+          "NORS",
+          "NOTS",
+          "ORNS",
+          "ORRS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate reverse",
+        "instructions": [
+          "REV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate select",
+        "instructions": [
+          "SEL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate set",
+        "instructions": [
+          "PFALSE",
+          "PTRUE"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate set/initialize, set flags",
+        "instructions": [
+          "PTRUES"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate find first/next",
+        "instructions": [
+          "PFIRST",
+          "PNEXT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate test",
+        "instructions": [
+          "PTEST"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Predicate transpose",
+        "instructions": [
+          "TRN1",
+          "TRN2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "PUNPKLO",
+        "instructions": [
+          "2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Predicate zip/unzip",
+        "instructions": [
+          "ZIP1",
+          "ZIP2",
+          "UZP1",
+          "UZP2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "021",
+    "title": "Table 3-22 SVE integer instructions",
+    "instructions": [
+      {
+        "instruction_group": "Arithmetic, absolute diff SABD, UABD",
+        "instructions": [
+          "SABD",
+          "UABD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, absolute diff accum",
+        "instructions": [
+          "SABA",
+          "UABA"
+        ],
+        "exec_latency": "2(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, absolute diff accum long",
+        "instructions": [
+          "SABALB",
+          "SABALT",
+          "UABALB",
+          "UABALT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, absolute diff long",
+        "instructions": [
+          "SABDLB",
+          "SABDLT",
+          "UABDLB",
+          "UABDLT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, address generation",
+        "instructions": [
+          "ADR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "Mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, basic",
+        "instructions": [
+          "ABS",
+          "ADD",
+          "SUB",
+          "SUBR",
+          "NEG",
+          "CNOT"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, basic",
+        "instructions": [
+          "SHADD",
+          "SHSUB",
+          "SHSUBR",
+          "SUBHNB",
+          "SUBHNT",
+          "UHADD",
+          "UHSUB",
+          "UHSUBR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "USUBWB, USUBWT",
+        "instructions": [
+          "1"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 2",
+        "utilized_pipelines": "",
+        "notes": "SVE2,mxi2"
+      },
+      {
+        "instruction_group": "Arithmetic, basic",
+        "instructions": [
+          "SADDLB",
+          "SADDLBT",
+          "SADDLT",
+          "SSUBLB",
+          "SSUBLBT",
+          "SSUBLT",
+          "SSUBLTB",
+          "UADDLB",
+          "UADDLT",
+          "USUBLB",
+          "USUBLT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, complex",
+        "instructions": [
+          "SQADD",
+          "SQSUB",
+          "UQADD",
+          "UQSUB"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, complex",
+        "instructions": [
+          "ADDHNB",
+          "ADDHNT",
+          "RADDHNB",
+          "RADDHNT",
+          "RSUBHNB",
+          "RSUBHNT",
+          "SQABS",
+          "SQNEG",
+          "SQSUBR",
+          "SRHADD",
+          "SUQADD",
+          "UQSUBR",
+          "USQADD",
+          "URHADD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, large integer",
+        "instructions": [
+          "ADCLB",
+          "ADCLT",
+          "SBCLB",
+          "SBCLT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, pairwise add",
+        "instructions": [
+          "ADDP"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, pairwise add and accum long",
+        "instructions": [
+          "SADALP",
+          "UADALP"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift",
+        "instructions": [
+          "ASR",
+          "LSR",
+          "LSL ASRR",
+          "LSLR",
+          "LSRR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "Mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift and accumulate",
+        "instructions": [
+          "SRSRA",
+          "SSRA",
+          "URSRA",
+          "USRA"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift by immediate",
+        "instructions": [
+          "SHRNB",
+          "SHRNT",
+          "SSHLLB",
+          "SSHLLT",
+          "USHLLB",
+          "USHLLT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift by immediate and insert",
+        "instructions": [
+          "SLI",
+          "SRI"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift complex",
+        "instructions": [
+          "SQSHLU",
+          "SQSHRNB",
+          "SQSHRNT",
+          "SQSHRUNB",
+          "SQSHRUNT",
+          "UQSHRNB",
+          "UQSHRNT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift complex",
+        "instructions": [
+          "SQSHL",
+          "SQSHLR",
+          "UQSHL",
+          "UQSHLR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift complex",
+        "instructions": [
+          "RSHRNB",
+          "RSHRNT",
+          "SQRSHRNB",
+          "SQRSHRNT",
+          "SQRSHRUNB",
+          "SQRSHRUNT",
+          "UQRSHRNB",
+          "UQRSHRNT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift complex",
+        "instructions": [
+          "SQRSHL",
+          "SQRSHLR",
+          "UQRSHL",
+          "UQRSHLR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift right for divide",
+        "instructions": [
+          "ASRD"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift rounding",
+        "instructions": [
+          "SRSHL",
+          "SRSHLR",
+          "URSHL",
+          "URSHLR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Arithmetic, shift rounding",
+        "instructions": [
+          "SRSHR",
+          "URSHR"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Bit manipulation",
+        "instructions": [
+          "BDEP",
+          "BEXT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Bit manipulation",
+        "instructions": [
+          "BGRP"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Bitwise select",
+        "instructions": [
+          "BSL",
+          "BSL1N",
+          "BSL2N",
+          "NBSL"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Count/reverse bits",
+        "instructions": [
+          "CLS",
+          "CLZ",
+          "RBIT"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Count/reverse bits, B H form",
+        "instructions": [
+          "CNT"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Count/reverse bits, S D-form",
+        "instructions": [
+          "CNT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Broadcast logical bitmask immediate to vector",
+        "instructions": [
+          "DUPM",
+          "MOV"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Compare and set flags",
+        "instructions": [
+          "CMPEQ",
+          "CMPGE",
+          "CMPGT",
+          "CMPHI",
+          "CMPHS",
+          "CMPLE",
+          "CMPLO",
+          "CMPLS",
+          "CMPLT",
+          "CMPNE"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Complex add",
+        "instructions": [
+          "CADD"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Complex add",
+        "instructions": [
+          "SQCADD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Complex dot product",
+        "instructions": [
+          "CDOT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Complex multiply-add B, H, S element size",
+        "instructions": [
+          "CMLA"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "element size",
+        "instructions": [
+          "CMLA"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Convert to floating point",
+        "instructions": [
+          "SCVTF",
+          "UCVTF"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Copy, imm",
+        "instructions": [
+          "CPY"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Copy, scalar SIMD&FP",
+        "instructions": [
+          "CPY"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Divides, 32-bit",
+        "instructions": [
+          "SDIV",
+          "SDIVR",
+          "UDIV",
+          "UDIVR"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Divides, 64-bit",
+        "instructions": [
+          "SDIV",
+          "SDIVR",
+          "UDIV",
+          "UDIVR"
+        ],
+        "exec_latency": "9",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Dot product",
+        "instructions": [
+          "SDOT",
+          "UDOT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Dot product, 8-bit, using signed and unsigned integers",
+        "instructions": [
+          "SUDOT",
+          "USDOT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Duplicate, indexed",
+        "instructions": [
+          "DUP",
+          "MOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Duplicate, immediate",
+        "instructions": [
+          "DUP",
+          "MOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Duplicate, scalar",
+        "instructions": [
+          "DUP",
+          "MOV"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "SVE128: 2\nSVE256: 2\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Extend, sign or zero",
+        "instructions": [
+          "SXTB",
+          "SXTH",
+          "SXTW",
+          "UXTB",
+          "UXTH",
+          "UXTW"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Extract",
+        "instructions": [
+          "EXT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Extract narrow saturating",
+        "instructions": [
+          "SQXTNB",
+          "SQXTNT",
+          "SQXTUNB",
+          "SQXTUNT",
+          "UQXTNB",
+          "UQXTNT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Insert operation, scalar",
+        "instructions": [
+          "INSR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "SVE128: 2\nSVE256: 2\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Insert operation, SIMD and FP scalar",
+        "instructions": [
+          "INSR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Extract operation, SIMD and FP scalar",
+        "instructions": [
+          "LASTA",
+          "LASTB"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Extract operation, scalar",
+        "instructions": [
+          "LASTA",
+          "LASTB"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "SVE128: 2\nSVE256: 2\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Histogram operations",
+        "instructions": [
+          "HISTCNT",
+          "HISTSEG"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, B, H, S form, immediate operands only",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, D form, immediate operands only",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, B, H, S form, scalar start, immediate increment",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "SVE128: 2\nSVE256: 2\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, D form, scalar start, immediate increment",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "11",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, B, H, S form, immediate start, scalar increment",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "SVE128: 2\nSVE256: 2\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, D form, immediate start, scalar increment",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "11",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, B, H, S form, scalar operands only",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "SVE128: 1\nSVE256: 2/3\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Horizontal operations, D form, scalar, scalar operands only",
+        "instructions": [
+          "INDEX"
+        ],
+        "exec_latency": "11",
+        "exec_throughput": "SVE128: 1\nSVE256: 1/2\nALU0134, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Logical",
+        "instructions": [
+          "AND",
+          "ORR",
+          "EOR",
+          "BIC",
+          "NOT",
+          "EON",
+          "MOV",
+          "ORN"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Logical",
+        "instructions": [
+          "EORBT",
+          "EORTB"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Max/min, basic and pairwise",
+        "instructions": [
+          "SMAX",
+          "SMIN",
+          "UMAX",
+          "UMIN"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Max/min, basic and pairwise",
+        "instructions": [
+          "SMAXP",
+          "SMINP",
+          "UMAXP",
+          "UMINP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Matching operations",
+        "instructions": [
+          "MATCH",
+          "NMATCH"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "SVE2"
+      },
+      {
+        "instruction_group": "Matrix multiply-accumulate",
+        "instructions": [
+          "SMMLA",
+          "UMMLA",
+          "USMMLA"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Move prefix",
+        "instructions": [
+          "MOVPRFX"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply, B, H, S element size",
+        "instructions": [
+          "MUL",
+          "SMULH",
+          "UMULH"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply, D element size",
+        "instructions": [
+          "MUL",
+          "SMULH",
+          "UMULH"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply long, B, H, S element size",
+        "instructions": [
+          "SMULLB",
+          "SMULLT",
+          "UMULLB",
+          "UMULLT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate, B, H, S element size",
+        "instructions": [
+          "MLA",
+          "MLS",
+          "MAD",
+          "MSB"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate, D element size",
+        "instructions": [
+          "MLA",
+          "MLS",
+          "MAD",
+          "MSB"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate long, B, H, S element size",
+        "instructions": [
+          "SMLALB",
+          "SMLALT",
+          "SMLSLB",
+          "SMLSLT",
+          "UMLALB",
+          "UMLALT",
+          "UMLSLB",
+          "UMLSLT"
+        ],
+        "exec_latency": "3(1)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate long, D element size",
+        "instructions": [
+          "SMLALB",
+          "SMLALT",
+          "SMLSLB",
+          "SMLSLT",
+          "UMLALB",
+          "UMLALT",
+          "UMLSLB",
+          "UMLSLT"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate saturating doubling long regular, B, H, S element size",
+        "instructions": [
+          "SQDMLALB",
+          "SQDMLALT",
+          "SQDMLALBT",
+          "SQDMLSLB",
+          "SQDMLSLT",
+          "SQDMLSLBT"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate saturating doubling long regular, D element size",
+        "instructions": [
+          "SQDMLALB",
+          "SQDMLALT",
+          "SQDMLALBT",
+          "SQDMLSLB",
+          "SQDMLSLT",
+          "SQDMLSLBT"
+        ],
+        "exec_latency": "4(3)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating doubling high, B, H, S element size",
+        "instructions": [
+          "SQDMULH"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating doubling high, D element size",
+        "instructions": [
+          "SQDMULH"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating doubling long, B, H, S element size",
+        "instructions": [
+          "SQDMULLB",
+          "SQDMULLT"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating doubling long, D element size",
+        "instructions": [
+          "SQDMULLB",
+          "SQDMULLT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating rounding doubling regular/complex accumulate, B, H, S element size",
+        "instructions": [
+          "SQRDMLAH",
+          "SQRDMLSH"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating rounding doubling regular/complex accumulate, D element size",
+        "instructions": [
+          "SQRDMLAH",
+          "SQRDMLSH"
+        ],
+        "exec_latency": "4(3)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2, SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating rounding doubling regular/complex accumulate, B, H, S element size",
+        "instructions": [
+          "SQRDCMLAH"
+        ],
+        "exec_latency": "3(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating rounding doubling regular/complex accumulate, D element size",
+        "instructions": [
+          "SQRDCMLAH"
+        ],
+        "exec_latency": "4(3)",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "2, SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating rounding doubling regular/complex, B, H, S element size",
+        "instructions": [
+          "SQRDMULH"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply saturating rounding doubling regular/complex, D element size",
+        "instructions": [
+          "SQRDMULH"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply/multiply long, (8x8) polynomial",
+        "instructions": [
+          "PMUL",
+          "PMULLB",
+          "PMULLT"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Predicate counting vector",
+        "instructions": [
+          "SQINCH",
+          "SQINCW",
+          "SQINCD",
+          "SQDECH",
+          "SQDECW",
+          "SQDECD",
+          "INCH",
+          "INCW",
+          "INCD",
+          "DECH",
+          "DECW",
+          "DECD",
+          "UQINCH",
+          "UQINCW",
+          "UQINCD",
+          "UQDECH",
+          "UQDECW",
+          "UQDECD"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Reciprocal estimate",
+        "instructions": [
+          "URECPE",
+          "URSQRTE"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Reduction, arithmetic",
+        "instructions": [
+          "SADDV",
+          "UADDV",
+          "SMAXV",
+          "SMINV",
+          "UMAXV",
+          "UMINV"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 3\nSVE256: 5\nSVE256: 1",
+        "utilized_pipelines": "",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Reduction, logical",
+        "instructions": [
+          "ANDV",
+          "EORV",
+          "ORV"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 2\nSVE256: 4\nSVE256: 1",
+        "utilized_pipelines": "",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Reverse, vector",
+        "instructions": [
+          "REV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Reverse, vector",
+        "instructions": [
+          "REVB",
+          "REVH",
+          "REVW"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Select, vector form",
+        "instructions": [
+          "MOV",
+          "SEL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Table lookup",
+        "instructions": [
+          "TBL"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Table lookup extension",
+        "instructions": [
+          "TBX"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Transpose, vector form",
+        "instructions": [
+          "TRN1",
+          "TRN2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Unpack and extend",
+        "instructions": [
+          "SUNPKHI",
+          "SUNPKLO",
+          "UUNPKHI",
+          "UUNPKLO"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Zip/unzip",
+        "instructions": [
+          "UZP1",
+          "UZP2",
+          "ZIP1",
+          "ZIP2"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "table_num": "022",
+    "title": "Table 3-23 SVE floating-point instructions",
+    "instructions": [
+      {
+        "instruction_group": "Floating point absolute value",
+        "instructions": [
+          "FABS"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point negative value",
+        "instructions": [
+          "FNEG"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point absolute difference",
+        "instructions": [
+          "FABD"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point arithmetic",
+        "instructions": [
+          "FADD",
+          "FSUB",
+          "FSUBR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point arithmetic pairwise",
+        "instructions": [
+          "FADDP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "F16",
+        "instructions": [
+          "FADDA"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 18\nSVE256: 42\nSVE256: 1/9",
+        "utilized_pipelines": "",
+        "notes": "SVE2"
+      },
+      {
+        "instruction_group": "F32",
+        "instructions": [
+          "FADDA"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 10\nSVE256: 26\nSVE256: 1/5",
+        "utilized_pipelines": "",
+        "notes": "SVE2"
+      },
+      {
+        "instruction_group": "F64",
+        "instructions": [
+          "FADDA"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 6\nSVE256: 20\nSVE256: 1/6",
+        "utilized_pipelines": "",
+        "notes": "SVE2"
+      },
+      {
+        "instruction_group": "Floating point compare",
+        "instructions": [
+          "FACGE",
+          "FACGT",
+          "FACLE",
+          "FACLT",
+          "FCMEQ",
+          "FCMGE",
+          "FCMGT",
+          "FCMLE",
+          "FCMLT",
+          "FCMNE",
+          "FCMUO"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point complex add",
+        "instructions": [
+          "FCADD"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point complex multiply add(vectors)",
+        "instructions": [
+          "FCMLA"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "multiply add(indexed)",
+        "instructions": [
+          "FCMLA"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point convert, long or narrow",
+        "instructions": [
+          "FCVT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point convert, long or narrow",
+        "instructions": [
+          "FCVTLT",
+          "FCVTNT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point convert, round to odd",
+        "instructions": [
+          "FCVTX",
+          "FCVTXNT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point base2 log",
+        "instructions": [
+          "FLOGB"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point convert to integer",
+        "instructions": [
+          "FCVTZS",
+          "FCVTZU"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point copy",
+        "instructions": [
+          "FCPY",
+          "FDUP",
+          "FMOV"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point divide, F16",
+        "instructions": [
+          "FDIV",
+          "FDIVR"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point divide, F32",
+        "instructions": [
+          "FDIV",
+          "FDIVR"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point divide, F64",
+        "instructions": [
+          "FDIV",
+          "FDIVR"
+        ],
+        "exec_latency": "9",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "pairwise",
+        "instructions": [
+          "FMAXP",
+          "FMAXNMP",
+          "FMINP",
+          "FMINNMP"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point min/max",
+        "instructions": [
+          "FMAX",
+          "FMIN",
+          "FMAXNM",
+          "FMINNM"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point multiply",
+        "instructions": [
+          "FMUL"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point multiply",
+        "instructions": [
+          "FSCALE",
+          "FMULX"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point multiply accumulate",
+        "instructions": [
+          "FMLA",
+          "FMLS",
+          "FMAD",
+          "FMSB",
+          "FNMAD",
+          "FNMLA",
+          "FNMLS",
+          "FNMSB"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point multiply add/sub accumulate long",
+        "instructions": [
+          "FMLALB",
+          "FMLALT",
+          "FMLSLB",
+          "FMLSLT"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2,mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point reciprocal estimate",
+        "instructions": [
+          "FRECPE",
+          "FRECPX",
+          "FRSQRTE"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point reciprocal step",
+        "instructions": [
+          "FRECPS",
+          "FRSQRTS"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point reduction, F16",
+        "instructions": [
+          "FADDV"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 9\nSVE256: 15\nSVE256: 2/5",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Floating point reduction, F32",
+        "instructions": [
+          "FADDV"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 6\nSVE256: 12\nSVE256: 1/2",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Floating point reduction, F64",
+        "instructions": [
+          "FADDV"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 3\nSVE256: 9\nSVE256: 2/3",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Floating point reduction",
+        "instructions": [
+          "FMAXNMV",
+          "FMAXV",
+          "FMINNMV",
+          "FMINV"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 3\nSVE256: 6\nSVE256: 1",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "integral",
+        "instructions": [
+          "FRINTA",
+          "FRINTI",
+          "FRINTM",
+          "FRINTN",
+          "FRINTP",
+          "FRINTX",
+          "FRINTZ"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point square root, F16",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "5",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point square root, F32",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "7",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point square root F64",
+        "instructions": [
+          "FSQRT"
+        ],
+        "exec_latency": "9",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point trigonometric exponentiation",
+        "instructions": [
+          "FEXPA"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point trigonometric multiply add",
+        "instructions": [
+          "FTMAD"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point trigonometric, miscellaneous",
+        "instructions": [
+          "FTSMUL"
+        ],
+        "exec_latency": "3",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "mxi1",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Floating point trigonometric, miscellaneous",
+        "instructions": [
+          "FTSSEL"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "table_num": "023",
+    "title": "Table 3-24 SVE BFlot16 (BF16) instructions",
+    "instructions": [
+      {
+        "instruction_group": "Convert, F32 to BF16",
+        "instructions": [
+          "BFCVT",
+          "BFCVTNT"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Dot product",
+        "instructions": [
+          "BFDOT"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "SVE128: 2\nSVE256: 1\nV",
+        "utilized_pipelines": "",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Matrix multiply accumulate",
+        "instructions": [
+          "BFMMLA"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "SVE128: 1\nSVE256: 1/2\nV",
+        "utilized_pipelines": "",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Multiply accumulate long",
+        "instructions": [
+          "BFMLALB",
+          "BFMLALT",
+          "BFMLALB",
+          "BFMLALT"
+        ],
+        "exec_latency": "4(2)",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "1, Mxi1",
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "table_num": "024",
+    "title": "Table 3-25 SVE load instructions",
+    "instructions": [
+      {
+        "instruction_group": "Load vector",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Load predicate",
+        "instructions": [
+          "LDR"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "SVE128: 3\nSVE256: 2\nLD, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Contiguous load, scalar + imm",
+        "instructions": [
+          "LD1B",
+          "LD1H",
+          "LD1W",
+          "LD1D",
+          "LD1SB",
+          "LD1SH",
+          "LD1SW"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous load, scalar + scalar",
+        "instructions": [
+          "LD1B",
+          "LD1H",
+          "LD1W",
+          "LD1D",
+          "LD1SB",
+          "LD1SH",
+          "LD1SW"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous load broadcast, scalar + imm",
+        "instructions": [
+          "LD1RB",
+          "LD1RH",
+          "LD1RW",
+          "LD1RD",
+          "LD1RSB",
+          "LD1RSH",
+          "LD1RSW"
+        ],
+        "exec_latency": "8",
+        "exec_throughput": "SVE128: 3\nSVE256: 2\nLD, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Contiguous load broadcast, scalar + imm",
+        "instructions": [
+          "LD1RQB",
+          "LD1RQH",
+          "LD1RQW",
+          "LD1RQD"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous load broadcast, scalar + scalar",
+        "instructions": [
+          "LD1RQB",
+          "LD1RQH",
+          "LD1RQW",
+          "LD1RQD"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Non-temporal load, scalar + imm",
+        "instructions": [
+          "LDNT1B",
+          "LDNT1H",
+          "LDNT1W",
+          "LDNT1D"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Non-temporal load, scalar + scalar",
+        "instructions": [
+          "LDNT1B",
+          "LDNT1H",
+          "LDNT1W",
+          "LDNT1D"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Non-temporal gather load, vector + scalar 32-bit element size",
+        "instructions": [
+          "LDNT1B",
+          "LDNT1H",
+          "LDNT1W",
+          "LDNT1SB",
+          "LDNT1SH"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Non-temporal gather load, vector + scalar 64-bit element size",
+        "instructions": [
+          "LDNT1B",
+          "LDNT1H",
+          "LDNT1W",
+          "LDNT1SB",
+          "LDNT1SH",
+          "LDNT1SW"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous first faulting load, scalar + scalar",
+        "instructions": [
+          "LDFF1B",
+          "LDFF1H",
+          "LDFF1W",
+          "LDFF1D",
+          "LDFF1SB",
+          "LDFF1SH",
+          "LDFF1SW",
+          "LDFF1SD"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous non-faulting load, scalar + imm",
+        "instructions": [
+          "LDNF1B",
+          "LDNF1D",
+          "LDNF1H",
+          "LDNF1W",
+          "LDNF1SB",
+          "LDNF1SH",
+          "LDNF1SW"
+        ],
+        "exec_latency": "6",
+        "exec_throughput": "3",
+        "utilized_pipelines": "LD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous Load three structures to three vectors, scalar + imm",
+        "instructions": [
+          "LD3B",
+          "LD3H",
+          "LD3W"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "SVE128: 2/3\nSVE256: 1/3\nLD, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Contiguous Load three structures to three vectors, scalar + imm",
+        "instructions": [
+          "LD3D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 8\nSVE256: 10\nSVE256: 2/3",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous Load three structures to three vectors, scalar + scalar",
+        "instructions": [
+          "LD3B",
+          "LD3H",
+          "LD3W"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "SVE128: 2/3\nSVE256: 1/3\nLD, V",
+        "utilized_pipelines": "-",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Contiguous Load three structures to three vectors, scalar + scalar",
+        "instructions": [
+          "LD3D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 8\nSVE256: 10\nSVE256: 2/3",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Gather load, vector + imm, 32- bit element size",
+        "instructions": [
+          "LD1B",
+          "LD1H",
+          "LD1W",
+          "LD1SB",
+          "LD1SH",
+          "LD1SW",
+          "LDFF1B",
+          "LDFF1H",
+          "LDFF1W",
+          "LDFF1SB",
+          "LDFF1SH",
+          "LDFF1SW"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 9\nSVE256: 10\nSVE256: 3/8",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Gather load, vector + imm, 64- bit element size",
+        "instructions": [
+          "LD1B",
+          "LD1H",
+          "LD1W",
+          "LD1D",
+          "LD1SB",
+          "LD1SH",
+          "LD1SW",
+          "LDFF1B",
+          "LDFF1D LDFF1H",
+          "LDFF1W",
+          "LDFF1SB",
+          "LDFF1SD",
+          "LDFF1SH",
+          "LDFF1SW"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 8\nSVE256: 9\nSVE256: 3/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Gather load, 32-bit scaled offset",
+        "instructions": [
+          "LD1H",
+          "LD1SH",
+          "LDFF1H",
+          "LDFF1SH",
+          "LD1W",
+          "LDFF1W",
+          "LDFF1SW"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 9\nSVE256: 10\nSVE256: 3/8",
+        "utilized_pipelines": "",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "025",
+    "title": "Table 3-26 SVE store instructions",
+    "instructions": [
+      {
+        "instruction_group": "Store from predicate reg",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V, ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Store from vector reg",
+        "instructions": [
+          "STR"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous store, scalar + imm",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous store, scalar + scalar",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Contiguous store two structures from two vectors, scalar + imm",
+        "instructions": [
+          "ST2B",
+          "ST2H",
+          "ST2W",
+          "ST2D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 1\nSVE256: 4",
+        "utilized_pipelines": "",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Contiguous store two structures from two vectors, scalar + scalar",
+        "instructions": [
+          "ST2B",
+          "ST2H",
+          "ST2W",
+          "ST2D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 1\nSVE256: 4",
+        "utilized_pipelines": "",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Non-temporal store, scalar + imm",
+        "instructions": [
+          "STNT1B",
+          "STNT1H",
+          "STNT1W",
+          "STNT1D"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Non-temporal store, scalar + scalar",
+        "instructions": [
+          "STNT1B",
+          "STNT1H",
+          "STNT1W",
+          "STNT1D"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "2",
+        "utilized_pipelines": "ST,STD",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter non-temporal store, vector + scalar 32-bit element size",
+        "instructions": [
+          "STNT1B",
+          "STNT1H",
+          "STNT1W"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 8\nSVE256: 1/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter non-temporal store, vector + scalar 64-bit element size",
+        "instructions": [
+          "STNT1B",
+          "STNT1H",
+          "STNT1W",
+          "STNT1D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 2\nSVE256: 4\nSVE256: 1/2",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store vector + imm 32-bit element size",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 8\nSVE256: 1/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store vector + imm 64-bit element size",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 2\nSVE256: 4\nSVE256: 1/2",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "offset",
+        "instructions": [
+          "ST1H",
+          "ST1W"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 8\nSVE256: 1/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store, 32-bit unpacked unscaled offset",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 8\nSVE256: 1/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store, 32-bit unpacked scaled offset",
+        "instructions": [
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 8\nSVE256: 1/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store, 32-bit unscaled offset",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 4\nSVE256: 8\nSVE256: 1/4",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store, 64-bit scaled offset",
+        "instructions": [
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 2\nSVE256: 4\nSVE256: 1/2",
+        "utilized_pipelines": "",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Scatter store, 64-bit unscaled offset",
+        "instructions": [
+          "ST1B",
+          "ST1H",
+          "ST1W",
+          "ST1D"
+        ],
+        "exec_latency": "",
+        "exec_throughput": "SVE128: 2\nSVE256: 4\nSVE256: 1/2",
+        "utilized_pipelines": "",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "026",
+    "title": "Table 3-27 SVE miscellaneous instructions",
+    "instructions": [
+      {
+        "instruction_group": "Read first fault register, unpredicated",
+        "instructions": [
+          "RDFFR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Read first fault register, predicated",
+        "instructions": [
+          "RDFFR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Read first fault register and set flags",
+        "instructions": [
+          "RDFFRS"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "2",
+        "utilized_pipelines": "V",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Set first fault register",
+        "instructions": [
+          "SETFFR"
+        ],
+        "exec_latency": "0",
+        "exec_throughput": "-",
+        "utilized_pipelines": "-",
+        "notes": "-"
+      },
+      {
+        "instruction_group": "Write to first fault register",
+        "instructions": [
+          "WRFFR"
+        ],
+        "exec_latency": "10",
+        "exec_throughput": "1/10",
+        "utilized_pipelines": "V, ALU25",
+        "notes": "-"
+      }
+    ]
+  },
+  {
+    "table_num": "027",
+    "title": "Table 3-28 SVE cryptographic instructions",
+    "instructions": [
+      {
+        "instruction_group": "crypto AES ops",
+        "instructions": [
+          "AESD",
+          "AESE",
+          "AESMC",
+          "AESIMC"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Crypto SHA3 ops",
+        "instructions": [
+          "BCAX",
+          "EOR3",
+          "RAX1"
+        ],
+        "exec_latency": "1",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Crypto SHA3 ops",
+        "instructions": [
+          "XAR"
+        ],
+        "exec_latency": "2",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      },
+      {
+        "instruction_group": "Crypto SM4 ops",
+        "instructions": [
+          "SM4E",
+          "SM4EKEY"
+        ],
+        "exec_latency": "4",
+        "exec_throughput": "SVE128: 4\nSVE256: 2\nV",
+        "utilized_pipelines": "SVE2",
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "table_num": "028",
+    "title": "Unknown Table",
+    "instructions": []
+  },
+  {
+    "table_num": "029",
+    "title": "Table 4-2 movprfx instructions",
+    "instructions": []
+  }
+]

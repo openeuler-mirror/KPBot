@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "apply-vectorization Arm intrinsics knowledge base record",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "isa",
+    "group_path",
+    "display_name",
+    "intrinsic_names",
+    "instruction_names",
+    "prototype",
+    "header",
+    "feature_macros",
+    "required_function_attributes",
+    "operand_constraints",
+    "immediate_constraints",
+    "vectorization_role",
+    "tail_policy",
+    "usage_template",
+    "correctness_rules",
+    "anti_patterns",
+    "related_items",
+    "source"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "intrinsic",
+        "instruction",
+        "attribute",
+        "rule"
+      ]
+    },
+    "isa": {
+      "enum": [
+        "neon",
+        "sve",
+        "sve2",
+        "sme",
+        "sme2"
+      ]
+    },
+    "group_path": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "intrinsic_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "instruction_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "prototype": {
+      "type": "string"
+    },
+    "header": {
+      "type": "string"
+    },
+    "feature_macros": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_function_attributes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "operand_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "immediate_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "vectorization_role": {
+      "type": "string"
+    },
+    "tail_policy": {
+      "type": "string"
+    },
+    "usage_template": {
+      "type": "string"
+    },
+    "correctness_rules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "anti_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "related_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "title",
+        "url",
+        "section",
+        "retrieved_at"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "section": {
+          "type": "string"
+        },
+        "retrieved_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
