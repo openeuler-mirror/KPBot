@@ -1,0 +1,35 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "kpbot-marketplace",
+  "description": "KPBot Marketplace — 面向鲲鹏/ARM 生态的高性能计算工具集，涵盖代码优化、系统 profiling、平台迁移等插件",
+  "version": "0.1.0",
+  "owner": {
+    "name": "Kunpeng Acceleration Team"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://atomgit.com/openEuler/KPBot",
+  "plugins": [
+    {
+      "name": "code-optimizer",
+      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
+      "author": {
+        "name": "Kunpeng Acceleration Team"
+      },
+      "category": "performance",
+      "source": "./Plugins/code-optimizer",
+      "version": "0.1.0",
+      "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling"]
+    },
+    {
+      "name": "app-tuner",
+      "description": "应用级调优 — 针对具体应用场景的深度性能调优",
+      "author": {
+        "name": "Kunpeng Acceleration Team"
+      },
+      "category": "performance",
+      "source": "./Plugins/app-tuner",
+      "version": "0.1.0",
+      "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64"]
+    }
+  ]
+}
