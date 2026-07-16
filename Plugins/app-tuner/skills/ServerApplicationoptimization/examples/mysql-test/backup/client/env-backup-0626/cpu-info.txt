@@ -1,0 +1,744 @@
+===== uname-m =====
+time: 2026-06-26 10:14:17
+aarch64
+
+===== lscpu =====
+time: 2026-06-26 10:14:17
+Architecture:                         aarch64
+CPU op-mode(s):                       64-bit
+Byte Order:                           Little Endian
+CPU(s):                               192
+On-line CPU(s) list:                  0-191
+Vendor ID:                            HiSilicon
+Model name:                           -
+Model:                                0
+Thread(s) per core:                   2
+Core(s) per socket:                   48
+Socket(s):                            2
+Stepping:                             0x0
+Frequency boost:                      disabled
+CPU(s) scaling MHz:                   100%
+CPU max MHz:                          2200.0000
+CPU min MHz:                          1200.0000
+BogoMIPS:                             200.00
+Flags:                                fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh rng ecv
+L1d cache:                            6 MiB (96 instances)
+L1i cache:                            12 MiB (96 instances)
+L2 cache:                             96 MiB (96 instances)
+L3 cache:                             168 MiB (4 instances)
+NUMA node(s):                         4
+NUMA node0 CPU(s):                    0-47
+NUMA node1 CPU(s):                    48-95
+NUMA node2 CPU(s):                    96-143
+NUMA node3 CPU(s):                    144-191
+Vulnerability Gather data sampling:   Not affected
+Vulnerability Itlb multihit:          Not affected
+Vulnerability L1tf:                   Not affected
+Vulnerability Mds:                    Not affected
+Vulnerability Meltdown:               Not affected
+Vulnerability Mmio stale data:        Not affected
+Vulnerability Reg file data sampling: Not affected
+Vulnerability Retbleed:               Not affected
+Vulnerability Spec rstack overflow:   Not affected
+Vulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:             Mitigation; __user pointer sanitization
+Vulnerability Spectre v2:             Vulnerable: Unprivileged eBPF enabled
+Vulnerability Srbds:                  Not affected
+Vulnerability Tsx async abort:        Not affected
+
+===== lscpu-extended =====
+time: 2026-06-26 10:14:17
+CPU NODE SOCKET CORE L1d:L1i:L2:L3   ONLINE    MAXMHZ    MINMHZ       MHZ
+  0    0      0    0 3:2:4:1            yes 2200.0000 1200.0000 2198.8811
+  1    0      0    0 3:2:4:1            yes 2200.0000 1200.0000 2198.8811
+  2    0      0    1 6:5:7:1            yes 2200.0000 1200.0000 2199.1931
+  3    0      0    1 6:5:7:1            yes 2200.0000 1200.0000 2199.1931
+  4    0      0    2 9:8:10:1           yes 2200.0000 1200.0000 2197.6770
+  5    0      0    2 9:8:10:1           yes 2200.0000 1200.0000 2197.6770
+  6    0      0    3 12:11:13:1         yes 2200.0000 1200.0000 2198.0869
+  7    0      0    3 12:11:13:1         yes 2200.0000 1200.0000 2198.0869
+  8    0      0    4 15:14:16:1         yes 2200.0000 1200.0000 2198.8540
+  9    0      0    4 15:14:16:1         yes 2200.0000 1200.0000 2198.8540
+ 10    0      0    5 18:17:19:1         yes 2200.0000 1200.0000 2199.4951
+ 11    0      0    5 18:17:19:1         yes 2200.0000 1200.0000 2199.4951
+ 12    0      0    6 21:20:22:1         yes 2200.0000 1200.0000 2198.9121
+ 13    0      0    6 21:20:22:1         yes 2200.0000 1200.0000 2198.9121
+ 14    0      0    7 24:23:25:1         yes 2200.0000 1200.0000 2198.3120
+ 15    0      0    7 24:23:25:1         yes 2200.0000 1200.0000 2198.3120
+ 16    0      0    8 27:26:28:1         yes 2200.0000 1200.0000 2199.9700
+ 17    0      0    8 27:26:28:1         yes 2200.0000 1200.0000 2199.9700
+ 18    0      0    9 30:29:31:1         yes 2200.0000 1200.0000 2198.3259
+ 19    0      0    9 30:29:31:1         yes 2200.0000 1200.0000 2198.3259
+ 20    0      0   10 33:32:34:1         yes 2200.0000 1200.0000 2198.5239
+ 21    0      0   10 33:32:34:1         yes 2200.0000 1200.0000 2198.5239
+ 22    0      0   11 36:35:37:1         yes 2200.0000 1200.0000 2199.3081
+ 23    0      0   11 36:35:37:1         yes 2200.0000 1200.0000 2199.3081
+ 24    0      0   12 39:38:40:1         yes 2200.0000 1200.0000 2198.8669
+ 25    0      0   12 39:38:40:1         yes 2200.0000 1200.0000 2198.8669
+ 26    0      0   13 42:41:43:1         yes 2200.0000 1200.0000 2199.6050
+ 27    0      0   13 42:41:43:1         yes 2200.0000 1200.0000 2199.6050
+ 28    0      0   14 45:44:46:1         yes 2200.0000 1200.0000 2197.6221
+ 29    0      0   14 45:44:46:1         yes 2200.0000 1200.0000 2197.6221
+ 30    0      0   15 48:47:49:1         yes 2200.0000 1200.0000 2199.3049
+ 31    0      0   15 48:47:49:1         yes 2200.0000 1200.0000 2199.3049
+ 32    0      0   16 51:50:52:1         yes 2200.0000 1200.0000 2198.3040
+ 33    0      0   16 51:50:52:1         yes 2200.0000 1200.0000 2198.3040
+ 34    0      0   17 54:53:55:1         yes 2200.0000 1200.0000 2197.7109
+ 35    0      0   17 54:53:55:1         yes 2200.0000 1200.0000 2197.7109
+ 36    0      0   18 57:56:58:1         yes 2200.0000 1200.0000 2199.5759
+ 37    0      0   18 57:56:58:1         yes 2200.0000 1200.0000 2199.5759
+ 38    0      0   19 60:59:61:1         yes 2200.0000 1200.0000 2198.9951
+ 39    0      0   19 60:59:61:1         yes 2200.0000 1200.0000 2198.9951
+ 40    0      0   20 63:62:64:1         yes 2200.0000 1200.0000 2199.3440
+ 41    0      0   20 63:62:64:1         yes 2200.0000 1200.0000 2199.3440
+ 42    0      0   21 66:65:67:1         yes 2200.0000 1200.0000 2200.2119
+ 43    0      0   21 66:65:67:1         yes 2200.0000 1200.0000 2200.2119
+ 44    0      0   22 69:68:70:1         yes 2200.0000 1200.0000 2198.8560
+ 45    0      0   22 69:68:70:1         yes 2200.0000 1200.0000 2198.8560
+ 46    0      0   23 72:71:73:1         yes 2200.0000 1200.0000 2198.6709
+ 47    0      0   23 72:71:73:1         yes 2200.0000 1200.0000 2198.6709
+ 48    1      0   24 76:75:77:74        yes 2200.0000 1200.0000 2198.6030
+ 49    1      0   24 76:75:77:74        yes 2200.0000 1200.0000 2198.6030
+ 50    1      0   25 79:78:80:74        yes 2200.0000 1200.0000 2198.9319
+ 51    1      0   25 79:78:80:74        yes 2200.0000 1200.0000 2198.9319
+ 52    1      0   26 82:81:83:74        yes 2200.0000 1200.0000 2199.1689
+ 53    1      0   26 82:81:83:74        yes 2200.0000 1200.0000 2199.1689
+ 54    1      0   27 85:84:86:74        yes 2200.0000 1200.0000 2199.5149
+ 55    1      0   27 85:84:86:74        yes 2200.0000 1200.0000 2199.5149
+ 56    1      0   28 88:87:89:74        yes 2200.0000 1200.0000 2199.7329
+ 57    1      0   28 88:87:89:74        yes 2200.0000 1200.0000 2199.7329
+ 58    1      0   29 91:90:92:74        yes 2200.0000 1200.0000 2199.6021
+ 59    1      0   29 91:90:92:74        yes 2200.0000 1200.0000 2199.6021
+ 60    1      0   30 94:93:95:74        yes 2200.0000 1200.0000 2199.7000
+ 61    1      0   30 94:93:95:74        yes 2200.0000 1200.0000 2199.7000
+ 62    1      0   31 97:96:98:74        yes 2200.0000 1200.0000 2199.8000
+ 63    1      0   31 97:96:98:74        yes 2200.0000 1200.0000 2199.8000
+ 64    1      0   32 100:99:101:74      yes 2200.0000 1200.0000 2199.3291
+ 65    1      0   32 100:99:101:74      yes 2200.0000 1200.0000 2199.3291
+ 66    1      0   33 103:102:104:74     yes 2200.0000 1200.0000 2199.9680
+ 67    1      0   33 103:102:104:74     yes 2200.0000 1200.0000 2199.9680
+ 68    1      0   34 106:105:107:74     yes 2200.0000 1200.0000 2198.2820
+ 69    1      0   34 106:105:107:74     yes 2200.0000 1200.0000 2198.2820
+ 70    1      0   35 109:108:110:74     yes 2200.0000 1200.0000 2199.5979
+ 71    1      0   35 109:108:110:74     yes 2200.0000 1200.0000 2199.5979
+ 72    1      0   36 112:111:113:74     yes 2200.0000 1200.0000 2200.3149
+ 73    1      0   36 112:111:113:74     yes 2200.0000 1200.0000 2200.3149
+ 74    1      0   37 115:114:116:74     yes 2200.0000 1200.0000 2199.3140
+ 75    1      0   37 115:114:116:74     yes 2200.0000 1200.0000 2199.3140
+ 76    1      0   38 118:117:119:74     yes 2200.0000 1200.0000 2199.4719
+ 77    1      0   38 118:117:119:74     yes 2200.0000 1200.0000 2199.4719
+ 78    1      0   39 121:120:122:74     yes 2200.0000 1200.0000 2199.4490
+ 79    1      0   39 121:120:122:74     yes 2200.0000 1200.0000 2199.4490
+ 80    1      0   40 124:123:125:74     yes 2200.0000 1200.0000 2200.1931
+ 81    1      0   40 124:123:125:74     yes 2200.0000 1200.0000 2200.1931
+ 82    1      0   41 127:126:128:74     yes 2200.0000 1200.0000 2198.6650
+ 83    1      0   41 127:126:128:74     yes 2200.0000 1200.0000 2198.6650
+ 84    1      0   42 130:129:131:74     yes 2200.0000 1200.0000 2200.4761
+ 85    1      0   42 130:129:131:74     yes 2200.0000 1200.0000 2200.4761
+ 86    1      0   43 133:132:134:74     yes 2200.0000 1200.0000 2198.9800
+ 87    1      0   43 133:132:134:74     yes 2200.0000 1200.0000 2198.9800
+ 88    1      0   44 136:135:137:74     yes 2200.0000 1200.0000 2197.9351
+ 89    1      0   44 136:135:137:74     yes 2200.0000 1200.0000 2197.9351
+ 90    1      0   45 139:138:140:74     yes 2200.0000 1200.0000 2200.4709
+ 91    1      0   45 139:138:140:74     yes 2200.0000 1200.0000 2200.4709
+ 92    1      0   46 142:141:143:74     yes 2200.0000 1200.0000 2198.6570
+ 93    1      0   46 142:141:143:74     yes 2200.0000 1200.0000 2198.6570
+ 94    1      0   47 145:144:146:74     yes 2200.0000 1200.0000 2202.1289
+ 95    1      0   47 145:144:146:74     yes 2200.0000 1200.0000 2202.1289
+ 96    2      1   48 149:148:150:147    yes 2200.0000 1200.0000 2198.3669
+ 97    2      1   48 149:148:150:147    yes 2200.0000 1200.0000 2198.3669
+ 98    2      1   49 152:151:153:147    yes 2200.0000 1200.0000 2200.2681
+ 99    2      1   49 152:151:153:147    yes 2200.0000 1200.0000 2200.2681
+100    2      1   50 155:154:156:147    yes 2200.0000 1200.0000 2198.8330
+101    2      1   50 155:154:156:147    yes 2200.0000 1200.0000 2198.8330
+102    2      1   51 158:157:159:147    yes 2200.0000 1200.0000 2198.5681
+103    2      1   51 158:157:159:147    yes 2200.0000 1200.0000 2198.5681
+104    2      1   52 161:160:162:147    yes 2200.0000 1200.0000 2196.3889
+105    2      1   52 161:160:162:147    yes 2200.0000 1200.0000 2196.3889
+106    2      1   53 164:163:165:147    yes 2200.0000 1200.0000 2199.5200
+107    2      1   53 164:163:165:147    yes 2200.0000 1200.0000 2199.5200
+108    2      1   54 167:166:168:147    yes 2200.0000 1200.0000 2199.6279
+109    2      1   54 167:166:168:147    yes 2200.0000 1200.0000 2199.6279
+110    2      1   55 170:169:171:147    yes 2200.0000 1200.0000 2199.3730
+111    2      1   55 170:169:171:147    yes 2200.0000 1200.0000 2199.3730
+112    2      1   56 173:172:174:147    yes 2200.0000 1200.0000 2198.1770
+113    2      1   56 173:172:174:147    yes 2200.0000 1200.0000 2198.1770
+114    2      1   57 176:175:177:147    yes 2200.0000 1200.0000 2199.3201
+115    2      1   57 176:175:177:147    yes 2200.0000 1200.0000 2199.3201
+116    2      1   58 179:178:180:147    yes 2200.0000 1200.0000 2199.8850
+117    2      1   58 179:178:180:147    yes 2200.0000 1200.0000 2199.8850
+118    2      1   59 182:181:183:147    yes 2200.0000 1200.0000 2199.6289
+119    2      1   59 182:181:183:147    yes 2200.0000 1200.0000 2199.6289
+120    2      1   60 185:184:186:147    yes 2200.0000 1200.0000 2198.8159
+121    2      1   60 185:184:186:147    yes 2200.0000 1200.0000 2198.8159
+122    2      1   61 188:187:189:147    yes 2200.0000 1200.0000 2200.3030
+123    2      1   61 188:187:189:147    yes 2200.0000 1200.0000 2200.3030
+124    2      1   62 191:190:192:147    yes 2200.0000 1200.0000 2200.0720
+125    2      1   62 191:190:192:147    yes 2200.0000 1200.0000 2200.0720
+126    2      1   63 194:193:195:147    yes 2200.0000 1200.0000 2200.4009
+127    2      1   63 194:193:195:147    yes 2200.0000 1200.0000 2200.4009
+128    2      1   64 197:196:198:147    yes 2200.0000 1200.0000 2199.7510
+129    2      1   64 197:196:198:147    yes 2200.0000 1200.0000 2199.7510
+130    2      1   65 200:199:201:147    yes 2200.0000 1200.0000 2199.5750
+131    2      1   65 200:199:201:147    yes 2200.0000 1200.0000 2199.5750
+132    2      1   66 203:202:204:147    yes 2200.0000 1200.0000 2198.9570
+133    2      1   66 203:202:204:147    yes 2200.0000 1200.0000 2198.9570
+134    2      1   67 206:205:207:147    yes 2200.0000 1200.0000 2198.6819
+135    2      1   67 206:205:207:147    yes 2200.0000 1200.0000 2198.6819
+136    2      1   68 209:208:210:147    yes 2200.0000 1200.0000 2200.0850
+137    2      1   68 209:208:210:147    yes 2200.0000 1200.0000 2200.0850
+138    2      1   69 212:211:213:147    yes 2200.0000 1200.0000 2199.3621
+139    2      1   69 212:211:213:147    yes 2200.0000 1200.0000 2199.3621
+140    2      1   70 215:214:216:147    yes 2200.0000 1200.0000 2199.7141
+141    2      1   70 215:214:216:147    yes 2200.0000 1200.0000 2199.7141
+142    2      1   71 218:217:219:147    yes 2200.0000 1200.0000 2199.1660
+143    2      1   71 218:217:219:147    yes 2200.0000 1200.0000 2199.1660
+144    3      1   72 222:221:223:220    yes 2200.0000 1200.0000 2200.0991
+145    3      1   72 222:221:223:220    yes 2200.0000 1200.0000 2200.0991
+146    3      1   73 225:224:226:220    yes 2200.0000 1200.0000 2198.8650
+147    3      1   73 225:224:226:220    yes 2200.0000 1200.0000 2198.8650
+148    3      1   74 228:227:229:220    yes 2200.0000 1200.0000 2200.3230
+149    3      1   74 228:227:229:220    yes 2200.0000 1200.0000 2200.3230
+150    3      1   75 231:230:232:220    yes 2200.0000 1200.0000 2199.5811
+151    3      1   75 231:230:232:220    yes 2200.0000 1200.0000 2199.5811
+152    3      1   76 234:233:235:220    yes 2200.0000 1200.0000 2197.4370
+153    3      1   76 234:233:235:220    yes 2200.0000 1200.0000 2197.4370
+154    3      1   77 237:236:238:220    yes 2200.0000 1200.0000 2198.9260
+155    3      1   77 237:236:238:220    yes 2200.0000 1200.0000 2198.9260
+156    3      1   78 240:239:241:220    yes 2200.0000 1200.0000 2199.7251
+157    3      1   78 240:239:241:220    yes 2200.0000 1200.0000 2199.7251
+158    3      1   79 243:242:244:220    yes 2200.0000 1200.0000 2199.7871
+159    3      1   79 243:242:244:220    yes 2200.0000 1200.0000 2199.7871
+160    3      1   80 246:245:247:220    yes 2200.0000 1200.0000 2200.1130
+161    3      1   80 246:245:247:220    yes 2200.0000 1200.0000 2200.1130
+162    3      1   81 249:248:250:220    yes 2200.0000 1200.0000 2199.8401
+163    3      1   81 249:248:250:220    yes 2200.0000 1200.0000 2199.8401
+164    3      1   82 252:251:253:220    yes 2200.0000 1200.0000 2198.2661
+165    3      1   82 252:251:253:220    yes 2200.0000 1200.0000 2198.2661
+166    3      1   83 255:254:256:220    yes 2200.0000 1200.0000 2199.3159
+167    3      1   83 255:254:256:220    yes 2200.0000 1200.0000 2199.3159
+168    3      1   84 258:257:259:220    yes 2200.0000 1200.0000 2198.7690
+169    3      1   84 258:257:259:220    yes 2200.0000 1200.0000 2198.7690
+170    3      1   85 261:260:262:220    yes 2200.0000 1200.0000 2198.2830
+171    3      1   85 261:260:262:220    yes 2200.0000 1200.0000 2198.2830
+172    3      1   86 264:263:265:220    yes 2200.0000 1200.0000 2200.0610
+173    3      1   86 264:263:265:220    yes 2200.0000 1200.0000 2200.0610
+174    3      1   87 267:266:268:220    yes 2200.0000 1200.0000 2199.4590
+175    3      1   87 267:266:268:220    yes 2200.0000 1200.0000 2199.4590
+176    3      1   88 270:269:271:220    yes 2200.0000 1200.0000 2199.3359
+177    3      1   88 270:269:271:220    yes 2200.0000 1200.0000 2199.3359
+178    3      1   89 273:272:274:220    yes 2200.0000 1200.0000 2200.1121
+179    3      1   89 273:272:274:220    yes 2200.0000 1200.0000 2200.1121
+180    3      1   90 276:275:277:220    yes 2200.0000 1200.0000 2198.8601
+181    3      1   90 276:275:277:220    yes 2200.0000 1200.0000 2198.8601
+182    3      1   91 279:278:280:220    yes 2200.0000 1200.0000 2199.1499
+183    3      1   91 279:278:280:220    yes 2200.0000 1200.0000 2199.1499
+184    3      1   92 282:281:283:220    yes 2200.0000 1200.0000 2198.1160
+185    3      1   92 282:281:283:220    yes 2200.0000 1200.0000 2198.1160
+186    3      1   93 285:284:286:220    yes 2200.0000 1200.0000 2199.8101
+187    3      1   93 285:284:286:220    yes 2200.0000 1200.0000 2199.8101
+188    3      1   94 288:287:289:220    yes 2200.0000 1200.0000 2199.4290
+189    3      1   94 288:287:289:220    yes 2200.0000 1200.0000 2199.4290
+190    3      1   95 291:290:292:220    yes 2200.0000 1200.0000 2199.8379
+191    3      1   95 291:290:292:220    yes 2200.0000 1200.0000 2199.8379
+
+===== proc-cpuinfo-summary =====
+time: 2026-06-26 10:14:17
+processor	: 0
+processor	: 1
+processor	: 2
+processor	: 3
+processor	: 4
+processor	: 5
+processor	: 6
+processor	: 7
+processor	: 8
+processor	: 9
+processor	: 10
+processor	: 11
+processor	: 12
+processor	: 13
+processor	: 14
+processor	: 15
+processor	: 16
+processor	: 17
+processor	: 18
+processor	: 19
+processor	: 20
+processor	: 21
+processor	: 22
+processor	: 23
+processor	: 24
+processor	: 25
+processor	: 26
+processor	: 27
+processor	: 28
+processor	: 29
+processor	: 30
+processor	: 31
+processor	: 32
+processor	: 33
+processor	: 34
+processor	: 35
+processor	: 36
+processor	: 37
+processor	: 38
+processor	: 39
+processor	: 40
+processor	: 41
+processor	: 42
+processor	: 43
+processor	: 44
+processor	: 45
+processor	: 46
+processor	: 47
+processor	: 48
+processor	: 49
+processor	: 50
+processor	: 51
+processor	: 52
+processor	: 53
+processor	: 54
+processor	: 55
+processor	: 56
+processor	: 57
+processor	: 58
+processor	: 59
+processor	: 60
+processor	: 61
+processor	: 62
+processor	: 63
+processor	: 64
+processor	: 65
+processor	: 66
+processor	: 67
+processor	: 68
+processor	: 69
+processor	: 70
+processor	: 71
+processor	: 72
+processor	: 73
+processor	: 74
+processor	: 75
+processor	: 76
+processor	: 77
+processor	: 78
+processor	: 79
+
+===== cpu-cache-sysfs =====
+time: 2026-06-26 10:14:17
+/sys/devices/system/cpu/cpu0/cache/index0/level=1
+/sys/devices/system/cpu/cpu0/cache/index0/size=64K
+/sys/devices/system/cpu/cpu0/cache/index0/type=Data
+/sys/devices/system/cpu/cpu0/cache/index1/level=1
+/sys/devices/system/cpu/cpu0/cache/index1/size=128K
+/sys/devices/system/cpu/cpu0/cache/index1/type=Instruction
+/sys/devices/system/cpu/cpu0/cache/index2/level=2
+/sys/devices/system/cpu/cpu0/cache/index2/size=1024K
+/sys/devices/system/cpu/cpu0/cache/index2/type=Unified
+/sys/devices/system/cpu/cpu0/cache/index3/level=3
+/sys/devices/system/cpu/cpu0/cache/index3/size=43008K
+/sys/devices/system/cpu/cpu0/cache/index3/type=Unified
+
+===== cpufreq-policy =====
+time: 2026-06-26 10:14:17
+/sys/devices/system/cpu/cpufreq/policy0/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy0/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq=2198881
+/sys/devices/system/cpu/cpufreq/policy0/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy10/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy10/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy10/scaling_cur_freq=2199495
+/sys/devices/system/cpu/cpufreq/policy10/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy100/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy100/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy100/scaling_cur_freq=2198833
+/sys/devices/system/cpu/cpufreq/policy100/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy102/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy102/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy102/scaling_cur_freq=2198568
+/sys/devices/system/cpu/cpufreq/policy102/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy104/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy104/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy104/scaling_cur_freq=2196389
+/sys/devices/system/cpu/cpufreq/policy104/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy106/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy106/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy106/scaling_cur_freq=2199520
+/sys/devices/system/cpu/cpufreq/policy106/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy108/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy108/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy108/scaling_cur_freq=2199628
+/sys/devices/system/cpu/cpufreq/policy108/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy110/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy110/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy110/scaling_cur_freq=2199373
+/sys/devices/system/cpu/cpufreq/policy110/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy112/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy112/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy112/scaling_cur_freq=2198177
+/sys/devices/system/cpu/cpufreq/policy112/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy114/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy114/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy114/scaling_cur_freq=2199320
+/sys/devices/system/cpu/cpufreq/policy114/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy116/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy116/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy116/scaling_cur_freq=2199885
+/sys/devices/system/cpu/cpufreq/policy116/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy118/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy118/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy118/scaling_cur_freq=2199629
+/sys/devices/system/cpu/cpufreq/policy118/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy12/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy12/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy12/scaling_cur_freq=2198912
+/sys/devices/system/cpu/cpufreq/policy12/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy120/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy120/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy120/scaling_cur_freq=2198816
+/sys/devices/system/cpu/cpufreq/policy120/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy122/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy122/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy122/scaling_cur_freq=2200303
+/sys/devices/system/cpu/cpufreq/policy122/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy124/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy124/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy124/scaling_cur_freq=2200072
+/sys/devices/system/cpu/cpufreq/policy124/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy126/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy126/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy126/scaling_cur_freq=2200401
+/sys/devices/system/cpu/cpufreq/policy126/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy128/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy128/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy128/scaling_cur_freq=2199751
+/sys/devices/system/cpu/cpufreq/policy128/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy130/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy130/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy130/scaling_cur_freq=2199575
+/sys/devices/system/cpu/cpufreq/policy130/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy132/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy132/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy132/scaling_cur_freq=2198957
+/sys/devices/system/cpu/cpufreq/policy132/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy134/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy134/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy134/scaling_cur_freq=2198682
+/sys/devices/system/cpu/cpufreq/policy134/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy136/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy136/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy136/scaling_cur_freq=2200085
+/sys/devices/system/cpu/cpufreq/policy136/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy138/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy138/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy138/scaling_cur_freq=2199362
+/sys/devices/system/cpu/cpufreq/policy138/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy14/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy14/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy14/scaling_cur_freq=2198312
+/sys/devices/system/cpu/cpufreq/policy14/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy140/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy140/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy140/scaling_cur_freq=2199714
+/sys/devices/system/cpu/cpufreq/policy140/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy142/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy142/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy142/scaling_cur_freq=2199166
+/sys/devices/system/cpu/cpufreq/policy142/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy144/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy144/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy144/scaling_cur_freq=2200099
+/sys/devices/system/cpu/cpufreq/policy144/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy146/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy146/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy146/scaling_cur_freq=2198865
+/sys/devices/system/cpu/cpufreq/policy146/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy148/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy148/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy148/scaling_cur_freq=2200323
+/sys/devices/system/cpu/cpufreq/policy148/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy150/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy150/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy150/scaling_cur_freq=2199581
+/sys/devices/system/cpu/cpufreq/policy150/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy152/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy152/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy152/scaling_cur_freq=2197437
+/sys/devices/system/cpu/cpufreq/policy152/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy154/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy154/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy154/scaling_cur_freq=2198926
+/sys/devices/system/cpu/cpufreq/policy154/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy156/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy156/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy156/scaling_cur_freq=2199725
+/sys/devices/system/cpu/cpufreq/policy156/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy158/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy158/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy158/scaling_cur_freq=2199787
+/sys/devices/system/cpu/cpufreq/policy158/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy16/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy16/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy16/scaling_cur_freq=2199970
+/sys/devices/system/cpu/cpufreq/policy16/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy160/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy160/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy160/scaling_cur_freq=2200113
+/sys/devices/system/cpu/cpufreq/policy160/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy162/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy162/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy162/scaling_cur_freq=2199840
+/sys/devices/system/cpu/cpufreq/policy162/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy164/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy164/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy164/scaling_cur_freq=2198266
+/sys/devices/system/cpu/cpufreq/policy164/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy166/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy166/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy166/scaling_cur_freq=2199316
+/sys/devices/system/cpu/cpufreq/policy166/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy168/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy168/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy168/scaling_cur_freq=2198769
+/sys/devices/system/cpu/cpufreq/policy168/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy170/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy170/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy170/scaling_cur_freq=2198283
+/sys/devices/system/cpu/cpufreq/policy170/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy172/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy172/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy172/scaling_cur_freq=2200061
+/sys/devices/system/cpu/cpufreq/policy172/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy174/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy174/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy174/scaling_cur_freq=2199459
+/sys/devices/system/cpu/cpufreq/policy174/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy176/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy176/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy176/scaling_cur_freq=2199336
+/sys/devices/system/cpu/cpufreq/policy176/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy178/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy178/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy178/scaling_cur_freq=2200112
+/sys/devices/system/cpu/cpufreq/policy178/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy18/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy18/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy18/scaling_cur_freq=2198326
+/sys/devices/system/cpu/cpufreq/policy18/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy180/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy180/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy180/scaling_cur_freq=2198860
+/sys/devices/system/cpu/cpufreq/policy180/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy182/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy182/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy182/scaling_cur_freq=2199150
+/sys/devices/system/cpu/cpufreq/policy182/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy184/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy184/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy184/scaling_cur_freq=2198116
+/sys/devices/system/cpu/cpufreq/policy184/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy186/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy186/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy186/scaling_cur_freq=2199810
+/sys/devices/system/cpu/cpufreq/policy186/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy188/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy188/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy188/scaling_cur_freq=2199429
+/sys/devices/system/cpu/cpufreq/policy188/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy190/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy190/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy190/scaling_cur_freq=2199838
+/sys/devices/system/cpu/cpufreq/policy190/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy2/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy2/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy2/scaling_cur_freq=2199193
+/sys/devices/system/cpu/cpufreq/policy2/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy20/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy20/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy20/scaling_cur_freq=2198524
+/sys/devices/system/cpu/cpufreq/policy20/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy22/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy22/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy22/scaling_cur_freq=2199308
+/sys/devices/system/cpu/cpufreq/policy22/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy24/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy24/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy24/scaling_cur_freq=2198867
+/sys/devices/system/cpu/cpufreq/policy24/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy26/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy26/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy26/scaling_cur_freq=2199605
+/sys/devices/system/cpu/cpufreq/policy26/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy28/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy28/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy28/scaling_cur_freq=2197622
+/sys/devices/system/cpu/cpufreq/policy28/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy30/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy30/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy30/scaling_cur_freq=2199305
+/sys/devices/system/cpu/cpufreq/policy30/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy32/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy32/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy32/scaling_cur_freq=2198304
+/sys/devices/system/cpu/cpufreq/policy32/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy34/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy34/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy34/scaling_cur_freq=2197711
+/sys/devices/system/cpu/cpufreq/policy34/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy36/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy36/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy36/scaling_cur_freq=2199576
+/sys/devices/system/cpu/cpufreq/policy36/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy38/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy38/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy38/scaling_cur_freq=2198995
+/sys/devices/system/cpu/cpufreq/policy38/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy4/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy4/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy4/scaling_cur_freq=2197677
+/sys/devices/system/cpu/cpufreq/policy4/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy40/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy40/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy40/scaling_cur_freq=2199344
+/sys/devices/system/cpu/cpufreq/policy40/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy42/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy42/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy42/scaling_cur_freq=2200212
+/sys/devices/system/cpu/cpufreq/policy42/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy44/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy44/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy44/scaling_cur_freq=2198856
+/sys/devices/system/cpu/cpufreq/policy44/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy46/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy46/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy46/scaling_cur_freq=2198671
+/sys/devices/system/cpu/cpufreq/policy46/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy48/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy48/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy48/scaling_cur_freq=2198603
+/sys/devices/system/cpu/cpufreq/policy48/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy50/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy50/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy50/scaling_cur_freq=2198932
+/sys/devices/system/cpu/cpufreq/policy50/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy52/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy52/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy52/scaling_cur_freq=2199169
+/sys/devices/system/cpu/cpufreq/policy52/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy54/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy54/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy54/scaling_cur_freq=2199515
+/sys/devices/system/cpu/cpufreq/policy54/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy56/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy56/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy56/scaling_cur_freq=2199733
+/sys/devices/system/cpu/cpufreq/policy56/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy58/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy58/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy58/scaling_cur_freq=2199602
+/sys/devices/system/cpu/cpufreq/policy58/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy6/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy6/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy6/scaling_cur_freq=2198087
+/sys/devices/system/cpu/cpufreq/policy6/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy60/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy60/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy60/scaling_cur_freq=2199700
+/sys/devices/system/cpu/cpufreq/policy60/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy62/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy62/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy62/scaling_cur_freq=2199800
+/sys/devices/system/cpu/cpufreq/policy62/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy64/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy64/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy64/scaling_cur_freq=2199329
+/sys/devices/system/cpu/cpufreq/policy64/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy66/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy66/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy66/scaling_cur_freq=2199968
+/sys/devices/system/cpu/cpufreq/policy66/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy68/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy68/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy68/scaling_cur_freq=2198282
+/sys/devices/system/cpu/cpufreq/policy68/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy70/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy70/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy70/scaling_cur_freq=2199598
+/sys/devices/system/cpu/cpufreq/policy70/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy72/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy72/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy72/scaling_cur_freq=2200315
+/sys/devices/system/cpu/cpufreq/policy72/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy74/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy74/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy74/scaling_cur_freq=2199314
+/sys/devices/system/cpu/cpufreq/policy74/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy76/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy76/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy76/scaling_cur_freq=2199472
+/sys/devices/system/cpu/cpufreq/policy76/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy78/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy78/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy78/scaling_cur_freq=2199449
+/sys/devices/system/cpu/cpufreq/policy78/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy8/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy8/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy8/scaling_cur_freq=2198854
+/sys/devices/system/cpu/cpufreq/policy8/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy80/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy80/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy80/scaling_cur_freq=2200193
+/sys/devices/system/cpu/cpufreq/policy80/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy82/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy82/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy82/scaling_cur_freq=2198665
+/sys/devices/system/cpu/cpufreq/policy82/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy84/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy84/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy84/scaling_cur_freq=2200476
+/sys/devices/system/cpu/cpufreq/policy84/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy86/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy86/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy86/scaling_cur_freq=2198980
+/sys/devices/system/cpu/cpufreq/policy86/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy88/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy88/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy88/scaling_cur_freq=2197935
+/sys/devices/system/cpu/cpufreq/policy88/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy90/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy90/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy90/scaling_cur_freq=2200471
+/sys/devices/system/cpu/cpufreq/policy90/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy92/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy92/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy92/scaling_cur_freq=2198657
+/sys/devices/system/cpu/cpufreq/policy92/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy94/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy94/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy94/scaling_cur_freq=2202129
+/sys/devices/system/cpu/cpufreq/policy94/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy96/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy96/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy96/scaling_cur_freq=2198367
+/sys/devices/system/cpu/cpufreq/policy96/scaling_governor=performance
+/sys/devices/system/cpu/cpufreq/policy98/cpuinfo_max_freq=2200000
+/sys/devices/system/cpu/cpufreq/policy98/cpuinfo_min_freq=1200000
+/sys/devices/system/cpu/cpufreq/policy98/scaling_cur_freq=2200268
+/sys/devices/system/cpu/cpufreq/policy98/scaling_governor=performance
+
+===== cpupower-frequency-info =====
+time: 2026-06-26 10:14:17
+analyzing CPU 32:
+  driver: cppc_cpufreq
+  CPUs which run at the same hardware frequency: 32 33
+  CPUs which need to have their frequency coordinated by software: 32 33
+  maximum transition latency:  Cannot determine or is not supported.
+  hardware limits: 1.20 GHz - 2.20 GHz
+  available cpufreq governors: conservative ondemand userspace powersave performance schedutil
+  current policy: frequency should be within 1.20 GHz and 2.20 GHz.
+                  The governor "performance" may decide which speed to use
+                  within this range.
+  current CPU frequency: Unable to call hardware
+  current CPU frequency: 2.20 GHz (asserted by call to kernel)
+

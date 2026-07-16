@@ -1,0 +1,33 @@
+===== perf-version =====
+time: 2026-06-26 10:14:11
+perf version 5.10.0-153.56.0.134.oe2203sp2.aarch64
+
+===== perf-event-paranoid =====
+time: 2026-06-26 10:14:11
+0
+
+===== kptr-restrict =====
+time: 2026-06-26 10:14:11
+0
+
+===== perf-list-hardware-events =====
+time: 2026-06-26 10:14:11
+  cache-misses                                       [Hardware event]
+  cpu-cycles OR cycles                               [Hardware event]
+  instructions                                       [Hardware event]
+
+===== perf-stat-smoke =====
+time: 2026-06-26 10:14:15
+
+ Performance counter stats for 'true':
+
+            917035      cycles                                                      
+            608440      instructions              #    0.66  insn per cycle         
+
+       0.007694584 seconds time elapsed
+
+       0.000000000 seconds user
+       0.000892000 seconds sys
+
+
+

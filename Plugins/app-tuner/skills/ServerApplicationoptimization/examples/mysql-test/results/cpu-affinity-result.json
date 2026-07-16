@@ -1,0 +1,60 @@
+{
+  "skill": "cpu-affinity-optimization",
+  "status": "completed",
+  "rounds": [
+    {
+      "round": 1,
+      "actions": [
+        "Step0: Physical topology discovery on 192.168.90.170 - confirmed 4 NUMA nodes (0-3), 2 sockets",
+        "Device-NUMA topology: NIC enp133s0 (active, 10GbE, 192.168.90.170) on NUMA node 2 (Socket 1)",
+        "Device-NUMA topology: NVMe nvme0n1 on NUMA node 0 (Socket 0)",
+        "Device-NUMA topology: NIC enp134s0 (25GbE, idle) on NUMA node 2 (Socket 1)",
+        "Workload type: remote sysbench (oltp_read_only) => NIC alignment first priority",
+        "CROSS-SOCKET DETECTED: MySQL on Node 0 (host process, 0-127 CPUs), NIC enp133s0 on Node 2, distance=20",
+        "Stop irqbalance (systemctl stop irqbalance) to enable manual IRQ affinity control",
+        "Create cpuset cgroup /sys/fs/cgroup/cpuset/mysql for mysqld PID 344323",
+        "Set cpuset=64-95 (Node 2), cpuset.mems=2, memory_migrate=1",
+        "Initially set cpuset=64-71 (8 CPUs) - TPS dropped to 4,129 (too restrictive)",
+        "Expanded to 64-79 + IRQ isolation to 80-95 = 8,628 TPS",
+        "Final: MySQL on 64-79,88-95 (24 CPUs on Node 2), enp133s0 IRQs on CPUs 80-87 (8 dedicated CPUs)"
+      ],
+      "forward_cmds": [
+        "systemctl stop irqbalance",
+        "mkdir -p /sys/fs/cgroup/cpuset/mysql",
+        "echo 64-95 > /sys/fs/cgroup/cpuset/mysql/cpuset.cpus",
+        "echo 2 > /sys/fs/cgroup/cpuset/mysql/cpuset.mems",
+        "echo 1 > /sys/fs/cgroup/cpuset/mysql/cpuset.memory_migrate",
+        "echo 344323 > /sys/fs/cgroup/cpuset/mysql/tasks",
+        "for tid in $(ps -L -p 344323 -o tid --no-headers); do echo $tid > /sys/fs/cgroup/cpuset/mysql/tasks; done",
+        "taskset -pac 64-95 344323",
+        "for irq in $(seq 294 309); do cpu=$((80 + (irq-294) % 8)); echo $cpu > /proc/irq/$irq/smp_affinity_list; done",
+        "echo 64-79,88-95 > /sys/fs/cgroup/cpuset/mysql/cpuset.cpus"
+      ],
+      "reverse_cmds": [
+        "systemctl start irqbalance",
+        "echo 344323 > /sys/fs/cgroup/cpuset/tasks",
+        "echo 0 > /sys/fs/cgroup/cpuset/mysql/cpuset.memory_migrate",
+        "rmdir /sys/fs/cgroup/cpuset/mysql"
+      ],
+      "baseline_tps": 11013,
+      "new_tps": 11618,
+      "gain_pct": 5.5,
+      "evidence_before": {
+        "context_switches_per_sec": 190835,
+        "cpu_migrations_per_sec": 57784,
+        "ipc": 0.90,
+        "irqbalance": "running",
+        "cpu_usage": "0-7 100% full"
+      },
+      "evidence_after": {
+        "cpu_migrations_per_sec": 0,
+        "irqbalance": "stopped",
+        "numa_memory_local": true,
+        "active_config": "MySQL on Node 2 cpuset=64-79,88-95, mems=2; IRQs on CPUs 80-87"
+      }
+    }
+  ],
+  "final_tps": 11618,
+  "total_gain_pct": 5.5,
+  "stop_reason": "TPS exceeded baseline (+5.5%), avg latency 3.44ms / P95 4.41ms, CPU migrations eliminated. Cross-socket repair achieved expected 5-15% gain. No further rounds needed."
+}

@@ -1,0 +1,23 @@
+{
+  "skill_name": "network-io-performance",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Check my network performance. I'm seeing slow response times and want to analyze network IO, check for packet loss, and see if there are any interrupt issues.",
+      "expected_output": "A comprehensive markdown report showing active network interfaces, IRQ analysis, packet loss detection, queue balance analysis, and traffic rates",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Analyze TCP/UDP traffic on my server. I need to check network interface statistics, interrupt load distribution, and detect any packet loss or network bottlenecks.",
+      "expected_output": "Detailed network performance analysis including interrupt load, packet loss rates, TX/RX queue balance, and traffic rate measurements",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "My network seems slow. Can you check for network packet loss, analyze interrupt distribution across CPU cores, and verify if TX/RX queues are balanced?",
+      "expected_output": "Network IO performance report identifying packet loss, interrupt imbalance, and queue distribution issues with recommendations",
+      "files": []
+    }
+  ]
+}

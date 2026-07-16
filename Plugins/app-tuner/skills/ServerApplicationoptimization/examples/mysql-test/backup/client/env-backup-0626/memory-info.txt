@@ -1,0 +1,89 @@
+===== dmidecode-memory =====
+time: 2026-06-26 10:14:17
+# dmidecode 3.5
+/sys/firmware/dmi/tables/smbios_entry_point: Permission denied
+# No SMBIOS nor DMI entry point found, sorry.
+
+===== lshw-memory =====
+time: 2026-06-26 10:14:17
+WARNING: you should run this program as super-user.
+  *-memory:0
+       description: System memory
+       physical id: 0
+       size: 512GiB
+  *-memory:1 UNCLAIMED
+       description: Memory controller
+       product: Huawei Technologies Co., Ltd.
+       vendor: Huawei Technologies Co., Ltd.
+       physical id: d1
+       bus info: pci@0000:30:05.0
+       version: 30
+       width: 64 bits
+       clock: 33MHz (30.3ns)
+       capabilities: cap_list
+       configuration: latency=0
+       resources: iomemory:40-3f memory:428900000-42890ffff
+WARNING: output may be incomplete or inaccurate, you should run this program as super-user.
+
+===== free-human =====
+time: 2026-06-26 10:14:21
+               total        used        free      shared  buff/cache   available
+Mem:           502Gi        40Gi       289Gi        31Gi       206Gi       461Gi
+Swap:             0B          0B          0B
+
+===== proc-meminfo =====
+time: 2026-06-26 10:14:21
+MemTotal:       526717900 kB
+MemFree:        303380396 kB
+MemAvailable:   483883600 kB
+Buffers:         2141888 kB
+Cached:         212144756 kB
+SwapCached:            0 kB
+Active:         78717988 kB
+Inactive:       136601956 kB
+Active(anon):   32304444 kB
+Inactive(anon):  1855332 kB
+Active(file):   46413544 kB
+Inactive(file): 134746624 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Zswap:                 0 kB
+Zswapped:              0 kB
+Dirty:                 4 kB
+Writeback:             0 kB
+AnonPages:       1030400 kB
+Mapped:           558044 kB
+Shmem:          33126476 kB
+KReclaimable:    2296536 kB
+Slab:            3334292 kB
+SReclaimable:    2296536 kB
+SUnreclaim:      1037756 kB
+KernelStack:       38336 kB
+PageTables:        31656 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:    263358948 kB
+Committed_AS:   36904316 kB
+VmallocTotal:   133141626880 kB
+VmallocUsed:      288612 kB
+VmallocChunk:          0 kB
+Percpu:          1489920 kB
+HardwareCorrupted:     0 kB
+AnonHugePages:    235520 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:   1171456 kB
+FilePmdMapped:    200704 kB
+CmaTotal:              0 kB
+CmaFree:               0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+

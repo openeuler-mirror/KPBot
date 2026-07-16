@@ -1,0 +1,173 @@
+{
+  "library_profiles": {
+    "allocators": {
+      "jemalloc": {
+        "best_scenarios": "高并发内存分配密集型应用（Redis、Memcached、数据库、消息队列），多线程频繁 malloc/free 场景",
+        "strengths": "Facebook 开发的生产级内存分配器。采用线程缓存（tcache）和区（arena）架构，通过减少多线程下的锁竞争和内存碎片来提升并发分配效率。支持详细的 malloc_stats 统计和 heap profiling 功能，便于诊断内存行为",
+        "verification_steps": "LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libjemalloc.so.2 <command>；启动后通过 MALLOC_CONF=stats_print:true 环境变量观察内存统计；对比 perf 热点中 malloc/free 相关函数的 CPU 占比变化"
+      },
+      "tcmalloc": {
+        "best_scenarios": "大量短生命周期小对象分配场景（C++ STL 密集型应用、RPC 框架、gRPC 服务），对分配延迟敏感的系统",
+        "strengths": "Google 开发的高性能内存分配器，gperftools 核心组件。采用每线程缓存（per-thread cache）加中心页堆（central page heap）双层架构，对小对象分配延迟做了专门优化。配套提供 CPU profiler 和 heap profiler 工具链",
+        "verification_steps": "LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libtcmalloc.so.4 <command>；使用 HEAPPROFILE=/tmp/heap.prof 环境变量开启 heap profiling；对比分配密集型 benchmark 的 ops/sec 变化"
+      }
+    },
+    "hash_functions": {
+      "xxhash": {
+        "best_scenarios": "哈希表密集型负载（KV 存储、数据库索引、缓存系统、去重引擎），数据校验和指纹计算",
+        "strengths": "Yann Collet 开发的极速非加密哈希算法。xxHash3 变体利用 SIMD 指令并行处理多个数据块，在批量哈希计算场景中可充分利用现代 CPU 的指令级并行能力。非加密特性使其比 SHA/MD5 等加密哈希函数更适合性能敏感的纯查表场景",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libxxhash.so <command> 或静态链接 -lxxhash；通过 perf stat 对比 hash 相关函数的 CPU cycle 数量和 IPC；使用 xxhsum 命令行工具离线对比大文件的哈希吞吐"
+      }
+    },
+    "compression": {
+      "ISA-L": {
+        "best_scenarios": "存储系统 RAID 和纠删码（Erasure Coding）编解码（分布式对象存储、HDFS、Ceph、MinIO 等），CRC32 校验密集场景",
+        "strengths": "Intel ISA-L (Intelligent Storage Acceleration Library) 是一套使用 SIMD 指令高度优化的存储加速库，通过 ARM NEON 适配层可在 aarch64 平台运行。涵盖三大功能域：(1) RAID — 提供 XOR、P+Q（Reed-Solomon）等条带计算的 SIMD 加速实现，利用 NEON 寄存器并行处理多个数据块，减少 RAID 校验计算对 CPU 的占用；(2) 纠删码（EC） — 提供 Reed-Solomon 和 Cauchy 矩阵的编码/解码/重建实现，利用 SIMD 并行化伽罗瓦域（GF(2^8)）乘法运算，是分布式存储系统中数据冗余保护的核心组件；(3) 校验 — CRC32 等函数通过标矢量混合计算利用硬件 CRC 指令和向量指令来减少计算开销",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libisal.so <command>；通过 ISA-L 自带的 erasure_code_test 和 crc_test 对比编解码和校验吞吐；通过 perf report 对比 raid/ec/crc32 相关函数的 CPU 占比变化"
+      }
+    },
+    "crypto": {
+      "openssl": {
+        "best_scenarios": "通用 TLS/SSL 加密通信（HTTPS 服务、API 网关、gRPC），对称/非对称加密，X.509 证书管理，所有标准密码学操作",
+        "strengths": "业界标准的开源密码学库，提供完整的 TLS 协议实现和密码学原语。在 ARM64 平台可利用 NEON 和 ARMv8 密码学扩展指令（AESE/PMULL/SHA256 等专用指令）对 AES-GCM、SHA 等常用算法进行硬件加速。3.0+ 版本引入 provider 模块化架构，支持自定义引擎加载",
+        "verification_steps": "使用 openssl speed -evp aes-256-gcm 和 openssl speed -evp x25519 基准测试；对比链接不同 OpenSSL 版本（1.1.1 / 3.0 / 3.4）的吞吐差异；通过 perf report 对比 libcrypto 热点函数"
+      },
+      "GMSSL": {
+        "best_scenarios": "国密合规场景：金融交易系统、电子政务平台、等保三级以上信息系统，需要使用 SM2/SM3/SM4/ZUC 国密算法的应用",
+        "strengths": "北京大学开发的开源国密算法库（基于 OpenSSL 分支），完整实现 SM2 椭圆曲线公钥密码、SM3 密码杂凑、SM4 分组密码和 ZUC 流密码算法。提供与 OpenSSL 兼容的 libcrypto/libssl API 接口，支持国密 TLS 协议（GB/T 38636）。在 ARM64 平台可通过 NEON 指令集对 SM4 等算法进行向量化优化",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libcrypto.so.<gmssl_version> <command>；使用 gmssl speed 命令基准测试 SM2/SM3/SM4 性能；对比 openssl 和 gmssl 在相同密码学操作上的 QPS"
+      },
+      "isa-l_crypto": {
+        "best_scenarios": "高频 AES 加密/解密（存储加密、网络包加密）、SHA 哈希计算、多缓冲区（multi-buffer）批量处理大量独立密码学任务的场景",
+        "strengths": "ISA-L 密码学扩展库，针对 AES-XTS/AES-GCM/SHA256/SHA512 等常用算法进行了 SIMD 级优化。核心设计采用多缓冲区（multi-buffer）模式——将多个独立的加密请求合并后在同一个 SIMD 流水线中处理，从而提升大吞吐场景下的指令效率。适合需要批量处理大量独立加密任务的系统（如全盘加密、TLS offload）",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libisal_crypto.so <command>；使用 ISA-L 自带的性能测试工具（如 aes_gcm_test）对比吞吐；通过 perf stat -e instructions,cycles 对比相同加密操作的 CPI"
+      }
+    },
+    "json": {
+      "sonic-cpp": {
+        "best_scenarios": "高吞吐 JSON 解析场景（API 网关反序列化、日志解析、消息中间件、ClickHouse 等 OLAP 系统），需要批量解析大量 JSON 数据的应用",
+        "strengths": "字节跳动开源的高性能 C++ JSON 库。核心设计利用 SIMD 指令（NEON/AVX2）实现单指令多数据并行扫描 JSON 字符串——同时跳过转义字符、空白符等冗余内容，减少逐字节解析的分支开销。支持 DOM 和 SAX 两种 API 模式",
+        "verification_steps": "在应用中替换 JSON 解析调用为 sonic-cpp API 或通过 LD_PRELOAD 拦截（需编写 shim）；使用 Google Benchmark 对比 sonic-cpp::Parse() 与原库的 QPS 和延迟分布（p50/p99）"
+      },
+      "RapidJSON": {
+        "best_scenarios": "嵌入式/低延迟 JSON 解析（IoT 设备通信、配置解析、轻量级 RPC），需要零拷贝（in-situ）解析的 C++ 应用",
+        "strengths": "腾讯开源的高性能 C++ JSON 库，Header-only 设计无链接依赖。支持零拷贝就地解析（in-situ parsing）——直接在原始输入字符串上修改而不额外分配内存。提供 SAX 和 DOM 两套 API，模板和内联优化消除虚函数调用开销。集成简单，适合对依赖体积敏感的项目",
+        "verification_steps": "在 C++ 项目中 #include <rapidjson/document.h> 并替换原有 JSON 解析逻辑；使用 rapidjson::Document::Parse() 与原库对比单文档解析耗时；通过 valgrind --tool=massif 对比内存峰值"
+      }
+    },
+    "memory_operations": {
+      "libmem": {
+        "best_scenarios": "ARM64 平台上 memcpy/memset/memcmp 调用极其频繁的应用（网络包处理、视频帧拷贝、数据库缓冲区管理、序列化/反序列化）",
+        "strengths": "针对 ARM64 NEON SIMD 指令集高度优化的内存操作库。利用 128-bit NEON 寄存器实现并行数据搬运，专门处理了非对齐地址访问、缓存行边界对齐等 ARM 平台上常见的性能瓶颈场景。大块内存操作通过预取指令（prefetch）隐藏内存访问延迟",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libmem.so <command>；通过 perf record -e cpu-cycles -g --call-graph dwarf -p <PID> -- sleep 10 采样后对比 memcpy/memset 的 CPU 占比和调用次数；使用自定义 benchmark 对比不同块大小的拷贝吞吐"
+      },
+      "libco": {
+        "best_scenarios": "高并发协程场景（RPC 框架、游戏服务器、代理服务），需要轻量级用户态并发处理大量连接的应用",
+        "strengths": "腾讯开源的 C++ 协程库，提供共享栈（share stack）模式降低多协程的内存开销。协程切换仅涉及寄存器保存/恢复，远低于内核线程上下文切换的代价。支持 hook 系统调用（如 read/write/send/recv）自动转为异步操作，无需修改业务代码即可获得协程并发能力。在 ARM64 上有汇编级优化的上下文切换路径",
+        "verification_steps": "在应用中集成 libco 的事件循环和协程调度（co_create/co_resume），使用 co_enable_hook_sys() 拦截阻塞系统调用为异步；对比 libco 协程版本与原线程模型的吞吐和延迟（wrk/ab 压测）"
+      }
+    },
+    "pattern_matching": {
+      "Hyperscan": {
+        "best_scenarios": "大规模正则表达式匹配（IDS/IPS 入侵检测、WAF 防火墙、DPI 深度包检测、日志实时告警、数据泄露防护 DLP），需要同时匹配数千条规则",
+        "strengths": "Intel 开源的高性能正则引擎。核心思路是将正则表达式集合拆分为字面量子串（literal string）和小规模 NFA——字面量部分用 SIMD 高速扫描，仅候选位置触发精确的 NFA 匹配验证。这种混合策略在规则数量多、但实际命中率低的场景（如网络流不匹配大多数规则）下尤为高效。在 ARM64 上有 NEON SIMD 适配",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libhs.so <command> 或链接 -lhs；使用 hs_compile() + hs_scan() API 替换 PCRE 匹配逻辑；通过 Hyperscan 自带的 hs_benchmark 工具对比规则集的匹配吞吐"
+      }
+    },
+    "linear_algebra": {
+      "OpenBLAS": {
+        "best_scenarios": "通用稠密矩阵运算（科学计算、气象模拟、金融风控、推荐系统训练），基于标准 BLAS API（Level 1/2/3）的 C 或 Fortran 应用",
+        "strengths": "开源高性能 BLAS 实现，在 ARM64 上通过手写 NEON 汇编 kernel 优化核心算子（GEMM/GEMV 等）。采用分层分块（blocking）和缓存预取策略最大化访存带宽利用率，支持运行时多线程并行（通过 OPENBLAS_NUM_THREADS 控制）。相比 Netlib BLAS 参考实现大幅提升了浮点运算效率",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libopenblas.so <command> 或 -lopenblas；设置 OPENBLAS_NUM_THREADS 控制并行线程数；使用 OpenBLAS 自带的 sgemm/dgemm 测试对比 GFLOPS"
+      },
+      "vectorBLAS": {
+        "best_scenarios": "ARM SVE/SVE2 向量扩展的下一代平台（Neoverse V1/V2/N3 等），需要充分利用可变向量宽度优化矩阵运算的应用",
+        "strengths": "针对 ARM SVE (Scalable Vector Extension) 设计的 BLAS 库。SVE 的核心优势是向量宽度无关（VLA）编程模型——同一份二进制代码无需重编译即可适配不同向量宽度的 ARM 平台（从 128-bit 到 2048-bit 均自动适配）。相比固定 128-bit NEON 的实现，可充分利用高端 ARM 服务器芯片的宽向量单元",
+        "verification_steps": "需要支持 SVE 的 ARM64 硬件（lscpu | grep -i sve 确认）；LD_PRELOAD=/usr/lib/libvectorblas.so <command>；对比 OpenBLAS 和 vectorBLAS 在不同矩阵规模下的 GFLOPS 差异"
+      }
+    },
+    "sparse_linear_algebra": {
+      "SparseBLAS": {
+        "best_scenarios": "大规模稀疏矩阵运算（图计算、有限元分析 FEA、计算流体力学 CFD、PageRank 等迭代算法），矩阵中非零元素比例低于 10%",
+        "strengths": "ARM 优化稀疏 BLAS 实现，支持 CSR/CSC/COO 等多种稀疏存储格式。核心优化针对 SpMV（稀疏矩阵-向量乘法）和 SpMM（稀疏矩阵-稠密矩阵乘法）——通过 NEON 向量化内循环和处理非零元素的不规则访存模式来减少内存带宽浪费。稀疏矩阵运算的性能瓶颈通常在内存带宽而非浮点单元，因此数据布局和缓存利用策略是优化的重点",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libsparseblas.so <command>；使用稀疏 BLAS API 对比 SpMV 的 GFLOPS 和内存带宽利用率；验证不同稀疏存储格式（CSR vs CSC vs COO）对具体应用的性能影响"
+      }
+    },
+    "math": {
+      "VML": {
+        "best_scenarios": "大规模向量化数学函数计算（信号处理、金融定价模型批量计算、物理仿真中的粒子系统），需要对整个数组执行 sin/cos/exp/log 等超越函数",
+        "strengths": "Vector Math Library（向量数学库），利用 SIMD 指令同时计算多个 double 或 float 的超越函数（sin、cos、exp、log、sqrt、erf 等）。与标准 Libm 逐个标量调用不同，VML 的向量化接口减少了函数调用开销，并能利用 SIMD 流水线并行计算多个元素。适合需要将同一数学函数应用于整个数组的场景",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libvml.so <command>；使用 vdSin/vdExp 等 VML API 替换标准 math.h 循环调用；对比大批量数学函数计算的总耗时"
+      },
+      "SVML": {
+        "best_scenarios": "编译器自动向量化场景（GCC/LLVM -O3 -ftree-vectorize 编译的 Fortran/C/C++ 循环），编译器自动将循环体内的标量数学调用替换为短向量版本",
+        "strengths": "Short Vector Math Library（短向量数学库），面向编译器自动向量化设计。每个函数处理 128-bit 短向量（2x double 或 4x float）。GCC/LLVM 在启用自动向量化时，若检测到循环中调用了 math.h 函数，会自动映射到 SVML 内部函数（如 __svml_sin2 / __svml_exp4 等）。开发者无需修改源代码即可获得向量化收益",
+        "verification_steps": "使用 gcc -O3 -ftree-vectorize -march=armv8-a+simd -fopt-info-vec-all 编译代码，确认编译器生成了 SVML 调用；通过 perf stat -e instructions,cycles 对比开启/关闭向量化后的 CPI"
+      },
+      "Interp_Spline": {
+        "best_scenarios": "查表插值（LUT interpolation）密集型应用（传感器校准曲线、三维渲染纹理采样、音频重采样、金融波动率曲面），需要在离散采样点之间快速计算中间值",
+        "strengths": "ARM64 NEON 优化的插值和样条函数库，支持线性、三次样条（cubic spline）、B 样条等多种插值算法。利用 SIMD 指令并行计算多个插值点。提供分段多项式系数预计算接口，支持 offline 训练 + online 推理模式，将复杂计算前置到预处理阶段以减少在线计算开销",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libinterp_spline.so <command>；对比样条插值 API 与手写标量循环在大量插值点上的耗时；验证插值精度（最大绝对误差）是否满足应用需求"
+      },
+      "autoGEMM": {
+        "best_scenarios": "自动调优的小矩阵乘法场景（深度学习推理中的全连接层、图神经网络聚合、粒子间相互作用力成对计算），矩阵维数不规则且需要在运行时动态选择最优 kernel",
+        "strengths": "自动矩阵乘法（auto-tuned GEMM）引擎。在运行时根据矩阵形状（M/N/K）和硬件特性（缓存大小、SIMD 宽度）自动选择最优的分块策略和 micro-kernel 实现。针对 ARM64 多代微架构（Neoverse N1/N2/V1 等）的不同缓存层级和向量宽度预调优，解决了固定分块策略在非规则矩阵形状下性能下降的问题",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libautogemm.so <command>；使用库自带的 autogemm_benchmark 对比固定分块 GEMM 在不同矩阵形状非规则组合下的 GFLOPS"
+      }
+    },
+    "dnn": {
+      "oneDNN": {
+        "best_scenarios": "CPU 端深度学习推理加速（TensorFlow/PyTorch/ONNX Runtime 的 CPU 后端），卷积神经网络、循环神经网络、Transformer 在 ARM 服务器上的推理部署",
+        "strengths": "Intel oneAPI Deep Neural Network Library（oneDNN，前身 MKL-DNN），对 ARM64 平台有完整支持。针对卷积（im2col+GEMM、Winograd、直接卷积）、矩阵乘法（brgemm）、LayerNorm/Softmax 等核心算子提供了 NEON 汇编级优化实现。支持 int8 量化推理（利用 ARM NEON dotprod 指令），可降低推理时的内存带宽和计算量",
+        "verification_steps": "在 PyTorch 中设置 torch.backends.mkldnn.enabled=True 或设置 ONNX Runtime 使用 DNNL Execution Provider；使用模型推理 benchmark 对比延迟和吞吐"
+      }
+    },
+    "fft": {
+      "FFTW": {
+        "best_scenarios": "快速傅里叶变换计算（信号频谱分析、图像频域滤波、OFDM 通信基带处理、音频编解码、分子动力学模拟中的长程静电计算）",
+        "strengths": "FFTW（Fastest Fourier Transform in the West）是学术界和工业界广泛使用的便携式 FFT 库。核心设计采用 planner 模式——首次调用时自动尝试多种 FFT 分解策略（Cooley-Tukey、split-radix、prime-factor 等），实测选择最优算法并缓存 plan 供后续复用。在 ARM64 平台通过 NEON 向量化复数运算来提升蝶形计算的效率。支持 FFTW_WISDOM 机制跨运行保存最优 plan 以减少重复初始化开销",
+        "verification_steps": "LD_PRELOAD=/usr/lib/libfftw3.so <command> 或链接 -lfftw3 -lfftw3f；使用 FFTW_ESTIMATE/FFTW_MEASURE/FFTW_PATIENT 对比 plan 时间的初始化开销；通过 fftw-wisdom 工具保存/恢复最优 plan"
+      }
+    },
+    "video": {
+      "X264": {
+        "best_scenarios": "H.264/AVC 视频编码（直播推流、视频会议、监控录像、短视频处理），需要高质量实时编码或转码的应用",
+        "strengths": "最广泛使用的 H.264/AVC 开源编码器，ARM64 平台有完善的 NEON 汇编优化覆盖。量化（quant）、运动估计（ME）、去块滤波（deblock）、DCT/IDCT 变换等核心计算密集模块均已 NEON 向量化。支持多种预设（preset）在编码速度和压缩效率之间灵活权衡（从 ultrafast 到 placebo）",
+        "verification_steps": "编译 x264 时确认 ./configure 输出 Summary 中 ASM=NEON 为 yes；使用 x264 --preset medium --tune psnr 编码标准测试序列对比 fps 和 PSNR"
+      },
+      "X265": {
+        "best_scenarios": "H.265/HEVC 视频编码（4K/8K 超高清内容分发、OTT 点播、蓝光压制），需要比 H.264 更高压缩效率的应用",
+        "strengths": "H.265/HEVC 标准的开源编码器，ARM64 平台有 NEON 汇编优化覆盖 DCT/IDCT、帧内预测（intra pred）、运动补偿（MC）、SAO 滤波等核心模块。HEVC 相比 AVC 增加了更多编码工具（更大 CTU、更多帧内预测方向、自适应样点补偿等），在同等画质下压缩效率更高，但编码计算量也相应增大。ARM NEON 优化有助于缩小这一计算量差距",
+        "verification_steps": "编译 x265 时确认 cmake -DENABLE_ASSEMBLY=ON；使用 x265 --preset medium 编码 4K 测试视频对比 fps 和 VMAF/SSIM 质量指标"
+      }
+    },
+    "serialization": {
+      "Protobuf": {
+        "best_scenarios": "微服务间 RPC 通信（gRPC 协议）、分布式消息队列（如 Kafka 消息体序列化）、需要向前/向后兼容协议演化的数据存储和交换",
+        "strengths": "Google 开发的 Protocol Buffers 二进制序列化协议。通过预定义 .proto schema，序列化后的消息体积远小于 JSON/XML 等文本格式。ARM64 平台可通过 NEON 指令加速 varint 编解码和字符串/字节数组的批量拷贝。protobuf-lite 运行时（LITE_RUNTIME）进一步精简了反射和验证逻辑，适合资源受限或追求极致延迟的场景",
+        "verification_steps": "使用 protoc --cpp_out=lite:. 生成 LITE_RUNTIME 模式优化代码；通过 Google Benchmark 对比相同消息的 SerializeToArray/ParseFromArray 的吞吐和延迟；对比不同序列化格式（JSON/Protobuf/Avro）的消息大小和 CPU 时间"
+      }
+    },
+    "sql_acceleration": {
+      "sparksql_native": {
+        "best_scenarios": "Apache Spark SQL 查询加速（ETL 数据管道、OLAP 分析查询、即席查询），尤其适合列式存储格式（Parquet/ORC）上的聚合、过滤和 Join 操作",
+        "strengths": "Spark SQL Native Engine 通过 JNI 将关键查询算子（HashAggregate、SortMergeJoin、Filter、Project）卸载到 ARM64 原生代码执行，利用 NEON SIMD 指令加速列式数据的批量处理。绕过了 JVM 的 JIT 编译和 GC 开销，直接在原生层完成数据过滤和聚合计算。配合列式存储可减少数据物化（materialization）的开销",
+        "verification_steps": "在 Spark 配置中启用 spark.plugins=org.apache.spark.sql.native；通过 Spark Web UI 查看 SQL 查询计划确认 NativeScan/NativeAgg 等算子生效；对比 TPC-DS 查询套件的总运行时间"
+      }
+    },
+    "network": {
+      "KTLS": {
+        "best_scenarios": "TLS 加密传输密集型服务（HTTPS Web Server/反向代理、TLS-terminated 负载均衡器、gRPC over TLS），需要在已建 TLS 会话后批量传输大数据的场景",
+        "strengths": "Kernel TLS (KTLS) 将 TLS 记录的对称加密（AES-GCM）操作卸载到 Linux 内核网络栈中直接执行。传统方式下数据在用户态加密后写入内核套接字，涉及额外的系统调用和数据拷贝。KTLS 在内核中完成加密（使用 send/sendfile 语义），消除了用户态加密的 CPU 开销和套接字缓冲区的重复数据搬运。适合已建立 TLS 连接后的长时数据批量传输场景",
+        "verification_steps": "确认内核支持 KTLS（cat /proc/sys/net/tls/enable_kernel_tls 返回 1）；应用代码中使用 setsockopt(fd, SOL_TLS, TLS_TX, ...) 或通过 OpenSSL 3.0+ 的 ktls 引擎自动启用；通过 perf top 对比内核 tls_tx/tls_rx 函数与用户态加密函数的 CPU 占比"
+      }
+    },
+    "kv_storage": {
+      "KAL-rocksdb": {
+        "best_scenarios": "已在用社区版 RocksDB 的嵌入式键值存储场景，覆盖读密集、写密集及读写混合的 LSM-tree 工作负载，通过 LD_PRELOAD 替换为鲲鹏优化版即获得整体性能提升",
+        "strengths": "基于社区 RocksDB 的鲲鹏优化版本，保持 API/ABI 兼容，可通过 LD_PRELOAD 直接替换原动态库（社区版与优化版库名一致）。针对 Kunpeng 920/950 微架构优化，在读、写及各配比读写混合场景下均优于同版本社区 RocksDB",
+        "verification_steps": "LD_PRELOAD=<KAL-rocksdb 构建产物>/librocksdb.so <应用启动命令>；启动后 lsof 确认加载路径指向 KAL 构建产物；通过 perf report 对比 rocksdb:: 热点的 CPU 占比与 IPC/cache-miss 变化"
+      }
+    }
+  }
+}

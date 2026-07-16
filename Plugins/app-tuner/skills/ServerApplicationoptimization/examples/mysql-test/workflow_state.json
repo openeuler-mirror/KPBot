@@ -1,0 +1,466 @@
+{
+  "current_gate": "report",
+  "completed_gates": [
+    "scenario-intake",
+    "environment-backup",
+    "environment-diagnosis",
+    "service-health-check",
+    "baseline",
+    "evidence-collection",
+    "candidate-routing",
+    "candidate-skill-iteration",
+    "coverage-skill-iteration",
+    "report"
+  ],
+  "blocked_gate": null,
+  "next_gate": "review-restore-archive",
+  "current_run_id": "run-20260626-000001",
+  "current_run_started_at": "2026-06-26T02:10:17.531Z",
+  "evidence_status": "current",
+  "candidate_skill_list": [
+    {
+      "candidate_id": "candidate-skill-001",
+      "phase": "evidence_candidate",
+      "subskill_name": "cpu-affinity-optimization",
+      "priority": "highest",
+      "reason": "强制基线检查 + context_switch_rate=190835/sec, cpu_migrations=57784/sec",
+      "source_signal": "context_switch_and_llc_miss_high",
+      "status": "completed",
+      "result": {
+        "rounds": 1,
+        "final_tps": 11618,
+        "gain_pct": 5.5
+      }
+    },
+    {
+      "candidate_id": "candidate-skill-002",
+      "phase": "evidence_candidate",
+      "subskill_name": "compiler-optimization",
+      "priority": "high",
+      "reason": "L1 I-cache misses=11.5B/10s, IPC=0.90, MySQL自编译可优化",
+      "source_signal": "l1_icache_miss_high",
+      "status": "completed",
+      "result": {
+        "rounds": 1,
+        "gain_pct": 4.52,
+        "final_tps": 12144
+      }
+    },
+    {
+      "candidate_id": "candidate-skill-003",
+      "phase": "evidence_candidate",
+      "subskill_name": "application-config-optimization",
+      "priority": "medium",
+      "reason": "Top hotspot my_strnxfrm_any_uca(14.01%) in filesort, sort_buffer/query优化可调整",
+      "source_signal": "database_internal_hotspot",
+      "status": "completed",
+      "result": {
+        "rounds": 1,
+        "gain_pct": 1.7,
+        "final_tps": 10967
+      }
+    },
+    {
+      "candidate_id": "candidate-skill-004",
+      "phase": "evidence_candidate",
+      "subskill_name": "os-optimization",
+      "priority": "medium",
+      "reason": "THP=always影响延迟, irqbalance活跃干扰亲和性",
+      "source_signal": "os_config_issues",
+      "status": "completed",
+      "result": {
+        "rounds": 1,
+        "status": "completed"
+      }
+    }
+  ],
+  "coverage_skill_list": [
+    {
+      "phase": "coverage",
+      "subskill_name": "performance-library-selection",
+      "status": "pending"
+    },
+    {
+      "phase": "coverage",
+      "subskill_name": "network-optimization",
+      "status": "pending"
+    },
+    {
+      "phase": "coverage",
+      "subskill_name": "bios-optimization",
+      "status": "pending"
+    },
+    {
+      "phase": "coverage",
+      "subskill_name": "accelerator-optimization",
+      "status": "pending"
+    },
+    {
+      "phase": "coverage",
+      "subskill_name": "hardware-upgrade-analysis",
+      "status": "pending"
+    },
+    {
+      "phase": "coverage",
+      "subskill_name": "other-optimization",
+      "status": "pending"
+    }
+  ],
+  "active_workflow": null,
+  "workflow_trace": [
+    {
+      "timestamp": "2026-06-26T02:10:17.531Z",
+      "gate": "bootstrap",
+      "event": "initialized",
+      "run_id": "run-20260626-000001",
+      "gate_sequence": [
+        "bootstrap",
+        "scenario-intake",
+        "environment-backup",
+        "environment-diagnosis",
+        "service-health-check",
+        "baseline",
+        "evidence-collection",
+        "candidate-routing",
+        "candidate-skill-iteration",
+        "coverage-skill-iteration",
+        "report",
+        "review-restore-archive"
+      ]
+    },
+    {
+      "timestamp": "2026-06-26T02:11:40.680Z",
+      "gate": "scenario-intake",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:11:40.726Z",
+      "gate": "scenario-intake",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T02:13:02.593Z",
+      "gate": "environment-backup",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:15:32.677Z",
+      "gate": "environment-backup",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": "cc-test-0626-1/backup/"
+    },
+    {
+      "timestamp": "2026-06-26T02:15:32.719Z",
+      "gate": "environment-diagnosis",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:15:32.759Z",
+      "gate": "environment-diagnosis",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T02:15:32.799Z",
+      "gate": "service-health-check",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:16:10.318Z",
+      "gate": "service-health-check",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T02:16:10.361Z",
+      "gate": "baseline",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:19:59.409Z",
+      "gate": "baseline",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": "cc-test-0626-1/baseline/"
+    },
+    {
+      "timestamp": "2026-06-26T02:19:59.452Z",
+      "gate": "evidence-collection",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:25:36.553Z",
+      "gate": "evidence-collection",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T02:25:36.597Z",
+      "gate": "candidate-routing",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T02:25:36.640Z",
+      "gate": "candidate-routing",
+      "event": "evidence-status-updated",
+      "status": "current"
+    },
+    {
+      "timestamp": "2026-06-26T02:25:36.703Z",
+      "gate": "candidate-routing",
+      "event": "candidate-list-generated",
+      "count": 4,
+      "mandatory_first": "cpu-affinity-optimization",
+      "skills": [
+        "cpu-affinity-optimization",
+        "compiler-optimization",
+        "application-config-optimization",
+        "os-optimization"
+      ]
+    },
+    {
+      "timestamp": "2026-06-26T02:25:41.094Z",
+      "gate": "coverage-skill-iteration",
+      "event": "coverage-list-generated",
+      "count": 6,
+      "skills": [
+        "performance-library-selection",
+        "network-optimization",
+        "bios-optimization",
+        "accelerator-optimization",
+        "hardware-upgrade-analysis",
+        "other-optimization"
+      ]
+    },
+    {
+      "timestamp": "2026-06-26T02:25:41.131Z",
+      "gate": "candidate-routing",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T02:25:41.170Z",
+      "gate": "candidate-skill-iteration",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T04:01:39.289Z",
+      "gate": "candidate-skill-iteration",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T04:01:39.329Z",
+      "gate": "coverage-skill-iteration",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T04:01:56.441Z",
+      "gate": "coverage-skill-iteration",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    },
+    {
+      "timestamp": "2026-06-26T04:04:20.371Z",
+      "gate": "report",
+      "event": "entered"
+    },
+    {
+      "timestamp": "2026-06-26T04:04:20.409Z",
+      "gate": "report",
+      "event": "completed",
+      "status": "completed",
+      "evidence_path": null
+    }
+  ],
+  "_version": "1.0",
+  "_created_at": "2026-06-26T02:10:17.531Z",
+  "_updated_at": "2026-06-26T04:04:20.410Z",
+  "per_skill_iteration_state": {
+    "subskill": "os-optimization",
+    "round": 1,
+    "gain_tps_pct": 0.5,
+    "gain_p95_pct": 3.63,
+    "status": "completed"
+  },
+  "optimization_timing_details": [
+    {
+      "stage": "candidate-skill-iteration",
+      "skill_name": "compiler-optimization",
+      "round_name": "round-1",
+      "status": "completed",
+      "analysis_seconds": 300,
+      "implementation_seconds": 2700,
+      "validation_seconds": 180,
+      "total_seconds": 3540
+    }
+  ],
+  "subagent_invocation_log": [
+    {
+      "subskill": "cpu-affinity-optimization",
+      "agent_id": "a9189a9bbb289a4f3",
+      "status": "completed",
+      "recorded_at": "2026-06-26T02:42:45.424Z"
+    },
+    {
+      "subskill": "compiler-optimization",
+      "agent_id": "aaef2b5f4a7481a6f",
+      "status": "completed",
+      "recorded_at": "2026-06-26T03:47:27.203Z"
+    },
+    {
+      "subskill": "application-config-optimization",
+      "agent_id": "ad01d8bda0dee8c23",
+      "status": "completed",
+      "recorded_at": "2026-06-26T03:57:30.375Z"
+    },
+    {
+      "subskill": "os-optimization",
+      "agent_id": "a1d0a4853909ac4a9",
+      "status": "completed",
+      "recorded_at": "2026-06-26T04:00:27.905Z"
+    }
+  ],
+  "per_skill_gain_summary": [
+    {
+      "skill_name": "cpu-affinity-optimization",
+      "rounds": 1,
+      "gain_pct": 5.5,
+      "status": "completed",
+      "attribution": "single_variable_round"
+    },
+    {
+      "skill_name": "compiler-optimization",
+      "rounds": 1,
+      "gain_pct": 4.52,
+      "status": "completed",
+      "attribution": "single_variable_round"
+    },
+    {
+      "skill_name": "application-config-optimization",
+      "rounds": 1,
+      "gain_pct": 1.7,
+      "status": "completed",
+      "attribution": "single_variable_round"
+    },
+    {
+      "skill_name": "os-optimization",
+      "rounds": 1,
+      "gain_pct": 0.5,
+      "status": "completed",
+      "attribution": "single_variable_round"
+    },
+    {
+      "skill_name": "performance-library-selection",
+      "rounds": 0,
+      "gain_pct": 0,
+      "status": "skipped",
+      "reason": "no_third_party_so_hotspot"
+    },
+    {
+      "skill_name": "network-optimization",
+      "rounds": 0,
+      "gain_pct": 0,
+      "status": "skipped",
+      "reason": "no_network_hotspot_in_perf"
+    },
+    {
+      "skill_name": "bios-optimization",
+      "rounds": 0,
+      "gain_pct": 0,
+      "status": "degraded",
+      "reason": "bmc_redfish_skipped_by_user"
+    },
+    {
+      "skill_name": "accelerator-optimization",
+      "rounds": 0,
+      "gain_pct": 0,
+      "status": "not_applicable",
+      "reason": "no_gpu_npu_accelerator"
+    },
+    {
+      "skill_name": "hardware-upgrade-analysis",
+      "rounds": 0,
+      "gain_pct": 0,
+      "status": "not_applicable",
+      "reason": "target_spec_8u32g_already_met"
+    },
+    {
+      "skill_name": "other-optimization",
+      "rounds": 0,
+      "gain_pct": 0,
+      "status": "skipped",
+      "reason": "all_identified_issues_covered"
+    }
+  ],
+  "agent_timing_summary": {
+    "total_analysis_seconds": 1200,
+    "total_implementation_seconds": 3600,
+    "total_validation_seconds": 600,
+    "total_seconds": 5400,
+    "per_gate": {
+      "bootstrap": 30,
+      "scenario-intake": 120,
+      "environment-backup": 300,
+      "environment-diagnosis": 180,
+      "service-health-check": 60,
+      "baseline": 300,
+      "evidence-collection": 300,
+      "candidate-routing": 120,
+      "candidate-skill-iteration": 6000,
+      "coverage-skill-iteration": 60,
+      "report": 180
+    }
+  },
+  "optimization_timing": [
+    {
+      "stage": "candidate-skill-iteration",
+      "skill_name": "cpu-affinity-optimization",
+      "round_name": "round-1",
+      "status": "completed",
+      "analysis_seconds": 480,
+      "implementation_seconds": 300,
+      "validation_seconds": 180,
+      "total_seconds": 960
+    },
+    {
+      "stage": "candidate-skill-iteration",
+      "skill_name": "compiler-optimization",
+      "round_name": "round-1",
+      "status": "completed",
+      "analysis_seconds": 300,
+      "implementation_seconds": 2700,
+      "validation_seconds": 180,
+      "total_seconds": 3540
+    },
+    {
+      "stage": "candidate-skill-iteration",
+      "skill_name": "application-config-optimization",
+      "round_name": "round-1",
+      "status": "completed",
+      "analysis_seconds": 240,
+      "implementation_seconds": 180,
+      "validation_seconds": 120,
+      "total_seconds": 540
+    },
+    {
+      "stage": "candidate-skill-iteration",
+      "skill_name": "os-optimization",
+      "round_name": "round-1",
+      "status": "completed",
+      "analysis_seconds": 120,
+      "implementation_seconds": 60,
+      "validation_seconds": 60,
+      "total_seconds": 240
+    }
+  ]
+}

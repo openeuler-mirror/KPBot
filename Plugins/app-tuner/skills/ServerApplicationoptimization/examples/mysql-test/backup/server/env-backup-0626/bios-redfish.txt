@@ -1,0 +1,6 @@
+===== redfish-bios-collection =====
+time: 2026-06-26 10:14:07
+status=skipped
+reason=BMC host/user/password not provided
+how_to_enable=pass --bmc-host/--bmc-user/--bmc-pass or set BMC_HOST/BMC_USER/BMC_PASS
+

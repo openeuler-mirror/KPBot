@@ -1,0 +1,18 @@
+{
+  "name": "app-tuner",
+  "version": "0.1.0",
+  "description": "应用级调优 — 针对具体应用场景的深度性能调优",
+  "author": {
+    "name": "Kunpeng Acceleration Team"
+  },
+  "homepage": "https://gitcode.com/KPBot/KPBot/tree/main/plugins/app-tuner",
+  "license": "Apache-2.0",
+  "keywords": [
+    "performance",
+    "tuning",
+    "application",
+    "arm",
+    "kunpeng",
+    "aarch64"
+  ]
+}

@@ -1,0 +1,319 @@
+{
+  "run_id": "run-20260626-000001",
+  "skill": "os-optimization",
+  "executed_at": "2026-06-26T12:00:00+08:00",
+  "agent_action_mode": "approved_execute",
+  "overall_summary": "OS-level optimization for MySQL OLTP workload on Kunpeng 920 (aarch64). Applied 5 online sysctl changes and disabled irqbalance on boot. THP was already at madvise (optimal). No cpufreq governor on aarch64 (hardware-fixed). HugePages recommended but requires MySQL restart.",
+
+  "os_findings": [
+    {
+      "parameter": "THP (Transparent HugePages)",
+      "current_value": "madvise",
+      "recommended_value": "madvise (olTP/never also acceptable)",
+      "status": "already_optimal",
+      "note": "Already set to madvise. Not always as initially documented. No change needed."
+    },
+    {
+      "parameter": "THP defrag",
+      "current_value": "madvise",
+      "recommended_value": "madvise",
+      "status": "already_optimal",
+      "note": "Already optimal."
+    },
+    {
+      "parameter": "vm.swappiness",
+      "current_value": 1,
+      "recommended_value": 1,
+      "status": "already_optimal",
+      "note": "Already set to 1 (database OLTP recommendation)."
+    },
+    {
+      "parameter": "vm.dirty_background_ratio",
+      "current_value": 3,
+      "recommended_value": 3,
+      "status": "already_optimal",
+      "note": "Already optimal for OLTP."
+    },
+    {
+      "parameter": "vm.dirty_ratio",
+      "current_value": 10,
+      "recommended_value": 5,
+      "status": "changed",
+      "note": "Changed from 10 to 5 (OLTP recommendation). Reduces writeback pressure on dirty page cache."
+    },
+    {
+      "parameter": "kernel.numa_balancing",
+      "current_value": 0,
+      "recommended_value": 0,
+      "status": "already_optimal",
+      "note": "Already 0. Aligns with cpu-affinity manual IRQ binding."
+    },
+    {
+      "parameter": "vm.zone_reclaim_mode",
+      "current_value": 0,
+      "recommended_value": 0,
+      "status": "already_optimal",
+      "note": "Default (no zone reclaim). Suitable for NUMA with manual binding."
+    },
+    {
+      "parameter": "net.core.somaxconn",
+      "current_value": 1024,
+      "recommended_value": 65535,
+      "status": "changed",
+      "note": "Changed from 1024 to 65535. Supports higher connection burst for 10K+ TPS workload."
+    },
+    {
+      "parameter": "net.core.netdev_max_backlog",
+      "current_value": 1000,
+      "recommended_value": 10000,
+      "status": "changed",
+      "note": "Changed from 1000 to 10000. Increases NIC ingress queue depth."
+    },
+    {
+      "parameter": "net.ipv4.tcp_max_syn_backlog",
+      "current_value": 256,
+      "recommended_value": 4096,
+      "status": "changed",
+      "note": "Changed from 256 to 4096. Accommodates higher SYN backlog under load."
+    },
+    {
+      "parameter": "net.ipv4.tcp_tw_reuse",
+      "current_value": 2,
+      "recommended_value": 1,
+      "status": "changed",
+      "note": "Changed from 2 to 1. Enables TIME_WAIT socket reuse for client connections."
+    },
+    {
+      "parameter": "irqbalance daemon",
+      "current_value": "inactive + disabled",
+      "recommended_value": "off (disabled on boot)",
+      "status": "changed",
+      "note": "Service already inactive (stopped by cpu-affinity). Disabled on boot to prevent re-enable after reboot overriding manual IRQ affinity."
+    },
+    {
+      "parameter": "CPU governor",
+      "current_value": "N/A (no cpufreq driver)",
+      "recommended_value": "performance (not configurable)",
+      "status": "already_optimal",
+      "note": "Kunpeng 920 (aarch64) does not expose cpufreq subsystem. Frequency is hardware-managed at maximum. No action needed."
+    },
+    {
+      "parameter": "I/O scheduler",
+      "current_value": "NVMe: none, SAS HDD: mq-deadline",
+      "recommended_value": "NVMe: none, HDD: mq-deadline",
+      "status": "already_optimal",
+      "note": "NVMe device (nvme0n1, MySQL data) uses none. SAS HDDs use mq-deadline. Both correct."
+    },
+    {
+      "parameter": "MySQL ulimit (open files)",
+      "current_value": 102400,
+      "recommended_value": "65535+",
+      "status": "already_optimal",
+      "note": "102400 exceeds the 65535 threshold. No change needed."
+    },
+    {
+      "parameter": "HugePages (explicit)",
+      "current_value": "none configured (nr_hugepages=0)",
+      "recommended_value": "consider enabling for 24G buffer pool",
+      "status": "restart_required_recommendation",
+      "note": "MySQL buffer pool = 24G > 16GB threshold. Explicit HugePages could reduce TLB misses. Requires MySQL restart and host hugepage allocation. See restart_required_actions."
+    },
+    {
+      "parameter": "HugePages size",
+      "current_value": "default 2MB",
+      "recommended_value": "2MB (default, adequate)",
+      "status": "analysis_only",
+      "note": "Default 2MB pages are adequate for this workload. 1G pages not needed."
+    }
+  ],
+
+  "online_change_actions": [
+    {
+      "action": "sysctl -w vm.dirty_ratio=5",
+      "parameter": "vm.dirty_ratio",
+      "old_value": 10,
+      "new_value": 5,
+      "rationale": "Reduce dirty page threshold from 10% to 5%. For OLTP with O_DIRECT, fewer dirty pages means less writeback pressure, improving read latency under mixed workloads.",
+      "risk": "low",
+      "executed": true,
+      "verified": true,
+      "persisted_to": "/etc/sysctl.d/99-sysctl.conf"
+    },
+    {
+      "action": "sysctl -w net.core.somaxconn=65535",
+      "parameter": "net.core.somaxconn",
+      "old_value": 1024,
+      "new_value": 65535,
+      "rationale": "Increase listen backlog from 1024 to 65535. At 10K+ TPS with 64 threads, default backlog can cause connection drops under burst.",
+      "risk": "low",
+      "executed": true,
+      "verified": true,
+      "persisted_to": "/etc/sysctl.d/99-sysctl.conf"
+    },
+    {
+      "action": "sysctl -w net.core.netdev_max_backlog=10000",
+      "parameter": "net.core.netdev_max_backlog",
+      "old_value": 1000,
+      "new_value": 10000,
+      "rationale": "Increase NIC ingress packet queue from 1000 to 10000. Prevents packet drops under high network throughput.",
+      "risk": "low",
+      "executed": true,
+      "verified": true,
+      "persisted_to": "/etc/sysctl.d/99-sysctl.conf"
+    },
+    {
+      "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096",
+      "parameter": "net.ipv4.tcp_max_syn_backlog",
+      "old_value": 256,
+      "new_value": 4096,
+      "rationale": "Increase SYN backlog from 256 to 4096. Supports higher connection establishment rate.",
+      "risk": "low",
+      "executed": true,
+      "verified": true,
+      "persisted_to": "/etc/sysctl.d/99-sysctl.conf"
+    },
+    {
+      "action": "sysctl -w net.ipv4.tcp_tw_reuse=1",
+      "parameter": "net.ipv4.tcp_tw_reuse",
+      "old_value": 2,
+      "new_value": 1,
+      "rationale": "Enable TIME_WAIT socket reuse. Reduces port exhaustion under high connection rate from client.",
+      "risk": "low",
+      "executed": true,
+      "verified": true,
+      "persisted_to": "/etc/sysctl.d/99-sysctl.conf"
+    },
+    {
+      "action": "systemctl disable irqbalance",
+      "parameter": "irqbalance boot status",
+      "old_value": "enabled",
+      "new_value": "disabled",
+      "rationale": "IRQ affinity already manually configured by cpu-affinity-optimization. irqbalance would override manual bindings if restarted. Service is already stopped.",
+      "risk": "low",
+      "executed": true,
+      "verified": true,
+      "persisted_to": "systemd unit enablement"
+    }
+  ],
+
+  "restart_required_actions": [
+    {
+      "action": "Configure explicit HugePages for MySQL",
+      "parameters": [
+        "vm.nr_hugepages = 12288 (24G / 2M)",
+        "vm.nr_overcommit_hugepages = 1024 (safety buffer)"
+      ],
+      "rationale": "MySQL buffer pool is 24G (>16GB threshold). Explicit HugePages reduce TLB pressure and improve memory access efficiency. THP is already at madvise; explicit HugePages provide deterministic page size.",
+      "steps": [
+        "sysctl -w vm.nr_hugepages=12288",
+        "sysctl -w vm.nr_overcommit_hugepages=1024",
+        "Persist to /etc/sysctl.d/99-sysctl.conf",
+        "Restart MySQL service to use hugepages via MADV_HUGEPAGE",
+        "Verify: grep HugePages /proc/meminfo"
+      ],
+      "risk": "medium",
+      "restart_required": true,
+      "mysql_restart_required": true,
+      "executed": false,
+      "deferred_reason": "MySQL restart required; not confirmed as allowed in current cycle"
+    }
+  ],
+
+  "system_reboot_actions": [],
+  "analysis_only_items": [],
+
+  "candidate_actions": [
+    {
+      "change_mode": "online",
+      "action": "sysctl -w vm.dirty_ratio=5",
+      "status": "executed"
+    },
+    {
+      "change_mode": "online",
+      "action": "sysctl -w net.core.somaxconn=65535",
+      "status": "executed"
+    },
+    {
+      "change_mode": "online",
+      "action": "sysctl -w net.core.netdev_max_backlog=10000",
+      "status": "executed"
+    },
+    {
+      "change_mode": "online",
+      "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096",
+      "status": "executed"
+    },
+    {
+      "change_mode": "online",
+      "action": "sysctl -w net.ipv4.tcp_tw_reuse=1",
+      "status": "executed"
+    },
+    {
+      "change_mode": "online",
+      "action": "systemctl disable irqbalance",
+      "status": "executed"
+    },
+    {
+      "change_mode": "restart_required",
+      "action": "Configure HugePages (nr_hugepages=12288) + restart MySQL",
+      "status": "recommended_not_executed"
+    }
+  ],
+
+  "rollback": {
+    "rollback_plan": [
+      {
+        "parameter": "vm.dirty_ratio",
+        "rollback_command": "sysctl -w vm.dirty_ratio=10",
+        "note": "Restore original value"
+      },
+      {
+        "parameter": "net.core.somaxconn",
+        "rollback_command": "sysctl -w net.core.somaxconn=1024",
+        "note": "Restore original value"
+      },
+      {
+        "parameter": "net.core.netdev_max_backlog",
+        "rollback_command": "sysctl -w net.core.netdev_max_backlog=1000",
+        "note": "Restore original value"
+      },
+      {
+        "parameter": "net.ipv4.tcp_max_syn_backlog",
+        "rollback_command": "sysctl -w net.ipv4.tcp_max_syn_backlog=256",
+        "note": "Restore original value"
+      },
+      {
+        "parameter": "net.ipv4.tcp_tw_reuse",
+        "rollback_command": "sysctl -w net.ipv4.tcp_tw_reuse=2",
+        "note": "Restore original value"
+      },
+      {
+        "parameter": "irqbalance boot enable",
+        "rollback_command": "systemctl enable irqbalance",
+        "note": "Re-enable irqbalance on boot"
+      }
+    ],
+    "config_file_rollback": "Remove the '# ===== OS Optimization for MySQL OLTP =====' section from /etc/sysctl.d/99-sysctl.conf and run sysctl -p"
+  },
+
+  "validation_plan": [
+    {
+      "check": "Verify sysctl values after reboot",
+      "command": "sysctl vm.dirty_ratio net.core.somaxconn net.core.netdev_max_backlog net.ipv4.tcp_max_syn_backlog net.ipv4.tcp_tw_reuse",
+      "expected": "All values match the new settings"
+    },
+    {
+      "check": "Verify irqbalance stays off after reboot",
+      "command": "systemctl is-enabled irqbalance",
+      "expected": "disabled"
+    },
+    {
+      "check": "Benchmark TPS impact (comparison with pre-OS-opt baseline)",
+      "method": "Run same sysbench workload as app-config optimization (64 threads) and compare TPS",
+      "expected": "No regression; minor improvement from reduced dirty_ratio and network backlog tuning"
+    }
+  ],
+
+  "container_boundary_notes": "MySQL is running on host (PID 449168), not inside Docker. Docker containers present on host are unrelated shells. All OS-level changes apply directly to MySQL environment. No container boundary restrictions."
+
+}

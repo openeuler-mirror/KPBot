@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>环境采集与环境诊断设计项</title>
+  <style>
+    :root {
+      --ink: #1f2937;
+      --muted: #667085;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --line: #d7e0ea;
+      --head: #152238;
+      --blue: #e8f1ff;
+      --blue-border: #4f8df7;
+      --green: #e8f7ef;
+      --green-border: #2f9e63;
+      --amber: #fff7df;
+      --amber-border: #d99a24;
+      --red: #fff1f2;
+      --red-border: #e11d48;
+      --code: #eef2f7;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+    }
+
+    header {
+      background: var(--head);
+      color: #fff;
+      padding: 34px 24px 30px;
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #a7c5ff;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 5vw, 46px);
+      line-height: 1.14;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 920px;
+      margin: 0;
+      color: #dce7f7;
+      font-size: 17px;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 10px 24px;
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      color: #1f3b63;
+      border: 1px solid #d4deea;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      background: #fff;
+    }
+
+    main {
+      padding: 28px 24px 52px;
+    }
+
+    section {
+      margin-bottom: 22px;
+      padding: 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 5px;
+      background: var(--code);
+      color: #21314d;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: #111827;
+      color: #f8fafc;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #233047;
+      background: #eef3f9;
+      font-weight: 700;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .card {
+      min-height: 110px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 15px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tag {
+      display: inline-block;
+      margin: 2px 4px 2px 0;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: #344054;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .ok {
+      background: var(--green);
+      border-color: var(--green-border);
+    }
+
+    .warn {
+      background: var(--amber);
+      border-color: var(--amber-border);
+    }
+
+    .info {
+      background: var(--blue);
+      border-color: var(--blue-border);
+    }
+
+    .danger {
+      background: var(--red);
+      border-color: var(--red-border);
+    }
+
+    .note {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--amber-border);
+      border-radius: 8px;
+      background: var(--amber);
+      color: #5c3d00;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Server Application Optimization Skill</p>
+      <h1>环境采集 + 环境诊断流程设计项</h1>
+      <p class="lead">本文罗列当前 skill 在环境备份阶段实际采集的指标、采集方式、产物文件，以及环境诊断阶段检查的项目、判定逻辑和输出字段。当前依据为 <code>backup_environment.sh</code>、<code>diagnose_environment.py</code> 和 <code>references/environment-diagnosis.md</code>。</p>
+    </div>
+  </header>
+
+  <nav>
+    <div class="wrap">
+      <a href="#position">流程位置</a>
+      <a href="#collection">采集项</a>
+      <a href="#diagnosis">诊断项</a>
+      <a href="#confirmation">诊断确认</a>
+      <a href="#outputs">输出结构</a>
+      <a href="#gaps">验证与缺口</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section id="position">
+      <h2>流程位置与执行顺序</h2>
+      <p>环境采集与诊断属于 Phase 1 的环境基座门控，必须在服务健康检查和基线测试之前完成。诊断结果需要用户确认后，才允许进入后续服务健康检查和基线性能确认。当前顺序设计如下：</p>
+      <div class="grid">
+        <div class="card info">
+          <strong>1. 环境备份</strong>
+          <p>执行 <code>scripts/backup_environment.sh &lt;output-dir&gt;</code>，按 BIOS、硬件、软件/OS/内核分类沉淀只读快照，并生成汇总报告。</p>
+        </div>
+        <div class="card info">
+          <strong>2. 环境诊断</strong>
+          <p>执行 <code>scripts/diagnose_environment.py</code>，基于备份目录、当前系统和可选清单输出诊断 JSON。</p>
+        </div>
+        <div class="card ok">
+          <strong>3. 诊断结果确认</strong>
+          <p>向用户展示阻塞项、降级项、补采建议和风险说明；用户确认后写入 <code>environment_diagnosis_confirmation_status=confirmed</code>。</p>
+        </div>
+        <div class="card ok">
+          <strong>4. 后续门控</strong>
+          <p>诊断结果已确认后，才进入服务健康检查、目标实例身份确认、基线建立和瓶颈识别。</p>
+        </div>
+      </div>
+      <pre>skills/server-application-optimization/scripts/backup_environment.sh --output-dir ./output/env --non-interactive
+# 如需通过 Redfish 采集 BIOS 当前配置：
+skills/server-application-optimization/scripts/backup_environment.sh --output-dir ./output/env \
+  --bmc-host &lt;BMC_IP&gt; --bmc-user &lt;BMC_USER&gt; --bmc-pass '&lt;BMC_PASS&gt;'
+python3 skills/server-application-optimization/scripts/diagnose_environment.py \
+  --backup-dir ./output/env \
+  --output ./output/env/environment-diagnosis.json</pre>
+      <div class="note">启动问询要求：开始采集前需要询问用户是否提供 BMC IP、用户名、密码。提供时通过 Redfish 只读接口采集 BIOS 当前配置；未提供时跳过 Redfish 并在 <code>bios-redfish.txt</code> 和汇总报告中记录 skipped。诊断完成后必须等待用户确认；未确认、拒绝或要求重建时，不进入服务健康、目标实例身份确认、基线性能确认和瓶颈识别。</div>
+    </section>
+
+    <section id="collection">
+      <h2>当前环境采集项与采集方式</h2>
+      <p>当前环境采集脚本采用顺序只读命令执行。每类信息都有独立采集文件，并额外生成 <code>environment-backup-report.html</code> 汇总报告。每个采集动作会写入 <code>command-manifest.txt</code>，记录 <code>RUN</code>、<code>OK</code>、<code>FAIL</code> 或 <code>SKIP</code>。命令不存在时不会中断流程，而是记录 <code>missing-command</code>。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>采集维度</th>
+            <th>产物文件</th>
+            <th>当前采集指标 / 内容</th>
+            <th>采集命令或来源</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>环境备份汇总报告</td>
+            <td><code>environment-backup-report.html</code></td>
+            <td>按 BIOS 配置、硬件配置信息、软件配置、OS/内核参数、运行环境边界汇总关键片段。报告片段会对序列号、UUID、MAC、IP、密码字段做基础脱敏。</td>
+            <td>脚本汇总各独立采集文件生成。</td>
+            <td>作为环境备份的一页式入口；完整证据仍以同目录原始文件为准。</td>
+          </tr>
+          <tr>
+            <td>CPU / Cache / SMT / NUMA / 频率</td>
+            <td><code>hardware-cpu.txt</code>，兼容文件 <code>cpu-info.txt</code>、<code>numa-topology.txt</code></td>
+            <td>总 CPU 数、在线 CPU、SMT 线程数、socket/core、cache 大小、NUMA 节点、CPU 频率、governor、cpufreq policy。</td>
+            <td><code>uname -m</code>、<code>lscpu</code>、<code>lscpu -e</code>、<code>/proc/cpuinfo</code>、<code>/sys/devices/system/cpu/cpu0/cache</code>、<code>/sys/devices/system/cpu/cpufreq</code>、<code>cpupower frequency-info</code></td>
+            <td>判断平台架构、核心数、线程数、CPU 型号，为 CPU/NUMA/编译优化提供基础信息。</td>
+          </tr>
+          <tr>
+            <td>内存条 / DDR / 规格 / 速率 / 编号 / 厂商</td>
+            <td><code>hardware-memory.txt</code>，兼容文件 <code>memory-info.txt</code></td>
+            <td>DIMM 信息、内存控制器、内存容量、可用量、swap、<code>/proc/meminfo</code> 明细；非 root 时保留权限不足输出。</td>
+            <td><code>dmidecode -t memory</code>、<code>lshw -class memory</code>、<code>free -h</code>、<code>cat /proc/meminfo</code></td>
+            <td>判断内存容量、swap、缓存、HugePage 相关状态，并支撑目标规格约束核对。</td>
+          </tr>
+          <tr>
+            <td>磁盘 SSD/HDD 类型 / 大小 / 厂商 / 型号</td>
+            <td><code>hardware-disk.txt</code>，兼容文件 <code>disk-info.txt</code></td>
+            <td>块设备详细信息、SSD/HDD rotational 标记、传输类型、型号、序列号、厂商、空间、挂载点、I/O scheduler、队列参数、smartctl 扫描。</td>
+            <td><code>lsblk -O</code>、<code>lsblk -d -o NAME,TYPE,SIZE,MODEL,SERIAL,VENDOR,ROTA,TRAN,...</code>、<code>df -h</code>、<code>mount</code>、<code>/sys/block/*/queue</code>、<code>smartctl --scan</code></td>
+            <td>识别数据目录所在介质、空间风险、挂载参数，以及后续磁盘瓶颈预筛上下文。</td>
+          </tr>
+          <tr>
+            <td>网卡型号 / 速率 / 厂商 / 驱动</td>
+            <td><code>hardware-nic.txt</code>，兼容文件 <code>nic-info.txt</code></td>
+            <td>PCIe 网络设备、链路接口、IP 地址、网卡速率/协商/驱动、offload、ring、coalesce。逐接口 <code>ethtool</code> 带短超时保护。</td>
+            <td><code>lspci -nn</code>、<code>ip -br link</code>、<code>ip -br address</code>、<code>ifconfig -a</code>、<code>ethtool</code>、<code>ethtool -i/-k/-g/-c</code></td>
+            <td>确认压测组网、服务端网卡、容器/主机网络边界和网络瓶颈预筛对象。</td>
+          </tr>
+          <tr>
+            <td>OS 配置 / sysctl / NUMA balancing / THP / XPS</td>
+            <td><code>os-config.txt</code>，兼容文件 <code>os-kernel.txt</code>、<code>thp-status.txt</code>、<code>hugepages-status.txt</code></td>
+            <td>内核版本、发行版、<code>sysctl -a</code>、NUMA balancing、透明大页、HugePages、ulimit、RPS/XPS、IRQ affinity、irqbalance、tuned profile。</td>
+            <td><code>uname -a</code>、<code>/proc/version</code>、<code>/etc/os-release</code>、<code>sysctl -a</code>、<code>/proc/sys/kernel/numa_balancing</code>、<code>/sys/kernel/mm/transparent_hugepage/*</code>、<code>/sys/class/net/*/queues/*/*ps_cpus</code></td>
+            <td>判断内核版本、发行版、补丁清单匹配和 perf/linux-tools 兼容性。</td>
+          </tr>
+          <tr>
+            <td>BIOS / 固件</td>
+            <td><code>bios-info.txt</code>、<code>bios-redfish.txt</code>、可选 <code>bios-redfish-*.json</code></td>
+            <td>OS 侧 BIOS/DMI/sysfs 信息；用户提供 BMC IP/用户/密码时，采集 Redfish 根、Systems、Managers、System、Bios、Bios/Settings JSON。</td>
+            <td><code>dmidecode -t bios/system/baseboard</code>、<code>/sys/class/dmi/id/*</code>、Redfish <code>/redfish/v1</code>、<code>/Systems</code>、<code>/Bios</code>、<code>/Bios/Settings</code></td>
+            <td>为 BIOS 高性能配置诊断提供证据。未提供 BMC 凭据时 Redfish 明确跳过，不阻断环境备份。</td>
+          </tr>
+          <tr>
+            <td>软件版本与编译构建链</td>
+            <td><code>software-versions.txt</code>、<code>build-system.txt</code>，兼容文件 <code>compiler-runtime.txt</code></td>
+            <td>gcc/g++/clang/cmake/make/ninja/go/rust/python/java/docker/containerd/runc/podman/mysql/mysqld/nginx/redis 等版本；不存在则记录 missing-command。</td>
+            <td>逐项执行 <code>--version</code>、<code>go version</code>、<code>java -version</code>、<code>nginx -v</code> 等只读版本命令。</td>
+            <td>支撑编译优化、运行时差异、应用构建环境判断。</td>
+          </tr>
+          <tr>
+            <td>虚拟化线索</td>
+            <td><code>virtualization.txt</code></td>
+            <td>虚拟化类型、CPU hypervisor 标记、<code>/proc/1/cgroup</code>。</td>
+            <td><code>systemd-detect-virt</code>、<code>grep -i hypervisor /proc/cpuinfo</code>、<code>cat /proc/1/cgroup</code></td>
+            <td>判断 baremetal / VM / container，并影响 perf/PMU 可用性判断。</td>
+          </tr>
+          <tr>
+            <td>运行环境类型</td>
+            <td><code>environment-type.txt</code></td>
+            <td><code>ENV_TYPE</code> 和 <code>RUNTIME_HINT</code>。</td>
+            <td>脚本内检测：读取 <code>/proc/1/cgroup</code>，或调用 <code>systemd-detect-virt</code>。</td>
+            <td>标识当前采集发生在宿主机、虚拟机、容器或未知环境。</td>
+          </tr>
+          <tr>
+            <td>容器资源限制</td>
+            <td><code>container-limits.txt</code></td>
+            <td>容器可见 cpuset 与内存限制。</td>
+            <td><code>/sys/fs/cgroup/cpuset.cpus.effective</code>、<code>/sys/fs/cgroup/cpuset/cpuset.cpus</code>、<code>/sys/fs/cgroup/memory.max</code>、<code>/sys/fs/cgroup/memory/memory.limit_in_bytes</code></td>
+            <td>核对目标规格约束，避免把容器资源边界误判为整机能力。</td>
+          </tr>
+          <tr>
+            <td>内核配置 / 内核参数 / 启动参数</td>
+            <td><code>kernel-config.txt</code></td>
+            <td>内核启动参数、当前内核配置、模块列表。</td>
+            <td><code>cat /proc/cmdline</code>、<code>zcat /proc/config.gz</code>、<code>/boot/config-$(uname -r)</code>、<code>lsmod</code></td>
+            <td>判断内核 feature、启动参数和补丁/配置清单匹配情况。</td>
+          </tr>
+          <tr>
+            <td>采集过程审计</td>
+            <td><code>command-manifest.txt</code></td>
+            <td>每个命令的执行时间、命令文本、成功/失败/跳过状态。</td>
+            <td>脚本内部 <code>log_manifest</code> 记录。</td>
+            <td>用于报告可追溯性、失败命令解释和降级采集说明。</td>
+          </tr>
+          <tr>
+            <td>优化时间线</td>
+            <td><code>optimization-timeline.txt</code></td>
+            <td><code>backup_start</code>、<code>backup_end</code>、manifest 路径。</td>
+            <td>脚本内部时间戳。</td>
+            <td>用于本轮 run_id 证据新鲜度和后续耗时统计。</td>
+          </tr>
+          <tr>
+            <td>采集说明</td>
+            <td><code>README.txt</code></td>
+            <td>备份目录说明、预期产物清单、执行记录规则。</td>
+            <td>脚本生成静态说明。</td>
+            <td>方便人工查看环境备份目录结构。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="diagnosis">
+      <h2>当前环境诊断项与判定设计</h2>
+      <p>环境诊断脚本会读取备份目录、当前系统文件、可选 reference 问题集和可选内核补丁清单，生成 <code>environment_diagnosis</code> JSON。当前核心诊断项如下。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>诊断项</th>
+            <th>诊断内容</th>
+            <th>采集 / 检查方式</th>
+            <th>状态输出</th>
+            <th>失败或降级影响</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>历史 Reference 问题集回归</td>
+            <td>检查历史问题集中提到的参数或配置是否已经正常。</td>
+            <td>通过 <code>--reference-issues</code> 输入 JSON。支持 <code>file_equals</code>、<code>file_contains</code>、<code>sysctl_equals</code>、<code>command_contains</code>、<code>backup_file_contains</code>、<code>backup_file_not_contains</code>。</td>
+            <td><code>not_present</code>、<code>invalid</code>、<code>passed</code>、<code>failed</code>、<code>degraded</code></td>
+            <td>高严重级别失败会进入 <code>blocked_items</code>；缺失问题集时标记 <code>not_present</code> 并跳过，不报错。</td>
+          </tr>
+          <tr>
+            <td>BIOS 是否高性能配置</td>
+            <td>确认 BIOS/固件是否偏性能取向，关注 Power Profile、C-State、频率策略、NUMA/Node Interleaving、内存频率和 RAS 选项。</td>
+            <td>诊断脚本读取备份中的 <code>bios-info.txt</code> 和 CPU 信息搜索 performance / maximum performance / hpc 等关键词，以及 powersave / balanced / energy saving 等节能关键词。环境备份脚本已支持通过 Redfish 额外生成 <code>bios-redfish-bios.json</code> 和 <code>bios-redfish-bios-settings.json</code>。</td>
+            <td><code>passed</code>、<code>failed</code>、<code>degraded</code></td>
+            <td>只看到 BIOS 版本但看不到策略字段时标记 <code>degraded</code>；发现节能/均衡关键词时标记 <code>failed</code>，提示补充 BMC/Redfish 或 BIOS 截图。</td>
+          </tr>
+          <tr>
+            <td>Perf / PMU 采集能力</td>
+            <td>检查是否具备后续 perf、topdown、火焰图、硬件 PMU 事件采集条件。</td>
+            <td>检查 <code>perf</code> 是否存在；读取 <code>/proc/sys/kernel/perf_event_paranoid</code>、<code>/proc/sys/kernel/kptr_restrict</code>、<code>/proc/self/status</code> capabilities；检测 baremetal/VM/container；执行 <code>perf list</code> 和 <code>perf stat -e cycles,instructions -- true</code> smoke test。</td>
+            <td><code>passed</code>、<code>failed</code>、<code>degraded</code></td>
+            <td><code>perf</code> 缺失、权限不足、容器未映射 perf/PMU、VM 未暴露 PMU、硬件事件不可见都会阻断或降低后续 CPU 深挖置信度。</td>
+          </tr>
+          <tr>
+            <td>内核补丁是否齐全</td>
+            <td>检查目标场景要求的内核补丁或内核配置是否存在。</td>
+            <td>通过 <code>--kernel-patch-manifest</code> 输入 JSON。支持 <code>uname_contains</code>、<code>os_release_contains</code>、<code>kernel_config_enabled</code>、<code>kernel_config_equals</code>、<code>file_exists</code>、<code>file_contains</code>、<code>command_contains</code>、<code>backup_file_contains</code>。</td>
+            <td><code>not_applicable_or_unknown</code>、<code>invalid</code>、<code>passed</code>、<code>failed</code>、<code>degraded</code></td>
+            <td>无补丁清单时标记 <code>not_applicable_or_unknown</code> 并降级提示；高严重级别补丁缺失会进入 <code>blocked_items</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Perf / PMU 细分检查项</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>当前检查内容</th>
+            <th>来源</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>perf_command_status</code></td>
+            <td>perf 命令是否存在。</td>
+            <td><code>shutil.which("perf")</code></td>
+          </tr>
+          <tr>
+            <td><code>perf_permission_status</code></td>
+            <td>当前用户是否 root，或是否具备 <code>CAP_PERFMON</code> / <code>CAP_SYS_ADMIN</code>。</td>
+            <td><code>os.geteuid()</code>、<code>/proc/self/status</code></td>
+          </tr>
+          <tr>
+            <td><code>runtime_environment</code></td>
+            <td>运行环境是 baremetal、VM、container 还是 unknown。</td>
+            <td><code>/.dockerenv</code>、<code>/proc/1/cgroup</code>、<code>systemd-detect-virt</code>、备份文件。</td>
+          </tr>
+          <tr>
+            <td><code>perf_event_paranoid</code></td>
+            <td>内核 perf 权限限制级别。</td>
+            <td><code>/proc/sys/kernel/perf_event_paranoid</code></td>
+          </tr>
+          <tr>
+            <td><code>kptr_restrict</code></td>
+            <td>内核符号地址解析限制。</td>
+            <td><code>/proc/sys/kernel/kptr_restrict</code></td>
+          </tr>
+          <tr>
+            <td><code>pmu_event_status</code></td>
+            <td><code>cycles</code>、<code>instructions</code>、<code>cache-misses</code>、<code>branches</code> 等硬件事件是否可见。</td>
+            <td><code>perf list</code></td>
+          </tr>
+          <tr>
+            <td><code>perf_smoke_test_status</code></td>
+            <td>最小硬件事件采集是否可运行。</td>
+            <td><code>perf stat -e cycles,instructions -- true</code></td>
+          </tr>
+          <tr>
+            <td><code>capabilities</code></td>
+            <td>有效 capability 位图及 <code>CAP_PERFMON</code>、<code>CAP_SYS_ADMIN</code>、<code>CAP_SYS_PTRACE</code> 布尔值。</td>
+            <td><code>/proc/self/status</code> 的 <code>CapEff</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="confirmation">
+      <h2>环境诊断结果确认门控</h2>
+      <p>诊断报告不是自动放行条件。Agent 需要把环境诊断摘要展示给用户确认，特别是 BIOS、perf/PMU、内核补丁、历史 reference 问题和降级证据。确认状态写入本轮 run manifest，并作为服务健康检查和基线性能确认的前置条件。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>确认状态</th>
+            <th>含义</th>
+            <th>后续动作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>pending</code></td>
+            <td>诊断已生成，但用户尚未确认。</td>
+            <td>停在环境诊断确认门控；只允许补采、解释诊断或生成 blocked/degraded 草稿。</td>
+          </tr>
+          <tr>
+            <td><code>confirmed</code></td>
+            <td>用户接受当前诊断结论和降级风险。</td>
+            <td>允许进入服务健康检查、目标实例身份确认和后续基线性能确认。</td>
+          </tr>
+          <tr>
+            <td><code>rebuild_required</code></td>
+            <td>用户要求补采或重建环境备份/诊断。</td>
+            <td>回到环境备份或诊断步骤，生成新的证据路径和诊断 JSON。</td>
+          </tr>
+          <tr>
+            <td><code>rejected</code> / <code>blocked</code></td>
+            <td>用户不接受诊断结论，或存在必须先修复的阻塞项。</td>
+            <td>输出当前阻塞报告；不得建立正式基线，也不得生成候选优化 skill 列表。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">确认记录建议包含 <code>confirmed_by</code>、<code>confirmed_at</code>、<code>confirmation_notes</code>、<code>accepted_degraded_items</code> 和 <code>remaining_blocked_items</code>，用于最终报告和案例归档追溯。</div>
+    </section>
+
+    <section id="outputs">
+      <h2>诊断输出结构</h2>
+      <p>当前诊断输出写入用户指定的 <code>--output</code> JSON 文件。主流程要求报告和案例归档保留该诊断结果，并在失败或降级时说明风险和最小补充证据。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>输出字段</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>schema_version</code>、<code>created_at</code></td>
+            <td>诊断结果 schema 版本和 UTC 生成时间。</td>
+          </tr>
+          <tr>
+            <td><code>status</code></td>
+            <td>环境诊断总状态：<code>passed</code>、<code>failed</code> 或 <code>degraded</code>。</td>
+          </tr>
+          <tr>
+            <td><code>reference_issue_set_status</code></td>
+            <td>历史 reference 问题集检查状态。</td>
+          </tr>
+          <tr>
+            <td><code>bios_performance_status</code></td>
+            <td>BIOS 高性能配置检查状态。</td>
+          </tr>
+          <tr>
+            <td><code>perf_pmu_status</code></td>
+            <td>perf/PMU 采集能力检查状态。</td>
+          </tr>
+          <tr>
+            <td><code>kernel_patch_status</code></td>
+            <td>内核补丁清单检查状态。</td>
+          </tr>
+          <tr>
+            <td><code>reference_issue_checks</code>、<code>kernel_patch_checks</code></td>
+            <td>逐项检查结果，包含 id、描述、严重级别、状态、实际值和错误信息。</td>
+          </tr>
+          <tr>
+            <td><code>bios_performance_findings</code>、<code>perf_pmu_findings</code></td>
+            <td>BIOS 与 perf/PMU 的发现列表。</td>
+          </tr>
+          <tr>
+            <td><code>perf_pmu_checks</code></td>
+            <td>perf 命令、权限、运行环境、paranoid、kptr、PMU 事件、smoke test、capabilities 的结构化检查结果。</td>
+          </tr>
+          <tr>
+            <td><code>findings</code></td>
+            <td>按 <code>reference_issues</code>、<code>bios_performance</code>、<code>perf_pmu</code>、<code>kernel_patches</code> 分类保留原始诊断结果。</td>
+          </tr>
+          <tr>
+            <td><code>blocked_items</code>、<code>degraded_items</code></td>
+            <td>阻塞项和降级项，用于决定是否停在环境诊断门控或继续但降低后续结论置信度。</td>
+          </tr>
+          <tr>
+            <td><code>evidence_paths</code></td>
+            <td>证据路径，当前至少包含环境备份目录。</td>
+          </tr>
+          <tr>
+            <td><code>next_steps</code></td>
+            <td>面向用户的补采集、权限修复或 BIOS 证据补充建议。</td>
+          </tr>
+          <tr>
+            <td><code>environment_diagnosis_confirmation_status</code></td>
+            <td>用户对诊断结果的确认状态：<code>pending</code>、<code>confirmed</code>、<code>rebuild_required</code>、<code>rejected</code> 或 <code>blocked</code>。</td>
+          </tr>
+          <tr>
+            <td><code>environment_diagnosis_confirmation_notes</code></td>
+            <td>用户确认意见、接受的降级项、要求补采的证据和阻塞项处置说明。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="gaps">
+      <h2>目标机验证与剩余缺口</h2>
+      <p>新版 <code>backup_environment.sh</code> 已在 <code>target-920-55</code> 上以非交互方式调试通过。最终备份目录为 <code>docs/environment-backup-target-920-55/</code>，压缩包为 <code>docs/environment-backup-target-920-55.tar.gz</code>。由于本轮未提供 BMC 凭据，Redfish BIOS 按设计跳过。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>设计要求项</th>
+            <th>当前实现状态</th>
+            <th>建议补齐方向</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GPU / NPU / 加速卡</td>
+            <td><span class="tag warn">未专门采集</span> 主流程要求记录 GPU/NPU，但环境备份脚本当前没有独立 <code>gpu-info.txt</code> 或 NPU 工具采集。</td>
+            <td>按平台补充 <code>nvidia-smi</code>、<code>rocm-smi</code>、厂商 NPU 工具、PCIe 拓扑和驱动版本。</td>
+          </tr>
+          <tr>
+            <td>应用配置</td>
+            <td><span class="tag warn">未通用采集</span> 当前脚本只采系统和工具链，未采 MySQL/Nginx/JVM 等应用配置。</td>
+            <td>由应用专项或用户输入提供配置路径；数据库场景可接入 <code>collect_mysql_status.sh</code>。</td>
+          </tr>
+          <tr>
+            <td>BIOS Redfish 当前配置</td>
+            <td><span class="tag ok">已支持</span> 用户提供 BMC IP/用户/密码时采集 Redfish BIOS JSON；本次 <code>target-920-55</code> 未提供 BMC 信息，因此报告中标记 skipped。</td>
+            <td>开始采集前询问用户；自动化运行时可传 <code>--bmc-host</code>、<code>--bmc-user</code>、<code>--bmc-pass</code> 或设置环境变量。</td>
+          </tr>
+          <tr>
+            <td>网卡驱动、队列、中断、ring/coalesce</td>
+            <td><span class="tag ok">已增强</span> 当前采集 <code>ethtool -i/-k/-g/-c</code>、RPS/XPS、IRQ affinity；逐接口 ethtool 带短超时保护。</td>
+            <td>后续可继续补充 <code>ethtool -S</code> 统计，避免环境备份文件过大时可做可选开关。</td>
+          </tr>
+          <tr>
+            <td>磁盘性能与 IO 调度</td>
+            <td><span class="tag ok">已增强</span> 当前采集 <code>lsblk -O</code>、rotational、TRAN、型号、厂商、<code>/sys/block/*/queue</code> 调度器和队列参数。</td>
+            <td>后续可补充运行期 <code>iostat -x</code>，但这更适合瓶颈识别阶段而不是静态环境备份。</td>
+          </tr>
+          <tr>
+            <td>CPU governor / 频率 / C-State OS 侧证据</td>
+            <td><span class="tag ok">已增强</span> 当前采集 <code>cpupower frequency-info</code>、<code>scaling_governor</code>、当前频率和 min/max 频率。</td>
+            <td>后续可补充 <code>/sys/devices/system/cpu/cpu*/cpuidle</code> C-State 细节。</td>
+          </tr>
+          <tr>
+            <td>可回退基线 manifest</td>
+            <td><span class="tag warn">部分具备</span> 当前有备份目录和命令 manifest，但没有独立 <code>restore_baseline_manifest</code> 文件。</td>
+            <td>生成包含采集路径、关键配置快照、可还原项、不可还原项和人工恢复步骤的 manifest。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">当前文档描述的是“现有脚本实际行为 + 主流程已声明的诊断规则”。如果后续扩展采集脚本，应同步更新本文件与 <code>references/environment-diagnosis.md</code>。</div>
+    </section>
+  </main>
+</body>
+</html>

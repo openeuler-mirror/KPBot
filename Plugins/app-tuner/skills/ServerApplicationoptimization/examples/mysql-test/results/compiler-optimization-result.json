@@ -1,0 +1,158 @@
+{
+  "skill": "compiler-optimization",
+  "status": "completed",
+  "run_id": "run-20260626-000001",
+  "compiler_profile_mode": "pgo",
+  "summary": "PGO (Profile-Guided Optimization) implemented for MySQL 8.0.25 self-compiled binary on Kunpeng 920 (aarch64). Achieved 4.52% TPS improvement with reduced latency.",
+
+  "baseline_identity": {
+    "binary_path": "/usr/local/mysql-opt/bin/mysqld.baseline",
+    "md5": "fba69ca6623918d36b0d6c9c52c152da",
+    "build_id": "d132a5cff58caa231d0bf22a252a224fddcb0b77",
+    "size_bytes": 62258472,
+    "compiler": "GCC 10.3.1 (openEuler 22.03)",
+    "c_flags": "-O3 -march=armv8.2-a+crc+crypto+lse -mtune=native -flto=auto -ffat-lto-objects -fuse-linker-plugin -fno-semantic-interposition",
+    "cxx_flags": "-O3 -march=armv8.2-a+crc+crypto+lse -mtune=native -flto=auto -ffat-lto-objects -fuse-linker-plugin -fno-semantic-interposition",
+    "release_flags": "-O3 -DNDEBUG",
+    "lse_instructions": "confirmed (2695 CAS instructions, LDADD instructions present in objdump)",
+    "ld": "GNU ld (GNU Binutils) 2.37",
+    "stripped": false,
+    "build_type": "Release",
+    "source_dir": "/home/mysql/mysql-server-mysql-8.0.25"
+  },
+
+  "pgo_binary_identity": {
+    "binary_path": "/usr/local/mysql-opt/bin/mysqld (currently running)",
+    "md5": "34d1362b96a259e106d19419e5881612",
+    "build_id": "ee4c8cc84b0a210844b2dc3f9521d69f27e4b8b1",
+    "size_bytes": 67987744,
+    "compiler": "GCC 10.3.1 (openEuler 22.03)",
+    "c_flags_pgo_generate": "-O3 -march=armv8.2-a+crc+crypto+lse -mtune=native -fno-semantic-interposition -fprofile-generate=/tmp/mysql-pgo-data",
+    "cxx_flags_pgo_generate": "-O3 -march=armv8.2-a+crc+crypto+lse -mtune=native -fno-semantic-interposition -fprofile-generate=/tmp/mysql-pgo-data",
+    "c_flags_pgo_use": "-O3 -march=armv8.2-a+crc+crypto+lse -mtune=native -flto=auto -ffat-lto-objects -fuse-linker-plugin -fno-semantic-interposition -fprofile-use=/tmp/mysql-pgo-data -fprofile-correction",
+    "cxx_flags_pgo_use": "-O3 -march=armv8.2-a+crc+crypto+lse -mtune=native -flto=auto -ffat-lto-objects -fuse-linker-plugin -fno-semantic-interposition -fprofile-use=/tmp/mysql-pgo-data -fprofile-correction",
+    "release_flags": "-O3 -DNDEBUG",
+    "build_dir": "/home/mysql/mysql-8.0.25-pgo-build-final",
+    "training_workload": "sysbench oltp_read_only, 10 tables x 1M rows, 32 threads, 120 seconds",
+    "profile_data_dir": "/tmp/mysql-pgo-data",
+    "profile_gcda_count": 2503,
+    "profile_data_size": "41MB"
+  },
+
+  "recommended_compiler": "gcc-10.3.1",
+  "recommended_arch_flags": "-march=armv8.2-a+crc+crypto+lse -mtune=native",
+  "arch_flag_gap": "None. Current flags already use -march=armv8.2-a+crc+crypto+lse -mtune=native which matches Kunpeng 920 (CPU implementer 0x48, CPU part 0xd01, ARMv8.2 with LSE/CRC/NEON/DotProduct). Available CPU features (atomics, crc32, asimd, asimddp, dcpop) are all matched by current arch flags.",
+
+  "codegen_verification": {
+    "lse_atomics": {
+      "present": true,
+      "count": "2695 CAS instructions confirmed via objdump",
+      "detail": "LSE LDADD, CAS, SWP instructions found. No load/store exclusive (ldxr/stxr) detected. LSE is fully utilized."
+    },
+    "crc32": {
+      "present": true,
+      "detail": "Software CRC32 functions detected (ut_crc32, ut_crc32_cpu_enabled). Hardware CRC instructions available in CPU. MySQL uses HW CRC when available via runtime dispatch."
+    },
+    "lto": {
+      "present": true,
+      "detail": "LTO enabled via -flto=auto. Binary size reduced from 209MB (without LTO) to 68MB (with LTO + PGO)."
+    },
+    "binary_not_stripped": true
+  },
+
+  "profile_guided_candidates": [
+    {
+      "name": "PGO with GCC 10.3.1",
+      "status": "implemented",
+      "expected_gain": "5-15%",
+      "measured_gain_pct": 4.52,
+      "training_workload": "sysbench oltp_read_only, 32 threads, 120s",
+      "notes": "PGO implemented. Measured 4.52% gain from local A/B testing. The gain is at the lower end of the expected range, likely because: (1) baseline already has LTO + full arch flags which capture much of the optimization potential; (2) training workload was sysbench oltp_read_only (read-only) which doesn't cover write code paths; (3) local benchmark uses 32 threads vs remote 64+ threads which changes profiling characteristics."
+    }
+  ],
+
+  "benchmark_results": {
+    "methodology": "A/B comparison on same server (192.168.90.170) with sysbench running locally. MySQL deployed on cpuset 64-79,88-95 (Node 2). Binary swapped between baseline and PGO-optimized with cold restart. 60s runs, 32 threads, oltp_read_only.",
+    "baseline": {
+      "tps": 9777,
+      "avg_latency_ms": 3.27,
+      "p95_latency_ms": 4.41,
+      "binary": "Original (GCC 10.3.1, O3, LTO, arch flags)"
+    },
+    "pgo_optimized": {
+      "tps": 10219,
+      "avg_latency_ms": 3.13,
+      "p95_latency_ms": 4.25,
+      "binary": "PGO GCC 10.3.1 (profile-generate + profile-use, O3, LTO, arch flags)"
+    },
+    "gain_pct": 4.52,
+    "latency_reduction_avg_pct": 4.28,
+    "latency_reduction_p95_pct": 3.63
+  },
+
+  "candidate_actions": [
+    {
+      "action_id": "pgo-gcc10-full-cycle",
+      "action_type": "recompile",
+      "status": "completed",
+      "precondition": "Source and build infrastructure available at /home/mysql/mysql-server-mysql-8.0.25, GCC 10.3.1, sysbench accessible",
+      "description": "Complete PGO cycle: (1) cmake with -fprofile-generate (no LTO), (2) make -j128, (3) deploy to /usr/local/mysql-opt-pgo/, (4) start on port 3308, (5) run sysbench training (120s, 32 threads), (6) cmake with -fprofile-use + -fprofile-correction + LTO, (7) make -j128, (8) deploy, (9) benchmark",
+      "expected_gain_before": "5-15%",
+      "measured_gain": "4.52%",
+      "risk": "low",
+      "validation": "A/B benchmark: baseline 9,777 TPS -> PGO 10,219 TPS",
+      "rollback": "cp /usr/local/mysql-opt/bin/mysqld.baseline /usr/local/mysql-opt/bin/mysqld",
+      "stop_or_reject_condition": "Build failure or gain <1%"
+    }
+  ],
+
+  "further_compiler_optimization_potential": [
+    {
+      "candidate": "GCC 12.2.1 Upgrade",
+      "expected_gain": "2-5% additional",
+      "risk": "medium",
+      "notes": "GCC 12.2.1 available at /opt/openEuler/gcc-toolset-12/root/usr/bin/gcc. Provides better auto-vectorization, better LTO, improved ARM tuning. Previous GCC 12 build failed (pre-existing build config issue, not compiler failure). GCC 12 + PGO combined could yield additional gains."
+    },
+    {
+      "candidate": "BOLT (Binary Optimization and Layout Tool)",
+      "expected_gain": "2-8% additional",
+      "risk": "medium",
+      "notes": "Requires LLVM 12+ tools (llvm-bolt, perf2bolt). Not currently installed. BOLT post-processes the compiled binary using perf data to optimize code layout, reducing I-cache misses. The high L1 I-cache misses (11.5B/10s) suggest BOLT could help."
+    },
+    {
+      "candidate": "Sysbench write-heavy workload PGO",
+      "expected_gain": "2-5% additional for mixed workloads",
+      "risk": "low",
+      "notes": "Current training only used oltp_read_only. Additional training with oltp_write_only or oltp_read_write would cover InnoDB write path functions (log system, flush, page write) which PGO could further optimize."
+    },
+    {
+      "candidate": "AutoFDO (Auto Feedback-Directed Optimization)",
+      "expected_gain": "3-8%",
+      "risk": "medium",
+      "notes": "Uses perf hardware sampling instead of instrumentation-based PGO. Avoids the need for -fprofile-generate build. GCC 10 supports -fauto-profile. Requires perf record with LBR, which Kunpeng 920 may not fully support."
+    }
+  ],
+
+  "next_round_candidate": "gcc-12-upgrade-then-pgo",
+
+  "blocked_source_candidates": [],
+  "confounded_binary_test": false,
+
+  "binary_equivalence_check": {
+    "baseline_hash": "fba69ca6623918d36b0d6c9c52c152da",
+    "pgo_hash": "34d1362b96a259e106d19419e5881612",
+    "same_source_branch": "mysql-8.0.25 source distribution",
+    "same_build_config": true,
+    "same_config": true,
+    "same_startup_args": true,
+    "notes": "Only difference is compiler flags (PGO instrumentation and profile-guided optimization). LTO maintained in final build. Source identical."
+  },
+
+  "notes": [
+    "Current running MySQL uses PGO-optimized binary (hash 34d1362b...). Baseline saved as mysqld.baseline.",
+    "Rollback command: cp /usr/local/mysql-opt/bin/mysqld.baseline /usr/local/mysql-opt/bin/mysqld",
+    "build-opt directory from original build preserved at /home/mysql/mysql-8.0.25-build-opt/",
+    "PGO build directories preserved: pgo-build-v4 (instrumentation), pgo-build-final (final optimized)",
+    "Profile data preserved at /tmp/mysql-pgo-data/ (2503 .gcda files, 41MB)"
+  ]
+}

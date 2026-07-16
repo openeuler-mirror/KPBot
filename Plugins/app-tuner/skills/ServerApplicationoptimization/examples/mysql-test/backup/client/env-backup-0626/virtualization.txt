@@ -1,0 +1,27 @@
+===== systemd-detect-virt =====
+time: 2026-06-26 10:14:23
+none
+
+[command failed with exit code 1]
+
+===== proc-cpuinfo-hypervisor =====
+time: 2026-06-26 10:14:23
+
+[command failed with exit code 1]
+
+===== proc-1-cgroup =====
+time: 2026-06-26 10:14:23
+13:blkio:/init.scope
+12:hugetlb:/
+11:misc:/
+10:freezer:/init.scope
+9:cpuset:/
+8:memory:/init.scope
+7:pids:/init.scope
+6:devices:/init.scope
+5:perf_event:/
+4:rdma:/
+3:cpu,cpuacct:/init.scope
+2:net_cls,net_prio:/
+1:name=systemd:/init.scope
+

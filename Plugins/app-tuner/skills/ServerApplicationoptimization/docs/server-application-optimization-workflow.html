@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Application Optimization Skill 执行 Workflow</title>
+  <style>
+    :root {
+      --ink: #1f2937;
+      --muted: #667085;
+      --line: #cbd5e1;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --phase1: #e7f0ff;
+      --phase1-border: #6b9ff8;
+      --phase2: #ebf8f1;
+      --phase2-border: #38a169;
+      --phase3: #fff4df;
+      --phase3-border: #d9822b;
+      --danger: #fff1f2;
+      --danger-border: #e11d48;
+      --warn: #fff8db;
+      --warn-border: #d6a500;
+      --ok: #e8f7ef;
+      --ok-border: #2f9e63;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+    }
+
+    header {
+      background: #162033;
+      color: #fff;
+      padding: 36px 24px 30px;
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #a7c5ff;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 5vw, 48px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 860px;
+      margin: 0;
+      color: #d7e1f4;
+      font-size: 17px;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid #d9e1ec;
+      backdrop-filter: blur(10px);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 10px 24px;
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      color: #1f3b63;
+      border: 1px solid #d4deea;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      background: #fff;
+    }
+
+    main {
+      padding: 28px 24px 52px;
+    }
+
+    section {
+      margin: 0 0 22px;
+      padding: 24px;
+      background: var(--panel);
+      border: 1px solid #dde5ef;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 18px 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 5px;
+      background: #eef2f7;
+      color: #21314d;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .legend-item {
+      min-height: 52px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .legend-item strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .phase1 { background: var(--phase1); border-color: var(--phase1-border); }
+    .phase2 { background: var(--phase2); border-color: var(--phase2-border); }
+    .phase3 { background: var(--phase3); border-color: var(--phase3-border); }
+    .danger { background: var(--danger); border-color: var(--danger-border); }
+    .warn { background: var(--warn); border-color: var(--warn-border); }
+    .ok { background: var(--ok); border-color: var(--ok-border); }
+
+    .flow {
+      margin-top: 18px;
+      display: grid;
+      gap: 0;
+    }
+
+    .node {
+      position: relative;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 15px 18px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 17px;
+    }
+
+    .node p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .connector {
+      width: 2px;
+      height: 24px;
+      margin: 0 auto;
+      background: var(--line);
+      position: relative;
+    }
+
+    .connector::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      bottom: -1px;
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 8px solid var(--line);
+    }
+
+    .decision {
+      max-width: 620px;
+      text-align: center;
+      border-radius: 8px;
+      border-style: dashed;
+      background: #fffdf4;
+      border-color: var(--warn-border);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    .branch {
+      padding: 14px 16px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .branch strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .branch ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .loop-note {
+      max-width: 760px;
+      margin: 12px auto 0;
+      padding: 12px 14px;
+      border-left: 4px solid #6978a8;
+      border-radius: 6px;
+      color: #344054;
+      background: #f4f6fb;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid #dce3ed;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef3f9;
+      color: #25344f;
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .check-card {
+      padding: 14px 16px;
+      border: 1px solid #dce3ed;
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .check-card h3 {
+      margin-top: 0;
+    }
+
+    .check-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      border: 1px solid #d7e0ea;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e5eefc;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .data-flow {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .flow-card {
+      min-height: 126px;
+      padding: 14px 16px;
+      border: 1px solid #dce3ed;
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .flow-card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #24324a;
+    }
+
+    .flow-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 760px) {
+      .legend,
+      .split,
+      .check-grid,
+      .data-flow {
+        grid-template-columns: 1fr;
+      }
+
+      section {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Server Application Optimization</p>
+      <h1>Skill 门控执行 Workflow</h1>
+      <p class="lead">
+        本图按当前 <code>skills/server-application-optimization</code> 的门控逻辑绘制，
+        用于 review Agent 是否严格自顶向下执行，并在异常、历史产物混入或证据失效时优先输出当前阻塞状态。
+      </p>
+    </div>
+  </header>
+
+  <nav>
+    <div class="wrap">
+      <a href="#overview">一图总览</a>
+      <a href="#artifacts">目录结构</a>
+      <a href="#data-control-flow">数据流控制流</a>
+      <a href="#gates">门控字段</a>
+      <a href="#exceptions">异常优先级</a>
+      <a href="#review">Review 检查点</a>
+      <a href="#sources">来源文件</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section id="overview">
+      <h2>1. 执行流一图总览</h2>
+      <p>
+        主流程分为 Phase 1 环境基座、Phase 2 瓶颈识别与候选优化 skill 列表、Phase 3 迭代验证和收尾。
+        红色分支代表必须停止并输出阻塞/降级报告的路径，不能继续引用历史产物伪装成当前结论。
+      </p>
+
+      <div class="legend">
+        <div class="legend-item phase1"><strong>Phase 1</strong>输入、run_id、备份、诊断、健康、基线</div>
+        <div class="legend-item phase2"><strong>Phase 2</strong>瓶颈识别、证据采集、候选 skill 列表</div>
+        <div class="legend-item phase3"><strong>Phase 3</strong>执行验证、报告、review、还原、归档</div>
+        <div class="legend-item danger"><strong>异常分支</strong>停止下游，生成 blocked/degraded 报告</div>
+      </div>
+
+      <div class="flow" aria-label="Server Application Optimization workflow flowchart">
+        <div class="node phase1">
+          <strong>0. 启动门控</strong>
+          <p>读取架构、输入契约、检查清单；初始化 <code>overall_progress</code>。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>1. 用户界面层确认</strong>
+          <p>确认测试场景、目标规格、压测方法、Agent 操作模式、变更范围、耗时和收益统计口径。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>2. 本轮运行身份</strong>
+          <p>场景和操作边界确认后生成 <code>current_run_id</code>、<code>current_run_started_at</code>、<code>current_run_manifest</code>；没有 run_id 的产物只算历史记录。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>3. 环境备份</strong>
+          <p>生成 <code>environment_backup_dir</code>、<code>dependency_status</code>、<code>restore_baseline_manifest</code>。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>4. 环境诊断</strong>
+          <p>检查历史 reference 问题集、BIOS 高性能配置、perf/PMU 采集能力、内核补丁齐全性；阻塞项停在 <code>environment_diagnosis_completed</code>。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>环境诊断是否存在阻塞项？</strong>
+          <p>例如关键依赖不可用、内核补丁缺失且影响测试可信度。</p>
+        </div>
+        <div class="split">
+          <div class="branch danger">
+            <strong>是：停止在环境诊断门控</strong>
+            <ul>
+              <li><code>overall_progress.status=blocked</code></li>
+              <li><code>blocked_gate=environment_diagnosis_completed</code></li>
+              <li>输出修复建议，不进入服务健康和基线。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>否：继续</strong>
+            <ul>
+              <li>证据不足但非阻塞时标记 <code>degraded</code>。</li>
+              <li>进入诊断结果用户确认。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>5. 环境诊断结果确认</strong>
+          <p>向用户展示 <code>blocked_items</code>、<code>degraded_items</code>、BIOS/PMU/内核补丁风险和补采建议；确认状态写入 <code>environment_diagnosis_confirmation_status</code>。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>用户是否确认环境诊断结果？</strong>
+          <p>必须满足 <code>environment_diagnosis_confirmation_status=confirmed</code>，才允许进入服务健康和基线前置流程。</p>
+        </div>
+        <div class="split">
+          <div class="branch danger">
+            <strong>否：停止在诊断确认门控</strong>
+            <ul>
+              <li><code>environment_diagnosis_confirmation_status=pending|rejected|rebuild_required|blocked</code></li>
+              <li>不得进入服务健康、目标实例身份确认和基线性能确认。</li>
+              <li>按用户意见补采、重建诊断或输出当前阻塞报告。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>是：进入服务健康</strong>
+            <ul>
+              <li>记录确认人、确认时间和接受的降级项。</li>
+              <li>本轮 run manifest 绑定诊断确认结果。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>6. 服务健康检查 + 目标实例身份</strong>
+          <p>端口/入口、协议 smoke test、认证权限、最小负载、PID/容器/二进制/配置/资源约束。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>服务健康和目标实例是否确认？</strong>
+          <p>必须满足 <code>environment_diagnosis_confirmation_status=confirmed</code>、<code>service_health_status=passed</code> 且 <code>target_instance_identity.status=confirmed</code>。</p>
+        </div>
+        <div class="split">
+          <div class="branch danger">
+            <strong>否：输出当前异常</strong>
+            <ul>
+              <li>不得建立正式基线。</li>
+              <li>不得进入瓶颈识别和候选 skill 列表生成。</li>
+              <li>不得用历史报告替代当前失败。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>是：进入基线</strong>
+            <ul>
+              <li>记录健康检查证据。</li>
+              <li>保留目标实例身份用于后续归因。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>7. 目标规格下建立基线</strong>
+          <p>先约束资源，再运行压测；记录原始日志、资源利用率、测试组网信心、测试用例信心。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>用户是否确认基线？</strong>
+          <p>未确认前不得进入候选优化 skill 列表生成。</p>
+        </div>
+        <div class="split">
+          <div class="branch warn">
+            <strong>否：回退重建</strong>
+            <ul>
+              <li>回到场景输入、规格约束或基线测试。</li>
+              <li><code>baseline_confirmation_status=rebuild_required</code> 或 <code>blocked</code>。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>是：写入检查点</strong>
+            <ul>
+              <li>写入 <code>checkpoint_5.json</code>。</li>
+              <li><code>baseline_confirmation_status=confirmed</code>。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase1">
+          <strong>8. 历史记录使用门控</strong>
+          <p>发现历史日志、报告、旧轮次时，仅记录为 <code>discovered_unconfirmed</code>；用户确认前不能参与当前结论。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase2">
+          <strong>9. 性能采集与瓶颈识别</strong>
+          <p>识别磁盘、网卡、内存、CPU、GPU/NPU、硬件规格瓶颈；低置信度先补采或降级说明。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>是否存在可识别瓶颈？</strong>
+          <p><code>unknown_bottleneck</code> 或 <code>no_active_bottleneck</code> 不进入盲目调优。</p>
+        </div>
+        <div class="split">
+          <div class="branch warn">
+            <strong>否：进入报告</strong>
+            <ul>
+              <li>输出无法识别或无活跃瓶颈结论。</li>
+              <li>给出补采或下一步计划。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>是：继续采集深度证据</strong>
+            <ul>
+              <li>瓶颈分类进入候选列表准备。</li>
+              <li>仍需通过证据新鲜度校验。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase2">
+          <strong>10. 基线后深度证据采集</strong>
+          <p>按目标进程采集火焰图、perf data、热点函数、热点 DSO/so 排名、topdown L1 icache miss、线程切换、L3/LLC cache miss 等。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>证据是否属于本轮且状态为 current？</strong>
+          <p>校验 run_id、采集时间、目标 PID/容器/端口、是否混入历史产物。</p>
+        </div>
+        <div class="split">
+          <div class="branch danger">
+            <strong>否：证据门控阻塞</strong>
+            <ul>
+              <li><code>current_evidence_status=missing|stale|mixed|invalid</code></li>
+              <li><code>bottleneck_classification=blocked</code></li>
+              <li>清空候选 skill 列表、候选池、收益和优化动作。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>是：允许生成候选列表</strong>
+            <ul>
+              <li><code>current_evidence_status=current</code></li>
+              <li>所有下游结论绑定同一 <code>current_run_id</code>。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase2">
+          <strong>11. 生成候选优化 skill 列表</strong>
+          <p>读取 <code>performance_signal_summary.json</code>，根据热点 so、网络热点、L1 icache miss、线程切换和 L3/LLC miss 生成 <code>candidate_skill_list</code>。</p>
+          <ul>
+            <li>高热点第三方库 → <code>performance-library-selection</code></li>
+            <li>网络相关热点高 → <code>network-optimization</code></li>
+            <li>L1 icache miss 高 → <code>compiler-optimization</code>，重点 PGO/LTO</li>
+            <li>线程切换高且 L3/LLC miss 高 → <code>cpu-affinity-optimization</code></li>
+          </ul>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase2">
+          <strong>12. 候选/coverage skill 分析</strong>
+          <p>先执行 <code>phase=evidence_candidate</code> 的 skill；候选完成后追加未命中的主优化 skill 作为 <code>phase=coverage</code>，最终所有主优化 skill 都有结论。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase3">
+          <strong>13. 串行执行验证</strong>
+          <p>每轮一个执行验证 subagent 负责当前 skill 的实施、复测、回退和结果记录；危险动作必须为 <code>approved_execute</code>。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node decision">
+          <strong>当前 skill 是否应停止？</strong>
+          <p>单个 skill 最多尝试 5 轮；若 5 轮收益均小于 1%，或候选动作耗尽/风险超界/用户停止，则停止当前 skill。</p>
+        </div>
+        <div class="split">
+          <div class="branch warn">
+            <strong>停止当前 skill</strong>
+            <ul>
+              <li>记录 <code>skill_stop_reason</code>。</li>
+              <li>继续执行 <code>candidate_skill_list</code> 中下一个候选或 coverage skill。</li>
+            </ul>
+          </div>
+          <div class="branch ok">
+            <strong>继续当前 skill</strong>
+            <ul>
+              <li>接受有效动作或回退负收益动作。</li>
+              <li>进入下一轮验证。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="loop-note">
+          候选列表循环：先完成证据命中的候选 skill，再完成 coverage skill；所有主优化 skill 完成、停止或阻塞并说明原因后进入报告。
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase3">
+          <strong>14. 报告输出</strong>
+          <p>正常路径输出最终优化报告；阻塞路径输出当前异常、失败证据、补采清单和下一步，不输出正式收益。</p>
+        </div>
+        <div class="connector"></div>
+
+        <div class="node phase3">
+          <strong>15. Review、环境还原、案例归档</strong>
+          <p>确认最终有效配置、已回退项、残留风险；按 manifest 还原环境；归档 <code>case_archive.json</code>。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="artifacts">
+      <h2>2. 输入输出目录与文件结构</h2>
+      <p>
+        当前 skill 的脚本允许调用方传入任意输出目录；为保证 run_id、证据新鲜度和案例归档一致，推荐统一落盘到
+        <code>output/server-application-optimization/&lt;current_run_id&gt;/</code>。所有正式结论只引用该目录下、且
+        <code>current_run_id</code> 一致的产物；历史日志和旧报告必须进入 <code>history/</code> 或待确认区，不能直接覆盖当前结论。
+      </p>
+      <pre>output/server-application-optimization/
+└── &lt;current_run_id&gt;/
+    ├── current-run-manifest.json                 # 本轮路径索引、run_id、启动时间、门控状态
+    ├── inputs/
+    │   ├── scenario-input.json                   # 用户场景、workload、目标规格、压测方式
+    │   ├── action-confirmation.json              # analysis_only / dry_run / approved_execute 和变更边界
+    │   ├── reference-issues.json                 # 可选：历史 reference 问题集
+    │   └── kernel-patch-manifest.json            # 可选：内核补丁检查清单
+    ├── env/
+    │   ├── backup/                               # backup_environment.sh --output-dir 的输出目录
+    │   │   ├── environment-backup-report.html
+    │   │   ├── command-manifest.txt
+    │   │   ├── optimization-timeline.txt
+    │   │   ├── bios-info.txt / bios-redfish.txt / bios-redfish-*.json
+    │   │   ├── hardware-cpu.txt / hardware-memory.txt / hardware-disk.txt / hardware-nic.txt
+    │   │   ├── software-versions.txt / build-system.txt / os-config.txt / kernel-config.txt
+    │   │   └── virtualization.txt / environment-type.txt / container-limits.txt
+    │   ├── environment-diagnosis.json            # diagnose_environment.py --output
+    │   └── environment-diagnosis-confirmation.json
+    ├── service-health/
+    │   ├── service-health.json
+    │   ├── service-health.log
+    │   └── target-instance-identity.json
+    ├── baseline/
+    │   ├── baseline-metrics.json
+    │   ├── baseline-raw.log
+    │   ├── baseline-resource-utilization.json
+    │   └── checkpoint_5.json
+    ├── evidence/
+    │   ├── snapshot_metadata.json                # collect_evidence_snapshot.sh 输出，必须含 current_run_id
+    │   ├── performance_signal_summary.json       # 候选 skill 列表的主输入
+    │   ├── perf.data / flamegraph.svg            # 可选：取决于权限和工具可用性
+    │   └── raw/                                  # top、perf、iostat、sar、应用日志等原始证据
+    ├── bottleneck/
+    │   └── bottleneck-classification.json
+    ├── candidates/
+    │   ├── tasks/                                # create_subagent_tasks.py --output-dir
+    │   │   ├── manifest.json
+    │   │   └── &lt;subskill-name&gt;.json
+    │   ├── results/                              # create_subagent_tasks.py --results-dir
+    │   │   └── &lt;subskill-name&gt;.json
+    │   ├── candidate_pool.json                   # merge_subagent_results.py --output-candidate-pool
+    │   └── candidate-skill-summary.md            # 合并摘要，可作为报告素材，不替代正式报告
+    ├── iterations/
+    │   └── &lt;subskill-name&gt;/round-&lt;n&gt;/
+    │       ├── action-plan.json
+    │       ├── validation-before.json
+    │       ├── validation-after.json
+    │       ├── rollback-plan.json
+    │       └── round-summary.json
+    ├── report/
+    │   ├── final-report.html 或 final-report.md
+    │   └── blocked-or-degraded-report.html 或 blocked-or-degraded-report.md
+    ├── restore/
+    │   ├── restore-baseline-manifest.json
+    │   └── restore-result.json
+    ├── archive/
+    │   └── case_archive.json
+    └── history/
+        └── discovered-unconfirmed/               # 旧日志、旧报告、历史轮次，只读待确认</pre>
+
+      <table>
+        <thead>
+          <tr>
+            <th>目录 / 文件</th>
+            <th>生成者</th>
+            <th>主要消费者</th>
+            <th>定义与约束</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>current-run-manifest.json</code></td>
+            <td>主 Agent 在场景和操作边界确认后创建</td>
+            <td>所有后续脚本、报告、归档</td>
+            <td>保存 <code>current_run_id</code>、<code>current_run_started_at</code>、关键产物路径和门控状态；没有该索引的产物只能作为历史材料。</td>
+          </tr>
+          <tr>
+            <td><code>inputs/</code></td>
+            <td>用户输入和主 Agent 归一化</td>
+            <td>环境诊断、基线、候选任务、最终报告</td>
+            <td>保存场景、目标规格、压测命令、reference 问题集、补丁清单和操作授权；敏感凭据只记录来源，不落明文密码/token。</td>
+          </tr>
+          <tr>
+            <td><code>env/backup/</code></td>
+            <td><code>backup_environment.sh --output-dir</code></td>
+            <td><code>diagnose_environment.py</code>、报告、restore manifest</td>
+            <td>环境备份原始证据目录。BIOS Redfish 为可选只读采集；未提供 BMC 信息时保留 skipped 记录。</td>
+          </tr>
+          <tr>
+            <td><code>env/environment-diagnosis.json</code></td>
+            <td><code>diagnose_environment.py --backup-dir --output</code></td>
+            <td>诊断确认门控、服务健康前置检查、最终报告</td>
+            <td>包含 BIOS、perf/PMU、内核补丁、历史问题集检查状态，以及 <code>blocked_items</code>、<code>degraded_items</code>、<code>next_steps</code>。</td>
+          </tr>
+          <tr>
+            <td><code>env/environment-diagnosis-confirmation.json</code></td>
+            <td>主 Agent 在用户确认后写入</td>
+            <td>服务健康、基线、瓶颈识别</td>
+            <td><code>environment_diagnosis_confirmation_status</code> 必须为 <code>confirmed</code> 才能进入下游；否则保持 blocked 或 rebuild。</td>
+          </tr>
+          <tr>
+            <td><code>service-health/</code></td>
+            <td>主 Agent 或场景专用健康检查脚本</td>
+            <td>基线、证据采集、报告</td>
+            <td>证明服务可压测且目标实例唯一，包括端口、PID、容器、二进制、配置、数据目录、资源约束和 smoke test。</td>
+          </tr>
+          <tr>
+            <td><code>baseline/</code></td>
+            <td>压测流程和主 Agent</td>
+            <td>瓶颈识别、收益统计、最终报告</td>
+            <td><code>checkpoint_5.json</code> 只在用户确认基线后写入；未确认基线不能驱动候选 skill 列表。</td>
+          </tr>
+          <tr>
+            <td><code>evidence/</code></td>
+            <td><code>collect_evidence_snapshot.sh</code> 或等价采集流程</td>
+            <td><code>create_subagent_tasks.py</code>、候选列表、瓶颈分析</td>
+            <td><code>snapshot_metadata.json</code> 与 <code>performance_signal_summary.json</code> 必须携带当前 run_id；证据缺失或过期时停止下游。</td>
+          </tr>
+          <tr>
+            <td><code>candidates/tasks/</code>、<code>candidates/results/</code></td>
+            <td><code>create_subagent_tasks.py</code> 和各 subskill</td>
+            <td><code>merge_subagent_results.py</code>、迭代执行</td>
+            <td>任务包从 evidence 生成，结果由 subskill 写回；每个结果必须保持 run_id 和 evidence 状态一致。</td>
+          </tr>
+          <tr>
+            <td><code>iterations/</code></td>
+            <td>执行验证 subagent</td>
+            <td>收益统计、review、restore、报告</td>
+            <td>每轮只允许一个执行主体修改环境；保存动作计划、前后验证、回退计划和轮次摘要。</td>
+          </tr>
+          <tr>
+            <td><code>report/</code>、<code>restore/</code>、<code>archive/</code></td>
+            <td>主 Agent 收尾阶段</td>
+            <td>用户、后续案例复用</td>
+            <td>正常路径输出最终报告；阻塞路径输出 blocked/degraded 报告。当前 <code>generate_report.py</code> 生成 Markdown，HTML 报告可由主 Agent 或后续转换脚本生成；归档 <code>case_archive.json</code> 作为后续案例输入。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="data-control-flow">
+      <h2>3. 数据流与控制流</h2>
+      <p>
+        数据流描述文件如何被生产和消费；控制流描述哪些状态允许继续。两者必须同时满足：即使文件存在，只要门控状态未确认或
+        <code>current_run_id</code> 不一致，也不能进入下游。
+      </p>
+      <div class="data-flow">
+        <div class="flow-card phase1">
+          <strong>输入归一化 → run manifest</strong>
+          <p>用户场景、操作授权、BMC/Redfish 选择和目标规格先写入 <code>inputs/</code>，再生成本轮 <code>current-run-manifest.json</code>。</p>
+        </div>
+        <div class="flow-card phase1">
+          <strong>环境备份 → 环境诊断 → 用户确认</strong>
+          <p><code>env/backup/</code> 是诊断 JSON 的输入；诊断摘要必须经用户确认后，才能进入服务健康和基线。</p>
+        </div>
+        <div class="flow-card phase2">
+          <strong>基线 → 证据 → 候选列表</strong>
+          <p>已确认基线和当前证据生成 <code>performance_signal_summary.json</code>，再驱动候选 skill task manifest。</p>
+        </div>
+        <div class="flow-card phase2">
+          <strong>候选任务 → 子 skill 结果 → 候选池</strong>
+          <p>各 subskill 只读任务包并输出 JSON 结果；合并脚本校验 run_id、证据状态和候选覆盖后生成 <code>candidate_pool.json</code>。</p>
+        </div>
+        <div class="flow-card phase3">
+          <strong>迭代验证 → 收益统计</strong>
+          <p>每轮动作都绑定前后验证、回退计划和收益摘要；负收益或风险超界动作不得沉淀为有效配置。</p>
+        </div>
+        <div class="flow-card phase3">
+          <strong>报告 → 还原 → 归档</strong>
+          <p>最终报告引用当前 run 目录内证据；restore 执行后写结果，case archive 只归档已确认或明确标注降级的事实。</p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>读取输入</th>
+            <th>写入输出</th>
+            <th>控制流放行条件</th>
+            <th>失败 / 未确认时</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>启动与输入确认</td>
+            <td>用户场景、部署信息、压测方法、目标规格、操作授权</td>
+            <td><code>inputs/*.json</code>、<code>current-run-manifest.json</code></td>
+            <td><code>scenario_input_state</code>、<code>agent_action_confirmation</code> 和 <code>current_run_id</code> 已建立</td>
+            <td>停在启动门控；只生成待补充清单</td>
+          </tr>
+          <tr>
+            <td>环境备份</td>
+            <td><code>inputs/</code>、BMC/Redfish 选择、当前主机只读命令</td>
+            <td><code>env/backup/</code>、<code>command-manifest.txt</code>、<code>environment-backup-report.html</code></td>
+            <td>备份目录生成，缺失命令已记录为 missing/degraded</td>
+            <td>输出缺失依赖和降级能力；可补采或停止</td>
+          </tr>
+          <tr>
+            <td>环境诊断与确认</td>
+            <td><code>env/backup/</code>、<code>reference-issues.json</code>、<code>kernel-patch-manifest.json</code></td>
+            <td><code>environment-diagnosis.json</code>、<code>environment-diagnosis-confirmation.json</code></td>
+            <td><code>environment_diagnosis_confirmation_status=confirmed</code></td>
+            <td>不得进入服务健康、目标实例身份或基线；按用户意见补采、重建或输出阻塞报告</td>
+          </tr>
+          <tr>
+            <td>服务健康与目标身份</td>
+            <td>诊断确认结果、服务入口、认证信息、目标实例线索</td>
+            <td><code>service-health.json</code>、<code>target-instance-identity.json</code></td>
+            <td><code>service_health_status=passed</code> 且 <code>target_instance_identity.status=confirmed</code></td>
+            <td>不得建立正式基线；不得用历史报告替代现场失败</td>
+          </tr>
+          <tr>
+            <td>基线建立与用户确认</td>
+            <td>目标规格、压测命令、服务健康证据、目标实例身份</td>
+            <td><code>baseline-metrics.json</code>、<code>baseline-raw.log</code>、<code>checkpoint_5.json</code></td>
+            <td><code>baseline_confirmation_status=confirmed</code></td>
+            <td>回退到规格约束、压测方法或场景输入，重建基线</td>
+          </tr>
+          <tr>
+            <td>瓶颈识别与深度证据</td>
+            <td>已确认基线、目标实例身份、现场性能采集</td>
+            <td><code>bottleneck-classification.json</code>、<code>snapshot_metadata.json</code>、<code>performance_signal_summary.json</code></td>
+            <td><code>current_evidence_status=current</code>，且 run_id、时间、目标实例一致</td>
+            <td>设置 <code>bottleneck_classification=blocked|not_entered</code>，清空候选列表</td>
+          </tr>
+          <tr>
+            <td>候选 skill 列表与候选池</td>
+            <td><code>performance_signal_summary.json</code>、<code>snapshot_metadata.json</code>、基线和瓶颈分类</td>
+            <td><code>tasks/manifest.json</code>、<code>tasks/&lt;subskill-name&gt;.json</code>、<code>candidate_pool.json</code></td>
+            <td>候选任务和结果均匹配当前 run_id，且 coverage skill 有结论</td>
+            <td>输出 blocked/degraded 候选摘要，不进入真实优化动作</td>
+          </tr>
+          <tr>
+            <td>迭代验证、报告、还原、归档</td>
+            <td><code>candidate_pool.json</code>、用户执行授权、轮次验证结果</td>
+            <td><code>iterations/</code>、<code>final-report.html</code> / <code>final-report.md</code>、<code>restore-result.json</code>、<code>case_archive.json</code></td>
+            <td>危险动作已确认，验证和回退完整；所有主优化 skill 完成、停止或阻塞</td>
+            <td>停止当前 skill 或全局停止；报告只输出当前异常和下一步，不输出正式收益</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="gates">
+      <h2>4. 门控状态字段</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>门控</th>
+            <th>关键字段</th>
+            <th>通过条件</th>
+            <th>失败时动作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>启动门控</td>
+            <td><code>overall_progress</code></td>
+            <td>已读取架构、输入契约、检查清单，并持续展示进度。</td>
+            <td>不得进入调优；补齐入口上下文。</td>
+          </tr>
+          <tr>
+            <td>用户界面层确认</td>
+            <td><code>scenario_input_state</code>、<code>agent_action_confirmation</code></td>
+            <td>场景、目标规格、压测方法、操作模式和变更范围已确认。</td>
+            <td>不得生成正式 run manifest；继续补齐输入和权限边界。</td>
+          </tr>
+          <tr>
+            <td>本轮运行身份</td>
+            <td><code>current_run_id</code>、<code>current_run_manifest</code></td>
+            <td>本轮所有产物可追溯到同一 run_id。</td>
+            <td>产物标记为历史记录；报告转为 blocked/degraded。</td>
+          </tr>
+          <tr>
+            <td>环境备份与诊断</td>
+            <td><code>environment_backup_dir</code>、<code>environment_diagnosis</code>、<code>perf_pmu_status</code></td>
+            <td>备份可还原，历史问题集、BIOS、perf/PMU、内核补丁诊断阻塞项为空或已明确降级。</td>
+            <td>停止在环境诊断门控，输出修复项。</td>
+          </tr>
+          <tr>
+            <td>环境诊断结果确认</td>
+            <td><code>environment_diagnosis_confirmation_status</code>、<code>environment_diagnosis_confirmation_notes</code></td>
+            <td>用户确认诊断结果，且明确接受降级项或补采处置。</td>
+            <td>不得进入服务健康、目标实例身份确认和基线性能确认；按用户意见补采、重建诊断或输出阻塞报告。</td>
+          </tr>
+          <tr>
+            <td>服务健康与实例身份</td>
+            <td><code>environment_diagnosis_confirmation_status</code>、<code>service_health_status</code>、<code>target_instance_identity.status</code></td>
+            <td>环境诊断已确认，服务可压测，目标实例唯一且可归因。</td>
+            <td>不得建立基线；不得引用历史报告替代当前失败。</td>
+          </tr>
+          <tr>
+            <td>基线确认</td>
+            <td><code>baseline_confirmation_status</code></td>
+            <td>用户确认目标规格、测试口径和基线指标。</td>
+            <td>回退到场景输入、规格约束或基线测试。</td>
+          </tr>
+          <tr>
+            <td>历史记录确认</td>
+            <td><code>historical_records_status</code></td>
+            <td>用户明确确认历史材料适用于本轮，且限定使用范围。</td>
+            <td>只能放入待确认材料章节，不进入收益和动作结论。</td>
+          </tr>
+          <tr>
+            <td>瓶颈识别</td>
+            <td><code>bottleneck_classification</code>、<code>bottleneck_confidence</code></td>
+            <td>基线已确认，瓶颈证据充分且分类可信。</td>
+            <td>补采、降级说明或进入无可识别瓶颈报告。</td>
+          </tr>
+          <tr>
+            <td>证据新鲜度</td>
+            <td><code>current_evidence_status</code></td>
+            <td>证据状态为 <code>current</code>，run_id、时间、目标身份一致。</td>
+            <td>清空下游正式结论，输出补采清单。</td>
+          </tr>
+          <tr>
+            <td>候选 skill 列表</td>
+            <td><code>candidate_skill_list</code>、<code>performance_signal_summary</code>、<code>candidate_pool</code></td>
+            <td>根据采集信息生成候选和 coverage skill，候选动作包含验证和回退。</td>
+            <td>缺证据则 blocked；不生成猜测性动作。</td>
+          </tr>
+          <tr>
+            <td>迭代执行</td>
+            <td><code>per_skill_iteration_state</code>、<code>iteration_decision</code></td>
+            <td>串行验证，收益和回退清楚，危险动作已确认。</td>
+            <td>停止当前 skill、回退动作或全局停止。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="exceptions">
+      <h2>5. 异常优先级</h2>
+      <div class="check-grid">
+        <div class="check-card danger">
+          <h3>当前异常优先于历史成功</h3>
+          <ul>
+            <li>环境诊断未确认时，不允许进入服务健康或基线性能确认。</li>
+            <li>当前服务健康失败时，不允许引用历史报告继续调优。</li>
+            <li>当前证据失效时，不允许保留旧候选池或旧收益。</li>
+            <li>当前 run_id 缺失时，所有下游结论只能是 blocked/degraded。</li>
+          </ul>
+        </div>
+        <div class="check-card warn">
+          <h3>历史产物默认未确认</h3>
+          <ul>
+            <li><code>historical_records_status=discovered_unconfirmed</code></li>
+            <li>用户确认前只能做只读摘要。</li>
+            <li>不得进入收益表、候选动作、停止规则和最终优化结论。</li>
+          </ul>
+        </div>
+        <div class="check-card ok">
+          <h3>正常路径输出</h3>
+          <ul>
+            <li>同一 <code>current_run_id</code> 贯穿基线、证据、候选列表、轮次和报告。</li>
+            <li><code>current_evidence_status=current</code></li>
+            <li>每轮有验证结果、风险、回退和收益归因。</li>
+          </ul>
+        </div>
+        <div class="check-card phase3">
+          <h3>阻塞报告输出</h3>
+          <ul>
+            <li>展示 <code>blocked_gate</code>、失败证据和修复建议。</li>
+            <li><code>bottleneck_classification=blocked</code> 或 <code>not_entered</code>。</li>
+            <li>候选 skill 列表、候选池、正式收益和优化动作为空。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="review">
+      <h2>6. Review 检查点</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Review 问题</th>
+            <th>符合预期时应看到</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>是否可能跳过上游门控直接进入优化？</td>
+            <td>不应可能。环境诊断结果确认、服务健康、目标实例、基线确认、证据新鲜度均是硬门控。</td>
+          </tr>
+          <tr>
+            <td>异常时是否会引用历史产物？</td>
+            <td>不会作为正式结论。历史产物只能进入待确认章节，当前异常优先。</td>
+          </tr>
+          <tr>
+            <td>候选列表是否只执行命中 skill？</td>
+            <td>不是。先执行证据命中的 <code>evidence_candidate</code>，再执行未命中的 coverage skill，最终所有主优化 skill 都有结论。</td>
+          </tr>
+          <tr>
+            <td>执行验证是否可能并发改环境？</td>
+            <td>不应可能。每轮只允许一个执行验证 subagent 修改环境。</td>
+          </tr>
+          <tr>
+            <td>单 skill 低收益时如何处理？</td>
+            <td>单个 skill 最多 5 轮；若 5 轮收益均小于 1% 则停止该 skill，并继续候选列表中的下一 skill。</td>
+          </tr>
+          <tr>
+            <td>最终报告是否区分正常与阻塞？</td>
+            <td>应区分。阻塞报告不输出正式收益、候选动作或优化结论。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="sources">
+      <h2>7. 来源文件</h2>
+      <p class="small">本 HTML 由以下当前 skill 文件抽取和重组，便于 review 流程而非替代主源。</p>
+      <ul>
+        <li><code>skills/server-application-optimization/SKILL.md</code></li>
+        <li><code>skills/server-application-optimization/references/workflow.md</code></li>
+        <li><code>skills/server-application-optimization/references/checklist.md</code></li>
+        <li><code>skills/server-application-optimization/references/input-contract.md</code></li>
+        <li><code>skills/server-application-optimization/references/report-schema.md</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
