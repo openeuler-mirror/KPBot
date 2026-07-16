@@ -40,4 +40,4 @@ No formal test suite is defined yet. For script changes, run the modified script
 
 Recent history uses short imperative messages, often with prefixes such as `fix:` and `docs:`. Follow that style, for example `docs: update report workflow` or `fix: handle missing network tool`.
 
-Do not force push to `main`. Put changes on a feature branch and merge through a Gitee Merge Request. PR/MR descriptions should summarize the changed skill behavior, list validation commands run, and mention any compatibility updates in `.claude/`, `.opencode/`, or `.agents/`.
+Do not force push to `main`. Put changes on a feature branch and merge through a AtomGit Merge Request. PR/MR descriptions should summarize the changed skill behavior, list validation commands run, and mention any compatibility updates in `.claude/`, `.opencode/`, or `.agents/`.

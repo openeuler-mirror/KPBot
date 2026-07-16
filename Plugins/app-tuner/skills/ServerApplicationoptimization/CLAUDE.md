@@ -128,8 +128,8 @@ skills/server-application-optimization/scripts/merge_subagent_results.py \
 ## Git Rules
 
 - **禁止 force push 到 main 分支**。main 分支只能通过 Merge Request 合并，不得使用 `git push --force` 或 `git push --force-with-lease` 推送到 main。
-- 所有变更必须先提交到功能分支，再通过 Gitee Merge Request 合并到 main。
-- 合并时如需 squash，在 Gitee MR 页面选择 squash merge 选项，不要本地 squash 后 force push。
+- 所有变更必须先提交到功能分支，再通过 AtomGit Merge Request 合并到 main。
+- 合并时如需 squash，在 AtomGit MR 页面选择 squash merge 选项，不要本地 squash 后 force push。
 - MR 描述应说明变更的 skill 行为、执行的验证命令、以及是否同步更新了轻量入口。
 
 ## Key Files Quick Reference
