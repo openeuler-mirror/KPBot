@@ -436,10 +436,10 @@ class BatchDriveFrameworkTests(unittest.TestCase):
             manifest_root = root / "projects"
             source = manifest_root / "rapidjson"
             workdir = root / "out" / "workdirs" / "rapidjson"
-            shared_skill = manifest_root / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md"
+            shared_skill = manifest_root / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md"
             source.mkdir(parents=True)
             shared_skill.parent.mkdir(parents=True)
-            shared_skill.write_text("---\nname: optimize-pipeline\n---\n", encoding="utf-8")
+            shared_skill.write_text("---\nname: kpbot-code-optimizer\n---\n", encoding="utf-8")
             (source / "reader.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
             copy_project(source, workdir)
@@ -447,7 +447,7 @@ class BatchDriveFrameworkTests(unittest.TestCase):
             install_answer_bank_in_workdir(workdir, "Answer bank:\n- recommended_mode: testcase\n")
 
             self.assertEqual(installed_from, (manifest_root / ".claude" / "skills").resolve())
-            self.assertTrue((workdir / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md").exists())
+            self.assertTrue((workdir / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md").exists())
             self.assertNotIn(".claude/skills", run(["git", "status", "--short"], workdir))
 
     def test_workdir_skills_replace_stale_project_copy_with_manifest_root(self) -> None:
@@ -456,8 +456,8 @@ class BatchDriveFrameworkTests(unittest.TestCase):
             manifest_root = root / "projects"
             source = manifest_root / "isa-l_crypto"
             workdir = root / "out" / "workdirs" / "isa_l_crypto"
-            shared_skill = manifest_root / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md"
-            stale_skill = source / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md"
+            shared_skill = manifest_root / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md"
+            stale_skill = source / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md"
             shared_skill.parent.mkdir(parents=True)
             stale_skill.parent.mkdir(parents=True)
             shared_skill.write_text("root-synced\n", encoding="utf-8")
@@ -467,7 +467,7 @@ class BatchDriveFrameworkTests(unittest.TestCase):
             copy_project(source, workdir)
             ensure_workdir_pipeline_skills(workdir, source)
 
-            installed = (workdir / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md").read_text(
+            installed = (workdir / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md").read_text(
                 encoding="utf-8"
             )
             self.assertEqual(installed, "root-synced\n")
@@ -478,16 +478,16 @@ class BatchDriveFrameworkTests(unittest.TestCase):
             manifest_root = root / "projects"
             source = manifest_root / "zlib"
             workdir = root / "out" / "workdirs" / "zlib"
-            shared_skill = manifest_root / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md"
+            shared_skill = manifest_root / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md"
             source.mkdir(parents=True)
             shared_skill.parent.mkdir(parents=True)
-            shared_skill.write_text("---\nname: optimize-pipeline\n---\n", encoding="utf-8")
+            shared_skill.write_text("---\nname: kpbot-code-optimizer\n---\n", encoding="utf-8")
             workdir.mkdir(parents=True)
 
             installed_from = ensure_workdir_pipeline_skills(workdir, source)
 
             self.assertEqual(installed_from, (manifest_root / ".claude" / "skills").resolve())
-            self.assertTrue((workdir / ".claude" / "skills" / "optimize-pipeline" / "SKILL.md").exists())
+            self.assertTrue((workdir / ".claude" / "skills" / "kpbot-code-optimizer" / "SKILL.md").exists())
 
     def test_run_probe_executes_argv_without_shell(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -784,7 +784,7 @@ class BatchDriveFrameworkTests(unittest.TestCase):
         text = (SCRIPT_DIR.parent.parent / "special-case-optimization" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("## Compatibility", text)
-        self.assertIn("optimize-pipeline/apply-optimization v1 contract", text)
+        self.assertIn("kpbot-code-optimizer/apply-optimization v1 contract", text)
         for field in [
             "special_case_result.success",
             "original_code",
@@ -1648,7 +1648,7 @@ class BatchDriveFrameworkTests(unittest.TestCase):
     def test_auto_reply_starts_pipeline_without_changing_effort(self) -> None:
         answer = answer_for("What would you like to do?\n❯ ", "", {})
 
-        self.assertEqual(answer, ("start_pipeline", "/optimize-pipeline\n"))
+        self.assertEqual(answer, ("start_pipeline", "/kpbot-code-optimizer\n"))
 
     def test_auto_reply_answers_chinese_target_type_prompt(self) -> None:
         answer_bank = (

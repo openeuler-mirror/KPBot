@@ -1,6 +1,6 @@
 ---
 name: drive-claude-optimize-pipeline
-description: Drive Claude Code through the KunpengAccelerationLibOptimization /optimize-pipeline workflow as a strict interaction proxy. Use when the user wants Codex or another Claude agent to enter, spawn, or supervise a Claude terminal session, especially when the user gives only a project or incomplete optimization context. Fill missing answers for /optimize-pipeline prompts by read-only discovery of project structure, candidate functions, test cases, and test/benchmark tools; keep the worker Claude as the sole workflow executor; prefer a separate worker Claude when Claude is the outer proxy; always choose continuation over stopping until Claude clearly reaches the final result; and save the full outer-agent/Claude transcript.
+description: Drive Claude Code through the KunpengAccelerationLibOptimization /kpbot-code-optimizer workflow as a strict interaction proxy. Use when the user wants Codex or another Claude agent to enter, spawn, or supervise a Claude terminal session, especially when the user gives only a project or incomplete optimization context. Fill missing answers for /kpbot-code-optimizer prompts by read-only discovery of project structure, candidate functions, test cases, and test/benchmark tools; keep the worker Claude as the sole workflow executor; prefer a separate worker Claude when Claude is the outer proxy; always choose continuation over stopping until Claude clearly reaches the final result; and save the full outer-agent/Claude transcript.
 platform: claude-only
 ---
 
@@ -8,9 +8,9 @@ platform: claude-only
 
 ## Purpose
 
-Operate as a narrow interaction proxy for Claude Code running `/optimize-pipeline`. The worker Claude owns the optimization workflow. The outer proxy agent supplies answers to the worker Claude's interactive prompts, keeps the session alive, and saves the transcript.
+Operate as a narrow interaction proxy for Claude Code running `/kpbot-code-optimizer`. The worker Claude owns the optimization workflow. The outer proxy agent supplies answers to the worker Claude's interactive prompts, keeps the session alive, and saves the transcript.
 
-When the user does not specify functions, test cases, test commands, or benchmark tools, the outer proxy performs read-only discovery only to build an answer bank for `/optimize-pipeline` prompts. Discovery supports the main pipeline; it does not replace GatherContext, DecomposeTasks, AnalyzeHotspot, profiling, verification, or any optimization stage.
+When the user does not specify functions, test cases, test commands, or benchmark tools, the outer proxy performs read-only discovery only to build an answer bank for `/kpbot-code-optimizer` prompts. Discovery supports the main pipeline; it does not replace GatherContext, DecomposeTasks, AnalyzeHotspot, profiling, verification, or any optimization stage.
 
 The outer proxy may be Codex or another Claude agent. When Claude is acting as the outer proxy instead of the worker, it may open a child Claude session in a subagent or child terminal and drive that child Claude with the same rules Codex would use.
 
@@ -23,7 +23,7 @@ This skill is deliberately narrower than an autonomous optimization operator: do
 3. Choose the execution topology:
    - If the active agent is the same Claude session that should execute the optimization, run the workflow directly in that session.
    - If the active agent is Codex or a Claude proxy supervising another Claude, launch a worker Claude Code session from the project directory. A Claude proxy must first try to use an available subagent, child terminal, or equivalent independent interactive session for this worker Claude.
-4. In the worker Claude session, send `/optimize-pipeline` without changing Claude's default effort.
+4. In the worker Claude session, send `/kpbot-code-optimizer` without changing Claude's default effort.
 5. Reply to the worker Claude only when it asks for input or exits before completing the workflow.
 6. Use the user's explicit context first, enriched by the answer bank. If a required answer is still missing, inspect the project with read-only commands and infer the best candidate answer.
 7. Do not change any workflow, skill, source file, build config, git state, dependency, Claude setting, or reasoning effort yourself, except the user-authorized permissions setup described below.
@@ -33,7 +33,7 @@ This skill is deliberately narrower than an autonomous optimization operator: do
 
 ## Continuation Priority
 
-Treat continuation as the highest-priority interaction rule. If Claude presents any interactive choice that includes continuing, retrying, proceeding, resuming, going to the next stage, going to the next round, auto-continuing, or terminating/stopping, always choose the option that keeps `/optimize-pipeline` moving forward. This applies even when the prompt is phrased as `继续 or 终止`, `continue or stop`, `是否继续`, `是否进入下一轮`, `是否重试`, or similar wording.
+Treat continuation as the highest-priority interaction rule. If Claude presents any interactive choice that includes continuing, retrying, proceeding, resuming, going to the next stage, going to the next round, auto-continuing, or terminating/stopping, always choose the option that keeps `/kpbot-code-optimizer` moving forward. This applies even when the prompt is phrased as `继续 or 终止`, `continue or stop`, `是否继续`, `是否进入下一轮`, `是否重试`, or similar wording.
 
 Do not voluntarily terminate, stop, pause, or summarize early. Do not treat a warning, failed attempt, skipped optimization point, regression, or blocker-like message as terminal if Claude offers any continue/retry/resume option. Stop only when Claude clearly reports the final pipeline summary/final result has been produced, or when the user explicitly tells the outer proxy to stop.
 
@@ -42,7 +42,7 @@ Do not voluntarily terminate, stop, pause, or summarize early. Do not treat a wa
 After the worker Claude session opens, start the optimization workflow without changing Claude's default reasoning effort:
 
 ```text
-/optimize-pipeline
+/kpbot-code-optimizer
 ```
 
 Do not change the reasoning effort by default for this proxy workflow unless the user explicitly requests a specific effort.
@@ -88,15 +88,15 @@ This skill must remain portable when installed under either Codex or Claude skil
 Use these role names consistently:
 
 - `outer proxy`: the agent reading this skill and supervising the interaction. It may be Codex or Claude.
-- `worker Claude`: the Claude Code session that runs `/optimize-pipeline` and owns all optimization work.
+- `worker Claude`: the Claude Code session that runs `/kpbot-code-optimizer` and owns all optimization work.
 
-If the active agent is already the Claude Code session that the user explicitly intends to use as the worker, run `/optimize-pipeline` directly and follow the continuation rules above.
+If the active agent is already the Claude Code session that the user explicitly intends to use as the worker, run `/kpbot-code-optimizer` directly and follow the continuation rules above.
 
 If the active agent is Claude and the user invoked this skill to supervise Claude work, prefer Claude-proxy-to-worker-Claude topology. The outer Claude must first attempt to launch a nested worker Claude through a subagent, child terminal, or equivalent independent interactive mechanism, then behave like Codex as a proxy: gather only missing answer-bank context read-only, answer the worker Claude tersely, prefer continuation, keep the worker Claude as the only agent that edits or tests the target project, and save a transcript for both sides of the interaction. Do not silently solve the optimization inside the current Claude session just because direct execution is possible. Fall back to direct execution only when the user explicitly asks the active Claude to be the worker or the environment cannot provide an independent child Claude session; state that fallback limitation in the final report.
 
 ## Answer Bank Discovery and Context Collection
 
-Before launching Claude, construct an answer bank from explicit user input. Run read-only discovery only for missing or ambiguous fields. This lets the user invoke the skill with just a project path while still giving `/optimize-pipeline` useful candidate answers.
+Before launching Claude, construct an answer bank from explicit user input. Run read-only discovery only for missing or ambiguous fields. This lets the user invoke the skill with just a project path while still giving `/kpbot-code-optimizer` useful candidate answers.
 
 Explicit fields to capture when present:
 
@@ -153,7 +153,7 @@ cd build && meson test --list
 
 Use command-listing probes only when the corresponding tool/build directory exists. If a listing command would build, install, execute tests, mutate files, or is not supported by that tool, skip it and record the static evidence instead.
 
-When the function target or hotspot target is missing, discover candidate functions/files before answering `/optimize-pipeline`. Prefer measured evidence from existing artifacts; otherwise produce static candidates and mark them as unmeasured:
+When the function target or hotspot target is missing, discover candidate functions/files before answering `/kpbot-code-optimizer`. Prefer measured evidence from existing artifacts; otherwise produce static candidates and mark them as unmeasured:
 
 ```bash
 find . -maxdepth 5 -type f \( -name '*perf*' -o -name '*profile*' -o -name '*flame*' -o -name '*.prof' -o -name 'perf.data' -o -name 'gmon.out' -o -name '*benchmark*.log' -o -name '*bench*.txt' \)
@@ -175,7 +175,7 @@ Answer bank:
 - confidence:
 ```
 
-Do not run builds, tests, benchmarks, profilers, package installs, formatters, code generators, git mutations, or cleanup commands during answer-bank discovery. If the user gave an exact test, benchmark, or profiling command, record it as a candidate for the worker Claude instead of running it yourself. The worker Claude should confirm or measure true dynamic hotspots inside `/optimize-pipeline`.
+Do not run builds, tests, benchmarks, profilers, package installs, formatters, code generators, git mutations, or cleanup commands during answer-bank discovery. If the user gave an exact test, benchmark, or profiling command, record it as a candidate for the worker Claude instead of running it yourself. The worker Claude should confirm or measure true dynamic hotspots inside `/kpbot-code-optimizer`.
 
 ## Inference Rules
 
@@ -185,7 +185,7 @@ Use these defaults when Claude asks and the user did not specify the answer:
   - If `code_path` and `function_name` are known, choose `函数优化`.
   - If the answer bank found a high-confidence measured hotspot with a source path and function name, choose `函数优化` and provide the evidence.
   - If benchmark/test entry points are clearer than a single function, choose `用例优化`.
-  - If no safe function target is known or hotspots are only static candidates, choose `用例优化`, provide the answer bank, and let `/optimize-pipeline` confirm and decompose hotspots.
+  - If no safe function target is known or hotspots are only static candidates, choose `用例优化`, provide the answer bank, and let `/kpbot-code-optimizer` confirm and decompose hotspots.
 - Project path:
   - Use the target directory's git root when available.
   - Otherwise use the current working directory.
@@ -223,7 +223,7 @@ Use these defaults when Claude asks and the user did not specify the answer:
   - If the Claude process exits before final summary, relaunch Claude in the same project and send a concise continuation request:
 
 ```text
-继续上一次 /optimize-pipeline 工作流。请从已有 optimization_reports 和当前仓库状态恢复，完成剩余阶段直到最终汇总。
+继续上一次 /kpbot-code-optimizer 工作流。请从已有 optimization_reports 和当前仓库状态恢复，完成剩余阶段直到最终汇总。
 ```
 
 ## Claude Reply Discipline
@@ -242,7 +242,7 @@ Answer bank:
 - test_command_candidates: cd build && ctest -R "unit|correctness" --output-on-failure
 - benchmark_command_candidates: cd build && ctest -R "bench|perf" --output-on-failure
 - hotspot_candidates: src/gemm.c:sgemm_kernel, static candidate from benchmark names and GEMM patterns; unmeasured
-- confidence: medium; worker Claude should confirm with profiling in /optimize-pipeline
+- confidence: medium; worker Claude should confirm with profiling in /kpbot-code-optimizer
 选择：用例优化
 ```
 
@@ -260,7 +260,7 @@ Answer bank:
 ```
 
 ```text
-继续。请完成完整 /optimize-pipeline 工作流，直到最终汇总。
+继续。请完成完整 /kpbot-code-optimizer 工作流，直到最终汇总。
 ```
 
 Bad replies:

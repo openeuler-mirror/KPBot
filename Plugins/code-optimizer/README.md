@@ -86,8 +86,8 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |
 |------|------|
-| `optimize-pipeline` | 优化 Pipeline 编排 |
-| `optimize-pipeline-workflow` | 优化 Pipeline 工作流 |
+| `kpbot-code-optimizer` | 优化 Pipeline 编排 |
+| `kpbot-code-optimizer-workflow` | 优化 Pipeline 工作流 |
 | `drive-claude-optimize-pipeline` | 驱动 Claude 执行优化 Pipeline |
 | `batch-drive-optimize-pipeline` | 批量驱动优化 Pipeline |
 | `interactive-optimizer` | 交互式优化器 |
@@ -133,7 +133,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 
 | 场景 | 告诉 OpenCode | 底层技能 |
 |------|-------------|---------|
-| 完整优化流程 | "帮我优化这个项目的性能" | `optimize-pipeline` |
+| 完整优化流程 | "帮我优化这个项目的性能" | `kpbot-code-optimizer` |
 | 逐函数交互优化 | "逐函数分析并优化这个模块" | `interactive-optimizer` |
 | 查 ARM 指令 | "查询 vaddq_f32 的用法" | `arm-instructions-query` |
 | SPE 采样分析 | "用 ARM SPE 分析缓存 miss" | `arm-spe-analysis` |
