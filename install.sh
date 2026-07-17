@@ -142,9 +142,9 @@ TOOL="claude"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
 # Skills: code-optimizer plugin
-SKILL_ROOT="$PLUGIN_ROOT/plugins/code-optimizer/skills"
+SKILL_ROOT="$PLUGIN_ROOT/Plugins/code-optimizer/skills"
 # OpenCode 覆盖层：仅含与 claude 版本有差异的文件（稀疏镜像 skills/ 结构）
-OPENCODE_OVERLAY="$PLUGIN_ROOT/plugins/code-optimizer/opencode"
+OPENCODE_OVERLAY="$PLUGIN_ROOT/Plugins/code-optimizer/opencode"
 # claude-only 的 skill：opencode 无对应工具，安装时跳过
 OPENCODE_SKIP="drive-claude-optimize-pipeline batch-drive-optimize-pipeline"
 
@@ -316,8 +316,8 @@ elif [ "$LEVEL" = "global" ] || { [ "$LEVEL" = "project" ] && [ "$INSTALL_BASE" 
     ESCAPED_ROOT="$(echo "$PLUGIN_ROOT_ABS" | sed 's/#/\\#/g')"
     tmpfile=$(mktemp)
     sed \
-      -e "s#](plugins/#](${ESCAPED_ROOT}/plugins/#g" \
-      -e "s#\`plugins/#\`${ESCAPED_ROOT}/plugins/#g" \
+      -e "s#](Plugins/#](${ESCAPED_ROOT}/Plugins/#g" \
+      -e "s#\`Plugins/#\`${ESCAPED_ROOT}/Plugins/#g" \
       "$config_src" > "$tmpfile"
     safe_install_file "$tmpfile" "$config_target" "$config_name" "$LEVEL"
 else
