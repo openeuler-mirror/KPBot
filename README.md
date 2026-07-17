@@ -108,7 +108,7 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 
 | 场景 | 告诉 AI | 底层技能 |
 |------|---------|---------|
-| 完整优化流程 | "帮我优化这个项目的性能" | `optimize-pipeline` |
+| 完整优化流程 | "帮我优化这个项目的性能" | `kpbot-code-optimizer` |
 | 逐函数交互优化 | "逐函数分析并优化这个模块" | `interactive-optimizer` |
 | 查 ARM 指令 | "查询 vaddq_f32 的用法" | `arm-instructions-query` |
 | SPE 采样分析 | "用 ARM SPE 分析缓存 miss" | `arm-spe-analysis` |
@@ -162,8 +162,8 @@ Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 
 - `compiler-flag-tuning` — 编译选项调优
 
 **Pipeline/编排类**
-- `optimize-pipeline` — 完整优化 Pipeline（Subagent 编排）
-- `optimize-pipeline-workflow` — 完整 Pipeline（Workflow 工具版）
+- `kpbot-code-optimizer` — 完整优化 Pipeline（Subagent 编排）
+- `kpbot-code-optimizer-workflow` — 完整 Pipeline（Workflow 工具版）
 - `interactive-optimizer` — 交互式逐函数优化
 - `gather-context` — 上下文收集
 - `parse-intent` — 意图解析
@@ -190,7 +190,7 @@ Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 
 #### 1. 完整 Pipeline 优化
 
 ```
-> 帮我用 optimize-pipeline 优化 src/math/matrix.c 中的 matmul 函数，
+> 帮我用 kpbot-code-optimizer 优化 src/math/matrix.c 中的 matmul 函数，
   测试用例是 tests/test_matmul，目标平台 Kunpeng-0xd01
 ```
 

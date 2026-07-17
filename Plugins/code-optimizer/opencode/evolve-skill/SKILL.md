@@ -231,7 +231,7 @@ cd <pipeline_root> && git add -A && git commit -m "backup: pre-evolve-skill chec
 | 2 | `skills/decide-optimization/SKILL.md` | 新增风险预判表行；新增 skill 路由映射；更新输出 enum |
 | 3 | `skills/apply-optimization/SKILL.md` | 新增步骤 0 路由分支；新增步骤 1f 调度逻辑；新增源码替换路径；新增输出字段；更新 enum |
 | 4 | `skills/verify-optimization/SKILL.md` | 新增 commit 前缀映射；判断是否需要 clean build；更新 commit 格式 enum |
-| 5 | `skills/optimize-pipeline/SKILL.md` | 更新用户补充点 type 识别；更新策略优先级排序引用 |
+| 5 | `skills/kpbot-code-optimizer/SKILL.md` | 更新用户补充点 type 识别；更新策略优先级排序引用 |
 | 6 | `prompts/stage.apply-optimization.md` | 新增路由文档行；新增输出字段；更新 enum |
 | 7 | `prompts/stage.decide-optimization.md` | 更新 strategy enum |
 | 8 | `skills/<new-strategy>/SKILL.md` | **新建** leaf skill 完整实现 |
@@ -310,7 +310,7 @@ grep -n "optimization_points\[\].type" skills/analyze-hotspot/SKILL.md
 grep -n "strategy.*取值" skills/decide-optimization/SKILL.md
 grep -n "strategy.*取值" skills/apply-optimization/SKILL.md
 grep -n "commit.*prefix\|strategy.*commit" skills/verify-optimization/SKILL.md
-grep -n "strategy" skills/optimize-pipeline/prompts/stage.decide-optimization.md
+grep -n "strategy" skills/kpbot-code-optimizer/prompts/stage.decide-optimization.md
 
 # 2. 策略→skill 映射一致性（3 文件）
 grep -n "<new-strategy>" skills/decide-optimization/SKILL.md skills/apply-optimization/SKILL.md skills/verify-optimization/SKILL.md
@@ -320,7 +320,7 @@ grep -n "<new-strategy>" skills/analyze-hotspot/SKILL.md
 
 # 4. 输出字段一致性
 grep -n "result" skills/apply-optimization/SKILL.md
-grep -n "result" skills/optimize-pipeline/prompts/stage.apply-optimization.md
+grep -n "result" skills/kpbot-code-optimizer/prompts/stage.apply-optimization.md
 ```
 
 若任一检查失败，报告用户并定位具体的不一致点。

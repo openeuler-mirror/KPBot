@@ -102,7 +102,7 @@ class StageExecutor:
 
     def _append_resume_prompt(self, config: StageExecutorConfig, runner_result: dict[str, Any], attempt: int) -> None:
         resume_text = (
-            "\n恢复提示：继续上一次 /optimize-pipeline 工作流。"
+            "\n恢复提示：继续上一次 /kpbot-code-optimizer 工作流。"
             "请从已有 optimization_reports 和当前仓库状态恢复，完成剩余阶段直到结束报告。\n"
         ) if config.legacy_driver else self.build_resume_prompt(
             target_id=config.target_id,

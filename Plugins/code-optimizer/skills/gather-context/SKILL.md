@@ -1,6 +1,6 @@
 ---
 name: gather-context
-description: 收集优化目标信息，与用户交互确定优化类型、代码路径、测试用例，自动探测项目用例并支持复选框选择。适用于 optimize-pipeline 的首个阶段。
+description: 收集优化目标信息，与用户交互确定优化类型、代码路径、测试用例，自动探测项目用例并支持复选框选择。适用于 kpbot-code-optimizer 的首个阶段。
 ---
 
 # 收集优化上下文

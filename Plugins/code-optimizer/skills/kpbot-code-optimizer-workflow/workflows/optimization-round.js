@@ -4,7 +4,7 @@
 // 执行一轮优化的核心循环：
 //   函数级 9 视角并行分析 → 合成 → 优化点级 Audit→Apply→Verify→Fix（串行）
 //
-// 由 optimize-pipeline Orchestrator 在每轮 profiling 后调用。
+// 由 kpbot-code-optimizer Orchestrator 在每轮 profiling 后调用。
 // Orchestrator 负责：用户交互、环境预检、DecomposeTasks、报告写入、轮次决策。
 // 本 Workflow 负责：纯 agent 驱动的优化执行。
 // 优化点按优先级排序后串行执行：每个点的 Apply 修改源码后 commit，

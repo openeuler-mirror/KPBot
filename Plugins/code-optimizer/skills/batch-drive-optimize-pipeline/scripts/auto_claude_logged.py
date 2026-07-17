@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run worker Claude through /optimize-pipeline with automatic replies and logs."""
+"""Run worker Claude through /kpbot-code-optimizer with automatic replies and logs."""
 
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ SEMANTIC_SIGNAL_RE = re.compile(
     re.I,
 )
 AUTO_REPLY_ECHO_LINE_RE = re.compile(
-    r"^\s*(?:继续(?:；如果流水线已经完成.*)?|同意，继续下一步。|/optimize-pipeline)\s*$",
+    r"^\s*(?:继续(?:；如果流水线已经完成.*)?|同意，继续下一步。|/kpbot-code-optimizer)\s*$",
     re.I | re.M,
 )
 
@@ -550,7 +550,7 @@ def answer_for(buffer: str, answer_bank: str, reply_counts: dict[str, int]) -> t
         re.I,
     )
     if ready_prompt and not selection_ui and "start_pipeline" not in reply_counts:
-        return ("start_pipeline", "/optimize-pipeline\n")
+        return ("start_pipeline", "/kpbot-code-optimizer\n")
 
     if selection_ui and re.search(r"(运行模式|pipeline_mode|自动模式|collaboration)", prompt_area, re.I):
         return ("mode_auto", "\x1b[B\n")

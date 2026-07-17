@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Batch-drive real Claude through /optimize-pipeline targets."""
+"""Batch-drive real Claude through /kpbot-code-optimizer targets."""
 
 from __future__ import annotations
 
@@ -974,7 +974,7 @@ def copy_project(source: Path, dest: Path) -> None:
 
 
 def has_optimize_pipeline_skill(skills_dir: Path) -> bool:
-    return (skills_dir / "optimize-pipeline" / "SKILL.md").is_file()
+    return (skills_dir / "kpbot-code-optimizer" / "SKILL.md").is_file()
 
 
 def pipeline_skills_candidates(source_project: Path) -> list[Path]:
@@ -1366,7 +1366,7 @@ def discover_project(source_project: Path, target: dict[str, Any]) -> dict[str, 
     ][:20]
 
     explicit_function = bool(target.get("code_path") and target.get("function_name"))
-    # Default sparse batch targets to testcase mode so /optimize-pipeline's
+    # Default sparse batch targets to testcase mode so /kpbot-code-optimizer's
     # DecomposeTasks profiling selects the real hot functions. Static hotspot
     # discovery remains a hint only; it must not narrow the worker into function
     # mode unless the manifest explicitly pins a source path and function.
@@ -1389,9 +1389,9 @@ def discover_project(source_project: Path, target: dict[str, Any]) -> dict[str, 
     confidence = "high: explicit function and test command supplied"
     if not explicit_function:
         if test_commands or bench_commands:
-            confidence = "medium: test/benchmark entry points discovered; hotspots are static candidates for /optimize-pipeline"
+            confidence = "medium: test/benchmark entry points discovered; hotspots are static candidates for /kpbot-code-optimizer"
         else:
-            confidence = "low: sparse project signals; worker Claude must inspect and decide inside /optimize-pipeline"
+            confidence = "low: sparse project signals; worker Claude must inspect and decide inside /kpbot-code-optimizer"
 
     manifest_mode = str(target.get("mode") or "").strip()
     if manifest_mode == "function" and explicit_function:
@@ -1472,7 +1472,7 @@ def render_candidates(candidates: list[str]) -> str:
 def render_hotspots_for_answer_bank(discovery: dict[str, Any], workdir: Path) -> str:
     hotspots = discovery.get("hotspot_candidates") or []
     if not hotspots:
-        return "none discovered statically; worker Claude should profile/decompose inside /optimize-pipeline"
+        return "none discovered statically; worker Claude should profile/decompose inside /kpbot-code-optimizer"
     rendered: list[str] = []
     for item in hotspots[:8]:
         path = item.get("code_path") or ""
@@ -1546,19 +1546,19 @@ def build_answer_bank(target: dict[str, Any], workdir: Path, discovery: dict[str
         f"- optimization_goal: {goal}\n"
         "- target_arch: ARM64/NEON host if available; otherwise continue with portable analysis and reporting\n"
         "- commit_policy: original repository must not be modified; this is an isolated temporary copy, internal commits are allowed\n"
-        "- round_policy: formal batch mode requires the full /optimize-pipeline flow; run up to 5 rounds unless no confirmed optimization point remains after verification\n"
+        "- round_policy: formal batch mode requires the full /kpbot-code-optimizer flow; run up to 5 rounds unless no confirmed optimization point remains after verification\n"
         "- optimization_limits: per round analyze up to 3 hotspot functions and up to 3 optimization points per function when available\n"
         "- baseline_policy: if baseline build or tests fail, stop as baseline_blocked and do not apply code changes\n"
         "- verification_policy: applied code must pass build, functional tests, adversarial review, and performance verification before being reported as successful\n"
         "- completion_contract: when the target is finished, write optimization_reports/run_*/stages/*.json for completed stages, optimization_reports/run_*/points/*.json for optimization-point decisions/apply/verify evidence, and optimization_reports/run_*/batch_result.json with pipeline_status, quality_status, applied_count, verified_count, clean_patch_files, blocked_reason, and performance_summary; then print SESSION_COMPLETE, BATCH_END, and SESSION_END before exiting\n"
-        "- discovery_policy: outer batch driver used read-only static/listing probes only; worker Claude must confirm real hotspots, tests, benchmarks, and edits inside /optimize-pipeline\n"
+        "- discovery_policy: outer batch driver used read-only static/listing probes only; worker Claude must confirm real hotspots, tests, benchmarks, and edits inside /kpbot-code-optimizer\n"
         "- static_hotspot_policy: static hotspot candidates are unmeasured hints only; ignore build tools, tests, conditional-only paths, and already-optimized SIMD/assembly labels unless runtime profiling confirms impact\n"
         f"{fast_path_text}\n"
         f"{choice}"
         f"benchmark_command：{benchmark or test_method}\n"
         f"优化目标：{goal}\n"
         "运行模式：自动模式 (auto)\n"
-        "请从 /optimize-pipeline 唯一入口完成完整流程，所有阶段自动同意并持续到结束报告。\n"
+        "请从 /kpbot-code-optimizer 唯一入口完成完整流程，所有阶段自动同意并持续到结束报告。\n"
     )
 
 
@@ -1570,7 +1570,7 @@ def install_answer_bank_in_workdir(workdir: Path, answer_bank: str) -> None:
     claude_path = workdir / "CLAUDE.md"
     batch_instructions = (
         "\n\n# Batch Optimize Pipeline Context\n\n"
-        "When `/optimize-pipeline` is invoked in this temporary worktree, first read "
+        "When `/kpbot-code-optimizer` is invoked in this temporary worktree, first read "
         "`.batch_optimize_answer_bank.md`. Use its project_root, code_path, "
         "function_name, test_method, benchmark_command, and optimization_goal values "
         "to answer GatherContext. Choose auto mode when offered. Continue ordinary "
@@ -1676,7 +1676,7 @@ def build_resume_prompt(
         f"Stage snapshot: {json.dumps(progress.get('stages') or [], ensure_ascii=False)}\n"
         f"Known artifacts: {json.dumps(artifacts, ensure_ascii=False)}\n"
         f"Missing completion gate fields: {', '.join(missing) if missing else 'not yet graded'}\n\n"
-        "继续上一次 /optimize-pipeline 工作流。只从已有仓库状态、optimization_reports、checkpoint 和当前 patch 恢复，"
+        "继续上一次 /kpbot-code-optimizer 工作流。只从已有仓库状态、optimization_reports、checkpoint 和当前 patch 恢复，"
         "不要重新复制项目，不要修改原始仓库。必须补齐缺失阶段、功能验证、性能验证和最终报告；"
         "如果确认没有有效优化，写明完整分析证据并产出 complete_no_optimization。\n"
     )

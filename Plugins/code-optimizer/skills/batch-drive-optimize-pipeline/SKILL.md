@@ -1,15 +1,15 @@
 ---
 name: batch-drive-optimize-pipeline
-description: Batch-drive real Claude Code sessions through the KunpengAccelerationLibOptimization /optimize-pipeline workflow. Use when the user wants unattended batch evaluation of optimization skills across many C/C++ libraries, operators, functions, or test cases, with original repos left untouched, worker Claude launched per target, all interactions auto-answered, and detailed reports/transcripts/patches collected. Includes a real-Claude self-test that creates a virtual C project and fails if Claude exits early, stalls, needs manual input, or does not reach a final optimization result.
+description: Batch-drive real Claude Code sessions through the KunpengAccelerationLibOptimization /kpbot-code-optimizer workflow. Use when the user wants unattended batch evaluation of optimization skills across many C/C++ libraries, operators, functions, or test cases, with original repos left untouched, worker Claude launched per target, all interactions auto-answered, and detailed reports/transcripts/patches collected. Includes a real-Claude self-test that creates a virtual C project and fails if Claude exits early, stalls, needs manual input, or does not reach a final optimization result.
 ---
 
 # Batch Drive Optimize Pipeline
 
 ## Purpose
 
-Run `/optimize-pipeline` repeatedly through real worker Claude sessions, using `drive-claude-optimize-pipeline` as the single-target interaction model.
+Run `/kpbot-code-optimizer` repeatedly through real worker Claude sessions, using `drive-claude-optimize-pipeline` as the single-target interaction model.
 
-This skill is an outer batch evaluator. It does not optimize directly and does not bypass `/optimize-pipeline`. For every target, it creates an isolated temporary copy, launches worker Claude, sends `/optimize-pipeline`, auto-answers prompts, waits for the final pipeline result, and collects reports.
+This skill is an outer batch evaluator. It does not optimize directly and does not bypass `/kpbot-code-optimizer`. For every target, it creates an isolated temporary copy, launches worker Claude, sends `/kpbot-code-optimizer`, auto-answers prompts, waits for the final pipeline result, and collects reports.
 
 ## Hard Rules
 
@@ -122,7 +122,7 @@ The first version intentionally runs serially (`max_parallel: 1`) so benchmark r
 
 ## Managed Batch Workflow
 
-The default driver is a managed outer workflow. It keeps `/optimize-pipeline` as the only optimizer, but the batch layer owns target isolation, Claude worker attempts, resume prompts, completion gates, and final artifact collection. Estimated-token context limits are disabled by default; set `context_soft_limit_tokens`, `context_hard_limit_tokens`, or `resume_prompt_max_tokens` only when an explicit bounded run is needed.
+The default driver is a managed outer workflow. It keeps `/kpbot-code-optimizer` as the only optimizer, but the batch layer owns target isolation, Claude worker attempts, resume prompts, completion gates, and final artifact collection. Estimated-token context limits are disabled by default; set `context_soft_limit_tokens`, `context_hard_limit_tokens`, or `resume_prompt_max_tokens` only when an explicit bounded run is needed.
 
 - Use `--legacy-driver` only when the previous long-session behavior is explicitly needed for comparison.
 - Each target gets an independent temporary workdir, state files, attempt log, usage summary, timing summary, completion gate, report, final summary, and patch.
@@ -132,7 +132,7 @@ The default driver is a managed outer workflow. It keeps `/optimize-pipeline` as
 
 ## Auto Discovery
 
-Before launching worker Claude, the batch driver performs read-only answer-bank discovery on the original project. This mirrors `drive-claude-optimize-pipeline` and is only used to help `/optimize-pipeline` answer GatherContext prompts; it does not replace profiling, decomposition, hotspot analysis, optimization, verification, or reporting.
+Before launching worker Claude, the batch driver performs read-only answer-bank discovery on the original project. This mirrors `drive-claude-optimize-pipeline` and is only used to help `/kpbot-code-optimizer` answer GatherContext prompts; it does not replace profiling, decomposition, hotspot analysis, optimization, verification, or reporting.
 
 Discovery collects:
 
@@ -145,9 +145,9 @@ Inference rules:
 
 - Explicit manifest fields always win.
 - If `code_path` and `function_name` are supplied, choose `函数优化`.
-- If no explicit function is supplied, recommend `用例优化` by default so `/optimize-pipeline` runs its normal auto-mode profiling path through `DecomposeTasks`.
+- If no explicit function is supplied, recommend `用例优化` by default so `/kpbot-code-optimizer` runs its normal auto-mode profiling path through `DecomposeTasks`.
 - Static hotspot candidates are retained only as unmeasured hints in the answer bank; they must not switch a sparse target into `函数优化`.
-- Pass the discovered test/benchmark/hotspot candidates to the worker and let `/optimize-pipeline` decompose and confirm the true hotspot.
+- Pass the discovered test/benchmark/hotspot candidates to the worker and let `/kpbot-code-optimizer` decompose and confirm the true hotspot.
 - The original project is only inspected with read-only probes; all edits, builds, tests, benchmarks, commits, and reports happen inside the temporary copy through worker Claude.
 
 ## Output Contract
@@ -190,7 +190,7 @@ workdirs/<id>/
 `final_summary.md` prefers the worker pipeline's formal final report from `optimization_reports/**/final_summary.md`, `FINAL_SUMMARY.md`, `final_report.md`, or `FINAL_REPORT.md`; if unavailable, it falls back to a transcript excerpt around a trusted final marker.
 Completion detection must also accept structured markers such as `.batch_optimize_result.json`, `claude_log/final_result.json`, `TARGET_COMPLETE.json`, `BATCH_SUMMARY.md`, `SESSION_COMPLETE`, `BATCH_END`, and `SESSION_END` when they report a complete status.
 `completion_gate.json` is the structured success gate and records `pipeline_reached_final_report`, `required_stages_seen`, `patch_collected`, `functional_verified`, `performance_measured`, `artifact_consistent`, `patch_hygiene_passed`, and `evidence_sources`.
-`target_result.json` separates `run_status`, `pipeline_status`, and `quality_status`: `run_status` is the batch-driver outcome, `pipeline_status` says whether `/optimize-pipeline` reached a final report, and `quality_status` / legacy `status` are the strict result gate (`applied_verified`, `complete_no_optimization`, `applied_unverified`, `baseline_blocked`, `pipeline_incomplete`, `driver_failed`, `artifact_error`, `report_inconsistent`, etc.).
+`target_result.json` separates `run_status`, `pipeline_status`, and `quality_status`: `run_status` is the batch-driver outcome, `pipeline_status` says whether `/kpbot-code-optimizer` reached a final report, and `quality_status` / legacy `status` are the strict result gate (`applied_verified`, `complete_no_optimization`, `applied_unverified`, `baseline_blocked`, `pipeline_incomplete`, `driver_failed`, `artifact_error`, `report_inconsistent`, etc.).
 `optimization_reports/run_*/stages/*.json`, `optimization_reports/run_*/points/*.json`, and `optimization_reports/run_*/batch_result.json` are strong evidence. Markdown summaries and transcript text are fallback evidence only and cannot by themselves satisfy strict stage gates.
 `status_snapshot.json` includes a bounded `human_summary` with one-line per-target progress, active target, phase label, elapsed/idle time, task counts, recent stage digest, optimization-point digest, auto-reply counts, and artifact paths. It must never include transcript bodies.
 `usage.json` records per-target and per-attempt token estimates: worker input/output, transcript tokens, driver prompt tokens, peak context estimate, method, and whether the numbers are exact. Treat these as estimates unless `is_exact=true`.
@@ -245,7 +245,7 @@ If a monitor session reports `Range of input length should be [1, 202745]`, trea
 
 The automatic worker replies follow the single-target drive skill:
 
-- Startup: send `/optimize-pipeline` without changing Claude's default effort.
+- Startup: send `/kpbot-code-optimizer` without changing Claude's default effort.
 - Mode: choose `自动模式 (auto)` when prompted.
 - GatherContext: answer from the manifest plus the generated answer bank.
 - Sandbox/permissions: choose the option that keeps the current session moving, usually `配置 permissions`.
