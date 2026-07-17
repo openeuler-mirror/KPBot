@@ -141,10 +141,8 @@ TOOL="claude"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
-# Skills: code-optimizer plugin
-SKILL_ROOT="$PLUGIN_ROOT/Plugins/code-optimizer/skills"
-# OpenCode 覆盖层：仅含与 claude 版本有差异的文件（稀疏镜像 skills/ 结构）
-OPENCODE_OVERLAY="$PLUGIN_ROOT/Plugins/code-optimizer/opencode"
+# Plugins: iterate all plugin skill directories dynamically
+PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
 # claude-only 的 skill：opencode 无对应工具，安装时跳过
 OPENCODE_SKIP="drive-claude-optimize-pipeline batch-drive-optimize-pipeline"
 
@@ -204,14 +202,30 @@ echo ""
 # --- Step 0: Preview ---
 step "[0/4] Checking items to be installed..."
 
-# Collect skills
+# Collect skills from all plugins (including nested packages)
 SKILL_COUNT=0
 SKILLS_TO_INSTALL=""
-for skill_dir in "$SKILL_ROOT"/*/; do
-    [ -d "$skill_dir" ] || continue
-    name=$(basename "$skill_dir")
-    SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $name"
-    SKILL_COUNT=$((SKILL_COUNT + 1))
+for plugin_dir in "$PLUGINS_DIR"/*/; do
+    [ -d "$plugin_dir" ] || continue
+    skill_src="$plugin_dir/skills"
+    [ -d "$skill_src" ] || continue
+    for skill_dir in "$skill_src"/*/; do
+        [ -d "$skill_dir" ] || continue
+        name=$(basename "$skill_dir")
+        SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $name"
+        SKILL_COUNT=$((SKILL_COUNT + 1))
+        # Detect package: skills/<name>/skills/<inner>/SKILL.md
+        for inner_dir in "$skill_dir"skills/*/; do
+            [ -d "$inner_dir" ] || continue
+            [ -f "$inner_dir/SKILL.md" ] || continue
+            inner_name=$(basename "$inner_dir")
+            # Only count if name won't collide with top-level
+            case " $SKILLS_TO_INSTALL " in
+                *" $inner_name "*) ;;
+                *) SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $inner_name"; SKILL_COUNT=$((SKILL_COUNT + 1)) ;;
+            esac
+        done
+    done
 done
 
 echo ""
@@ -257,31 +271,79 @@ echo ""
 ok "开始安装..."
 echo ""
 
-# --- Step 1: Copy skills (with opencode overlay) ---
+# --- Step 1: Copy skills (multi-plugin, with opencode overlay) ---
 step "[1/4] Setting up KPBot skills..."
 mkdir -p "$CONFIG_ROOT/skills"
 
 # 清理目标目录下旧内容（幂等重装）
 rm -rf "$CONFIG_ROOT/skills"/*
 
-# 基底：拷贝全部 skills（claude 格式）
-cp -r "$SKILL_ROOT/"* "$CONFIG_ROOT/skills/"
+# 基底：拷贝全部 plugins 的 skills（claude 格式）
+for plugin_dir in "$PLUGINS_DIR"/*/; do
+    [ -d "$plugin_dir" ] || continue
+    skill_src="$plugin_dir/skills"
+    [ -d "$skill_src" ] || continue
+    plugin_name=$(basename "$plugin_dir")
+    cp -r "$skill_src/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+done
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$TOOL" = "opencode" ]; then
-    # OpenCode 覆盖层：用 opencode/ 下的差异文件覆盖 claude 版本
-    if [ -d "$OPENCODE_OVERLAY" ]; then
-        cp -r "$OPENCODE_OVERLAY/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
-        ok "OpenCode overlay applied"
-    fi
+    # 应用每个插件的 opencode/ 覆盖层（差异文件覆盖 claude 版本）
+    for plugin_dir in "$PLUGINS_DIR"/*/; do
+        [ -d "$plugin_dir" ] || continue
+        if [ -d "$plugin_dir/opencode" ]; then
+            cp -r "$plugin_dir/opencode/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+        fi
+    done
+    ok "OpenCode overlays applied"
     # 跳过 claude-only 的 skill（opencode 无对应工具）
     for skip_name in $OPENCODE_SKIP; do
         [ -e "$CONFIG_ROOT/skills/$skip_name" ] && rm -rf "$CONFIG_ROOT/skills/$skip_name"
-        skill_count=$((skill_count - 1))
     done
-    ok "Skills: $skill_count copied (opencode)"
 else
-    ok "Skills: $skill_count copied (claude)"
+    :
+fi
+
+# Nested packages → tool-discoverable symlinks
+# When a plugin directory has skills/<inner>/SKILL.md, the tool scans one-level
+# deep only. Mirror the inner skill at root via symlinks so relative paths
+# (subskills/, references/, ref-skills/) still resolve correctly.
+link_count=0
+for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
+    [ -d "$pkg_dir" ] || continue
+    pkg_name=$(basename "$pkg_dir")
+    # Detect canonical inner skill: <pkg>/skills/<name>/SKILL.md
+    for inner_dir in "$pkg_dir"skills/*/; do
+        [ -d "$inner_dir" ] || continue
+        [ -f "$inner_dir/SKILL.md" ] || continue
+        inner_name=$(basename "$inner_dir")
+        target="$CONFIG_ROOT/skills/$inner_name"
+        # Skip if already exists as a regular directory (don't overwrite flat skills)
+        [ -d "$target" ] && continue
+        mkdir -p "$target"
+        # Copy main SKILL.md (the tool reads content from here)
+        cp "$inner_dir/SKILL.md" "$target/"
+        # Symlink sub-resources so relative path references resolve
+        for sub in subskills references scripts agents ref-skills; do
+            if [ -d "$inner_dir/$sub" ] && [ ! -e "$target/$sub" ]; then
+                ln -s "../$pkg_name/skills/$inner_name/$sub" "$target/$sub"
+            elif [ -d "$pkg_dir/$sub" ] && [ ! -e "$target/$sub" ]; then
+                # Fallback: package-level resource (e.g. ref-skills/)
+                ln -s "../$pkg_name/$sub" "$target/$sub"
+            fi
+        done
+        ok "Discovery link: $inner_name → $pkg_name/skills/$inner_name"
+        link_count=$((link_count + 1))
+    done
+done
+
+# Final count (after overlays, skips, and discovery links)
+skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
+if [ "$link_count" -gt 0 ]; then
+    ok "Skills: $skill_count installed ($TOOL, including $link_count discovery link(s))"
+else
+    ok "Skills: $skill_count installed ($TOOL)"
 fi
 echo ""
 
@@ -339,8 +401,8 @@ if [ "$TOOL" = "opencode" ]; then
     # OpenCode auto-scans .opencode/skills/ — Step 1 already done
     ok "Auto-scan: skills/"
 else
-    # Claude: skills copied to .claude/skills/ from Step 1
-    ok "Skills: $skill_count copied to .claude/skills/"
+    # Claude: skills installed to .claude/skills/ in Step 1
+    ok "Skills: $skill_count ready in .claude/skills/"
 fi
 echo ""
 
