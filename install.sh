@@ -146,10 +146,18 @@ PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
 # claude-only 的 skill：opencode 无对应工具，安装时跳过
 OPENCODE_SKIP="drive-claude-optimize-pipeline batch-drive-optimize-pipeline"
 
+# --- No arguments: show error + usage ---
+if [ $# -eq 0 ]; then
+    echo -e "${RED}${BOLD}错误：未指定任何参数${NC}"
+    echo ""
+    show_help
+    exit 1
+fi
+
 # --- Parse arguments ---
 for arg in "$@"; do
     case "$arg" in
-        --help)            show_help; exit 0 ;;
+        -h|--help)         show_help; exit 0 ;;
         global|project)    LEVEL="$arg" ;;
         claude|opencode)   TOOL="$arg" ;;
     esac
