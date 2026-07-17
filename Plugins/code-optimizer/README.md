@@ -48,7 +48,7 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 claude plugins marketplace add https://gitcode.com/KPBot/KPBot.git
 
 # 或本地安装
-claude plugins install --plugin-dir /path/to/KPBot/plugins/code-optimizer
+claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 ```
 
 安装后，Claude Code 会根据上下文自动激活相关 skills。
