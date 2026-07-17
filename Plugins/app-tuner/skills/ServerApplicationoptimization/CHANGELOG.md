@@ -1,6 +1,6 @@
 # Changelog
 
-本文件记录 server-application-optimization skill 的演进历史。
+本文件记录 kpbot-app-tuner skill 的演进历史。
 
 ## [Unreleased]
 

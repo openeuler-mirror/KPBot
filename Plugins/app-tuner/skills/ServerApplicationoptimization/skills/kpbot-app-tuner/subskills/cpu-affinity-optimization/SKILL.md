@@ -1,6 +1,6 @@
 ---
 name: cpu-affinity-optimization
-description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 server-application-optimization 的子 skill 使用。
+description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 kpbot-app-tuner 的子 skill 使用。
 ---
 
 # CPU Affinity Optimization

@@ -38,7 +38,7 @@
 - 当前接入方式：提炼通用 CPU 亲和性能力后内置到仓库
 - 本地适配：有
   - 统一使用 `cpu-affinity-optimization` 命名，不暴露 `bind-core` 作为主命名
-  - 由 `skills/server-application-optimization/subskills/cpu-affinity-optimization/SKILL.md` 统一入口调度
+  - 由 `skills/kpbot-app-tuner/subskills/cpu-affinity-optimization/SKILL.md` 统一入口调度
   - 当前框架优先从 `ref-skills/cpu-affinity-optimization/` 查找
   - 仓库外历史路径不作为默认依赖，仅在框架内轻量规则回退时保留
 

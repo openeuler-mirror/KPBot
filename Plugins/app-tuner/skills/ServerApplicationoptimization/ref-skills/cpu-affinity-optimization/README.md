@@ -22,7 +22,7 @@
 
 它不直接替代总框架里的入口，而是由：
 
-- `skills/server-application-optimization/subskills/cpu-affinity-optimization/SKILL.md`
+- `skills/kpbot-app-tuner/subskills/cpu-affinity-optimization/SKILL.md`
 
 统一适配和调度。
 
@@ -46,4 +46,4 @@
 
 如果当前仓库内置版本可用，总框架会优先使用它。
 
-只有在仓库内置版本缺失时，`server-application-optimization` 才会回退到内部轻量规则路径。
+只有在仓库内置版本缺失时，`kpbot-app-tuner` 才会回退到内部轻量规则路径。

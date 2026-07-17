@@ -335,7 +335,7 @@
     <div class="doc-section" id="current-score">
       <h2>1. Server Application Optimization 当前评分</h2>
       <p>
-        本次评分对象为 <code>skills/server-application-optimization/</code> 主框架，
+        本次评分对象为 <code>skills/kpbot-app-tuner/</code> 主框架，
         不评价各专项子 skill 的领域算法深度。子 skill 在本次评审中只检查是否存在
         <code>SKILL.md</code>、名称是否与目录一致，以及是否能被主框架按候选列表和结果 JSON 契约接入。
       </p>
@@ -366,7 +366,7 @@
           <tr>
             <td>触发与定位</td>
             <td class="score">15 / 15</td>
-            <td><code>server-application-optimization</code> 命名符合 kebab-case，展示名保留 Server Application Optimization，能清楚表达服务器应用优化主框架定位。</td>
+            <td><code>kpbot-app-tuner</code> 命名符合 kebab-case，展示名保留 Server Application Optimization，能清楚表达服务器应用优化主框架定位。</td>
           </tr>
           <tr>
             <td>渐进披露</td>
@@ -396,7 +396,7 @@
           <tr>
             <td>兼容与维护</td>
             <td class="score">8 / 8</td>
-            <td>主源、Claude Code、OpenCode、通用 Agent 入口已统一为 <code>server-application-optimization</code>，旧命名核心残留检查通过。</td>
+            <td>主源、Claude Code、OpenCode、通用 Agent 入口已统一为 <code>kpbot-app-tuner</code>，旧命名核心残留检查通过。</td>
           </tr>
           <tr>
             <td>使用体验</td>
@@ -418,17 +418,17 @@
         <tbody>
           <tr>
             <td>框架质量检查</td>
-            <td><code>skills/server-application-optimization/scripts/validate_skill_quality.py</code></td>
+            <td><code>skills/kpbot-app-tuner/scripts/validate_skill_quality.py</code></td>
             <td><span class="tag good">PASS</span>：frontmatter、平台入口、旧命名残留、脚本门禁和 subskill 接口契约通过。</td>
           </tr>
           <tr>
             <td>Python 脚本语法</td>
-            <td><code>PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/server-application-optimization/scripts/*.py</code></td>
+            <td><code>PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/kpbot-app-tuner/scripts/*.py</code></td>
             <td><span class="tag good">PASS</span></td>
           </tr>
           <tr>
             <td>Shell 脚本语法</td>
-            <td><code>bash -n skills/server-application-optimization/scripts/*.sh skills/server-application-optimization/subskills/network-optimization/scripts/*.sh</code></td>
+            <td><code>bash -n skills/kpbot-app-tuner/scripts/*.sh skills/kpbot-app-tuner/subskills/network-optimization/scripts/*.sh</code></td>
             <td><span class="tag good">PASS</span></td>
           </tr>
           <tr>
@@ -451,11 +451,11 @@
         <tbody>
           <tr>
             <td>Skill</td>
-            <td><code>server-application-optimization</code></td>
+            <td><code>kpbot-app-tuner</code></td>
           </tr>
           <tr>
             <td>Source</td>
-            <td>Repo-local skill directory，主源为 <code>skills/server-application-optimization/</code></td>
+            <td>Repo-local skill directory，主源为 <code>skills/kpbot-app-tuner/</code></td>
           </tr>
           <tr>
             <td>Author / Version</td>
@@ -686,40 +686,40 @@
       <h3>基础结构检查</h3>
       <pre><code># 检查 SKILL.md frontmatter、name、description 等基础规则
 python3 /Users/a111/.codex/skills/.system/skill-creator/scripts/quick_validate.py \
-  skills/server-application-optimization
+  skills/kpbot-app-tuner
 
 # 列出 skill 文件，确认是否有无关文件或遗漏资源
-rg --files skills/server-application-optimization
+rg --files skills/kpbot-app-tuner
 
 # 检查引用的文件是否存在
-rg -n "references/|subskills/|scripts/" skills/server-application-optimization/SKILL.md
+rg -n "references/|subskills/|scripts/" skills/kpbot-app-tuner/SKILL.md
 </code></pre>
 
       <h3>Markdown、YAML 和脚本检查</h3>
       <pre><code># Shell 语法和常见错误
-bash -n skills/server-application-optimization/scripts/*.sh
-shellcheck skills/server-application-optimization/scripts/*.sh
+bash -n skills/kpbot-app-tuner/scripts/*.sh
+shellcheck skills/kpbot-app-tuner/scripts/*.sh
 
 # Python 语法检查
-python3 -m py_compile skills/server-application-optimization/scripts/*.py
+python3 -m py_compile skills/kpbot-app-tuner/scripts/*.py
 
 # 可选：格式和文档风格检查
-yamllint skills/server-application-optimization/**/*.yaml
-markdownlint docs skills/server-application-optimization
-shfmt -d skills/server-application-optimization/scripts/*.sh
+yamllint skills/kpbot-app-tuner/**/*.yaml
+markdownlint docs skills/kpbot-app-tuner
+shfmt -d skills/kpbot-app-tuner/scripts/*.sh
 </code></pre>
 
       <h3>安全和敏感信息扫描</h3>
       <pre><code># 快速搜索高风险模式
 rg -n "(curl|wget|nc |ncat|ssh |scp |sudo|chmod 777|eval\\(|exec\\(|base64|openssl|~/.ssh|~/.aws|cookie|token|secret|password)" \
-  skills/server-application-optimization
+  skills/kpbot-app-tuner
 
 # 可选：凭据泄露扫描
 gitleaks detect --source . --no-git
 trufflehog filesystem .
 
 # 可选：通用静态安全扫描
-semgrep scan --config auto skills/server-application-optimization
+semgrep scan --config auto skills/kpbot-app-tuner
 </code></pre>
 
       <h3>依赖和供应链检查</h3>
@@ -732,11 +732,11 @@ grype dir:.
 
       <h3>真实任务验证</h3>
       <pre><code># 示例：用一个干净任务验证 skill 是否能跑通关键路径
-skills/server-application-optimization/scripts/backup_environment.sh ./output/env
-skills/server-application-optimization/scripts/init_report.sh ./output/report demo-scenario
-skills/server-application-optimization/scripts/run_placeholder_benchmark.sh demo-scenario
+skills/kpbot-app-tuner/scripts/backup_environment.sh ./output/env
+skills/kpbot-app-tuner/scripts/init_report.sh ./output/report demo-scenario
+skills/kpbot-app-tuner/scripts/run_placeholder_benchmark.sh demo-scenario
 
-python3 skills/server-application-optimization/scripts/summarize_improvement.py \
+python3 skills/kpbot-app-tuner/scripts/summarize_improvement.py \
   --baseline baseline.json \
   --candidate tuned.json \
   --round-name round-2
@@ -950,7 +950,7 @@ Skill 名称：
             <td><strong>S4</strong></td>
             <td>
               本仓库项目实践与规范：<code>AGENTS.md</code>、
-              <code>docs/architecture-4plus1.md</code>、<code>docs/server-application-optimization-skill.md</code>。
+              <code>docs/architecture-4plus1.md</code>、<code>docs/kpbot-app-tuner-skill.md</code>。
             </td>
             <td>
               服务器应用优化 skill 需要单一主源、兼容入口同步、证据驱动、可降级执行、

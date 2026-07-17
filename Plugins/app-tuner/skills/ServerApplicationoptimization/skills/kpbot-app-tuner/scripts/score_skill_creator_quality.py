@@ -145,7 +145,7 @@ def score(skill_dir: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("skill_dir", nargs="?", default="skills/server-application-optimization")
+    parser.add_argument("skill_dir", nargs="?", default="skills/kpbot-app-tuner")
     parser.add_argument("--min-score", type=int, default=90)
     args = parser.parse_args()
 

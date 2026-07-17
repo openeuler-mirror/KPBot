@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-This repository is a server application optimization skill framework. The canonical implementation lives in `skills/server-application-optimization/`.
+This repository is a server application optimization skill framework. The canonical implementation lives in `skills/kpbot-app-tuner/`.
 
-- `skills/server-application-optimization/SKILL.md`: main orchestration skill.
-- `skills/server-application-optimization/subskills/`: focused optimization workflows such as CPU affinity, compiler tuning, network, and database analysis.
-- `skills/server-application-optimization/references/`: supporting contracts, checklists, examples, schemas, and workflow notes.
-- `skills/server-application-optimization/scripts/`: executable helpers for backups, placeholder benchmarks, bottleneck checks, and report summaries.
+- `skills/kpbot-app-tuner/SKILL.md`: main orchestration skill.
+- `skills/kpbot-app-tuner/subskills/`: focused optimization workflows such as CPU affinity, compiler tuning, network, and database analysis.
+- `skills/kpbot-app-tuner/references/`: supporting contracts, checklists, examples, schemas, and workflow notes.
+- `skills/kpbot-app-tuner/scripts/`: executable helpers for backups, placeholder benchmarks, bottleneck checks, and report summaries.
 - `docs/`: requirements, design, usage guide, architecture, and report template.
 - `ref-skills/`: imported or reference skills used as integration examples.
 - `.claude/`, `.opencode/`, `.agents/`: compatibility entry points. Keep them aligned with the canonical skill when changing public skill behavior.
@@ -17,14 +17,14 @@ This repository is a server application optimization skill framework. The canoni
 There is no package build step. Validate changes with targeted script runs and documentation review:
 
 ```bash
-skills/server-application-optimization/scripts/backup_environment.sh ./output/env
-skills/server-application-optimization/scripts/init_report.sh ./output/report demo-scenario
-skills/server-application-optimization/scripts/run_placeholder_benchmark.sh demo-scenario
-python3 skills/server-application-optimization/scripts/summarize_improvement.py \
+skills/kpbot-app-tuner/scripts/backup_environment.sh ./output/env
+skills/kpbot-app-tuner/scripts/init_report.sh ./output/report demo-scenario
+skills/kpbot-app-tuner/scripts/run_placeholder_benchmark.sh demo-scenario
+python3 skills/kpbot-app-tuner/scripts/summarize_improvement.py \
   --baseline baseline.json --candidate tuned.json --round-name round-2
 ```
 
-Use `shellcheck skills/server-application-optimization/scripts/*.sh` when available before changing shell scripts.
+Use `shellcheck skills/kpbot-app-tuner/scripts/*.sh` when available before changing shell scripts.
 
 ## Coding Style & Naming Conventions
 

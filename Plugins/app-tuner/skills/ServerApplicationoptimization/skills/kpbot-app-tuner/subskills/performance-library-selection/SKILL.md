@@ -1,6 +1,6 @@
 ---
 name: performance-library-selection
-description: 根据热点函数、perf 与 BPF 证据推荐高性能库或替代实现，例如 malloc、memcpy、压缩或加密库，作为 server-application-optimization 的统一高性能库选型入口使用。在 aarch64 场景下可条件引用外部 library-replacement skill，否则回退到内部通用路径。
+description: 根据热点函数、perf 与 BPF 证据推荐高性能库或替代实现，例如 malloc、memcpy、压缩或加密库，作为 kpbot-app-tuner 的统一高性能库选型入口使用。在 aarch64 场景下可条件引用外部 library-replacement skill，否则回退到内部通用路径。
 ---
 
 # Performance Library Selection

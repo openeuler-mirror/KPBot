@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 单一主源 + 多平台轻量入口
 
-主源位于 `skills/server-application-optimization/`。轻量入口为薄跳转层（仅含 frontmatter 和主源路径指向），各平台通过轻量入口或直接主源加载 skill：
+主源位于 `skills/kpbot-app-tuner/`。轻量入口为薄跳转层（仅含 frontmatter 和主源路径指向），各平台通过轻量入口或直接主源加载 skill：
 
-- `skills/server-application-optimization/` — 主源（唯一修改目标）
-- `.claude/skills/server-application-optimization/` — Claude Code Dynamic Workflows 入口（薄跳转 + 运行时契约）
-- `.opencode/skills/server-application-optimization/` — OpenCode 入口（薄跳转）
-- `.agents/skills/server-application-optimization/` — 通用 Agent 入口（薄跳转）
+- `skills/kpbot-app-tuner/` — 主源（唯一修改目标）
+- `.claude/skills/kpbot-app-tuner/` — Claude Code Dynamic Workflows 入口（薄跳转 + 运行时契约）
+- `.opencode/skills/kpbot-app-tuner/` — OpenCode 入口（薄跳转）
+- `.agents/skills/kpbot-app-tuner/` — 通用 Agent 入口（薄跳转）
 - Codex / Cursor — 直接读取主源目录
 
 **轻量入口只做发现和跳转，不复制主源内容。修改只需改主源。**
@@ -62,7 +62,7 @@ Claude Code 必须持续维护 `current_workflow_state`：
 
 ### 动态候选子 skill
 
-每个子 skill 位于 `skills/server-application-optimization/subskills/<name>/SKILL.md`：
+每个子 skill 位于 `skills/kpbot-app-tuner/subskills/<name>/SKILL.md`：
 
 - `io-memory-network-bottleneck-analysis` — 非 CPU 瓶颈预筛（Step 6 加载）
 - `cpu-affinity-optimization`、`bios-optimization`、`os-optimization`、`network-optimization`、`application-config-optimization`、`compiler-optimization`、`performance-library-selection`、`accelerator-optimization`、`hardware-upgrade-analysis`、`other-optimization` — 按 `candidate_skill_list` 优先加载，候选完成后按 coverage 阶段补齐结论
@@ -91,27 +91,27 @@ Claude Code 必须持续维护 `current_workflow_state`：
 
 ```bash
 # Shell 脚本静态检查（推荐安装 shellcheck）
-shellcheck skills/server-application-optimization/scripts/*.sh
+shellcheck skills/kpbot-app-tuner/scripts/*.sh
 
 # 环境备份测试
-skills/server-application-optimization/scripts/backup_environment.sh ./output/env
+skills/kpbot-app-tuner/scripts/backup_environment.sh ./output/env
 
 # 报告目录初始化
-skills/server-application-optimization/scripts/init_report.sh ./output/report demo-scenario
+skills/kpbot-app-tuner/scripts/init_report.sh ./output/report demo-scenario
 
 # 占位 benchmark
-skills/server-application-optimization/scripts/run_placeholder_benchmark.sh demo-scenario
+skills/kpbot-app-tuner/scripts/run_placeholder_benchmark.sh demo-scenario
 
 # MySQL 状态采集
-skills/server-application-optimization/scripts/collect_mysql_status.sh --output-dir ./output/mysql
+skills/kpbot-app-tuner/scripts/collect_mysql_status.sh --output-dir ./output/mysql
 
 # 收益汇总
-python3 skills/server-application-optimization/scripts/summarize_improvement.py \
+python3 skills/kpbot-app-tuner/scripts/summarize_improvement.py \
   --baseline baseline.json --candidate tuned.json --round-name round-2
 
 # 动态 skill 任务包生成与合并
-skills/server-application-optimization/scripts/create_subagent_tasks.py --scenario demo --output-dir ./output/dynamic-skill-tasks
-skills/server-application-optimization/scripts/merge_subagent_results.py \
+skills/kpbot-app-tuner/scripts/create_subagent_tasks.py --scenario demo --output-dir ./output/dynamic-skill-tasks
+skills/kpbot-app-tuner/scripts/merge_subagent_results.py \
   --results-dir ./output/dynamic-skill-results --output-candidate-pool ./output/candidate_pool.json
 ```
 
@@ -134,8 +134,8 @@ skills/server-application-optimization/scripts/merge_subagent_results.py \
 
 ## Key Files Quick Reference
 
-- `skills/server-application-optimization/SKILL.md` — 主 skill，AI Agent 首先加载
-- `skills/server-application-optimization/references/workflow.md` — 完整工作流细节
-- `skills/server-application-optimization/references/checklist.md` — 各阶段执行检查清单
-- `skills/server-application-optimization/references/reading-guide.md` — 文档关系与单点定义表
+- `skills/kpbot-app-tuner/SKILL.md` — 主 skill，AI Agent 首先加载
+- `skills/kpbot-app-tuner/references/workflow.md` — 完整工作流细节
+- `skills/kpbot-app-tuner/references/checklist.md` — 各阶段执行检查清单
+- `skills/kpbot-app-tuner/references/reading-guide.md` — 文档关系与单点定义表
 - `docs/architecture-4plus1.md` — 架构设计

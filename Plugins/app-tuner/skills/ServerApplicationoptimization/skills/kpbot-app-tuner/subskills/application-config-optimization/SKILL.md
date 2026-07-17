@@ -1,6 +1,6 @@
 ---
 name: application-config-optimization
-description: 综合瓶颈分析结果输出线程数、队列、批量、缓存、连接等应用层最佳性能配置建议，作为 server-application-optimization 的子 skill 使用。
+description: 综合瓶颈分析结果输出线程数、队列、批量、缓存、连接等应用层最佳性能配置建议，作为 kpbot-app-tuner 的子 skill 使用。
 ---
 
 # Application Config Optimization

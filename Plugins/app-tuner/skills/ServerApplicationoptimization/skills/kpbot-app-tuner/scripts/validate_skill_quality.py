@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the server-application-optimization skill structure and common regressions."""
+"""Validate the kpbot-app-tuner skill structure and common regressions."""
 
 from __future__ import annotations
 
@@ -233,7 +233,7 @@ def check_subskill_contracts(skill_dir: Path, errors: list[str], warnings: list[
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("skill_dir", nargs="?", default="skills/server-application-optimization")
+    parser.add_argument("skill_dir", nargs="?", default="skills/kpbot-app-tuner")
     args = parser.parse_args()
 
     skill_dir = Path(args.skill_dir).resolve()

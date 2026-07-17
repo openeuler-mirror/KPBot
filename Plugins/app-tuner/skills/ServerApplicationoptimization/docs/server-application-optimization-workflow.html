@@ -364,7 +364,7 @@
       <p class="eyebrow">Server Application Optimization</p>
       <h1>Skill 门控执行 Workflow</h1>
       <p class="lead">
-        本图按当前 <code>skills/server-application-optimization</code> 的门控逻辑绘制，
+        本图按当前 <code>skills/kpbot-app-tuner</code> 的门控逻辑绘制，
         用于 review Agent 是否严格自顶向下执行，并在异常、历史产物混入或证据失效时优先输出当前阻塞状态。
       </p>
     </div>
@@ -666,10 +666,10 @@
       <h2>2. 输入输出目录与文件结构</h2>
       <p>
         当前 skill 的脚本允许调用方传入任意输出目录；为保证 run_id、证据新鲜度和案例归档一致，推荐统一落盘到
-        <code>output/server-application-optimization/&lt;current_run_id&gt;/</code>。所有正式结论只引用该目录下、且
+        <code>output/kpbot-app-tuner/&lt;current_run_id&gt;/</code>。所有正式结论只引用该目录下、且
         <code>current_run_id</code> 一致的产物；历史日志和旧报告必须进入 <code>history/</code> 或待确认区，不能直接覆盖当前结论。
       </p>
-      <pre>output/server-application-optimization/
+      <pre>output/kpbot-app-tuner/
 └── &lt;current_run_id&gt;/
     ├── current-run-manifest.json                 # 本轮路径索引、run_id、启动时间、门控状态
     ├── inputs/
@@ -1083,11 +1083,11 @@
       <h2>7. 来源文件</h2>
       <p class="small">本 HTML 由以下当前 skill 文件抽取和重组，便于 review 流程而非替代主源。</p>
       <ul>
-        <li><code>skills/server-application-optimization/SKILL.md</code></li>
-        <li><code>skills/server-application-optimization/references/workflow.md</code></li>
-        <li><code>skills/server-application-optimization/references/checklist.md</code></li>
-        <li><code>skills/server-application-optimization/references/input-contract.md</code></li>
-        <li><code>skills/server-application-optimization/references/report-schema.md</code></li>
+        <li><code>skills/kpbot-app-tuner/SKILL.md</code></li>
+        <li><code>skills/kpbot-app-tuner/references/workflow.md</code></li>
+        <li><code>skills/kpbot-app-tuner/references/checklist.md</code></li>
+        <li><code>skills/kpbot-app-tuner/references/input-contract.md</code></li>
+        <li><code>skills/kpbot-app-tuner/references/report-schema.md</code></li>
       </ul>
     </section>
   </main>

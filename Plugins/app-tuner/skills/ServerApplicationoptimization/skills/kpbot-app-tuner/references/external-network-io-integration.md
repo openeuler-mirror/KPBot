@@ -57,7 +57,7 @@
 
 普通用户：
 
-- 只使用 `server-application-optimization`
+- 只使用 `kpbot-app-tuner`
 - 在网络优化阶段由框架自动判断是否进入外部路径
 
 高级用户：

@@ -1,6 +1,6 @@
 ---
 name: compiler-optimization
-description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 server-application-optimization 的子 skill 使用。
+description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 kpbot-app-tuner 的子 skill 使用。
 ---
 
 # Compiler Optimization

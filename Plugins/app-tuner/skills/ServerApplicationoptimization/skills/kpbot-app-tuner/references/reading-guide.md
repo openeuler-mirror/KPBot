@@ -7,7 +7,7 @@ docs/
   architecture-4plus1.md   ← 唯一架构设计文档（4+1 视图）
   report-template.md       ← 报告模板（由 report-schema.md 定义字段）
 
-skills/server-application-optimization/
+skills/kpbot-app-tuner/
   SKILL.md                 ← 主 skill（编排器，AI Agent 首先加载）
   references/
     application-agent-architecture.md ← 架构图到三阶段重构的映射
@@ -57,7 +57,7 @@ ref-skills/                ← 仓库内置的第三方 skill
 .claude/skills/            ← Claude Code 轻量入口
 .opencode/skills/          ← OpenCode 轻量入口
 .agents/skills/            ← 通用 Agent 轻量入口
-Codex / Cursor             ← 可直接读取 skills/server-application-optimization/ 主源
+Codex / Cursor             ← 可直接读取 skills/kpbot-app-tuner/ 主源
 ```
 
 ## 推荐阅读顺序
