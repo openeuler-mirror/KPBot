@@ -1,6 +1,6 @@
 ---
 name: network-optimization
-description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡、IRQ、队列、RSS/RPS/XPS、协议栈、丢包和远程压测网络影响，输出可验证、可回退的网络优化候选动作，作为 server-application-optimization 的子 skill 使用。
+description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡、IRQ、队列、RSS/RPS/XPS、协议栈、丢包和远程压测网络影响，输出可验证、可回退的网络优化候选动作，作为 kpbot-app-tuner 的子 skill 使用。
 ---
 
 # Network Optimization

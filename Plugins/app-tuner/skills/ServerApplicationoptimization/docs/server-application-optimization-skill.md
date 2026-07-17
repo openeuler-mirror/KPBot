@@ -194,7 +194,7 @@
 | 输入材料不足 | Agent 基于不完整信息生成错误计划或过宽假设 | 提供应用版本、部署方式、压测命令、目标规格、变更边界和已有观测数据；缺失项要保留为 `<待补充>` |
 | 过度信任 Agent 判断 | 将候选动作直接当成最终调优结论 | Agent 输出是分析建议，生产变更必须由工程师 review 后执行 |
 | 权限边界不清 | Agent 可能尝试执行 SSH、容器、数据库或系统命令 | 运行前明确只读采集、dry-run、允许执行的主机和命令范围 |
-| Skill 版本漂移 | 不同 Agent 环境加载到旧版 skill 或轻量入口未同步 | 使用前确认主源 `skills/server-application-optimization/` 与 `.claude/`、`.opencode/`、`.agents/` 入口一致 |
+| Skill 版本漂移 | 不同 Agent 环境加载到旧版 skill 或轻量入口未同步 | 使用前确认主源 `skills/kpbot-app-tuner/` 与 `.claude/`、`.opencode/`、`.agents/` 入口一致 |
 | 子 skill 输出不完整 | 候选池缺少某个方向的分析，导致决策偏向已有证据 | 检查 `candidate_skill_list` 中所有候选和 coverage subagent 是否返回 `ok` 或明确 `degraded`/`blocked` 原因 |
 | 脚本依赖缺失 | `perf`、`sysstat`、`iostat`、数据库客户端等工具缺失，导致采集降级 | 报告必须记录依赖状态、缺失工具和降级影响，不把降级结果当完整结论 |
 | 上下文压缩或长会话丢信息 | Agent 在长流程中遗漏早期约束、路径或用户确认 | 关键参数写入 checklist、checkpoint、report input，不只保存在对话里 |
@@ -216,12 +216,12 @@
 
 ### Skill vetter 扫描结果
 
-以下结果按 `skill-vetter` 安全审查协议整理，扫描对象为仓库内主源目录 `skills/server-application-optimization/`。扫描时间为 `2026-05-21`，用于发布前安全说明；正式发布前建议再次扫描一次，以最终仓库状态为准。
+以下结果按 `skill-vetter` 安全审查协议整理，扫描对象为仓库内主源目录 `skills/kpbot-app-tuner/`。扫描时间为 `2026-05-21`，用于发布前安全说明；正式发布前建议再次扫描一次，以最终仓库状态为准。
 
 ```text
 SKILL VETTING REPORT
 ═══════════════════════════════════════
-Skill: server-application-optimization
+Skill: kpbot-app-tuner
 Source: repo-local skill directory
 Author: <作者/团队待补充>
 Version: <版本号待补充>
@@ -291,8 +291,8 @@ VERDICT:
 ```bash
 git clone <公开仓库地址>
 cd <repo-dir>
-skills/server-application-optimization/scripts/backup_environment.sh ./output/env
-skills/server-application-optimization/scripts/init_report.sh ./output/report demo-scenario
+skills/kpbot-app-tuner/scripts/backup_environment.sh ./output/env
+skills/kpbot-app-tuner/scripts/init_report.sh ./output/report demo-scenario
 ```
 
 在支持 `SKILL.md` 的 Agent 环境中，可以直接描述优化目标：
@@ -305,7 +305,7 @@ skills/server-application-optimization/scripts/init_report.sh ./output/report de
 也可以使用更接近案例的输入：
 
 ```text
-使用 server-application-optimization skill 帮我优化 MySQL 8U32G 只读场景。
+使用 kpbot-app-tuner skill 帮我优化 MySQL 8U32G 只读场景。
 远端压测，先建立基线，部署和压测方法参考 <测试说明文档路径>。
 ```
 

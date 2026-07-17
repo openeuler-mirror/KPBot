@@ -306,11 +306,11 @@
           <p>诊断结果已确认后，才进入服务健康检查、目标实例身份确认、基线建立和瓶颈识别。</p>
         </div>
       </div>
-      <pre>skills/server-application-optimization/scripts/backup_environment.sh --output-dir ./output/env --non-interactive
+      <pre>skills/kpbot-app-tuner/scripts/backup_environment.sh --output-dir ./output/env --non-interactive
 # 如需通过 Redfish 采集 BIOS 当前配置：
-skills/server-application-optimization/scripts/backup_environment.sh --output-dir ./output/env \
+skills/kpbot-app-tuner/scripts/backup_environment.sh --output-dir ./output/env \
   --bmc-host &lt;BMC_IP&gt; --bmc-user &lt;BMC_USER&gt; --bmc-pass '&lt;BMC_PASS&gt;'
-python3 skills/server-application-optimization/scripts/diagnose_environment.py \
+python3 skills/kpbot-app-tuner/scripts/diagnose_environment.py \
   --backup-dir ./output/env \
   --output ./output/env/environment-diagnosis.json</pre>
       <div class="note">启动问询要求：开始采集前需要询问用户是否提供 BMC IP、用户名、密码。提供时通过 Redfish 只读接口采集 BIOS 当前配置；未提供时跳过 Redfish 并在 <code>bios-redfish.txt</code> 和汇总报告中记录 skipped。诊断完成后必须等待用户确认；未确认、拒绝或要求重建时，不进入服务健康、目标实例身份确认、基线性能确认和瓶颈识别。</div>

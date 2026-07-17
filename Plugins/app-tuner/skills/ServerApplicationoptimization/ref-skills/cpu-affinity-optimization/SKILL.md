@@ -7,11 +7,11 @@ description: 面向通用服务的 CPU 亲和性专项 subskill，聚焦 CPU 拓
 
 `ref-skills/cpu-affinity-optimization/` 是当前仓库内置的通用 CPU 亲和性能力源。
 
-> **本文件是底层能力定义，不应被主流程或外部工具直接引用。** 上层调用应通过 `skills/server-application-optimization/subskills/cpu-affinity-optimization/SKILL.md`（统一入口适配层）进行，该适配层负责决定是否委派给本文件以及如何回退。
+> **本文件是底层能力定义，不应被主流程或外部工具直接引用。** 上层调用应通过 `skills/kpbot-app-tuner/subskills/cpu-affinity-optimization/SKILL.md`（统一入口适配层）进行，该适配层负责决定是否委派给本文件以及如何回退。
 
 它不是单独给用户直接切换使用的第二入口，而是由主框架中的：
 
-- `skills/server-application-optimization/subskills/cpu-affinity-optimization/SKILL.md`
+- `skills/kpbot-app-tuner/subskills/cpu-affinity-optimization/SKILL.md`
 
 统一适配和调用。
 
@@ -123,7 +123,7 @@ description: 面向通用服务的 CPU 亲和性专项 subskill，聚焦 CPU 拓
 
 ## 迭代优化语义
 
-在 `server-application-optimization` 的轮次编排里，本 subskill 不只输出建议，还要输出：
+在 `kpbot-app-tuner` 的轮次编排里，本 subskill 不只输出建议，还要输出：
 
 - 当前轮是否应优先推进 CPU 亲和性优化
 - 当前轮是否已经完成 CPU 亲和性验证

@@ -57,22 +57,22 @@
 │   ├── library-replacement/
 │   └── network-io-performance/
 ├── skills/
-│   └── server-application-optimization/
+│   └── kpbot-app-tuner/
 │       ├── SKILL.md
 │       ├── agents/openai.yaml
 │       ├── references/
 │       ├── scripts/
 │       └── subskills/
-├── .claude/skills/server-application-optimization/
-├── .opencode/skills/server-application-optimization/
-└── .agents/skills/server-application-optimization/
+├── .claude/skills/kpbot-app-tuner/
+├── .opencode/skills/kpbot-app-tuner/
+└── .agents/skills/kpbot-app-tuner/
 ```
 
 ## 核心 Skill
 
 主 skill 位于：
 
-- `skills/server-application-optimization/SKILL.md`
+- `skills/kpbot-app-tuner/SKILL.md`
 
 它负责整体编排，而不是直接承载全部实现逻辑。当前定义的核心流程为：
 
@@ -115,11 +115,11 @@ review、环境还原和案例归档
 
 本仓库采用“单一主源 + 轻量入口”的组织方式：
 
-- 主源：`skills/server-application-optimization/`
-- Claude Code 入口：`.claude/skills/server-application-optimization/`
-- OpenCode 入口：`.opencode/skills/server-application-optimization/`
-- 通用 Agent 入口：`.agents/skills/server-application-optimization/`
-- Codex / Cursor：直接读取 `skills/server-application-optimization/` 主源目录
+- 主源：`skills/kpbot-app-tuner/`
+- Claude Code 入口：`.claude/skills/kpbot-app-tuner/`
+- OpenCode 入口：`.opencode/skills/kpbot-app-tuner/`
+- 通用 Agent 入口：`.agents/skills/kpbot-app-tuner/`
+- Codex / Cursor：直接读取 `skills/kpbot-app-tuner/` 主源目录
 
 维护原则是以主源为准，轻量入口只做发现和跳转。
 
@@ -134,7 +134,7 @@ review、环境还原和案例归档
 
 ## 脚本说明
 
-脚本位于 `skills/server-application-optimization/scripts/`：
+脚本位于 `skills/kpbot-app-tuner/scripts/`：
 
 - `backup_environment.sh`
   按单条命令顺序执行环境采集并落盘
@@ -175,37 +175,37 @@ review、环境还原和案例归档
 
 从以下文件开始阅读：
 
-- `skills/server-application-optimization/SKILL.md`
+- `skills/kpbot-app-tuner/SKILL.md`
 
 ### 2. 初始化环境备份目录
 
 ```bash
-skills/server-application-optimization/scripts/backup_environment.sh ./output/env
+skills/kpbot-app-tuner/scripts/backup_environment.sh ./output/env
 ```
 
 ### 3. 初始化报告目录
 
 ```bash
-skills/server-application-optimization/scripts/init_report.sh ./output/report demo-scenario
+skills/kpbot-app-tuner/scripts/init_report.sh ./output/report demo-scenario
 ```
 
 ### 4. 运行占位 benchmark
 
 ```bash
-skills/server-application-optimization/scripts/run_placeholder_benchmark.sh demo-scenario
+skills/kpbot-app-tuner/scripts/run_placeholder_benchmark.sh demo-scenario
 ```
 
 ### 5. 采集 MySQL 状态
 
 ```bash
-skills/server-application-optimization/scripts/collect_mysql_status.sh \
+skills/kpbot-app-tuner/scripts/collect_mysql_status.sh \
   --output-dir ./output/mysql -- --defaults-extra-file=/path/to/my.cnf
 ```
 
 ### 6. 生成并合并动态 skill 任务
 
 ```bash
-skills/server-application-optimization/scripts/create_subagent_tasks.py \
+skills/kpbot-app-tuner/scripts/create_subagent_tasks.py \
   --scenario demo-scenario \
   --baseline ./output/baseline.json \
   --evidence-dir ./output/evidence \
@@ -216,7 +216,7 @@ skills/server-application-optimization/scripts/create_subagent_tasks.py \
 subagent 输出 JSON 后合并候选池：
 
 ```bash
-skills/server-application-optimization/scripts/merge_subagent_results.py \
+skills/kpbot-app-tuner/scripts/merge_subagent_results.py \
   --results-dir ./output/dynamic-skill-results \
   --output-candidate-pool ./output/candidate_pool.json \
   --output-summary ./output/route-summary.md
@@ -225,7 +225,7 @@ skills/server-application-optimization/scripts/merge_subagent_results.py \
 ### 7. 汇总优化收益
 
 ```bash
-python3 skills/server-application-optimization/scripts/summarize_improvement.py \
+python3 skills/kpbot-app-tuner/scripts/summarize_improvement.py \
   --baseline baseline.json \
   --candidate tuned.json \
   --round-name round-2
@@ -234,13 +234,13 @@ python3 skills/server-application-optimization/scripts/summarize_improvement.py 
 ### 8. 检查外部 `library-replacement`
 
 ```bash
-skills/server-application-optimization/scripts/check_external_library_replacement.sh
+skills/kpbot-app-tuner/scripts/check_external_library_replacement.sh
 ```
 
 ### 9. 显式执行外部 `library-replacement` 安装辅助
 
 ```bash
-skills/server-application-optimization/scripts/install_external_library_replacement.sh
+skills/kpbot-app-tuner/scripts/install_external_library_replacement.sh
 ```
 
 ## 报告输出

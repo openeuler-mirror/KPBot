@@ -2,7 +2,7 @@
 
 ## 目标
 
-本说明统一列出 `server-application-optimization` 及其子 skill 依赖的工具、用途、是否必需，以及缺失时的标准降级策略。
+本说明统一列出 `kpbot-app-tuner` 及其子 skill 依赖的工具、用途、是否必需，以及缺失时的标准降级策略。
 
 核心原则：
 

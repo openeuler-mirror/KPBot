@@ -4387,7 +4387,7 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
             </div>
         </div>
         <div class='debug-info'>341336bf-98e &rarr; 905ef043-6dd</div>
-        <div class='content'><code>/server-application-optimization</code><br><strong>Args:</strong> 读取/Users/a111/Desktop/code/ServerApplicationoptimization/examples/mysql-test/mysql920_sysbench_test.md获取当前测试场景和环境信息，调优临时文件和最终报告帮忙放到/Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/目录</div>
+        <div class='content'><code>/kpbot-app-tuner</code><br><strong>Args:</strong> 读取/Users/a111/Desktop/code/ServerApplicationoptimization/examples/mysql-test/mysql920_sysbench_test.md获取当前测试场景和环境信息，调优临时文件和最终报告帮忙放到/Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/目录</div>
         
     </div>
     
@@ -4406,15 +4406,15 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
             </div>
         </div>
         <div class='debug-info'>2413d925-636 &rarr; 341336bf-98e</div>
-        <div class='content'><div class="slash-command markdown"><p>Base directory for this skill: /Users/a111/Desktop/code/ServerApplicationoptimization/.claude/skills/server-application-optimization</p>
+        <div class='content'><div class="slash-command markdown"><p>Base directory for this skill: /Users/a111/Desktop/code/ServerApplicationoptimization/.claude/skills/kpbot-app-tuner</p>
 <h1>Server Application Optimization Agent (Claude Code Dynamic Workflows Entry)</h1>
 <p>本文件是 Claude Code 的平台入口。它只定义 Claude Code 如何启动 Dynamic Workflows；实现内容仍以主源为准。</p>
-<p><strong>请加载主源</strong>: <code>skills/server-application-optimization/SKILL.md</code></p>
+<p><strong>请加载主源</strong>: <code>skills/kpbot-app-tuner/SKILL.md</code></p>
 <p>主源目录包含完整 SKILL.md、references/、subskills/、scripts/ 等全部资源。本入口仅用于 Claude Code 平台的 skill 发现，所有逻辑、流程和约束定义均在主源中维护。</p>
 <h2>Claude Code Dynamic Workflow Contract</h2>
 <p>Claude Code 调用该 skill 时必须按以下运行时契约执行：</p>
 <ol>
-<li>先加载主源 <code>skills/server-application-optimization/SKILL.md</code>，再按主源的 Phase 1 强制读取列表加载 references。</li>
+<li>先加载主源 <code>skills/kpbot-app-tuner/SKILL.md</code>，再按主源的 Phase 1 强制读取列表加载 references。</li>
 <li>初始化 <code>current_workflow_state</code>，至少包含 <code>current_gate</code>、<code>completed_gates</code>、<code>blocked_gate</code>、<code>next_gate</code>、<code>current_run_id</code>、<code>evidence_status</code>、<code>candidate_skill_list</code>、<code>active_workflow</code> 和 <code>workflow_trace</code>。</li>
 <li>启动阶段只进入 <code>bootstrap</code>、<code>scenario-intake</code>、<code>environment-baseline</code> 等上游 workflow；不得提前批量读取或执行所有 subskills。</li>
 <li>基线确认和深度证据采集完成后，读取 <code>references/candidate-skill-list.md</code> 并生成 <code>candidate_skill_list</code>。</li>
@@ -4457,7 +4457,7 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
             </div>
         </div>
         <div class='debug-info'>cd79ba8c-49e &rarr; 50a15a58-3f0</div>
-        <div class='content markdown'><div class="thinking-content markdown"><p>The user is invoking the <code>/server-application-optimization</code> skill with arguments to read a test scenario file and work with MySQL optimization. Let me first invoke the skill, then read the test scenario file.</p>
+        <div class='content markdown'><div class="thinking-content markdown"><p>The user is invoking the <code>/kpbot-app-tuner</code> skill with arguments to read a test scenario file and work with MySQL optimization. Let me first invoke the skill, then read the test scenario file.</p>
 </div></div>
         
         <div class='fold-bar' data-message-id='d-8' data-border-color='thinking'>
@@ -4478,7 +4478,7 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
     
     <div class='message tool_use d-2 d-7 d-8' data-message-id='d-9' id='msg-d-9'>
         <div class='header'>
-            <span title="ID: call_00_5EXAxszBljMBsJRPZ0753673">💡 Skill <span class='tool-summary'>server-application-optimization</span></span>
+            <span title="ID: call_00_5EXAxszBljMBsJRPZ0753673">💡 Skill <span class='tool-summary'>kpbot-app-tuner</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:47.536Z'>2026-06-26 02:09:47</span>
@@ -4488,15 +4488,15 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
         </div>
         <div class='debug-info'>4b4f6c32-b92 &rarr; cd79ba8c-49e</div>
         <div class='content'>
-<div class="skill-body markdown"><p>Base directory for this skill: /Users/a111/Desktop/code/ServerApplicationoptimization/.claude/skills/server-application-optimization</p>
+<div class="skill-body markdown"><p>Base directory for this skill: /Users/a111/Desktop/code/ServerApplicationoptimization/.claude/skills/kpbot-app-tuner</p>
 <h1>Server Application Optimization Agent (Claude Code Dynamic Workflows Entry)</h1>
 <p>本文件是 Claude Code 的平台入口。它只定义 Claude Code 如何启动 Dynamic Workflows；实现内容仍以主源为准。</p>
-<p><strong>请加载主源</strong>: <code>skills/server-application-optimization/SKILL.md</code></p>
+<p><strong>请加载主源</strong>: <code>skills/kpbot-app-tuner/SKILL.md</code></p>
 <p>主源目录包含完整 SKILL.md、references/、subskills/、scripts/ 等全部资源。本入口仅用于 Claude Code 平台的 skill 发现，所有逻辑、流程和约束定义均在主源中维护。</p>
 <h2>Claude Code Dynamic Workflow Contract</h2>
 <p>Claude Code 调用该 skill 时必须按以下运行时契约执行：</p>
 <ol>
-<li>先加载主源 <code>skills/server-application-optimization/SKILL.md</code>，再按主源的 Phase 1 强制读取列表加载 references。</li>
+<li>先加载主源 <code>skills/kpbot-app-tuner/SKILL.md</code>，再按主源的 Phase 1 强制读取列表加载 references。</li>
 <li>初始化 <code>current_workflow_state</code>，至少包含 <code>current_gate</code>、<code>completed_gates</code>、<code>blocked_gate</code>、<code>next_gate</code>、<code>current_run_id</code>、<code>evidence_status</code>、<code>candidate_skill_list</code>、<code>active_workflow</code> 和 <code>workflow_trace</code>。</li>
 <li>启动阶段只进入 <code>bootstrap</code>、<code>scenario-intake</code>、<code>environment-baseline</code> 等上游 workflow；不得提前批量读取或执行所有 subskills。</li>
 <li>基线确认和深度证据采集完成后，读取 <code>references/candidate-skill-list.md</code> 并生成 <code>candidate_skill_list</code>。</li>
@@ -4527,7 +4527,7 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
         <div class='debug-info'>0e5da2eb-131 &rarr; 6ac0e8f9-360</div>
         <div class='content markdown'><div class="thinking-content markdown"><p>The skill has been loaded. Now I need to follow the Dynamic Workflow Contract:</p>
 <ol>
-<li>First, load the main source <code>skills/server-application-optimization/SKILL.md</code></li>
+<li>First, load the main source <code>skills/kpbot-app-tuner/SKILL.md</code></li>
 <li>Then load the Phase 1 mandatory references</li>
 <li>Read the test scenario file</li>
 <li>Initialize the workflow state</li>
@@ -4574,7 +4574,7 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
     
     <div class='message tool_use pair_first d-2 d-7 d-11' data-message-id='d-12' id='msg-d-12'>
         <div class='header'>
-            <span title="ID: call_00_f31aGPTDbwXGizE44MLg1842">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/SKILL.md</span></span>
+            <span title="ID: call_00_f31aGPTDbwXGizE44MLg1842">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/SKILL.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:50.618Z'>2026-06-26 02:09:50</span>
@@ -4610,7 +4610,7 @@ Instructions say WHAT, not HOW. &quot;Add X&quot; or &quot;Fix Y&quot; doesn&#x2
 <span class="normal">  3</span>
 <span class="normal">  4</span>
 <span class="normal">  5</span></pre></div></td><td class="code"><div><pre><span></span><code>---
-name: server-application-optimization
+name: kpbot-app-tuner
 <span class="gu">description: 使用该 skill 构建和执行服务器应用优化 Agent 的自顶向下优化流程，覆盖用户场景输入、Agent 可选操作确认、基线数据确认、环境诊断与备份、磁盘/网卡/内存/CPU/GPU/NPU/硬件规格瓶颈识别、基线后按进程火焰图/热点函数/热点 so/topdown L1 icache miss/L3 cache miss/线程切换等性能信息采集、根据采集信息生成候选优化 skill 列表、按候选列表依次执行 CPU 亲和性、网络参数、性能库、应用配置、BIOS、OS、编译和 Other 等优化 skill、候选完成后覆盖执行未命中 skill、分轮收益统计、review 与环境还原、案例归档和最终报告输出。适用于 Claude Code、Codex、Cursor、OpenCode 以及其他支持目录式 SKILL.md 的编程 Agent 环境。</span>
 <span class="gu">---</span>
 </pre></div></td></tr></table></div>
@@ -4934,7 +4934,7 @@ name: server-application-optimization
 <span class="normal">316</span>
 <span class="normal">317</span>
 <span class="normal">318</span></pre></div></td><td class="code"><div><pre><span></span><code>---
-name: server-application-optimization
+name: kpbot-app-tuner
 <span class="gu">description: 使用该 skill 构建和执行服务器应用优化 Agent 的自顶向下优化流程，覆盖用户场景输入、Agent 可选操作确认、基线数据确认、环境诊断与备份、磁盘/网卡/内存/CPU/GPU/NPU/硬件规格瓶颈识别、基线后按进程火焰图/热点函数/热点 so/topdown L1 icache miss/L3 cache miss/线程切换等性能信息采集、根据采集信息生成候选优化 skill 列表、按候选列表依次执行 CPU 亲和性、网络参数、性能库、应用配置、BIOS、OS、编译和 Other 等优化 skill、候选完成后覆盖执行未命中 skill、分轮收益统计、review 与环境还原、案例归档和最终报告输出。适用于 Claude Code、Codex、Cursor、OpenCode 以及其他支持目录式 SKILL.md 的编程 Agent 环境。</span>
 <span class="gu">---</span>
 
@@ -5248,7 +5248,7 @@ node<span class="w"> </span>scripts/dynamic_workflow_manager.js<span class="w"> 
 
 <span class="gu">## Compatibility Notes</span>
 
-<span class="k">-</span><span class="w"> </span>主源目录为 <span class="sb">`skills/server-application-optimization/`</span>。
+<span class="k">-</span><span class="w"> </span>主源目录为 <span class="sb">`skills/kpbot-app-tuner/`</span>。
 <span class="k">-</span><span class="w"> </span><span class="sb">`.claude/`</span>、<span class="sb">`.opencode/`</span>、<span class="sb">`.agents/`</span> 中的入口只做发现和跳转；Codex、Cursor 等编程 Agent 可直接加载主源目录，所有行为以本主源为准。
 <span class="k">-</span><span class="w"> </span>仓库内 <span class="sb">`ref-skills/`</span> 作为外部能力源，必须通过本 skill 的候选列表和安全门禁接入。
 </code></pre></div></td></tr></table></div>
@@ -7351,7 +7351,7 @@ mysqladmin<span class="w"> </span>-u<span class="w"> </span>root<span class="w">
     
     <div class='message tool_use pair_first d-2 d-7 d-17' data-message-id='d-18' id='msg-d-18'>
         <div class='header'>
-            <span title="ID: call_00_u5olm5cQT0aUydizURd49241">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/application-agent-architecture.md</span></span>
+            <span title="ID: call_00_u5olm5cQT0aUydizURd49241">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/application-agent-architecture.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:57.344Z'>2026-06-26 02:09:57</span>
@@ -7636,7 +7636,7 @@ Phase 3 完成标志：
     
     <div class='message tool_use pair_first d-2 d-7 d-17' data-message-id='d-20' id='msg-d-20'>
         <div class='header'>
-            <span title="ID: call_01_fsrzMtESdvX4nNL9q8aI6863">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/input-contract.md</span></span>
+            <span title="ID: call_01_fsrzMtESdvX4nNL9q8aI6863">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/input-contract.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:57.762Z'>2026-06-26 02:09:57</span>
@@ -8163,7 +8163,7 @@ Phase 3 完成标志：
     
     <div class='message tool_use pair_first d-2 d-7 d-17' data-message-id='d-22' id='msg-d-22'>
         <div class='header'>
-            <span title="ID: call_02_ZNUsR1KqQWS2MDYcuqBj4382">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/user-interaction-gates.md</span></span>
+            <span title="ID: call_02_ZNUsR1KqQWS2MDYcuqBj4382">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/user-interaction-gates.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:58.221Z'>2026-06-26 02:09:58</span>
@@ -8792,7 +8792,7 @@ Agent 必须按物理节点逐台询问。展示该节点的 ID、角色、地�
     
     <div class='message tool_use pair_first d-2 d-7 d-17' data-message-id='d-24' id='msg-d-24'>
         <div class='header'>
-            <span title="ID: call_03_hIi0zfqSOS77Jm5h1IWy4084">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/checklist.md</span></span>
+            <span title="ID: call_03_hIi0zfqSOS77Jm5h1IWy4084">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/checklist.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:58.668Z'>2026-06-26 02:09:58</span>
@@ -9229,7 +9229,7 @@ Agent 必须按物理节点逐台询问。展示该节点的 ID、角色、地�
     
     <div class='message tool_use pair_first d-2 d-7 d-17' data-message-id='d-26' id='msg-d-26'>
         <div class='header'>
-            <span title="ID: call_04_fmRe0vVzJ3iHStEKGnHK6768">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/environment-diagnosis.md</span></span>
+            <span title="ID: call_04_fmRe0vVzJ3iHStEKGnHK6768">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/environment-diagnosis.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:09:59.133Z'>2026-06-26 02:09:59</span>
@@ -9910,7 +9910,7 @@ Step 1: User Interface Confirmation - present scenario summary, ask for confirma
             </div>
         </div>
         <div class='debug-info'>6c5c485b-364 &rarr; 0884c330-a06</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>ls /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/dynamic_workflow_manager.js 2&gt;/dev/null &amp;&amp; echo &quot;EXISTS&quot; || echo &quot;NOT FOUND&quot;</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>ls /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js 2&gt;/dev/null &amp;&amp; echo &quot;EXISTS&quot; || echo &quot;NOT FOUND&quot;</pre></div></div>
         
     </div>
     
@@ -9929,7 +9929,7 @@ Step 1: User Interface Confirmation - present scenario summary, ask for confirma
             </div>
         </div>
         <div class='debug-info'>52aac600-f1a &rarr; 6c5c485b-364</div>
-        <div class='content'><pre>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/dynamic_workflow_manager.js
+        <div class='content'><pre>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js
 EXISTS</pre></div>
         
     </div>
@@ -10042,7 +10042,7 @@ EXISTS</pre></div>
             </div>
         </div>
         <div class='debug-info'>a4482192-c54 &rarr; e4d3b454-ef4</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js init --run-id run-20260626-000001 --output-dir cc-test-0626-1 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js init --run-id run-20260626-000001 --output-dir cc-test-0626-1 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -10424,7 +10424,7 @@ EXISTS</pre></div>
             </div>
         </div>
         <div class='debug-info'>41b901bc-815 &rarr; 1e496706-269</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate scenario-intake 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate scenario-intake 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate scenario-intake 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate scenario-intake 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -10739,7 +10739,7 @@ EXISTS</pre></div>
             </div>
         </div>
         <div class='debug-info'>e1efaa58-fd2 &rarr; e5ce4cd7-01c</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate environment-backup 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate environment-backup 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -11298,7 +11298,7 @@ Linux localhost.localdomain 6.6.0-95.0.0.99.oe2403sp2.aarch64 #1 SMP Thu Jun  5 
     
     <div class='message tool_use pair_first d-2 d-7 d-82' data-message-id='d-83' id='msg-d-83'>
         <div class='header'>
-            <span title="ID: call_00_Ef5f8bi81WdZmF4mUarj1836">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/backup_environment.sh</span></span>
+            <span title="ID: call_00_Ef5f8bi81WdZmF4mUarj1836">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/backup_environment.sh</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:13:57.274Z'>2026-06-26 02:13:57</span>
@@ -12928,7 +12928,7 @@ log_manifest<span class="w"> </span><span class="s2">&quot;END environment backu
             </div>
         </div>
         <div class='debug-info'>c24e2ec6-1f0 &rarr; 5c30f019-2ee</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>scp -o StrictHostKeyChecking=no /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/backup_environment.sh root@192.168.90.170:/tmp/backup_environment.sh 2&gt;&amp;1 &amp;&amp; ssh root@192.168.90.170 &quot;chmod +x /tmp/backup_environment.sh &amp;&amp; /tmp/backup_environment.sh --output-dir /tmp/env-backup-0626 --non-interactive&quot; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>scp -o StrictHostKeyChecking=no /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/backup_environment.sh root@192.168.90.170:/tmp/backup_environment.sh 2&gt;&amp;1 &amp;&amp; ssh root@192.168.90.170 &quot;chmod +x /tmp/backup_environment.sh &amp;&amp; /tmp/backup_environment.sh --output-dir /tmp/env-backup-0626 --non-interactive&quot; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -12983,7 +12983,7 @@ Generated summary report at /tmp/env-backup-0626/environment-backup-report.html<
             </div>
         </div>
         <div class='debug-info'>749b2ae9-3c8 &rarr; c24e2ec6-1f0</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>scp -o StrictHostKeyChecking=no /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/backup_environment.sh sxk@192.168.90.105:/tmp/backup_environment.sh 2&gt;&amp;1 &amp;&amp; ssh sxk@192.168.90.105 &quot;chmod +x /tmp/backup_environment.sh &amp;&amp; /tmp/backup_environment.sh --output-dir /tmp/env-backup-0626 --non-interactive&quot; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>scp -o StrictHostKeyChecking=no /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/backup_environment.sh sxk@192.168.90.105:/tmp/backup_environment.sh 2&gt;&amp;1 &amp;&amp; ssh sxk@192.168.90.105 &quot;chmod +x /tmp/backup_environment.sh &amp;&amp; /tmp/backup_environment.sh --output-dir /tmp/env-backup-0626 --non-interactive&quot; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -14505,7 +14505,7 @@ innodb_io_capacity	10000</pre>
             </div>
         </div>
         <div class='debug-info'>b033d571-1a8 &rarr; 9badb1e2-2ca</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate environment-backup --evidence cc-test-0626-1/backup/ 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate environment-diagnosis 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate environment-diagnosis 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate service-health-check 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate environment-backup --evidence cc-test-0626-1/backup/ 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate environment-diagnosis 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate environment-diagnosis 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate service-health-check 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -15062,7 +15062,7 @@ Threads fairness:
             </div>
         </div>
         <div class='debug-info'>f19bf256-73d &rarr; b8d57408-fd9</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate service-health-check 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate baseline 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate service-health-check 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate baseline 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -15783,7 +15783,7 @@ Average:     127    0.01    0.00    0.00    0.00    0.00    0.00    0.00    0.00
             </div>
         </div>
         <div class='debug-info'>54beb2f8-057 &rarr; 4b111eab-637</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate baseline --evidence cc-test-0626-1/baseline/ 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate evidence-collection 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate baseline --evidence cc-test-0626-1/baseline/ 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate evidence-collection 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -16747,7 +16747,7 @@ Based on the evidence:</p>
     
     <div class='message tool_use pair_first d-2 d-7 d-211' data-message-id='d-212' id='msg-d-212'>
         <div class='header'>
-            <span title="ID: call_00_nrfTrSzMi9VXTzuKzcj96423">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/candidate-skill-list.md</span></span>
+            <span title="ID: call_00_nrfTrSzMi9VXTzuKzcj96423">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/candidate-skill-list.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:25:12.424Z'>2026-06-26 02:25:12</span>
@@ -17366,7 +17366,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
             </div>
         </div>
         <div class='debug-info'>807d9ff1-f56 &rarr; 862c789b-ea0</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate evidence-collection 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate candidate-routing 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-evidence --state cc-test-0626-1/workflow_state.json --status current 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-candidates --state cc-test-0626-1/workflow_state.json --candidates &#x27;[{&quot;candidate_id&quot;:&quot;candidate-001&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;cpu-affinity-optimization&quot;,&quot;priority&quot;:&quot;highest&quot;,&quot;reason&quot;:&quot;强制基线检查 + context_switch_rate=190835/sec, cpu_migrations=57784/sec&quot;,&quot;source_signal&quot;:&quot;context_switch_and_llc_miss_high&quot;},{&quot;candidate_id&quot;:&quot;candidate-002&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;compiler-optimization&quot;,&quot;priority&quot;:&quot;high&quot;,&quot;reason&quot;:&quot;L1 I-cache misses=11.5B/10s, IPC=0.90, MySQL自编译可优化&quot;,&quot;source_signal&quot;:&quot;l1_icache_miss_high&quot;},{&quot;candidate_id&quot;:&quot;candidate-003&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;application-config-optimization&quot;,&quot;priority&quot;:&quot;medium&quot;,&quot;reason&quot;:&quot;Top hotspot my_strnxfrm_any_uca(14.01%) in filesort, sort_buffer/query优化可调整&quot;,&quot;source_signal&quot;:&quot;database_internal_hotspot&quot;},{&quot;candidate_id&quot;:&quot;candidate-004&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;os-optimization&quot;,&quot;priority&quot;:&quot;medium&quot;,&quot;reason&quot;:&quot;THP=always影响延迟, irqbalance活跃干扰亲和性&quot;,&quot;source_signal&quot;:&quot;os_config_issues&quot;}]&#x27; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate evidence-collection 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate candidate-routing 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-evidence --state cc-test-0626-1/workflow_state.json --status current 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-candidates --state cc-test-0626-1/workflow_state.json --candidates &#x27;[{&quot;candidate_id&quot;:&quot;candidate-001&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;cpu-affinity-optimization&quot;,&quot;priority&quot;:&quot;highest&quot;,&quot;reason&quot;:&quot;强制基线检查 + context_switch_rate=190835/sec, cpu_migrations=57784/sec&quot;,&quot;source_signal&quot;:&quot;context_switch_and_llc_miss_high&quot;},{&quot;candidate_id&quot;:&quot;candidate-002&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;compiler-optimization&quot;,&quot;priority&quot;:&quot;high&quot;,&quot;reason&quot;:&quot;L1 I-cache misses=11.5B/10s, IPC=0.90, MySQL自编译可优化&quot;,&quot;source_signal&quot;:&quot;l1_icache_miss_high&quot;},{&quot;candidate_id&quot;:&quot;candidate-003&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;application-config-optimization&quot;,&quot;priority&quot;:&quot;medium&quot;,&quot;reason&quot;:&quot;Top hotspot my_strnxfrm_any_uca(14.01%) in filesort, sort_buffer/query优化可调整&quot;,&quot;source_signal&quot;:&quot;database_internal_hotspot&quot;},{&quot;candidate_id&quot;:&quot;candidate-004&quot;,&quot;phase&quot;:&quot;evidence_candidate&quot;,&quot;subskill_name&quot;:&quot;os-optimization&quot;,&quot;priority&quot;:&quot;medium&quot;,&quot;reason&quot;:&quot;THP=always影响延迟, irqbalance活跃干扰亲和性&quot;,&quot;source_signal&quot;:&quot;os_config_issues&quot;}]&#x27; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -17479,7 +17479,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
             </div>
         </div>
         <div class='debug-info'>b146088c-663 &rarr; f382da65-4b0</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js auto-coverage --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate candidate-routing 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate candidate-skill-iteration 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js auto-coverage --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate candidate-routing 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate candidate-skill-iteration 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -17681,7 +17681,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
             </div>
         </div>
         <div class='debug-info'>35fee1ed-49e &rarr; aeff786e-9ca</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill cpu-affinity-optimization --status running 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill cpu-affinity-optimization --status running 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -17819,7 +17819,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
 <li>CPU 0-7 100% 满载</li>
 </ul>
 <h2>要求</h2>
-<p>请先读取 <code>skills/server-application-optimization/subskills/cpu-affinity-optimization/SKILL.md</code> 获取完整指导。</p>
+<p>请先读取 <code>skills/kpbot-app-tuner/subskills/cpu-affinity-optimization/SKILL.md</code> 获取完整指导。</p>
 <h3>Step 0：物理拓扑发现（必须最先执行）</h3>
 <p>通过 SSH 到 192.168.90.170 执行以下命令并记录结果：</p>
 <ol>
@@ -18042,7 +18042,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
     
     <div class='message tool_use sidechain pair_first d-2 d-7 d-229 d-231 d-234' data-message-id='d-235' id='msg-d-235'>
         <div class='header'>
-            <span title="ID: call_00_Ed6XCnOyhDKPzxRprrSa1031">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/subskills/cpu-affinity-optimization/SKILL.md</span></span>
+            <span title="ID: call_00_Ed6XCnOyhDKPzxRprrSa1031">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/subskills/cpu-affinity-optimization/SKILL.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:26:03.258Z'>2026-06-26 02:26:03</span>
@@ -18079,7 +18079,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
 <span class="normal">  4</span>
 <span class="normal">  5</span></pre></div></td><td class="code"><div><pre><span></span><code>---
 name: cpu-affinity-optimization
-<span class="gu">description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 server-application-optimization 的子 skill 使用。</span>
+<span class="gu">description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 kpbot-app-tuner 的子 skill 使用。</span>
 <span class="gu">---</span>
 </pre></div></td></tr></table></div>
 </div>
@@ -18538,7 +18538,7 @@ name: cpu-affinity-optimization
 <span class="normal">452</span>
 <span class="normal">453</span></pre></div></td><td class="code"><div><pre><span></span><code>---
 name: cpu-affinity-optimization
-<span class="gu">description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 server-application-optimization 的子 skill 使用。</span>
+<span class="gu">description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 kpbot-app-tuner 的子 skill 使用。</span>
 <span class="gu">---</span>
 
 <span class="gh"># CPU Affinity Optimization</span>
@@ -27529,7 +27529,7 @@ Threads fairness:
             </div>
         </div>
         <div class='debug-info'>0d2df4cc-dd6 &rarr; 2491d2a0-f85</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill cpu-affinity-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;final_tps&quot;:11618,&quot;gain_pct&quot;:5.5}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;cpu-affinity-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:5.5,&quot;gain_p95_pct&quot;:3.5,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-timing --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;optimization_timing_details&quot;:[{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;cpu-affinity-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:480,&quot;implementation_seconds&quot;:300,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:960}]}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;cpu-affinity-optimization&quot;,&quot;agent_id&quot;:&quot;a9189a9bbb289a4f3&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill cpu-affinity-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;final_tps&quot;:11618,&quot;gain_pct&quot;:5.5}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;cpu-affinity-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:5.5,&quot;gain_p95_pct&quot;:3.5,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-timing --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;optimization_timing_details&quot;:[{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;cpu-affinity-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:480,&quot;implementation_seconds&quot;:300,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:960}]}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;cpu-affinity-optimization&quot;,&quot;agent_id&quot;:&quot;a9189a9bbb289a4f3&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -27685,7 +27685,7 @@ Threads fairness:
             </div>
         </div>
         <div class='debug-info'>f3e980a1-432 &rarr; ce59df65-1b5</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill compiler-optimization --status running 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill compiler-optimization --status running 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -27796,7 +27796,7 @@ Threads fairness:
 <li>MySQL 编译选项: 需从备份中确认</li>
 </ul>
 <h2>要求</h2>
-<p>请先读取 <code>skills/server-application-optimization/subskills/compiler-optimization/SKILL.md</code> 获取完整指导。</p>
+<p>请先读取 <code>skills/kpbot-app-tuner/subskills/compiler-optimization/SKILL.md</code> 获取完整指导。</p>
 <h3>Step 1：分析当前编译配置</h3>
 <p>通过 SSH 到 192.168.90.170 检查：</p>
 <ul>
@@ -27967,7 +27967,7 @@ Threads fairness:
     
     <div class='message tool_use sidechain pair_first d-2 d-7 d-450 d-452 d-454' data-message-id='d-455' id='msg-d-455'>
         <div class='header'>
-            <span title="ID: call_00_yKJGeGBeLQOjiMaBCuvA1834">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/subskills/compiler-optimization/SKILL.md</span></span>
+            <span title="ID: call_00_yKJGeGBeLQOjiMaBCuvA1834">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/subskills/compiler-optimization/SKILL.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T02:43:11.689Z'>2026-06-26 02:43:11</span>
@@ -28004,7 +28004,7 @@ Threads fairness:
 <span class="normal"> 4</span>
 <span class="normal"> 5</span></pre></div></td><td class="code"><div><pre><span></span><code>---
 name: compiler-optimization
-<span class="gu">description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 server-application-optimization 的子 skill 使用。</span>
+<span class="gu">description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 kpbot-app-tuner 的子 skill 使用。</span>
 <span class="gu">---</span>
 </pre></div></td></tr></table></div>
 </div>
@@ -28107,7 +28107,7 @@ name: compiler-optimization
 <span class="normal">96</span>
 <span class="normal">97</span></pre></div></td><td class="code"><div><pre><span></span><code>---
 name: compiler-optimization
-<span class="gu">description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 server-application-optimization 的子 skill 使用。</span>
+<span class="gu">description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 kpbot-app-tuner 的子 skill 使用。</span>
 <span class="gu">---</span>
 
 <span class="gh"># Compiler Optimization</span>
@@ -41490,7 +41490,7 @@ final_status
             </div>
         </div>
         <div class='debug-info'>ce42a22f-0d3 &rarr; 214b3069-23a</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill compiler-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;gain_pct&quot;:4.52,&quot;final_tps&quot;:12144}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;compiler-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:4.52,&quot;gain_p95_pct&quot;:3.63,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-timing --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;optimization_timing_details&quot;:[{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;compiler-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:300,&quot;implementation_seconds&quot;:2700,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:3540}]}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;compiler-optimization&quot;,&quot;agent_id&quot;:&quot;aaef2b5f4a7481a6f&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill compiler-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;gain_pct&quot;:4.52,&quot;final_tps&quot;:12144}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;compiler-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:4.52,&quot;gain_p95_pct&quot;:3.63,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-timing --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;optimization_timing_details&quot;:[{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;compiler-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:300,&quot;implementation_seconds&quot;:2700,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:3540}]}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;compiler-optimization&quot;,&quot;agent_id&quot;:&quot;aaef2b5f4a7481a6f&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -41568,7 +41568,7 @@ final_status
             </div>
         </div>
         <div class='debug-info'>83f448e0-78b &rarr; 38c15bcc-507</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill application-config-optimization --status running 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill application-config-optimization --status running 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -41696,7 +41696,7 @@ max_connections=500
 <li>Buffer pool hit rate was ~12% at cold start</li>
 </ul>
 <h2>要求</h2>
-<p>请先读取 <code>skills/server-application-optimization/subskills/application-config-optimization/SKILL.md</code> 获取完整指导。</p>
+<p>请先读取 <code>skills/kpbot-app-tuner/subskills/application-config-optimization/SKILL.md</code> 获取完整指导。</p>
 <h3>Step 1：分析当前配置</h3>
 <p>通过 SSH 检查 MySQL 运行时状态：</p>
 <ul>
@@ -42062,7 +42062,7 @@ max_connections=500
     
     <div class='message tool_use sidechain pair_first d-2 d-7 d-716 d-718 d-731' data-message-id='d-734' id='msg-d-734'>
         <div class='header'>
-            <span title="ID: call_01_VtmAm17wG1yHDeBuAFbS4691">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/subskills/application-config-optimization/SKILL.md</span></span>
+            <span title="ID: call_01_VtmAm17wG1yHDeBuAFbS4691">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/subskills/application-config-optimization/SKILL.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T03:47:46.417Z'>2026-06-26 03:47:46</span>
@@ -42099,7 +42099,7 @@ max_connections=500
 <span class="normal">  4</span>
 <span class="normal">  5</span></pre></div></td><td class="code"><div><pre><span></span><code>---
 name: application-config-optimization
-<span class="gu">description: 综合瓶颈分析结果输出线程数、队列、批量、缓存、连接等应用层最佳性能配置建议，作为 server-application-optimization 的子 skill 使用。</span>
+<span class="gu">description: 综合瓶颈分析结果输出线程数、队列、批量、缓存、连接等应用层最佳性能配置建议，作为 kpbot-app-tuner 的子 skill 使用。</span>
 <span class="gu">---</span>
 </pre></div></td></tr></table></div>
 </div>
@@ -42229,7 +42229,7 @@ name: application-config-optimization
 <span class="normal">123</span>
 <span class="normal">124</span></pre></div></td><td class="code"><div><pre><span></span><code>---
 name: application-config-optimization
-<span class="gu">description: 综合瓶颈分析结果输出线程数、队列、批量、缓存、连接等应用层最佳性能配置建议，作为 server-application-optimization 的子 skill 使用。</span>
+<span class="gu">description: 综合瓶颈分析结果输出线程数、队列、批量、缓存、连接等应用层最佳性能配置建议，作为 kpbot-app-tuner 的子 skill 使用。</span>
 <span class="gu">---</span>
 
 <span class="gh"># Application Config Optimization</span>
@@ -49065,7 +49065,7 @@ thread_cache_size	64</pre>
             </div>
         </div>
         <div class='debug-info'>2ba5bac7-62b &rarr; 9b3ff5d7-ebb</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill application-config-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;gain_pct&quot;:1.7,&quot;final_tps&quot;:10967}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;application-config-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:1.7,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;application-config-optimization&quot;,&quot;agent_id&quot;:&quot;ad01d8bda0dee8c23&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill os-optimization --status running 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill application-config-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;gain_pct&quot;:1.7,&quot;final_tps&quot;:10967}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;application-config-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:1.7,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;application-config-optimization&quot;,&quot;agent_id&quot;:&quot;ad01d8bda0dee8c23&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill os-optimization --status running 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -49217,7 +49217,7 @@ thread_cache_size	64</pre>
 <li>无 HugePages 配置</li>
 </ul>
 <h2>要求</h2>
-<p>请先读取 <code>skills/server-application-optimization/subskills/os-optimization/SKILL.md</code> 获取完整指导。</p>
+<p>请先读取 <code>skills/kpbot-app-tuner/subskills/os-optimization/SKILL.md</code> 获取完整指导。</p>
 <h3>分析重点</h3>
 <ol>
 <li>THP 策略：always → madvise 或 never（数据库场景建议）</li>
@@ -49385,7 +49385,7 @@ thread_cache_size	64</pre>
     
     <div class='message tool_use sidechain pair_first d-2 d-7 d-917 d-919 d-921' data-message-id='d-922' id='msg-d-922'>
         <div class='header'>
-            <span title="ID: call_00_ilWzqT8b0e3xc8IrMkpL5875">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/subskills/os-optimization/SKILL.md</span></span>
+            <span title="ID: call_00_ilWzqT8b0e3xc8IrMkpL5875">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/subskills/os-optimization/SKILL.md</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T03:57:40.736Z'>2026-06-26 03:57:40</span>
@@ -54887,7 +54887,7 @@ candidate_actions: 7</pre></div>
             </div>
         </div>
         <div class='debug-info'>d4a6c360-394 &rarr; f5c4c993-828</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill os-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;os-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:0.5,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;os-optimization&quot;,&quot;agent_id&quot;:&quot;a1d0a4853909ac4a9&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill os-optimization --status completed --result &#x27;{&quot;rounds&quot;:1,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-iteration-state --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;os-optimization&quot;,&quot;round&quot;:1,&quot;gain_tps_pct&quot;:0.5,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js append-subagent-log --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;subskill&quot;:&quot;os-optimization&quot;,&quot;agent_id&quot;:&quot;a1d0a4853909ac4a9&quot;,&quot;status&quot;:&quot;completed&quot;}&#x27; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -55118,7 +55118,7 @@ Threads fairness:
             </div>
         </div>
         <div class='debug-info'>f43acf1e-6f2 &rarr; cb5f2951-885</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate candidate-skill-iteration 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate coverage-skill-iteration 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate candidate-skill-iteration 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate coverage-skill-iteration 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -55233,7 +55233,7 @@ Threads fairness:
         </div>
         <div class='debug-info'>be05d0e7-dc5 &rarr; ee9bb4a1-c40</div>
         <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>for skill in performance-library-selection network-optimization bios-optimization accelerator-optimization hardware-upgrade-analysis other-optimization; do
-  node skills/server-application-optimization/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill &quot;$skill&quot; --status completed 2&gt;&amp;1
+  node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js update-candidate-status --state cc-test-0626-1/workflow_state.json --subskill &quot;$skill&quot; --status completed 2&gt;&amp;1
 done</pre></div></div>
         
     </div>
@@ -55321,7 +55321,7 @@ Error: Candidate skill &quot;other-optimization&quot; not found in candidate_ski
             </div>
         </div>
         <div class='debug-info'>521d3d6d-1d2 &rarr; 67185e4b-061</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js summary --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1 | head -40</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js summary --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1 | head -40</pre></div></div>
         
     </div>
     
@@ -55435,7 +55435,7 @@ Error: Candidate skill &quot;other-optimization&quot; not found in candidate_ski
             </div>
         </div>
         <div class='debug-info'>5ed1a4e5-2c7 &rarr; adb2eb15-b9d</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate coverage-skill-iteration 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-per-skill-gains --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;cpu-affinity-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:5.5,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;compiler-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:4.52,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;application-config-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:1.7,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;os-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:0.5,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;performance-library-selection&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;skipped&quot;,&quot;reason&quot;:&quot;no_third_party_so_hotspot&quot;},&quot;network-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;skipped&quot;,&quot;reason&quot;:&quot;no_network_hotspot_in_perf&quot;},&quot;bios-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;degraded&quot;,&quot;reason&quot;:&quot;bmc_redfish_skipped_by_user&quot;},&quot;accelerator-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;not_applicable&quot;,&quot;reason&quot;:&quot;no_gpu_npu_accelerator&quot;},&quot;hardware-upgrade-analysis&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;not_applicable&quot;,&quot;reason&quot;:&quot;target_spec_8u32g_already_met&quot;},&quot;other-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;skipped&quot;,&quot;reason&quot;:&quot;all_identified_issues_covered&quot;}}&#x27; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate coverage-skill-iteration 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-per-skill-gains --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;cpu-affinity-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:5.5,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;compiler-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:4.52,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;application-config-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:1.7,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;os-optimization&quot;:{&quot;rounds&quot;:1,&quot;gain_pct&quot;:0.5,&quot;status&quot;:&quot;completed&quot;,&quot;attribution&quot;:&quot;single_variable_round&quot;},&quot;performance-library-selection&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;skipped&quot;,&quot;reason&quot;:&quot;no_third_party_so_hotspot&quot;},&quot;network-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;skipped&quot;,&quot;reason&quot;:&quot;no_network_hotspot_in_perf&quot;},&quot;bios-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;degraded&quot;,&quot;reason&quot;:&quot;bmc_redfish_skipped_by_user&quot;},&quot;accelerator-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;not_applicable&quot;,&quot;reason&quot;:&quot;no_gpu_npu_accelerator&quot;},&quot;hardware-upgrade-analysis&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;not_applicable&quot;,&quot;reason&quot;:&quot;target_spec_8u32g_already_met&quot;},&quot;other-optimization&quot;:{&quot;rounds&quot;:0,&quot;gain_pct&quot;:0,&quot;status&quot;:&quot;skipped&quot;,&quot;reason&quot;:&quot;all_identified_issues_covered&quot;}}&#x27; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -55558,7 +55558,7 @@ Error: Candidate skill &quot;other-optimization&quot; not found in candidate_ski
             </div>
         </div>
         <div class='debug-info'>76f70bb0-ab0 &rarr; 20abce36-f67</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js set-timing --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;agent_timing_summary&quot;:{&quot;total_analysis_seconds&quot;:1200,&quot;total_implementation_seconds&quot;:3600,&quot;total_validation_seconds&quot;:600,&quot;total_seconds&quot;:5400,&quot;per_gate&quot;:{&quot;bootstrap&quot;:30,&quot;scenario-intake&quot;:120,&quot;environment-backup&quot;:300,&quot;environment-diagnosis&quot;:180,&quot;service-health-check&quot;:60,&quot;baseline&quot;:300,&quot;evidence-collection&quot;:300,&quot;candidate-routing&quot;:120,&quot;candidate-skill-iteration&quot;:6000,&quot;coverage-skill-iteration&quot;:60,&quot;report&quot;:180}},&quot;optimization_timing&quot;:[{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;cpu-affinity-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:480,&quot;implementation_seconds&quot;:300,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:960},{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;compiler-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:300,&quot;implementation_seconds&quot;:2700,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:3540},{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;application-config-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:240,&quot;implementation_seconds&quot;:180,&quot;validation_seconds&quot;:120,&quot;total_seconds&quot;:540},{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;os-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:120,&quot;implementation_seconds&quot;:60,&quot;validation_seconds&quot;:60,&quot;total_seconds&quot;:240}]}&#x27; 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js set-timing --state cc-test-0626-1/workflow_state.json --data &#x27;{&quot;agent_timing_summary&quot;:{&quot;total_analysis_seconds&quot;:1200,&quot;total_implementation_seconds&quot;:3600,&quot;total_validation_seconds&quot;:600,&quot;total_seconds&quot;:5400,&quot;per_gate&quot;:{&quot;bootstrap&quot;:30,&quot;scenario-intake&quot;:120,&quot;environment-backup&quot;:300,&quot;environment-diagnosis&quot;:180,&quot;service-health-check&quot;:60,&quot;baseline&quot;:300,&quot;evidence-collection&quot;:300,&quot;candidate-routing&quot;:120,&quot;candidate-skill-iteration&quot;:6000,&quot;coverage-skill-iteration&quot;:60,&quot;report&quot;:180}},&quot;optimization_timing&quot;:[{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;cpu-affinity-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:480,&quot;implementation_seconds&quot;:300,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:960},{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;compiler-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:300,&quot;implementation_seconds&quot;:2700,&quot;validation_seconds&quot;:180,&quot;total_seconds&quot;:3540},{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;application-config-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:240,&quot;implementation_seconds&quot;:180,&quot;validation_seconds&quot;:120,&quot;total_seconds&quot;:540},{&quot;stage&quot;:&quot;candidate-skill-iteration&quot;,&quot;skill_name&quot;:&quot;os-optimization&quot;,&quot;round_name&quot;:&quot;round-1&quot;,&quot;status&quot;:&quot;completed&quot;,&quot;analysis_seconds&quot;:120,&quot;implementation_seconds&quot;:60,&quot;validation_seconds&quot;:60,&quot;total_seconds&quot;:240}]}&#x27; 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -55628,7 +55628,7 @@ Error: Candidate skill &quot;other-optimization&quot; not found in candidate_ski
             </div>
         </div>
         <div class='debug-info'>bb1d2627-680 &rarr; e853cf87-178</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js report-ready --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js report-ready --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -55827,7 +55827,7 @@ Error: Candidate skill &quot;other-optimization&quot; not found in candidate_ski
             </div>
         </div>
         <div class='debug-info'>6e7c74e1-3fb &rarr; 28d116f2-ccb</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js summary --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js summary --state cc-test-0626-1/workflow_state.json 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -56332,7 +56332,7 @@ Error: Candidate skill &quot;other-optimization&quot; not found in candidate_ski
     
     <div class='message tool_use pair_first d-2 d-7 d-1094' data-message-id='d-1097' id='msg-d-1097'>
         <div class='header'>
-            <span title="ID: call_01_ttFW7MDTzuwHc4MLXzms6915">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/references/report-generation.md, lines 1-80</span></span>
+            <span title="ID: call_01_ttFW7MDTzuwHc4MLXzms6915">📄 Read <span class='tool-summary'>/Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/references/report-generation.md, lines 1-80</span></span>
             <div class='header-info'>
                 <div class='timestamp-row'>
                     <span class='timestamp' data-timestamp='2026-06-26T04:02:09.033Z'>2026-06-26 04:02:09</span>
@@ -56578,7 +56578,7 @@ python3<span class="w"> </span>scripts/generate_report.py<span class="w"> </span
             </div>
         </div>
         <div class='debug-info'>f35c7d3d-6fd &rarr; e3b72c14-fde</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/generate_report.py --help 2&gt;&amp;1 | head -20</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/generate_report.py --help 2&gt;&amp;1 | head -20</pre></div></div>
         
     </div>
     
@@ -57122,7 +57122,7 @@ options:
             </div>
         </div>
         <div class='debug-info'>6b8275b3-867 &rarr; bccf7192-7c8</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/generate_report.py --input /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/report-input.json --output /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/reports/final-report.md 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/generate_report.py --input /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/report-input.json --output /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/reports/final-report.md 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -58857,7 +58857,7 @@ The report was generated with missing architecture fields. Fill these before fin
             </div>
         </div>
         <div class='debug-info'>691464f6-dd7 &rarr; 553ee838-cce</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/generate_report.py --input /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/report-input.json --output /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/reports/final-report.md 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/generate_report.py --input /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/report-input.json --output /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/reports/final-report.md 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -59004,7 +59004,7 @@ Missing architecture fields: environment_snapshot, workflow_trace, optimization_
             </div>
         </div>
         <div class='debug-info'>008a67cd-66e &rarr; af373319-a1a</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/server-application-optimization/scripts/generate_report.py --input /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/report-input.json --output /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/reports/final-report.md 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>python3 /Users/a111/Desktop/code/ServerApplicationoptimization/skills/kpbot-app-tuner/scripts/generate_report.py --input /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/report-input.json --output /Users/a111/Desktop/code/ServerApplicationoptimization/cc-test-0626-1/reports/final-report.md 2&gt;&amp;1</pre></div></div>
         
     </div>
     
@@ -59509,7 +59509,7 @@ No free-form summary was provided; see structured sections below.
             </div>
         </div>
         <div class='debug-info'>29dc0fbe-9ba &rarr; 73c2139b-d7f</div>
-        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate report 2&gt;&amp;1 &amp;&amp; node skills/server-application-optimization/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate report 2&gt;&amp;1</pre></div></div>
+        <div class='content'><div class='bash-tool-content'><pre class='bash-tool-command'>node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-enter --state cc-test-0626-1/workflow_state.json --gate report 2&gt;&amp;1 &amp;&amp; node skills/kpbot-app-tuner/scripts/dynamic_workflow_manager.js gate-complete --state cc-test-0626-1/workflow_state.json --gate report 2&gt;&amp;1</pre></div></div>
         
     </div>
     

@@ -1,6 +1,6 @@
 # 内置 Subskill 目录
 
-`ref-skills/` 用于放置当前仓库内置的第三方或外部来源 skill，作为 `server-application-optimization` 主框架的默认扩展能力来源。
+`ref-skills/` 用于放置当前仓库内置的第三方或外部来源 skill，作为 `kpbot-app-tuner` 主框架的默认扩展能力来源。
 
 当前已纳入：
 
