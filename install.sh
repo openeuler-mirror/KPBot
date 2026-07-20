@@ -346,6 +346,24 @@ for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
     done
 done
 
+# Copy shared scripts (e.g. print_logo.sh) into skills whose SKILL.md references them
+for skill_dir in "$CONFIG_ROOT/skills"/*/; do
+    [ -d "$skill_dir" ] || continue
+    [ -f "$skill_dir/SKILL.md" ] || continue
+        for shared_script in "$PLUGINS_DIR/common/scripts/"*.sh; do
+        [ -f "$shared_script" ] || continue
+        script_name=$(basename "$shared_script")
+        if grep -q "$script_name" "$skill_dir/SKILL.md" 2>/dev/null; then
+            mkdir -p "$skill_dir/scripts"
+            [ -f "$skill_dir/scripts/$script_name" ] && continue
+            cp "$shared_script" "$skill_dir/scripts/"
+        fi
+    done
+done
+
+# Ensure helper scripts (e.g. print_logo.sh) are executable
+chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*.sh 2>/dev/null || true
+
 # Final count (after overlays, skips, and discovery links)
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
 if [ "$link_count" -gt 0 ]; then
