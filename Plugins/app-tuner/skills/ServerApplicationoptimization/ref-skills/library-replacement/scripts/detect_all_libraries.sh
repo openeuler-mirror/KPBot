@@ -132,9 +132,9 @@ fi
 
 # 14. 键值存储引擎 (kv_storage)
 if grep -qiE "librocksdbjni|librocksdb" "$REPORT_FILE"; then
-    add_detection "kv_storage" "RocksDB" "综合" "检测到 RocksDB 动态库 (librocksdbjni/librocksdb)"
+    add_detection "kv_storage" "RocksDB (社区版)" "综合" "检测到 RocksDB 动态库 (librocksdbjni/librocksdb)"
 elif grep -qiE "\"symbol\": \"[^\"]*rocksdb::|\"symbol\": \"[^\"]*(DBImpl::Write|WriteBatch|CompactionJob|MemTable|BlockBasedTable)" "$REPORT_FILE"; then
-    add_detection "kv_storage" "RocksDB" "动态" "热点包含 RocksDB LSM 引擎符号"
+    add_detection "kv_storage" "RocksDB (社区版)" "动态" "热点包含 RocksDB LSM 引擎符号"
 fi
 
 # ==============================================================================

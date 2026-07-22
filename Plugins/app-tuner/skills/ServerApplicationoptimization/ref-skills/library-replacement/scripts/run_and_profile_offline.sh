@@ -15,44 +15,94 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 DATA_FILE="/tmp/perf_$$.data"
+LIBS_TMP="/tmp/libs_$$.txt"
 
 # 确保脚本退出时清理临时采样文件，但不清理生成的报告文件
-trap 'rm -f "$DATA_FILE"' EXIT
+trap 'rm -f "$DATA_FILE" "$LIBS_TMP"' EXIT
 
 PS_OUTPUT=""
 LSOF_OUTPUT=""
 PROCESS_FOUND=0
 
 # -------------------------------------------------------------------------
-# 1. 启动 Perf 并包裹目标命令 (采集最多 10 秒)
+# 1. 直接启动目标进程并拿到其 PID，再用 perf 采样该 PID
+#    不用 `perf record -- $COMMAND`：那样目标进程是 perf 的孙进程，
+#    pgrep -P 只能取到 perf 自身，lsof 会采到 perf 的库而非应用库。
+#    采样窗口默认 30s：JVM 类负载启动慢，librocksdbjni.so 等 JNI 库懒加载，
+#    10s 往往来不及覆盖；可通过环境变量 PERF_WINDOW 覆盖。
 # -------------------------------------------------------------------------
+PERF_WINDOW="${PERF_WINDOW:-30}"
+# 用 bash -c 启动：子 shell 会 exec 成目标命令本身（comm=java/sleep），
+# 使 $! 即应用 PID；若用 eval，子 shell 停留在 bash，lsof 只能采到 bash 的库。
+bash -c "$COMMAND" >/dev/null 2>&1 &
+TARGET_PID=$!
+PERF_PID=""
+
+# perf 可用则对目标 PID 采样（perf 不可用或失败不影响静态采集）
 if command -v perf &> /dev/null; then
-  timeout 10 perf record -g -o "$DATA_FILE" -- $COMMAND >/dev/null 2>&1 &
-  PERF_PID=$!
-else
-  # 退化模式：如果没有 perf，仅拉起进程
-  eval "$COMMAND" >/dev/null 2>&1 &
+  timeout "$PERF_WINDOW" perf record -p "$TARGET_PID" -g -o "$DATA_FILE" >/dev/null 2>&1 &
   PERF_PID=$!
 fi
 
-sleep 0.2
+# 采集库依赖：lsof（末列为路径）+ /proc/<PID>/maps（第 6 列为映射路径，覆盖更全）
+collect_libs() {
+  local pid="$1"
+  lsof -p "$pid" 2>/dev/null | grep '\.so' | awk '{print $NF}' >> "$LIBS_TMP" || true
+  grep '\.so' "/proc/$pid/maps" 2>/dev/null | awk '{print $6}' >> "$LIBS_TMP" || true
+}
 
-TARGET_PID=$(pgrep -P $PERF_PID | head -n 1)
-if [[ -z "$TARGET_PID" ]]; then
-  TARGET_PID=$PERF_PID
+# 判断进程是否仍存活（排除僵尸：僵尸的 kill -0 仍成功，会误导轮询不退出）
+is_alive() {
+  local p="$1"
+  local st
+  st=$(grep '^State:' "/proc/$p/status" 2>/dev/null | awk '{print $2}')
+  [[ -n "$st" && "$st" != "Z" ]]
+}
+
+# -------------------------------------------------------------------------
+# 2. 首次发现进程时采集一次 ps（CPU% 累计值早期更稳定）
+# -------------------------------------------------------------------------
+: > "$LIBS_TMP"
+for _ in $(seq 1 10); do
+  if kill -0 "$TARGET_PID" 2>/dev/null; then
+    PROCESS_FOUND=1
+    PS_OUTPUT=$(ps -p "$TARGET_PID" -o pid=,%cpu=,%mem=,vsz=,rss=,comm= --no-headers 2>/dev/null || echo "")
+    break
+  fi
+  sleep 0.1
+done
+
+# -------------------------------------------------------------------------
+# 3. 在目标进程生命周期内轮询采集库依赖（每秒一次，取并集）
+#    原因：JNI 库（如 librocksdbjni.so）由 JVM 懒加载，单次早期 lsof 会漏掉；
+#    需反复抓取 lsof + /proc/<PID>/maps 并合并，才能捕获懒加载的 .so。
+#    进程退出后即停止；长时进程在 PERF_WINDOW+5s 后停止（perf 已结束）。
+# -------------------------------------------------------------------------
+MAX_POLL=$(( PERF_WINDOW + 5 ))
+i=0
+while (( i < MAX_POLL )) && is_alive "$TARGET_PID"; do
+  PROCESS_FOUND=1
+  collect_libs "$TARGET_PID"
+  sleep 1
+  i=$(( i + 1 ))
+done
+
+# 回收已退出的目标进程（避免僵尸）；回收 perf（若有）
+if ! is_alive "$TARGET_PID" 2>/dev/null; then
+  wait "$TARGET_PID" 2>/dev/null || true
+fi
+if [[ -n "$PERF_PID" ]]; then
+  kill "$PERF_PID" 2>/dev/null || true
+  wait "$PERF_PID" 2>/dev/null || true
 fi
 
-# -------------------------------------------------------------------------
-# 2. 采集静态进程状态
-# -------------------------------------------------------------------------
+# 若目标仍存活（perf 超时但进程未退出），补采一次（此时懒加载库通常已加载）
 if kill -0 "$TARGET_PID" 2>/dev/null; then
   PROCESS_FOUND=1
-  PS_OUTPUT=$(ps -p "$TARGET_PID" -o pid=,%cpu=,%mem=,vsz=,rss=,comm= --no-headers 2>/dev/null || echo "")
-  LSOF_OUTPUT=$(lsof -p "$TARGET_PID" 2>/dev/null | grep '\.so' | awk '{print $NF}' | sort -u || echo "")
+  collect_libs "$TARGET_PID"
 fi
 
-# 等待采样结束
-wait $PERF_PID 2>/dev/null || true
+LSOF_OUTPUT=$(sort -u "$LIBS_TMP" 2>/dev/null || echo "")
 
 # -------------------------------------------------------------------------
 # 3. 解析并拍平 Perf 数据，转换为 JSON 结构
