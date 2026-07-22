@@ -163,10 +163,10 @@
       }
     },
     "kv_storage": {
-      "KAL-rocksdb": {
-        "best_scenarios": "已在用社区版 RocksDB 的嵌入式键值存储场景，覆盖读密集、写密集及读写混合的 LSM-tree 工作负载，通过 LD_PRELOAD 替换为鲲鹏优化版即获得整体性能提升",
-        "strengths": "基于社区 RocksDB 的鲲鹏优化版本，保持 API/ABI 兼容，可通过 LD_PRELOAD 直接替换原动态库（社区版与优化版库名一致）。针对 Kunpeng 920/950 微架构优化，在读、写及各配比读写混合场景下均优于同版本社区 RocksDB",
-        "verification_steps": "LD_PRELOAD=<KAL-rocksdb 构建产物>/librocksdb.so <应用启动命令>；启动后 lsof 确认加载路径指向 KAL 构建产物；通过 perf report 对比 rocksdb:: 热点的 CPU 占比与 IPC/cache-miss 变化"
+      "rocksdb-kunpeng": {
+        "best_scenarios": "已在用社区版 RocksDB 的嵌入式键值存储场景，覆盖读密集、写密集及读写混合的 LSM-tree 工作负载，包括 C++ 直接链接与 Java/JNI（如 Flink 状态后端）接入",
+        "strengths": "社区 RocksDB 的鲲鹏优化替代品，保持 API/ABI 兼容，库名与社区版一致可直接替换原动态库。针对 Kunpeng 920/950 微架构优化，在读、写及各配比读写混合场景下均优于同版本社区 RocksDB",
+        "verification_steps": "按接入方式二选一：(A) C++ 直接链接--LD_PRELOAD=<rocksdb 构建产物>/librocksdb.so <应用启动命令>，启动后 lsof -p <PID> | grep rocksdb 确认加载路径指向构建产物；(B) Java/JNI（Flink 等）--定位 JAR 内 librocksdbjni.so（unzip -l <app>.jar | grep librocksdbjni），用优化版本的 librocksdbjni.so 替换（jar -uf <app>.jar <path>/librocksdbjni.so），重启 JVM 后 lsof 确认加载路径。两种方式均通过 perf report 对比 rocksdb:: 热点的 CPU 占比与 IPC/cache-miss 变化"
       }
     }
   }
