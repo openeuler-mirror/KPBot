@@ -5,7 +5,7 @@
   "author": {
     "name": "Kunpeng Acceleration Team"
   },
-  "homepage": "https://atomgit.com/openEuler/KPBot/tree/main/Plugins/app-tuner",
+  "homepage": "https://atomgit.com/openeuler/KPBot/tree/master/Plugins/app-tuner",
   "license": "Apache-2.0",
   "keywords": [
     "performance",
