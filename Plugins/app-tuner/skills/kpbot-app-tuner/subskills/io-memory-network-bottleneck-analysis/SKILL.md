@@ -92,7 +92,7 @@ description: 多指标瓶颈预筛子 skill，基于 iostat、vmstat、sar、per
 ## Suggested Script
 
 ```bash
-scripts/detect_bottleneck.sh <pid> <duration>
+../../scripts/detect_bottleneck.sh <pid> <duration>
 ```
 
 ## Caller Behavior
@@ -127,4 +127,4 @@ scripts/detect_bottleneck.sh <pid> <duration>
 
 ## Candidate Action Contract
 
-本 skill 通常只输出瓶颈分类，不直接输出可执行变更。若必须生成 `candidate_actions[]`，每项必须包含 `action_id`、`action_type`、`precondition`、`expected_gain`、`risk`、`validation`、`rollback`、`stop_or_reject_condition` 和 `evidence_sources`；否则只输出 `required_evidence` 和下一步路由，不伪造优化动作。
+本 skill 通常只输出瓶颈分类，不直接输出可执行变更。若必须生成 `candidate_actions[]`，每项必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`；否则只输出 `required_evidence` 和下一步路由，不伪造优化动作。

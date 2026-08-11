@@ -89,7 +89,7 @@ Phase 2 完成标志：
 
 | 架构图模块 | Skill 承接 |
 |---|---|
-| 单 skill 5 轮收益均 <1% 停止 | `per_skill_iteration_state` |
+| 单 skill 需验证完全 subskill 给出的所有推荐 | `per_skill_iteration_state` |
 | 无可识别瓶颈或所有调优完成 | `global_stop_reason` |
 | 输出报告 | `final_report_path` |
 | review & 环境还原 | `review_result`、`restore_result` |

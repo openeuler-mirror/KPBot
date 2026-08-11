@@ -14,10 +14,12 @@
 4. `service_health_check`
 5. `baseline_run`
 
+可执行实现：完成环境备份后，可用 `scripts/diagnose_environment.py --backup-dir <backup_dir> --output <environment_diagnosis.json> [--reference-issues <path>] [--kernel-patch-manifest <path>] [--timeout <sec>]` 自动执行诊断项（历史 reference 问题集回归、BIOS 高性能配置、perf/PMU 采集能力、内核补丁齐全性、NPU 设备与 ARM PMU），输出 `blocked_items`/`degraded_items`/`findings` 汇总；`--backup-dir` 需指向 `backup_environment.sh` 的产物目录。
+
 若环境诊断发现阻塞项，应设置：
 
 - `overall_progress.status=blocked`
-- `blocked_gate=environment_diagnosis`
+- `blocked_gate=environment-diagnosis`
 - `environment_diagnosis.status=failed` 或 `blocked`
 
 若证据不足但不影响继续做服务健康检查，应设置：
@@ -240,3 +242,39 @@
 ```
 
 报告和案例归档必须保留该诊断结果。若诊断失败或降级，后续报告必须说明风险和最小补充证据。
+
+## AI 推理场景环境诊断
+
+当 `workload_type` 为 `ai_inference` 时，环境诊断必须额外覆盖以下 AI 推理栈组件。诊断结果写入 `environment_diagnosis.findings` 的 `ai_inference_findings` 子字段。
+
+### 诊断项
+
+| 诊断项 | 采集命令 | 检查内容 | 缺失/异常时处理 |
+|--------|---------|---------|----------------|
+| CANN 版本 | `cat /usr/local/Ascend/ascend-toolkit/latest/version.cfg` | 版本是否与 torch_npu 兼容（见 `platform-tuning-notes.md` 版本矩阵） | 标记 `cann_version_missing`，降级 NPU 相关分析 |
+| torch_npu 版本 | `pip show torch_npu 2>/dev/null` | 版本是否与 PyTorch/CANN 兼容 | 标记 `torch_npu_version_missing`，降级编译优化分析 |
+| NPU 设备健康 | `npu-smi info` | 每张卡是否在线、HBM 容量、温度、功耗是否正常 | 标记 `npu_device_error`，阻塞 NPU 相关优化 |
+| HBM 使用率 | `npu-smi info` | HBM 使用率是否接近上限（>90% 时 OOM 风险） | 标记 `hbm_pressure`，提示 `application-config-optimization` 调整 `gpu-memory-utilization`/`max-num-seqs` |
+| NPU NUMA 归属 | `lspci -d 19e5: -v \| grep -i numa` 或 `cat /sys/bus/pci/devices/*/numa_node` | NPU 归属 NUMA node 是否与协调进程一致 | 标记 `npu_numa_misaligned`，提示 `cpu-affinity-optimization` 绑核到 NPU 所在 NUMA |
+| HCCS 链路 | `npu-smi info -t board` | 多卡 HCCS 链路是否正常 | 标记 `hccs_link_abnormal`，阻塞多卡 TP 优化 |
+| /dev/davinci 权限 | `ls -la /dev/davinci* /dev/davinci_manager /dev/devmm_svm /dev/hisi_hdc` | 应用用户是否有 rw 权限 | 标记 `device_permission_denied`，阻塞 NPU 推理 |
+| 算子 fallback 日志 | 检查应用日志中 `fallback to cpu` 或 `operator not supported` | 是否存在算子 fallback | 标记 `operator_fallback_detected`，提示 `compiler-optimization` 检查 CANN 版本/自定义算子 |
+| vLLM/推理框架版本 | `pip show vllm 2>/dev/null` 或对应框架版本命令 | 版本是否与 torch_npu/CANN 兼容 | 标记 `inference_framework_version_missing`，降级应用配置分析 |
+
+### 输出字段
+
+```json
+{
+  "ai_inference_findings": {
+    "cann_version": "string|missing",
+    "torch_npu_version": "string|missing",
+    "npu_device_health": "healthy|degraded|error",
+    "hbm_usage_pct": "number|null",
+    "npu_numa_alignment": "aligned|misaligned|unknown",
+    "hccs_link_status": "normal|abnormal|not_applicable",
+    "device_permissions": "ok|denied|partial",
+    "operator_fallback": "none|detected|unknown",
+    "inference_framework_version": "string|missing"
+  }
+}
+```

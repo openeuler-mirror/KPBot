@@ -15,6 +15,8 @@ def to_float(value):
         return None
 
 
+import re
+
 def higher_is_better(metric_name: str) -> bool:
     name = metric_name.lower()
     lower_better_tokens = [
@@ -30,7 +32,8 @@ def higher_is_better(metric_name: str) -> bool:
         "error",
         "fail",
     ]
-    return not any(token in name for token in lower_better_tokens)
+    # Use word-boundary matching to avoid false positives (e.g. "p50" matching "p5000").
+    return not any(re.search(r'\b' + re.escape(token) + r'\b', name) for token in lower_better_tokens)
 
 
 def main():

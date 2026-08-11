@@ -79,6 +79,7 @@ Collection groups:
 - Hardware configuration: hardware-cpu.txt, hardware-memory.txt, hardware-disk.txt, hardware-nic.txt
 - Software configuration: software-versions.txt, os-config.txt, kernel-config.txt, build-system.txt, perf-diagnosis.txt
 - Runtime context: virtualization.txt, environment-type.txt, container-limits.txt
+- NPU/Ascend configuration: npu/npu_smi_info.txt, npu/npu_board.txt, npu/npu_usage.txt, npu/cann_version.txt, npu/torch_npu_version.txt, npu/npu_numa_topology.txt, npu/device_permissions.txt, npu/ascend_env.txt
 - Compatibility files: cpu-info.txt, numa-topology.txt, memory-info.txt, disk-info.txt, nic-info.txt, os-kernel.txt,
   compiler-runtime.txt, thp-status.txt, hugepages-status.txt
 - Summary: environment-backup-report.html
@@ -166,7 +167,17 @@ capture_shell_if_available() {
   local target_file="$1"
   local label="$2"
   local command_name="$3"
-  local command_text="$4"
+  local command_text="${4:-}"
+
+  if [ -z "${command_text}" ]; then
+    local first_word="${command_name%% *}"
+    if command -v "${first_word}" >/dev/null 2>&1; then
+      run_capture_shell "${target_file}" "${label}" "${command_name}"
+    else
+      note_missing_command "${target_file}" "${first_word}"
+    fi
+    return
+  fi
 
   if command -v "${command_name}" >/dev/null 2>&1; then
     run_capture_shell "${target_file}" "${label}" "${command_text}"
@@ -474,6 +485,26 @@ collect_runtime_context() {
   capture_shell_if_available "${OUTPUT_DIR}/virtualization.txt" "proc-1-cgroup" cat "cat /proc/1/cgroup"
 }
 
+collect_npu_config() {
+  # NPU/Ascend 配置采集：CANN 版本、torch_npu 版本、npu-smi、NPU NUMA 拓扑、/dev/davinci* 权限、CANN 环境变量
+  local npu_dir="${OUTPUT_DIR}/npu"
+  mkdir -p "${npu_dir}"
+
+  if command -v npu-smi >/dev/null 2>&1; then
+    capture_if_available "${npu_dir}/npu_smi_info.txt" "npu-smi-info" npu-smi info
+    capture_if_available "${npu_dir}/npu_board.txt" "npu-smi-board" npu-smi info -t board
+    capture_if_available "${npu_dir}/npu_usage.txt" "npu-smi-usage" npu-smi info -t usages -i 0
+  else
+    note_missing_command "${npu_dir}/npu_smi_info.txt" "npu-smi"
+  fi
+
+  capture_shell_if_available "${npu_dir}/cann_version.txt" cat "cat /usr/local/Ascend/ascend-toolkit/latest/version.cfg"
+  capture_shell_if_available "${npu_dir}/torch_npu_version.txt" pip "pip show torch_npu 2>/dev/null"
+  capture_shell_if_available "${npu_dir}/npu_numa_topology.txt" lspci "lspci -d 19e5: -v"
+  capture_shell_if_available "${npu_dir}/device_permissions.txt" ls "ls -la /dev/davinci* 2>/dev/null"
+  capture_shell_if_available "${npu_dir}/ascend_env.txt" env "env | grep -i ascend"
+}
+
 generate_summary_report() {
   local redfish_status="skipped"
   if [[ -n "${BMC_HOST}" && -n "${BMC_USER}" && -n "${BMC_PASS}" ]]; then
@@ -751,6 +782,7 @@ collect_bios
 collect_hardware
 collect_software
 collect_runtime_context
+collect_npu_config
 copy_compatibility_files
 
 {

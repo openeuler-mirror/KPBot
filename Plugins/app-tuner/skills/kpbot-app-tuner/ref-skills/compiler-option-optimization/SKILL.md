@@ -193,7 +193,7 @@ lscpu
 如果用户提供了PID，使用脚本`scripts/perf_hotspot.sh`采集热点：
 
 ```bash
-bash ~/.claude/skills/compiler-option-optimization/scripts/perf_hotspot.sh <PID>
+bash ref-skills/compiler-option-optimization/scripts/perf_hotspot.sh <PID>
 ```
 
 如果用户选择跳过或未提供PID，则跳过本阶段，后续阶段4.2中基于热点函数的推荐将不可用，需在报告中标注"未采集热点数据，热点相关推荐不可用"。

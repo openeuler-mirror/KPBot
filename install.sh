@@ -346,6 +346,32 @@ for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
     done
 done
 
+# Register skill-owned agents (agents/*.md) into the platform agent directory.
+# 目录名 "agents" 在两种平台均被识别：
+#   - Claude Code : .claude/agents/<name>.md
+#   - OpenCode    : .opencode/agent/<name>.md 或 .opencode/agents/<name>.md（复数目录兼容）
+# 使用 symlink 保持插件源为唯一事实源（single source of truth）。
+mkdir -p "$CONFIG_ROOT/agents"
+# Clean stale links pointing at skills that were just re-installed (idempotent)
+find "$CONFIG_ROOT/agents" -maxdepth 1 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+agent_count=0
+for skill_dir in "$CONFIG_ROOT/skills"/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name=$(basename "$skill_dir")
+    [ -d "$skill_dir/agents" ] || continue
+    for agent_file in "$skill_dir"/agents/*.md; do
+        [ -f "$agent_file" ] || continue
+        agent_name=$(basename "$agent_file")
+        target="$CONFIG_ROOT/agents/$agent_name"
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            continue
+        fi
+        ln -s "../skills/$skill_name/agents/$agent_name" "$target"
+        agent_count=$((agent_count + 1))
+        ok "Agent: $skill_name/agents/$agent_name"
+    done
+done
+
 # Copy shared scripts (e.g. print_logo.sh) into skills whose SKILL.md references them
 for skill_dir in "$CONFIG_ROOT/skills"/*/; do
     [ -d "$skill_dir" ] || continue
@@ -426,9 +452,15 @@ step "[3/4] Configuring tool discovery..."
 if [ "$TOOL" = "opencode" ]; then
     # OpenCode auto-scans .opencode/skills/ — Step 1 already done
     ok "Auto-scan: skills/"
+    if [ "$agent_count" -gt 0 ]; then
+        ok "Auto-scan: agents/ ($agent_count subagent definition(s) registered)"
+    fi
 else
     # Claude: skills installed to .claude/skills/ in Step 1
     ok "Skills: $skill_count ready in .claude/skills/"
+    if [ "$agent_count" -gt 0 ]; then
+        ok "Agent files: $agent_count registered in .claude/agents/"
+    fi
 fi
 echo ""
 

@@ -41,6 +41,93 @@ REQUIRED_ACTION_FIELDS = {
 PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 
+NPU_TIMING_KEYS = (
+    "npu_evidence_collection_seconds",
+    "npu_profiler_seconds",
+    "host_device_analysis_seconds",
+)
+
+
+def _coerce_seconds(value):
+    if value in (None, "", False, True):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def merge_npu_timing(subagent_results):
+    """合并 NPU 采集时间到 timing summary，区分 NPU 与 CPU 采集耗时。
+
+    遍历每个 subagent 的 timing 列表（或 optimization_timing_details），
+    对 skill_name == "accelerator-optimization" 的记录按 stage / item 维度
+    归类到 NPU 采集三类：
+      - npu_evidence_collection_seconds: npu-smi / CANN / 拓扑采集
+      - npu_profiler_seconds: torch_npu profiler / msprof 等性能采集
+      - host_device_analysis_seconds: host-device 拷贝 / HBM 带宽分析
+    其余 accelerator-optimization 时间记入 cpu_evidence_collection_seconds。
+    """
+    npu_timing = {key: 0.0 for key in NPU_TIMING_KEYS}
+    npu_timing["cpu_evidence_collection_seconds"] = 0.0
+
+    classifier = {
+        "npu_evidence_collection": (
+            "npu-smi", "npusmi", "cann", "topology", "davinci", "ascend",
+            "board", "device_permission", "torch_npu", "numa_topology",
+        ),
+        "npu_profiler": (
+            "profiler", "msprof", "trace", "aicpu", "aivector", "op_stats",
+            "ascend_pytorch_profiler",
+        ),
+        "host_device_analysis": (
+            "h2d", "d2h", "host_device", "host-device", "hbm", "bandwidth",
+            "memcpy", "transile", "hccl",
+        ),
+    }
+
+    for result in subagent_results:
+        timing_entries = result.get("optimization_timing_details")
+        if not isinstance(timing_entries, list):
+            timing_field = result.get("timing")
+            if isinstance(timing_field, list):
+                timing_entries = timing_field
+            elif isinstance(timing_field, dict):
+                timing_entries = [timing_field]
+            else:
+                timing_entries = []
+
+        for entry in timing_entries:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("skill_name") != "accelerator-optimization":
+                continue
+
+            seconds = _coerce_seconds(entry.get("total_seconds")) or (
+                _coerce_seconds(entry.get("analysis_seconds"))
+                + _coerce_seconds(entry.get("implementation_seconds"))
+                + _coerce_seconds(entry.get("validation_seconds"))
+            )
+            if seconds <= 0:
+                continue
+
+            # haystack intentionally excludes "stage" (too generic, e.g. "evidence")
+            # so CPU-side evidence entries fall through to the cpu bucket.
+            haystack = " ".join(
+                str(entry.get(k, ""))
+                for k in ("optimization_item", "round_name", "notes", "item")
+            ).lower()
+            matched = False
+            for timing_key, hints in classifier.items():
+                if any(hint in haystack for hint in hints):
+                    npu_timing[f"{timing_key}_seconds"] += seconds
+                    matched = True
+                    break
+            if not matched:
+                npu_timing["cpu_evidence_collection_seconds"] += seconds
+
+    return npu_timing
+
 
 def load_result(path):
     try:
@@ -225,6 +312,7 @@ def main():
         "candidate_skill_list": candidate_skill_list,
         "dynamic_route_plan": candidate_skill_list,
         "subagent_results": subagent_results,
+        "npu_timing_breakdown": merge_npu_timing(subagent_results),
         "validation_errors": validation_errors,
         "gate_errors": gate_errors,
         "degraded_capabilities": degraded,
@@ -275,6 +363,18 @@ def main():
             )
     else:
         lines.append("- None")
+
+    npu_timing_breakdown = merge_npu_timing(subagent_results)
+    lines.extend([
+        "",
+        "## NPU Timing Breakdown",
+        "",
+        f"- NPU evidence collection: {npu_timing_breakdown.get('npu_evidence_collection_seconds', 0.0):.2f}s",
+        f"- NPU profiler: {npu_timing_breakdown.get('npu_profiler_seconds', 0.0):.2f}s",
+        f"- Host-device analysis: {npu_timing_breakdown.get('host_device_analysis_seconds', 0.0):.2f}s",
+        f"- CPU-side evidence collection (accelerator-optimization remainder): {npu_timing_breakdown.get('cpu_evidence_collection_seconds', 0.0):.2f}s",
+        "",
+    ])
 
     lines.extend(["", "## Degraded Capabilities", ""])
     if degraded:

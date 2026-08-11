@@ -45,7 +45,8 @@ skills/kpbot-app-tuner/
     database-workload-analysis/SKILL.md
   scripts/                 ← 辅助脚本（环境备份、瓶颈检测等）
   agents/
-    openai.yaml            ← OpenAI Agent 配置
+    analyzer.md            ← 统一分析 subagent（按 subskill_name 加载对应 skill）
+    executor.md            ← 统一执行验证 subagent
   ref-skills/              ← skill 内置的第三方 skill
     bigdata-framework-optimization/
     compiler-option-optimization/
@@ -81,6 +82,13 @@ Codex / Cursor             ← 可直接读取 skills/kpbot-app-tuner/ 主源
 2. `references/reading-guide.md` — 理解文档关系（本文件）
 3. `references/input-contract.md` — 理解接口约定
 4. 对应 subskill — 理解专项逻辑
+
+提交前可用开发期质量工具校验结构：
+
+- `scripts/validate_skill_quality.py` — 校验 skill 目录结构、必填 subskill 清单和常见回归模式。
+- `scripts/score_skill_creator_quality.py` — 按 skill-creator rubric 对主 skill 打分。
+
+这两个是开发/CI 期元工具，不进入运行时优化流程。
 
 ## 单点定义原则
 

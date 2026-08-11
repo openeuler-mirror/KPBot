@@ -422,3 +422,263 @@ apply_optimization_action.sh --action grub-params \
 - 线程绑核/NUMA 绑定/cpuset 由 `cpu-affinity-optimization` 负责。
 - 应用参数（线程数/连接池/buffer pool）由 `application-config-optimization` 负责。
 - 编译选项/LTO/PGO 由 `compiler-optimization` 负责。
+
+## NPU 推理 cgroup 设备控制
+
+针对 Ascend NPU 推理场景，OS 层需额外管理 `/dev/davinci*` 设备访问权限与多租户隔离。本章节适用于 A+K 场景识别命中（Step 2 第 2 步检测到 NPU）后的补充调优。
+
+### 背景
+
+昇腾 NPU 通过字符设备暴露给用户态：
+
+| 设备路径 | 用途 |
+|---------|------|
+| `/dev/davinci0` ... `/dev/davinciN` | NPU 计算设备（每张卡一个） |
+| `/dev/davinci_manager` | 设备管理通道 |
+| `/dev/devmm_svm` | 设备内存管理（SVM 共享虚拟内存） |
+| `/dev/hisi_hdc` | 海思 HCCN 通信通道（HCCL 依赖） |
+
+应用进程（vLLM EngineCore、torch_npu init）需对这些设备有 `rw` 权限，否则 `aclrtSetDevice` 报权限错误。
+
+### cgroup v2 device controller
+
+cgroup v2 通过 `cgroup.bpf` + `bpf` 程序实现设备过滤，或回退到 `cgroup v1` 的 `devices` 子系统。openEuler 22.03/24.03 默认 cgroup v2 hybrid。
+
+**v2 写法（推荐，需 kernel 5.10+）**：
+
+```bash
+# 创建 NPU 推理专用 cgroup
+mkdir -p /sys/fs/cgroup/npu_inference
+echo "+device" > /sys/fs/cgroup/npu_inference/cgroup.subtree_control
+
+# 允许访问 davinci0（白名单策略需 BPF，简化为权限降级）
+chmod 660 /dev/davinci0 /dev/davinci_manager /dev/devmm_svm /dev/hisi_hdc
+chown root:hw_davinci /dev/davinci0 /dev/davinci_manager /dev/devmm_svm /dev/hisi_hdc
+usermod -aG hw_davinci <app_user>
+```
+
+**v1 写法（兼容老环境）**：
+
+```bash
+mkdir -p /sys/fs/cgroup/devices/npu_inference
+echo "deny" > /sys/fs/cgroup/devices/npu_inference/devices.deny
+echo "c 1:5 rwm" > /sys/fs/cgroup/devices/npu_inference/devices.allow   # /dev/zero 示例
+# davinci0 主次设备号通过 `ls -l /dev/davinci0` 获取，假设为 242:0
+echo "c 242:0 rwm" > /sys/fs/cgroup/devices/npu_inference/devices.allow
+```
+
+### 验证命令
+
+```bash
+# 检查设备权限
+ls -l /dev/davinci* /dev/davinci_manager /dev/devmm_svm /dev/hisi_hdc
+
+# 检查进程是否在目标 cgroup
+cat /proc/<pid>/cgroup
+```
+
+### 实战结论
+
+- 实战（Ascend910 + vLLM qwen2.5-1.5b 单租户场景）未触发 cgroup 隔离，仅做权限校验
+- 多租户部署此章节为**必需**，单租户可降级为权限检查
+- 容器场景下若 `--device` 未映射全 4 个设备，torch_npu 初始化失败报 `aclrtSetDevice` 错误
+
+## HugePages 与 vLLM KV Cache
+
+vLLM 使用 PagedAttention，KV cache 以 page（块）形式分配在 host RAM 或 device HBM。本章节聚焦 host 侧 KV cache 与模型权重加载场景的大页优化。
+
+### vLLM KV Cache 内存模型
+
+```
+[GPU/NPU HBM]   ← PagedAttention KV blocks（device 内存，不在此讨论）
+[Host RAM]      ← 模型权重、CUDA/npu host buffer、swap fallback
+```
+
+vLLM 在 host 侧分配场景：
+- 模型权重加载（`safetensors` → host RAM → device HBM）
+- AsyncEngine 多进程 IPC 共享内存
+- CPU offload 场景（vLLM cpu+gpu 混合）
+
+### 大页配置方法
+
+**静态预留 HugePages**（推荐，确定性强）：
+
+```bash
+# 计算所需大页数：app_memory_GB × 1024 / 2MB × 1.1（10% 余量）
+# 例如 32GB 模型 → 32×1024/2×1.1 = 18176 pages
+echo 18176 > /proc/sys/vm/nr_hugepages
+
+# NUMA 分配（鲲鹏双 NUMA 节点，按需分配到指定节点）
+echo 9088 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
+echo 9088 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages
+
+# 持久化
+echo "vm.nr_hugepages = 18176" >> /etc/sysctl.d/99-os-optimization.conf
+```
+
+**GLIBC_TUNABLES 大页（glibc >= 2.34）**：
+
+```bash
+# glibc malloc 申请大页（无需应用改造）
+export GLIBC_TUNABLES=glibc.malloc.tcache_count=0:glibc.malloc.hugetlb=1
+
+# 应用启动
+GLIBC_TUNABLES=glibc.malloc.tcache_count=0:glibc.malloc.hugetlb=1 \
+  python -m vllm.entrypoints.openai.api_server --model qwen2.5-1.5b ...
+```
+
+| 参数 | 作用 | NPU 推理推荐值 |
+|------|------|--------------|
+| `glibc.malloc.tcache_count` | tcache 缓冲数，0 关闭 | `0`（避免跨线程缓存污染） |
+| `glibc.malloc.hugetlb` | malloc 走大页 | `1`（启用） |
+| `glibc.malloc.mmap_max` | mmap 阈值 | 默认，vLLM 大块分配走 mmap |
+| `vm.nr_hugepages` | 系统大页池 | 按模型大小计算 |
+
+### PyTorch / torch_npu malloc 行为
+
+- PyTorch 默认 allocator 不走 glibc malloc（自己管理 CUDA/npu caching allocator）
+- torch_npu HBM 分配与 host RAM 解耦，大页优化主要影响**权重加载阶段**与**host buffer**
+- vLLM 的 `weight_loader` 使用 `np.memmap` + `torch.from_numpy`，权重加载阶段会触发大页映射
+
+### tcmalloc 拦截陷阱（实战）
+
+> ⚠️ **关键陷阱**：若应用通过 `LD_PRELOAD` 加载 `libtcmalloc.so`，则所有 `malloc` 调用被 tcmalloc 拦截，glibc 大页调优（GLIBC_TUNABLES）**完全失效**。
+
+实战 Ascend910 + vLLM 场景：
+- vLLM 启动脚本设置 `LD_PRELOAD=libtcmalloc.so`
+- 设置 `GLIBC_TUNABLES=glibc.malloc.hugetlb=1` 无效果
+- `cat /proc/meminfo | grep HugePages` 显示已分配但使用率 0%
+
+**验证 tcmalloc 是否生效**：
+
+```bash
+# 检查进程是否加载 tcmalloc
+cat /proc/<pid>/maps | grep -i tcmalloc
+
+# 若有匹配行，则 glibc 大页调优失效，需直接关闭 tcmalloc 或改用 tcmalloc 自带大页（需重新编译）
+```
+
+**绕过方法**：
+1. 移除 `LD_PRELOAD`（若 tcmalloc 不是性能瓶颈）
+2. 改用 `jemalloc` + 大页（jemalloc 支持 `MALLOC_CONF` 大页）
+3. 编译 tcmalloc with `--enable-hugetlbfs`（需重新编译 gperftools）
+
+### 实战结论
+
+| 模型规模 | 大页收益 | 原因 |
+|---------|---------|------|
+| < 2B（如 qwen2.5-1.5b） | **无收益** | 内存压力小，TLB miss 不是瓶颈；权重加载阶段短暂，大页节省的 TLB miss 被其他开销淹没 |
+| 7B - 13B | **可能有收益** | 权重 14-26GB，TLB miss 在加载阶段显著；需 tcmalloc 不拦截 |
+| > 30B | **可能有收益** | 权重 >60GB，TLB miss 主导加载阶段；强烈建议大页 |
+
+实战平台（Ascend910 + qwen2.5-1.5b）：
+- 大页配置被拒绝（tcmalloc 拦截 + 小模型无收益）
+- 总优化收益 +94.5% 来自其他维度（绑核、并发等），大页贡献 0%
+
+> 通用场景下大页仍是**重要候选**，不应因单场景拒绝而全盘否定。本 skill 在 Step 5 排序时按模型大小动态评估收益。
+
+## 调度器对 AI 推理线程的影响
+
+Linux 调度器演进对 vLLM AsyncEngine 等异步推理框架有直接影响。本章节评估调度器参数与可替代调度器在 NPU 推理场景的潜力。
+
+### 调度器版本基线
+
+| 内核 | 默认调度器 | 关键特性 | openEuler 版本 |
+|------|----------|---------|--------------|
+| OLK-5.10 | CFS + EAS（鲲鹏） | 时间片公平，EAS 选能效核 | 22.03 |
+| OLK-6.6 | EEVDF | 按截止时间排序，延迟敏感优化 | 24.03 |
+| 主线 6.12+ | EEVDF + sched_ext | 可加载 BPF 调度器 | — |
+
+> **实战平台（OLK-5.10）仍用 CFS**，本 skill 输出 CFS 调优参数；升级到 OLK-6.6 后需重新评估 EEVDF 影响。
+
+### vLLM AsyncEngine 调度敏感点
+
+vLLM AsyncEngine 使用 asyncio event loop：
+
+```
+[Main event loop] → [request queue] → [EngineCore worker] → [NPU 算子下发]
+       ↑ asyncio.sleep / await                          ↓ 同步等待 NPU 完成
+[Token streaming] ←─────────────────────── [result queue] ←
+```
+
+调度延迟敏感点：
+1. **event loop 唤醒延迟**：await 后被唤醒的延迟，CFS 默认 `sched_latency_ns` 6ms 可能过大
+2. **EngineCore worker 被抢占**：算子下发途中被其他线程抢占，造成 NPU 空等
+3. **wakeup 抢占**：高优先级线程唤醒时是否立即抢占当前线程
+
+### CFS 调优参数（OLK-5.10）
+
+```bash
+# 当前值
+sysctl kernel.sched_latency_ns
+sysctl kernel.sched_min_granularity_ns
+sysctl kernel.sched_wakeup_granularity_ns
+sysctl kernel.sched_wakeup_preempt_ns
+```
+
+| 参数 | 默认值 | NPU 推理推荐 | 说明 |
+|------|--------|------------|------|
+| `sched_latency_ns` | 6000000（6ms） | 2000000-3000000（2-3ms） | 调度周期，降低可减小唤醒延迟 |
+| `sched_min_granularity_ns` | 2000000（2ms） | 1000000（1ms） | 单线程最小运行时间 |
+| `sched_wakeup_granularity_ns` | 2000000（2ms） | 500000-1000000（0.5-1ms） | 唤醒抢占粒度，降低可加速唤醒 |
+| `sched_wakeup_preempt_ns` | - | 同 wakeup_granularity | 唤醒抢占阈值 |
+
+```bash
+# 应用（在线，需 root）
+sysctl -w kernel.sched_latency_ns=3000000
+sysctl -w kernel.sched_min_granularity_ns=1000000
+sysctl -w kernel.sched_wakeup_granularity_ns=1000000
+
+# 持久化
+cat >> /etc/sysctl.d/99-os-optimization.conf <<EOF
+kernel.sched_latency_ns = 3000000
+kernel.sched_min_granularity_ns = 1000000
+kernel.sched_wakeup_granularity_ns = 1000000
+EOF
+```
+
+> ⚠️ 这些参数是**全局**的，会影响所有线程。若系统上有其他延迟不敏感负载（如 batch 作业），降低 sched_latency 可能损害其吞吐。建议仅在**推理专用机**上调整。
+
+### EEVDF 影响（OLK-6.6 / kernel 6.6+）
+
+EEVDF（Earliest Eligible Virtual Deadline First）替代 CFS：
+- 按虚拟截止时间排序，延迟敏感任务优先
+- 引入 `sched_feat` `LATENCY_WARN` 监控延迟抖动
+- 默认参数更激进，asyncio 唤醒延迟预期更优
+
+**调优方向**（OLK-6.6 需实测）：
+- `kernel.sched_base_slice_ns` 替代 `sched_min_granularity_ns`
+- `kernel.sched_features` 中 `EEVDF` 相关位
+- 暂无 vLLM on NPU 在 EEVDF 下的实测数据，标注 `verified=false`
+
+### sched_ext 潜力
+
+`sched_ext` 允许通过 BPF 加载自定义调度器：
+- 可针对 vLLM 推理场景编写专用调度策略（如 EngineCore 优先级最高）
+- 实战平台 OLK-5.10 不支持，OLK-6.6 实验性支持
+- 暂无生产级 NPU 推理 sched_ext 调度器，标注 `experimental`
+
+### 验证方法
+
+```bash
+# 测量唤醒延迟分布（需 perf）
+perf sched record -p <vllm_pid> -- sleep 10
+perf sched latency -p <vllm_pid>
+
+# 监控调度延迟告警（EEVDF）
+echo 1 > /sys/kernel/debug/sched/latency_warn_enabled
+dmesg | grep "sched:.*latency"
+
+# 监控抢占次数
+perf stat -e context-switches,cpu-migrations,sched:sched_switch -p <pid> -- sleep 5
+```
+
+### 实战结论
+
+| 平台 | 调度器调优 | 实测收益 |
+|------|----------|---------|
+| OLK-5.10（实战） | CFS 参数降低 | 未单独测量，被绑核收益掩盖 |
+| OLK-6.6 | EEVDF 默认参数可能已足够 | 未实测，标注 verified=false |
+| 主线 6.12+ | sched_ext 实验 | 实验性，不推荐生产 |
+
+> 调度器参数调优是**次要候选**，仅在绑核 + governor 之后仍存在调度抖动时考虑。

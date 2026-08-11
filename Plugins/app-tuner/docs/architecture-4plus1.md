@@ -199,7 +199,7 @@ kpbot-app-tuner 4+1 视图
 - `checklist.md`：阶段检查项。
 - `report-schema.md`：报告字段契约。
 - `candidate-skill-list.md`、`candidate-skill-analysis.md`、`subagent-orchestration.md`：候选 skill 列表、任务包和 subagent 输出契约。
-- `prerequisites.md`、`remote-execution.md`、`optimization-decision-tree.md` 等：依赖、远程执行、优化方向选择和降级规则。
+- `prerequisites.md`、`optimization-decision-tree.md` 等：依赖、优化方向选择和降级规则。
 
 工具脚本层：
 
@@ -291,7 +291,9 @@ docs/
 
 skills/kpbot-app-tuner/   # [唯一主源]
   SKILL.md                          # 主编排入口
-  agents/openai.yaml
+  agents/
+    analyzer.md                     # 统一分析 subagent
+    executor.md                     # 统一执行验证 subagent
   references/                       # 22 个契约与流程文档
   scripts/                          # 22 个工具脚本
   subskills/                        # 候选列表专项 subskill (12 个)

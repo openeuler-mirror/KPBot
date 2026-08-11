@@ -38,6 +38,7 @@ Review 目标：确认最终交付是否可信、可回退、可复用。
 | 服务重启变更 | 还原配置并重启服务验证 |
 | 系统重启/BIOS 变更 | 输出人工窗口期和检查清单 |
 | 重编译/二进制替换 | 恢复上一轮二进制、配置、库和启动参数 |
+| 虚拟环境变更（pip install 替换库/重编译/LD_PRELOAD） | 用 `scripts/snapshot_python_env.sh` 的字节级快照还原（预先 `snapshot`，回退时 `restore` 校验 sha256 manifest），保证回退后与原环境字节一致；不使用 pip uninstall+重装替代 |
 
 输出字段：
 
@@ -85,6 +86,8 @@ Review 目标：确认最终交付是否可信、可回退、可复用。
   "final_report_path": "",
   "review_result": {},
   "restore_result": {},
+  "forward_reverse_cmd_log": [],
+  "raw_data_archive": [],
   "reuse_tags": [],
   "lessons_learned": [],
   "created_at": ""
@@ -93,6 +96,8 @@ Review 目标：确认最终交付是否可信、可回退、可复用。
 
 归档规则：
 
+- `forward_reverse_cmd_log`：每轮记录 `{skill_name, round, forward_cmd, reverse_cmd, execution_status}`，便于事后追溯每步变更与回退命令。
+- `raw_data_archive`：每轮记录 `{skill_name, round, raw_data_archive_dir, files: [benchmark_raw.csv, env_before.json, env_after.json, forward_cmd.txt, reverse_cmd.txt, server_log.txt, ...]}`，指向未脱敏的原始轮次数据目录。
 - 保留技术证据路径，不保留敏感账号、密钥、客户业务数据。
 - 使用 `<placeholder>` 替代 IP、用户名、客户路径和容器名。
 - 归档总体进度、阻塞门控、服务健康检查结果和目标实例身份确认状态。
@@ -100,7 +105,7 @@ Review 目标：确认最终交付是否可信、可回退、可复用。
 - 归档环境诊断结果，包括历史 reference 问题集状态、BIOS 高性能配置状态、perf/PMU 采集能力状态和内核补丁检查状态。
 - 归档历史记录状态；未经用户确认的历史记录必须标记为 `discovered_unconfirmed`，不得写成已验证优化收益。
 - 标注可复用条件与不可复用条件。
-- 标注导致 skill 停止的 5 轮 <1% 证据。
+- 标注导致 skill 停止的证据（subskill 推荐已全部验证完毕或无法继续验证的原因）。
 
 ## 推荐脚本
 

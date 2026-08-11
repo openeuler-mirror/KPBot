@@ -44,7 +44,7 @@ else
     INPUT_TYPE="unknown"
     if grep -qE '^\s+[0-9]+\.[0-9]+%\s+' "$REPORT_FILE" 2>/dev/null && grep -qE '\[\.\]' "$REPORT_FILE" 2>/dev/null; then
         INPUT_TYPE="perf_report"
-    el    if grep -qE '"perf_data_path"|"evidence_files"|"perf_report_path"|"loaded_libraries"|"perf_report"|"maps_libs_path"|"perf_available"' "$REPORT_FILE" 2>/dev/null; then
+    elif grep -qE '"perf_data_path"|"evidence_files"|"perf_report_path"|"loaded_libraries"|"perf_report"|"maps_libs_path"|"perf_available"' "$REPORT_FILE" 2>/dev/null; then
         INPUT_TYPE="evidence_report_json"
     elif grep -qE '"hot_symbols"|"detected_libraries"' "$REPORT_FILE" 2>/dev/null; then
         INPUT_TYPE="structured_json_no_symbol"

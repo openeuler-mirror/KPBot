@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
+# detect_bottleneck.sh — classify primary bottleneck from system metrics.
+# Note: uses gawk-only match($0, /re/, array) syntax (line ~283);
+#       requires gawk, not mawk. On minimal containers install gawk first.
 set -euo pipefail
 
 PID="${1:-}"
 DURATION="${2:-60}"
 CORE_LIST="${3:-}"  # optional: e.g. "32-39" for mpstat -P
+EVIDENCE_DIR="${4:-}"  # optional: evidence snapshot dir for NPU log parsing
 
 if [[ -z "${PID}" ]]; then
   echo '{"bottleneck_type":"unknown_bottleneck","legacy_bottleneck_type":"unknown","detailed_bottleneck_type":"unknown","confidence":"low","evidence":{},"fallback_notes":["target pid is required"]}'
@@ -13,6 +17,193 @@ fi
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
+
+# === 容器感知（新增）===
+
+detect_container_env() {
+  # Detect whether the script is running inside a container and expose cgroup CPU limits.
+  # Output variables:
+  #   in_container, cgroup_cpuset_count, effective_cpu_count_source
+  local is_container="false"
+  if [[ -f /.dockerenv ]]; then
+    is_container="true"
+  elif [[ -r /proc/1/cgroup ]] && grep -qE 'docker|containerd|kubepods|lxc' /proc/1/cgroup 2>/dev/null; then
+    is_container="true"
+  fi
+
+  local cgroup_count=""
+  # cpuset.cpus.effective works for cgroup v2; cpuset.cpus for v1
+  for path in /sys/fs/cgroup/cpuset.cpus.effective \
+              /sys/fs/cgroup/cpuset/cpuset.cpus.effective \
+              /sys/fs/cgroup/cpuset.cpus \
+              /sys/fs/cgroup/cpuset/cpuset.cpus; do
+    if [[ -r "${path}" ]]; then
+      local raw
+      raw=$(cat "${path}" 2>/dev/null | tr -d '[:space:]' || true)
+      if [[ -n "${raw}" && "${raw}" != "" ]]; then
+        cgroup_count=$(expand_cpu_list "${raw}")
+        break
+      fi
+    fi
+  done
+
+  # CPU quota (cfs_quota_us / cfs_period_us) — useful when cpuset is not pinned
+  local quota_count=""
+  for quota_path in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu/cpu.cfs_quota_us; do
+    if [[ -r "${quota_path}" ]]; then
+      local quota_line
+      quota_line=$(cat "${quota_path}" 2>/dev/null | tr -d '[:space:]' || true)
+      # cpu.max format: "quota period" (e.g. "200000 100000" => 2 cpus)
+      if [[ "${quota_line}" == *" "* ]]; then
+        local quota period
+        read -r quota period <<<"${quota_line}"
+        if [[ "${quota}" =~ ^[0-9]+$ && "${period}" =~ ^[0-9]+$ && "${period}" -gt 0 ]]; then
+          quota_count=$(awk -v q="${quota}" -v p="${period}" 'BEGIN { printf "%.0f", q/p }')
+          break
+        fi
+      elif [[ "${quota_line}" =~ ^[0-9]+$ ]]; then
+        # cfs_quota_us standalone; need cfs_period_us
+        local period_path
+        for period_path in /sys/fs/cgroup/cpu/cpu.cfs_period_us; do
+          if [[ -r "${period_path}" ]]; then
+            local period
+            period=$(cat "${period_path}" 2>/dev/null | tr -d '[:space:]' || true)
+            if [[ "${period}" =~ ^[0-9]+$ && "${period}" -gt 0 ]]; then
+              quota_count=$(awk -v q="${quota_line}" -v p="${period}" 'BEGIN { printf "%.0f", q/p }')
+              break
+            fi
+          fi
+        done
+        break
+      fi
+    fi
+  done
+
+  # Pick the smaller bound (most restrictive)
+  local effective=""
+  local source="getconf"
+  if [[ -n "${cgroup_count}" && "${cgroup_count}" -gt 0 ]]; then
+    effective="${cgroup_count}"
+    source="cgroup_cpuset"
+  elif [[ -n "${quota_count}" && "${quota_count}" -gt 0 ]]; then
+    effective="${quota_count}"
+    source="cgroup_cpu_quota"
+  fi
+
+  IN_CONTAINER="${is_container}"
+  CGROUP_CPU_COUNT="${effective}"
+  EFFECTIVE_CPU_SOURCE="${source}"
+}
+
+expand_cpu_list() {
+  # Expand a CPU list like "0-3,5,7-9" into a count.
+  local list="$1"
+  local count=0
+  IFS=',' read -ra ranges <<<"${list}"
+  for r in "${ranges[@]}"; do
+    if [[ "${r}" == *-* ]]; then
+      local start end
+      start="${r%-*}"
+      end="${r#*-}"
+      if [[ "${start}" =~ ^[0-9]+$ && "${end}" =~ ^[0-9]+$ ]]; then
+        count=$(( count + end - start + 1 ))
+      fi
+    elif [[ "${r}" =~ ^[0-9]+$ ]]; then
+      count=$(( count + 1 ))
+    fi
+  done
+  echo "${count}"
+}
+
+get_effective_cpu_count() {
+  # Container-aware CPU count: prefer cgroup bound, fall back to getconf.
+  if [[ -n "${CGROUP_CPU_COUNT}" && "${CGROUP_CPU_COUNT}" -gt 0 ]]; then
+    echo "${CGROUP_CPU_COUNT}"
+  else
+    getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1
+  fi
+}
+
+# Initialize container awareness up front so CPU threshold logic below uses the right core count.
+IN_CONTAINER="false"
+CGROUP_CPU_COUNT=""
+EFFECTIVE_CPU_SOURCE="getconf"
+detect_container_env
+
+# === NPU 瓶颈检测（新增）===
+
+parse_npu_utilization() {
+  # Parse npu-smi info -t utilization output and return the max AI Core utilization.
+  local log_path="$1"
+  if [[ ! -r "${log_path}" ]]; then
+    echo "0"
+    return
+  fi
+  awk '
+    /^[0-9]+[[:space:]]+[0-9]+/ {
+      if ($2 + 0 > max) max = $2 + 0
+    }
+    END { if (max == "") print 0; else printf "%.0f", max }
+  ' "${log_path}" 2>/dev/null
+}
+
+parse_host_cpu() {
+  # Reuse the already-computed host CPU utilization (mpstat-based) for NPU feed bottleneck detection.
+  # Caller passes the output_dir; we read mpstat.txt if available, otherwise echo 0.
+  local output_dir="$1"
+  local mpstat_path="${output_dir}/workload_running/mpstat.txt"
+  if [[ ! -r "${mpstat_path}" ]]; then
+    echo "0"
+    return
+  fi
+  awk '/Average/ && $2 !~ /CPU/ {usr+=$3; sys+=$5; irq+=$8; soft+=$9; n++} END {if (n==0) print 0; else printf "%.0f", usr+sys+irq+soft}' "${mpstat_path}" 2>/dev/null
+}
+
+detect_npu_bottleneck() {
+  local output_dir="$1"
+  local npu_status_path="${output_dir}/workload_running/npu_status.json"
+
+  # No NPU evidence collected -> skip
+  if [[ ! -r "${npu_status_path}" ]]; then
+    return
+  fi
+
+  # Check whether NPU was marked unavailable
+  if grep -q '"npu_available": false' "${npu_status_path}" 2>/dev/null; then
+    return
+  fi
+
+  local npu_util host_cpu_util
+  npu_util=$(parse_npu_utilization "${output_dir}/workload_running/npu_utilization.log")
+  host_cpu_util=$(parse_host_cpu "${output_dir}")
+
+  NPU_UTIL_PCT="${npu_util}"
+  HOST_CPU_UTIL_PCT="${host_cpu_util}"
+  NPU_BOTTLENECK_DETECTED="true"
+
+  # NPU bottleneck classification
+  if awk -v u="${npu_util}" -v c="${host_cpu_util}" 'BEGIN { exit !(u < 60 && c > 80) }'; then
+    NPU_BOTTLENECK_TYPE="cpu_feed_bottleneck"
+    NPU_BOTTLENECK_CONFIDENCE="medium"
+  elif awk -v u="${npu_util}" 'BEGIN { exit !(u > 90) }'; then
+    NPU_BOTTLENECK_TYPE="npu_compute_bottleneck"
+    NPU_BOTTLENECK_CONFIDENCE="high"
+  else
+    NPU_BOTTLENECK_TYPE="npu_other"
+    NPU_BOTTLENECK_CONFIDENCE="low"
+  fi
+}
+
+NPU_BOTTLENECK_DETECTED="false"
+NPU_BOTTLENECK_TYPE=""
+NPU_BOTTLENECK_CONFIDENCE=""
+NPU_UTIL_PCT="null"
+HOST_CPU_UTIL_PCT="null"
+
+# Run NPU detection if evidence dir was provided
+if [[ -n "${EVIDENCE_DIR}" ]]; then
+  detect_npu_bottleneck "${EVIDENCE_DIR}"
+fi
 
 cpu_pct="null"
 cpu_pct_mpstat="null"
@@ -151,7 +342,7 @@ legacy_bottleneck_type="unknown"
 
 # Use mpstat as primary CPU saturation indicator (includes %irq)
 if [[ "${cpu_pct_mpstat}" != "null" ]]; then
-  total_cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+  total_cores="$(get_effective_cpu_count)"
   cpu_threshold="$(awk -v cores="${total_cores}" 'BEGIN { printf "%.2f", cores * 85 }')"
   if awk -v cpu="${cpu_pct_mpstat}" -v threshold="${cpu_threshold}" 'BEGIN { exit !(cpu > threshold) }'; then
     detailed_bottleneck_type="cpu"
@@ -159,7 +350,7 @@ if [[ "${cpu_pct_mpstat}" != "null" ]]; then
   fi
 elif [[ "${cpu_pct}" != "null" ]]; then
   # Fallback to pidstat if mpstat unavailable (underestimates, excludes %irq)
-  total_cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+  total_cores="$(get_effective_cpu_count)"
   cpu_threshold="$(awk -v cores="${total_cores}" 'BEGIN { printf "%.2f", cores * 80 }')"
   if awk -v cpu="${cpu_pct}" -v threshold="${cpu_threshold}" 'BEGIN { exit !(cpu > threshold) }'; then
     detailed_bottleneck_type="cpu"
@@ -229,6 +420,32 @@ if [[ "${detailed_bottleneck_type}" == "unknown" && "${network_hint}" != "unknow
   confidence="low"
 fi
 
+# NPU bottleneck overrides when no host-side bottleneck was identified
+if [[ "${NPU_BOTTLENECK_DETECTED}" == "true" && "${detailed_bottleneck_type}" == "unknown" ]]; then
+  detailed_bottleneck_type="npu"
+  bottleneck_type="${NPU_BOTTLENECK_TYPE}"
+  legacy_bottleneck_type="npu_bottleneck"
+  confidence="${NPU_BOTTLENECK_CONFIDENCE}"
+fi
+
+# Container-aware fallback note
+if [[ "${IN_CONTAINER}" == "true" ]]; then
+  fallback_notes+=("running_in_container")
+  if [[ "${EFFECTIVE_CPU_SOURCE}" != "getconf" ]]; then
+    fallback_notes+=("cpu_count_from_${EFFECTIVE_CPU_SOURCE}")
+  fi
+fi
+
+# Format NPU fields for JSON output (handle null states safely)
+npu_util_json="null"
+host_cpu_util_json="null"
+npu_bottleneck_type_json="null"
+if [[ "${NPU_BOTTLENECK_DETECTED}" == "true" ]]; then
+  npu_util_json="${NPU_UTIL_PCT}"
+  host_cpu_util_json="${HOST_CPU_UTIL_PCT}"
+  npu_bottleneck_type_json="\"${NPU_BOTTLENECK_TYPE}\""
+fi
+
 fallback_json="[]"
 if [[ "${#fallback_notes[@]}" -gt 0 ]]; then
   fallback_json="$(printf '%s\n' "${fallback_notes[@]}" | awk 'BEGIN{printf "["} {printf "%s\"%s\"", sep, $0; sep=","} END{printf "]"}')"
@@ -258,7 +475,13 @@ cat <<EOF
     "network_tx_packets_per_sec": ${network_tx_packets_per_sec},
     "network_drop_delta": ${network_drop_delta},
     "network_sample_seconds": ${sample_seconds:-0},
-    "memory_pressure_hint": "${memory_pressure_hint}"
+    "memory_pressure_hint": "${memory_pressure_hint}",
+    "in_container": ${IN_CONTAINER},
+    "effective_cpu_source": "${EFFECTIVE_CPU_SOURCE}",
+    "effective_cpu_count": $(get_effective_cpu_count),
+    "npu_bottleneck_type": ${npu_bottleneck_type_json},
+    "npu_utilization_pct": ${npu_util_json},
+    "host_cpu_util_pct": ${host_cpu_util_json}
   },
   "fallback_notes": ${fallback_json}
 }

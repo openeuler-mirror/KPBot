@@ -29,6 +29,8 @@
 - `SHOW GLOBAL STATUS`
 - `SHOW VARIABLES`
 
+批量采集可使用 `scripts/collect_mysql_status.sh --output-dir <dir> [--database <db>] [-- mysql options...]` 一键导出上述状态（含 `-uroot -p` 等连接参数透传），产出落盘供分析使用。
+
 建议重点关注：
 
 - Buffer Pool 命中率

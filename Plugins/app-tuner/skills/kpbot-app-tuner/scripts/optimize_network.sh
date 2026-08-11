@@ -72,7 +72,7 @@ if [ -z "$IFACE" ]; then
     fail "必须指定 --iface 参数"
 fi
 
-BACKUP_DIR="/tmp/network_opt_backup_${IFACE}"
+BACKUP_DIR="${BACKUP_DIR:-./output/network_opt_backup_${IFACE}}"
 
 # 只有真实执行和回退需要 root；dry-run 可由普通用户预审。
 if { [ "$EXECUTE" = true ] || [ "$ROLLBACK" = true ]; } && [ "$(id -u)" -ne 0 ]; then

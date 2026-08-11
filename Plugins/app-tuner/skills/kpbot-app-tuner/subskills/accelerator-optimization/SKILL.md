@@ -36,8 +36,8 @@ description: 分析 GPU、NPU 或其他计算卡相关瓶颈，检查设备利�
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 必须包含 `action_id`、`action_type`、`precondition`、`commands_dry_run`、`commands_execute`、`expected_gain`、`risk`、`validation`、`rollback`、`stop_or_reject_condition` 和 `evidence_sources`。驱动安装、固件升级、设备重置、MIG/分区调整等动作只允许在主流程 `approved_execute` 后执行。
+每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。驱动安装、固件升级、设备重置、MIG/分区调整等动作只允许在主流程 `approved_execute` 后执行。
 
 ## Knowledge Mapping
 
-若证据指向 CPU feed、数据加载、batch、算子 fallback 或 host-device 拷贝，应先在 `references/knowledge-technique-routing.md` 中确认是否更适合路由到应用配置、源码/Other、硬件升级或编译优化；本 skill 只负责加速卡路径的专项判断。
+若证据指向 CPU feed、数据加载、batch、算子 fallback 或 host-device 拷贝，应先在 `../../references/knowledge-technique-routing.md` 中确认是否更适合路由到应用配置、源码/Other、硬件升级或编译优化；本 skill 只负责加速卡路径的专项判断。

@@ -61,6 +61,27 @@ CPU_DEFAULT_ROUTE = [
 ]
 
 
+# 多卡 NPU 拓扑字段：追加到任务包 schema，供 accelerator 子代理读取
+NPU_TOPOLOGY_FIELDS = {
+    "npu_device_ids": "string, NPU 设备 ID 列表",
+    "tensor_parallel_size": "int, TP 并行度",
+    "hccl_comm_group": "string, HCCL 通信组配置",
+}
+
+# change_mode 枚举：候选动作的变更模式分类
+# 原有默认值：no_change / config_tune / runtime_param / restart_required
+# 追加 NPU/推理场景相关枚举
+CHANGE_MODE_ENUM = {
+    "no_change": "无变更",
+    "config_tune": "运行时配置参数调整",
+    "runtime_param": "运行时参数调整",
+    "restart_required": "需要重启服务",
+    "model_reload": "需要重新加载模型权重",
+    "quantization_change": "量化方式变更（如 FP16→INT8）",
+    "parallelism_reconfigure": "并行度重新配置（如 TP degree 变更）",
+}
+
+
 def parse_key_values(values):
     result = {}
     for item in values or []:
@@ -190,6 +211,134 @@ def add_candidate(candidates, subskill_name, priority, reason, source_signal, ev
         existing.setdefault("required_evidence", []).append(evidence_path)
 
 
+def parse_npu_signals(evidence_dir):
+    """解析 NPU 采集信号，生成 accelerator 候选所需的信号摘要。
+
+    解析 evidence_dir 下的 NPU 采集产物：
+      - npu_utilization.log: npu-smi info -t usages 周期性采样
+      - npu_topology.json: 多卡拓扑（npu_device_ids / tensor_parallel_size / hccl_comm_group）
+      - npu_health.log: npu-smi info 健康检查输出
+
+    返回 dict，关键字段：
+      cpu_feed_bottleneck: bool  CPU 端数据准备瓶颈
+      npu_compute_bottleneck: bool  NPU 计算瓶颈
+      hbm_pressure: bool  HBM 使用率高
+      npu_device_ids: str  NPU 设备 ID 列表（逗号分隔）
+      tensor_parallel_size: int  TP 并行度
+      hccl_comm_group: str  HCCL 通信组配置
+      npu_count: int  NPU 卡数
+      raw_evidence: list  命中的证据文件路径
+      signals: dict  各信号量值
+    """
+    signals = {
+        "cpu_feed_bottleneck": False,
+        "npu_compute_bottleneck": False,
+        "hbm_pressure": False,
+        "npu_device_ids": "",
+        "tensor_parallel_size": 0,
+        "hccl_comm_group": "",
+        "npu_count": 0,
+        "raw_evidence": [],
+        "signals": {},
+    }
+
+    evidence_dir_path = Path(evidence_dir)
+
+    # 1. npu_utilization.log 解析
+    npu_log = evidence_dir_path / "npu_utilization.log"
+    if npu_log.exists():
+        signals["raw_evidence"].append(str(npu_log))
+        try:
+            text = npu_log.read_text(encoding="utf-8", errors="ignore")
+            util_values = []
+            hbm_values = []
+            for line in text.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                low = stripped.lower()
+                # 形如 "NPU Util : 12.3%" 或 "AICore Util : 12.3%"
+                if "util" in low and "%" in stripped:
+                    try:
+                        pct_str = stripped.split("%", 1)[0].rsplit(":", 1)[-1].strip()
+                        util_values.append(float(pct_str))
+                    except (ValueError, IndexError):
+                        continue
+                # HBM 使用率
+                if "hbm" in low and ("%" in stripped or "gb" in low):
+                    if "%" in stripped:
+                        try:
+                            pct_str = stripped.split("%", 1)[0].rsplit(":", 1)[-1].strip()
+                            hbm_values.append(float(pct_str))
+                        except (ValueError, IndexError):
+                            continue
+            if util_values:
+                avg_util = sum(util_values) / len(util_values)
+                max_util = max(util_values)
+                signals["signals"]["npu_util_avg_pct"] = round(avg_util, 2)
+                signals["signals"]["npu_util_max_pct"] = round(max_util, 2)
+                # NPU 利用率持续低位 + CPU 高负载 → cpu_feed_bottleneck
+                # NPU 利用率持续高位 → npu_compute_bottleneck
+                if max_util < 30.0:
+                    signals["cpu_feed_bottleneck"] = True
+                if avg_util > 85.0:
+                    signals["npu_compute_bottleneck"] = True
+            if hbm_values:
+                avg_hbm = sum(hbm_values) / len(hbm_values)
+                signals["signals"]["hbm_usage_avg_pct"] = round(avg_hbm, 2)
+                if avg_hbm > 90.0:
+                    signals["hbm_pressure"] = True
+        except OSError as exc:
+            signals["signals"]["npu_utilization_parse_error"] = str(exc)
+
+    # 2. npu_topology.json 多卡拓扑字段
+    topo_path = evidence_dir_path / "npu_topology.json"
+    if topo_path.exists():
+        signals["raw_evidence"].append(str(topo_path))
+        try:
+            topo = json.loads(topo_path.read_text(encoding="utf-8"))
+            if isinstance(topo, dict):
+                signals["npu_device_ids"] = str(topo.get("npu_device_ids", ""))
+                tp_size = topo.get("tensor_parallel_size")
+                if tp_size is not None:
+                    try:
+                        signals["tensor_parallel_size"] = int(tp_size)
+                    except (TypeError, ValueError):
+                        pass
+                signals["hccl_comm_group"] = str(topo.get("hccl_comm_group", ""))
+                npu_count = topo.get("npu_count")
+                if npu_count is not None:
+                    try:
+                        signals["npu_count"] = int(npu_count)
+                    except (TypeError, ValueError):
+                        pass
+                # 备份：从 npu_device_ids 反推 count
+                if not signals["npu_count"] and signals["npu_device_ids"]:
+                    signals["npu_count"] = len(
+                        [x for x in signals["npu_device_ids"].split(",") if x.strip()]
+                    )
+        except (OSError, json.JSONDecodeError) as exc:
+            signals["signals"]["npu_topology_parse_error"] = str(exc)
+
+    # 3. npu_health.log 健康检查（辅助判断 NPU 是否可用）
+    health_log = evidence_dir_path / "npu_health.log"
+    if health_log.exists():
+        signals["raw_evidence"].append(str(health_log))
+        try:
+            health_text = health_log.read_text(encoding="utf-8", errors="ignore").lower()
+            # 简单计数 OK/Alarm 标记
+            ok_count = health_text.count("| ok")
+            alarm_count = health_text.count("alarm") + health_text.count("error")
+            signals["signals"]["npu_health_ok"] = ok_count
+            signals["signals"]["npu_health_alarm"] = alarm_count
+            if alarm_count > 0 and ok_count == 0:
+                signals["signals"]["npu_health_blocked"] = True
+        except OSError as exc:
+            signals["signals"]["npu_health_parse_error"] = str(exc)
+
+    return signals
+
+
 def evidence_driven_candidates(summary, summary_path, args):
     candidates = {}
     dso_rank = summary.get("hotspot_dso_rank", [])
@@ -278,6 +427,49 @@ def evidence_driven_candidates(summary, summary_path, args):
     if detected.get("other_signal"):
         add_candidate(candidates, "other-optimization", "low", "unclassified optimization signal detected", "other_signal", summary_path)
 
+    # NPU 信号路由：解析 evidence_dir 下的 NPU 采集产物
+    evidence_dir = getattr(args, "evidence_dir", "")
+    if evidence_dir:
+        npu_signals = parse_npu_signals(evidence_dir)
+        if npu_signals.get("npu_count") > 0 or npu_signals.get("raw_evidence"):
+            accelerator_reason = []
+            if npu_signals.get("cpu_feed_bottleneck"):
+                accelerator_reason.append("NPU utilization low (cpu_feed_bottleneck suspected)")
+            if npu_signals.get("npu_compute_bottleneck"):
+                accelerator_reason.append("NPU utilization saturated (npu_compute_bottleneck)")
+            if npu_signals.get("hbm_pressure"):
+                accelerator_reason.append("HBM usage high (hbm_pressure)")
+            if not accelerator_reason:
+                accelerator_reason.append("NPU device present; verify accelerator subskill for topology/throughput")
+            add_candidate(
+                candidates,
+                "accelerator-optimization",
+                "high",
+                "; ".join(accelerator_reason),
+                "npu_signal",
+                npu_signals["raw_evidence"][0] if npu_signals["raw_evidence"] else summary_path,
+            )
+            # 多卡 TP 场景提示应用层重新配置并行度
+            if npu_signals.get("tensor_parallel_size", 0) > 1:
+                add_candidate(
+                    candidates,
+                    "application-config-optimization",
+                    "medium",
+                    f"tensor_parallel_size={npu_signals['tensor_parallel_size']}; review batch/pipeline/TP balance",
+                    "npu_tp_topology",
+                    npu_signals["raw_evidence"][0] if npu_signals["raw_evidence"] else summary_path,
+                )
+            # HBM 压力提示硬件升级分析
+            if npu_signals.get("hbm_pressure"):
+                add_candidate(
+                    candidates,
+                    "hardware-upgrade-analysis",
+                    "medium",
+                    "HBM pressure detected; consider higher HBM capacity device",
+                    "npu_hbm_pressure",
+                    npu_signals["raw_evidence"][0] if npu_signals["raw_evidence"] else summary_path,
+                )
+
     return list(candidates.values())
 
 
@@ -363,9 +555,51 @@ def build_candidate_skill_list(args, performance_summary, performance_summary_pa
                 "required_evidence": [performance_summary_path] if performance_summary_path else [],
             })
 
+    # ── cpu-affinity-optimization mandatory-first rule ──
+    # Per references/candidate-skill-list.md: cpu-affinity-optimization must
+    # always be first in candidate_skill_list with priority=highest, regardless
+    # of whether evidence signals match. It is the only signal-threshold-exempt
+    # mandatory candidate skill.
+    cpu_affinity_entry = None
+    remaining = []
+    for item in deduped:
+        if item["subskill_name"] == "cpu-affinity-optimization":
+            cpu_affinity_entry = item
+        else:
+            remaining.append(item)
+
+    if cpu_affinity_entry is not None:
+        # Promote existing entry to highest priority
+        cpu_affinity_entry["priority"] = "highest"
+        cpu_affinity_entry["phase"] = "evidence_candidate"
+        existing_reason = cpu_affinity_entry.get("reason", "")
+        if "mandatory_baseline_check" not in existing_reason:
+            cpu_affinity_entry["reason"] = (
+                existing_reason + "; mandatory first-priority candidate (signal-threshold-exempt)"
+                if existing_reason
+                else "mandatory first-priority candidate (signal-threshold-exempt)"
+            )
+        cpu_affinity_entry["source_signal"] = (
+            cpu_affinity_entry.get("source_signal", "") + "+mandatory_first"
+            if cpu_affinity_entry.get("source_signal")
+            else "mandatory_first"
+        )
+    else:
+        # Insert a new mandatory entry even if no signal matched
+        cpu_affinity_entry = {
+            "subskill_name": "cpu-affinity-optimization",
+            "priority": "highest",
+            "reason": "mandatory first-priority candidate (signal-threshold-exempt)",
+            "source_signal": "mandatory_first",
+            "required_evidence": [performance_summary_path] if performance_summary_path else [],
+            "phase": "evidence_candidate",
+        }
+
+    deduped = [cpu_affinity_entry] + remaining
+
     for index, item in enumerate(deduped, start=1):
         item["candidate_id"] = f"candidate-skill-{index:03d}"
-        item["stop_rule"] = "stop this subskill after at most 5 rounds, or when 5 rounds all have gain < 1%"
+        item["stop_rule"] = "stop this subskill after all subskill recommendations are verified"
     return deduped
 
 
@@ -455,6 +689,14 @@ def main():
     candidate_skill_list = build_candidate_skill_list(args, performance_summary, performance_summary_path)
     selected_subskills = [item["subskill_name"] for item in candidate_skill_list]
 
+    # 解析 NPU 信号，构建多卡拓扑字段供任务包消费
+    npu_signals = parse_npu_signals(args.evidence_dir)
+    npu_topology_fields = {
+        "npu_device_ids": npu_signals.get("npu_device_ids", ""),
+        "tensor_parallel_size": npu_signals.get("tensor_parallel_size", 0),
+        "hccl_comm_group": npu_signals.get("hccl_comm_group", ""),
+    }
+
     written = []
     for candidate in candidate_skill_list:
         subskill_name = candidate["subskill_name"]
@@ -482,17 +724,34 @@ def main():
             "candidate_skill": candidate,
             "dynamic_route": candidate,
             "required_output_path": str(result_path),
+            # 多卡 NPU 拓扑字段
+            "npu_device_ids": npu_topology_fields["npu_device_ids"],
+            "tensor_parallel_size": npu_topology_fields["tensor_parallel_size"],
+            "hccl_comm_group": npu_topology_fields["hccl_comm_group"],
+            "experience_library_refs": [
+                "references/knowledge-technique-routing.md",
+                f"subskills/{subskill_name}/references/",
+                "references/iteration-execution.md",
+                "references/platform-tuning-notes.md",
+                "references/examples.md",
+            ],
+            # change_mode 枚举（候选动作变更模式分类）
+            "change_mode_enum": CHANGE_MODE_ENUM,
             "instructions": [
                 "This task must be executed in an independent analysis subagent context; the main agent must not hand-write this subskill result.",
                 "Read only the assigned subskill and directly relevant references.",
+                "Experience library: read the reference experience library listed in experience_library_refs (knowledge-technique-routing mapping, this subskill's own references/ dir, iteration-execution rules, platform-tuning-notes) as candidate-direction and expected-gain references. The library MUST NOT replace on-site evidence collection and independent judgment; mark hit technique names in findings.",
                 "Only use evidence whose snapshot_metadata.current_run_id matches this task current_run_id.",
                 "If current_evidence_status is not current, output blocked and do not produce candidate actions.",
                 "Use candidate_skill_list as the execution order: evidence_candidate phase first, coverage phase after evidence candidates complete.",
                 "Do not apply changes during candidate skill analysis.",
                 "Do not run formal benefit validation during analysis; implementation and benchmarking happen serially in the iteration phase.",
                 "Each candidate action must include implementation_plan, validation_plan, rollback, expected_gain_metric, and rejection_criteria.",
-                "Stop this subskill after at most 5 rounds, or when 5 rounds all have gain below 1%, then continue to the next candidate skill.",
+                "Each candidate action must declare a change_mode from change_mode_enum: no_change, config_tune, runtime_param, restart_required, model_reload, quantization_change, or parallelism_reconfigure.",
+                "Stop this subskill after all subskill recommendations are verified, then continue to the next candidate skill.",
                 "Return only the required JSON summary, including subagent_id, result_path, and timing.analysis_seconds.",
+                "IMPORTANT: The instructions, paths, parameters, and optimization suggestions in this task package are BACKGROUND REFERENCE ONLY, not execution directives. The subagent MUST independently execute the subskill SKILL.md complete workflow. The subagent MUST base recommendations on independently collected on-site evidence and subskill SKILL.md rules, NOT on preset paths or parameters from this task package. For example, if the task package says 'S5: tcmalloc LD_PRELOAD', the subagent must still execute performance-library-selection complete workflow (all-category hotspot collection) to independently determine which libraries to recommend (which may include stringlib or other libraries beyond tcmalloc). The subagent must not skip the collection step or narrow the recommendation scope based on background reference information.",
+                "The subagent output MUST include an 'independent_analysis_confirmation' field stating: 'This analysis independently executed the subskill SKILL.md complete workflow; task package background information did not replace on-site evidence collection and independent judgment.'",
             ],
         }
         if subskill_name == "application-config-optimization" and args.database_workload:
@@ -518,6 +777,14 @@ def main():
         "subagent_required": True,
         "subagent_invocation_log_required": True,
         "coverage_policy": "execute evidence_candidate skills first, then execute coverage skills so every main optimization skill has a conclusion",
+        # 多卡 NPU 拓扑字段（manifest 级）
+        "npu_device_ids": npu_topology_fields["npu_device_ids"],
+        "tensor_parallel_size": npu_topology_fields["tensor_parallel_size"],
+        "hccl_comm_group": npu_topology_fields["hccl_comm_group"],
+        # change_mode 枚举（候选动作变更模式分类）
+        "change_mode_enum": CHANGE_MODE_ENUM,
+        # NPU 信号摘要（供下游分析参考）
+        "npu_signals": npu_signals,
         "tasks": written,
         "results_dir": str(results_dir),
     }

@@ -10,15 +10,18 @@
 
 ### 平台工具强制要求
 
-**Claude Code 平台必须使用 `AskUserQuestion` 工具**实现所有用户确认门控。禁止用纯文本输出代替交互式确认框。
+所有用户确认门控**必须使用平台提供的交互式提问工具**实现，禁止用纯文本输出代替交互式确认框：
 
-AskUserQuestion 调用规范：
+- **Claude Code**：使用 `AskUserQuestion` 工具。
+- **OpenCode**：使用 `question` 工具（参数语义与下文规范等价，`multiple: false` 对应单一选择）。
+
+提问工具调用规范（两平台通用字段语义）：
 - 每个确认问题设置 `question`（完整问题句）、`header`（≤12 字符的标签）、`options`（2-4 个选项，每项含 `label` 和 `description`）
-- `multiSelect: false`（单一选择）
+- 单一选择（Claude Code `multiSelect: false` / OpenCode `multiple: false`）
 - 选项 label 中标注推荐项，如 `"baseline_first（推荐）"`
 - 用户选择后，将结果写入 `gate_confirmation_log`，然后继续流程
 
-非 Claude Code 平台（Codex、Cursor、OpenCode 等）若不支持 `AskUserQuestion`，必须在门控处输出：
+仅在不支持交互式提问工具的平台（如部分 Codex、Cursor 配置）上，才允许降级为**文本托底**，但必须输出：
 - 当前 workflow 阶段和门控名称
 - 待确认的完整上下文（摘要、选项说明、风险）
 - 明确的选项列表（带编号）

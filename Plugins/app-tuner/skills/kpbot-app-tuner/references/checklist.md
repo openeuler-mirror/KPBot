@@ -74,7 +74,7 @@
 - 是否确认压测账号、token、证书或 ACL 可从压测端访问目标服务。
 - 是否执行最小负载 smoke test，例如 1 线程短测，并确认压测工具初始化成功。
 - 是否完成目标实例身份校验：端口、PID、容器/进程、二进制、配置文件、数据目录、运行时库、资源约束。
-- 若服务未启动、端口不通、认证失败、权限不足或 smoke test 失败，是否设置 `overall_progress.status=blocked` 和 `blocked_gate=service_health_check`。
+- 若服务未启动、端口不通、认证失败、权限不足或 smoke test 失败，是否设置 `overall_progress.status=blocked` 和 `blocked_gate=service-health-check`。
 - 服务健康检查失败时，是否停止在该门控并告知用户具体问题、证据路径和修复建议。
 - 服务健康检查失败时，是否避免运行正式基线、瓶颈识别、候选 skill 列表生成和优化轮次。
 
@@ -156,8 +156,7 @@
 - 每轮是否只变更一个 skill 的变量（单变量原则）；来自不同 skill 的变更是否拆分为独立轮次。
 - cpu-affinity-optimization 是否在所有其他候选 skill 之前执行，且有 `skill_execution_order.cpu_affinity_first_verified=true`。
 - 每轮是否执行目标实例身份复核、压测、收益计算和回退判断。
-- 单个 skill 是否最多尝试 5 轮。
-- 同一 skill 是否在 5 轮收益均小于 1% 时停止。
+- 单个 skill 是否需验证完全 subskill 给出的所有推荐。
 - 若该 skill 停止，是否继续执行 `candidate_skill_list` 中下一个候选或 coverage skill。
 - 是否确认所有主优化 skill 均完成、停止或阻塞并说明原因后才进入最终报告。
 
