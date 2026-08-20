@@ -2,6 +2,36 @@
 
 候选 skill workflow 使用两类 subagent 执行 `candidate_skill_list` 中的 skill：分析 subagent 和执行验证 subagent。主 agent 只维护全局状态、候选 skill 列表、任务包、候选池、收益统计和最终决策。
 
+## 双阶段强制契约（Dual-Phase Enforcement）
+
+每个候选 skill 和 coverage skill **必须**经历两个独立 subagent 阶段，**禁止合并为单个 subagent**：
+
+1. **分析阶段**（分析 subagent）：独立读 `subskills/<name>/SKILL.md`，按完整流程分析现场证据，输出 `candidate_actions`，**不修改系统**。
+2. **执行验证阶段**（执行验证 subagent）：基于分析结果实施、复测、记录收益/回退。
+
+**违规判定**：
+- 主 agent 在分析 subagent 的 prompt 中指定具体动作（如 "LD_PRELOAD tcmalloc"、"使用 BiSheng 预编译二进制"），替代 subagent 的独立分析 → 违规。
+- 主 agent 跳过分析 subagent，直接启动执行验证 subagent 执行预判动作 → 违规。
+- 主 agent 将分析和执行合并为单个 subagent（既分析又执行） → 违规。
+- 主 agent 直接手写 coverage skill 结论，未启动 subagent → 违规。
+
+**门控机制**：
+- `verify-order`：进入任何其他候选/coverage skill 前，确认 cpu-affinity-optimization 已完成。
+- `verify-skill-completeness`：任意 skill 标记 completed 前，校验该 skill 分析 subagent 输出的全部 `candidate_actions` 都有结论（执行/拒绝/阻塞/停止且说明原因），且 `steps_covered` 覆盖 SKILL.md 定义的全部手段类别。`incomplete_skills` 非空时禁止标记 completed。
+- `report-ready`：报告生成前合并执行 `validateCompliance + validateReportInputs + verifySkillCompleteness`，任一失败则阻塞。
+
+### executor 强制合规（脚本强制）
+
+`dynamic_workflow_manager.js` 对 subagent 执行记录实施强制校验，文档与脚本保持一致：
+
+- **分析阶段必须为 analyzer**：`append-subagent-log` 的 `phase=analysis` 要求 `subagent_type=analyzer`（统一分析 agent，按任务包 `subskill_name` 字段加载对应 skill；兼容旧值 `oracle`）；传入 executor 会被拒绝。
+- **实施阶段必须为 executor**：`phase=implementation` 要求 `subagent_type=executor`，且 `subagent_id` 必须为平台返回的真实 subagent 任务 ID。`platform_unavailable_degraded_context` 在实施阶段被拒绝——OpenCode/Claude Code 均禁止降级。
+- **completed/stopped 必须有 executor 记录**：`set-iteration-state` 在状态为 `completed`/`stopped` 且声明轮次时，会校验 `subagent_invocation_log` 中存在对应 skill 的 `phase=implementation` + `subagent_type=executor` 记录；缺失则抛 `EXECUTOR_MANDATORY_VIOLATION`，阻止标记完成。
+- **applied 动作必须有证可溯**：`verify-skill-completeness` 发现某个 skill 有已应用动作但无 executor 实施记录时，写入 `incomplete_skills`（`executor_mandatory_violation`），`report-ready` 拒绝通过。
+- **主 agent 违规手写结果**：主 agent 自行实施、伪造 before/after 指标或直接写入轮次结果而不启动独立 executor subagent，会因上述校验在 `set-iteration-state` 或 `report-ready` 阶段被拦截。
+
+> **注意**：输入侧的 prompt 约束（如禁止主 agent 在 prompt 中写死动作）本质上是规则而非技术强制，效果有限。根本解决需要架构改进——将 subagent 行为规范从 task prompt 移到 system prompt，由平台加载。详见设计文档第 7 节"架构改进方案：自定义 subagent 类型"。
+
 ## 职责边界
 
 ### 主 agent
@@ -17,18 +47,24 @@
 
 若运行平台提供 subagent / Task / multi-agent 工具，主 agent 必须使用该工具启动子任务，并把工具返回的任务 ID 写入 `subagent_invocation_log.subagent_id`。
 
-**Claude Code 平台不可降级**：Claude Code 内置 `Agent` 工具始终可用，因此在该平台上**绝对禁止**使用降级模式，每个候选 skill 和 coverage skill 都必须启动独立 subagent 执行。违反此规则视为合规失败。
+**主流平台不可降级**：Claude Code 内置 `Agent` 工具、OpenCode 提供 `task` 工具，均始终可用，因此在这两个平台上**绝对禁止**使用降级模式，每个候选 skill 和 coverage skill 都必须启动独立 subagent 执行。违反此规则视为合规失败。
 
 只有在下述平台完全不支持任何 subagent 工具时，才允许降级为”显式独立上下文执行”：必须为每个 skill 写出任务包、单独读取对应 `subskills/<name>/SKILL.md`、生成独立结果 JSON，并在日志中标记 `subagent_id=platform_unavailable_degraded_context`。Claude Code、Codex CLI、OpenCode 和 Cursor Agent 均不在此列，不得降级。降级执行不能与主 agent 手写全量候选结果混同。
 
 ### 分析 Subagent
 
 - 只负责一个候选 skill。
-- 在自己的上下文中读取对应 `subskills/<name>/SKILL.md`。
-- 只从 `evidence_snapshot_dir` 读取预采集证据。
+- **必须独立执行 subskill SKILL.md 的完整流程**：读取对应 `subskills/<name>/SKILL.md` 后，按其定义的完整流程独立执行，不得跳过任何步骤。
+- **任务包中的路径、配置、优化参数仅作为背景参考**，不得作为执行指令直接照搬。subagent 必须基于自己采集的现场证据独立判断：
+  - 哪些候选库/参数/动作应该推荐（依据 subskill SKILL.md 的证据分级与阈值规则）
+  - 哪些动作应拒绝（依据现场证据不满足条件）
+  - 哪些 subskill 要求的采集（如 perf sampling、库检测）需要现场执行而非依赖预采集
+- 从 `evidence_snapshot_dir` 读取预采集证据作为起点；**当 subskill SKILL.md 要求采集的证据在预采集快照中缺失或不完整时，subagent 必须现场补充采集**（如 perf record、lsof、detect_all_libraries.sh），不得以"预采集未覆盖"为由跳过 subskill 的 Step 1。
+- **禁止以任务包 instructions 中的预设路径替代 subskill 流程**：例如任务包写明"S5: tcmalloc LD_PRELOAD"，subagent 仍必须执行 performance-library-selection 的完整流程（热点采集 → 库类型识别+规则匹配 → 验证流程设计），独立判断应推荐哪些库（可能包括 tcmalloc 之外的其他库如 stringlib）。
 - 输出候选动作、风险、验证方法、回退方法和停止条件。
 - 不执行正式收益验证，不修改系统。
 - 输出中必须包含 `timing.analysis_seconds` 和 `result_path`；主 agent 必须把它折算进 `optimization_timing_details`。
+- 输出中必须包含 `independent_analysis_confirmation` 字段，声明"本分析已独立执行 subskill SKILL.md 完整流程，任务包背景信息未替代现场证据采集和独立判断"。
 
 ### 执行验证 Subagent
 
@@ -42,6 +78,17 @@
 - 若验证失败、收益为负、身份不一致或触发拒绝条件，执行回退并输出 `rejected_optimization_actions`。
 - 输出轮次结果到 `rounds/round_N_summary.json`，不得自行进入下一 skill。
 - 输出中必须包含 `per_skill_gain_pct` 字段，表示该 skill 独立归因的累计收益（仅在该 skill 的首轮执行时从原始基线计算；后续轮次从上一轮有效配置计算阶段收益）。若因轮次混淆或无法隔离，标记为 `null`。
+- **每步记录 forward_cmd / reverse_cmd**：实施动作前，必须先记录 `forward_cmd`（即将执行的变更命令）和 `reverse_cmd`（可独立执行的回退命令），通过 `record-execution` 写入 `workflow_state.json`。`reverse_cmd` 必须可独立执行、不依赖对话上下文、包含完整的环境变量和路径。未记录 forward_cmd/reverse_cmd 的轮次不得标记为已完成。
+- **归档原始数据**：每轮必须归档以下原始数据到 `rounds/round_N_<skill_name>/` 目录：
+  - `benchmark_raw.csv` — 压测原始 CSV 输出（含 throughput/TTFT/TPOT 全字段）
+  - `env_before.json` — 变更前环境变量和进程状态快照
+  - `env_after.json` — 变更后环境变量和进程状态快照
+  - `forward_cmd.txt` + `reverse_cmd.txt` — 本轮变更和回退命令
+  - `server_log.txt` — 服务启动/运行日志片段
+  - `npu_metrics.json`（AI 推理场景）— NPU 利用率/HBM 带宽采样
+  - `perf_data.bin`（如本轮有采集）— perf record 原始数据
+  - 归档文件不得脱敏或截断；脱敏仅在案例归档（`case_archive.json`）阶段执行。
+  - 原始数据归档路径写入 `round_N_summary.json` 的 `raw_data_archive_dir` 字段。
 
 ## 任务包格式
 
@@ -63,9 +110,25 @@
 - `candidate_skill`
 - `required_output_path`
 - `instructions`
+- `experience_hints`
 
 兼容字段：`evidence_dir` 和 `dynamic_route` 可继续出现，但新实现必须读取 `evidence_snapshot_dir` 和 `candidate_skill`。
 任务包生成器会读取 `evidence_snapshot_dir/snapshot_metadata.json`，若其中 `current_run_id` 与参数不一致、`current_evidence_status != current`、`snapshot_time` 早于 `current_run_started_at`，或 `target_identity` 与本轮目标实例身份不一致，必须拒绝生成任务包。命令行参数不得把快照中的 `stale`、`mixed`、`invalid` 状态覆盖为 `current`。
+
+**任务包信息分层**：
+
+| 层 | 字段 | 内容 | subagent 使用方式 |
+|----|------|------|------------------|
+| 现场证据 | `evidence_snapshot_dir` + `performance_signal_summary_path` + `baseline_path` | perf record 原始数据、DSO 排名、热点函数、topdown、基线指标 | subagent 直接读文件，数据完整可验证 `current_run_id`。**这是分析的唯一数据源** |
+| 经验参考 | `experience_hints` | 历史收益数据、推荐路径线索、场景适配性经验 | 仅供参考，不是执行依据。subagent 在 `findings` 中标注命中的经验库技术名，但推荐决策必须基于现场证据 |
+| 执行规则 | `instructions` | "只读不修改"、"输出 JSON 格式"、"覆盖 SKILL.md 全部步骤"、"输出 steps_covered 和 independent_analysis_confirmation" | 纯规则，不含数据，不含经验 |
+
+**`experience_hints` 字段约束**：
+- 内容来自子 SKILL 的 `references/` 经验库（如 `ascend-playbook.md`、`optimization_kb.json`），由 `create_subagent_tasks.py` 自动提取，不由主 agent 手写
+- 每条经验必须标注 `source`（来源文件），subagent 可追溯
+- subagent 输出时在 `findings` 中标注命中的经验库技术名，但推荐决策（`recommendation`/`confidence`）必须基于现场证据分级
+
+> **注意**：`instructions` 字段约束是规则性的，主 agent 仍可能在 task prompt 中写入具体动作指令替代 subagent 的独立分析。这是当前架构的固有局限，根本解决需要自定义 subagent 类型（见设计文档第 7 节）。
 
 候选池合并器默认以 `candidate_skill_list` 作为期望 skill 列表；缺少任何候选或 coverage skill 的结果、run_id 不一致、证据状态不为 `current` 或候选动作为空，都会写入 `candidate_pool.json.gate_errors`。执行验证任务生成器必须在存在 `gate_errors` 时拒绝生成任务包。
 
@@ -106,6 +169,8 @@ scripts/create_subagent_tasks.py \
 | `required_evidence` | string[] | 是 | 缺失证据；无缺失时为空数组 |
 | `fallback_notes` | string[] | 是 | 降级说明；无降级时为空数组 |
 | `timing` | object | 是 | 耗时统计 |
+| `independent_analysis_confirmation` | string | 是 | 声明"本分析已独立执行 subskill SKILL.md 完整流程，任务包背景信息未替代现场证据采集和独立判断" |
+| `steps_covered` | array | 是 | 声明覆盖的 SKILL.md 步骤和手段类别（如 performance-library-selection 的 18 类库名）。`verify-skill-completeness` 校验是否覆盖全部必填类别 |
 
 ## 执行验证输出 JSON
 

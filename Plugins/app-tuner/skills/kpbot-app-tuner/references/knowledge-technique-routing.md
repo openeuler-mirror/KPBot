@@ -1,6 +1,6 @@
 # Knowledge Technique Routing
 
-本文件把知识库 `/Users/a111/knowledge/20_Knowledge/Performance/Server-Performance-Optimization` 中的技术层和案例索引映射到当前子 skill。使用时只按命中的瓶颈读取相关知识库文件；不要把历史案例当作当前结论。
+本文件把知识库技术层和案例索引映射到当前子 skill。知识库路径为可选配置：若部署了本地知识库，通过环境变量 `KPBOT_KB_ROOT` 或启动参数指定其根目录；未配置时本文件仍可作为技术层路由参考使用。使用时只按命中的瓶颈读取相关知识库文件；不要把历史案例当作当前结论。
 
 ## Routing Map
 

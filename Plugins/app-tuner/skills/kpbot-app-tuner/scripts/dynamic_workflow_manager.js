@@ -73,6 +73,44 @@ const ALL_PRIMARY_SKILLS = [
 /** 合法 evidence_status 值 */
 const EVIDENCE_STATUSES = new Set(['current', 'missing', 'stale', 'mixed', 'invalid']);
 
+/**
+ * 解析候选条目中的终态（completed/stopped/blocked），供 setCandidateSkillList 保留终态。
+ * @param {string} subskillName
+ * @param {Object} candidate  候选条目（可能带 status 字段）
+ * @returns {string}
+ */
+function getCandidateStatus(subskillName, candidate) {
+  const TERMINAL_STATUSES = ['completed', 'stopped', 'blocked'];
+  if (candidate && TERMINAL_STATUSES.includes(candidate.status)) {
+    return candidate.status;
+  }
+  const PRIMARY = [
+    'application-config-optimization',
+    'performance-library-selection',
+    'cpu-affinity-optimization',
+    'network-optimization',
+    'compiler-optimization',
+    'os-optimization',
+    'bios-optimization',
+    'accelerator-optimization',
+    'hardware-upgrade-analysis',
+    'other-optimization',
+  ];
+  return PRIMARY.includes(subskillName) ? 'pending' : 'pending';
+}
+
+/**
+ * 根据日志条目推断 subagent 类型（未显式声明时）。
+ * phase=implementation/execution/executor → executor；否则 analyzer。
+ * @param {string|undefined} phase
+ * @returns {string}
+ */
+function inferSubagentType(phase) {
+  if (!phase) return 'analyzer';
+  const implPhases = ['implementation', 'execution', 'executor', 'validation', 'apply'];
+  return implPhases.includes(phase) ? 'executor' : 'analyzer';
+}
+
 // ---------------------------------------------------------------------------
 // DynamicWorkflowManager
 // ---------------------------------------------------------------------------
@@ -282,7 +320,39 @@ class DynamicWorkflowManager {
     const hasMandatory = candidates.find(c => c.subskill_name === MANDATORY_SKILL);
     const others = candidates.filter(c => c.subskill_name !== MANDATORY_SKILL);
 
+    // 其余候选：performance-library-selection 必须排在 os-optimization 之前
+    // （库替换影响 malloc 路径，是 OS 大页/GLIBC_TUNABLES 调优的前置依赖）。
+    const PERF_LIB = 'performance-library-selection';
+    const OS_OPT = 'os-optimization';
+    const hasPerfLib = others.some(c => c.subskill_name === PERF_LIB);
+    const hasOsOpt = others.some(c => c.subskill_name === OS_OPT);
+    if (hasPerfLib && hasOsOpt) {
+      const perfIdx = others.findIndex(c => c.subskill_name === PERF_LIB);
+      const osIdx = others.findIndex(c => c.subskill_name === OS_OPT);
+      if (perfIdx > osIdx) {
+        const [perfItem] = others.splice(perfIdx, 1);
+        others.splice(osIdx, 0, perfItem);
+      }
+    }
+
+    // compiler-optimization 必须排在候选列表最末位
+    // （编译级改造会重建二进制、干扰其他 skill 的 A/B 收益归因，
+    //  需等其他运行时类手段验证完毕后再执行）。
+    const COMPILER_OPT = 'compiler-optimization';
+    const compilerIdx = others.findIndex(c => c.subskill_name === COMPILER_OPT);
+    if (compilerIdx !== -1 && compilerIdx !== others.length - 1) {
+      const [compilerItem] = others.splice(compilerIdx, 1);
+      others.push(compilerItem);
+    }
+
     const list = [];
+
+    // 从旧列表中保留已完成/已停止/已阻塞 skill 的终态，防止 set-candidates 覆盖回滚
+    const TERMINAL_STATUSES = ['completed', 'stopped', 'blocked'];
+    const previousList = this.state.candidate_skill_list || [];
+    const prevTerminal = new Map(
+      previousList.map(c => [c.subskill_name, c])
+    );
 
     // 始终在第一位置入 cpu-affinity-optimization
     list.push({
@@ -294,11 +364,15 @@ class DynamicWorkflowManager {
       source_signal: hasMandatory
         ? (hasMandatory.source_signal || 'mandatory_baseline_check')
         : 'mandatory_baseline_check',
-      status: 'pending',
+      status: prevTerminal.has(MANDATORY_SKILL) && TERMINAL_STATUSES.includes(prevTerminal.get(MANDATORY_SKILL).status)
+        ? prevTerminal.get(MANDATORY_SKILL).status
+        : getCandidateStatus(MANDATORY_SKILL, hasMandatory),
+      result: prevTerminal.get(MANDATORY_SKILL) ? prevTerminal.get(MANDATORY_SKILL).result : undefined,
     });
 
     // 其余候选按用户提供的顺序排列
     for (let i = 0; i < others.length; i++) {
+      const prev = prevTerminal.get(others[i].subskill_name);
       list.push({
         candidate_id: `candidate-skill-${String(i + 2).padStart(3, '0')}`,
         phase: 'evidence_candidate',
@@ -306,7 +380,10 @@ class DynamicWorkflowManager {
         priority: others[i].priority || 'medium',
         reason: others[i].reason || '',
         source_signal: others[i].source_signal || '',
-        status: 'pending',
+        status: prev && TERMINAL_STATUSES.includes(prev.status)
+          ? prev.status
+          : getCandidateStatus(others[i].subskill_name, others[i]),
+        result: prev ? prev.result : undefined,
       });
     }
 
@@ -709,6 +786,391 @@ class DynamicWorkflowManager {
   }
 
   // -----------------------------------------------------------------------
+  // 证据完整性 / Skill 完整性 / Subagent Prompt 预检
+  // -----------------------------------------------------------------------
+
+  /**
+   * 验证证据快照的必填字段是否非空。
+   * evidence-collection gate 完成时必须调用。任一必填字段为空时返回 passed=false，
+   * 主 agent 必须阻塞在 evidence-collection 门控，补采后重新校验。
+   *
+   * 字段按 perf 能力分层：
+   *   - perf record 依赖：hotspot_function_rank, hotspot_dso_rank
+   *     perf record -e task-clock 采集调用栈/DSO，在 perf=degraded 时仍可用。
+   *     仅当 perf=failed（perf 命令缺失或完全不可用）时才允许为空。
+   *   - 硬件 PMU 依赖：topdown
+   *     perf stat -e cycles,instructions 采集，需要硬件 PMU。
+   *     perf=degraded（硬件 PMU 不可用）或 perf=failed 时允许为空。
+   *   - 非 perf 依赖：threading
+   *     mpstat/pidstat 采集，任何情况下都必须非空。
+   *
+   * 交叉校验：perf 状态来自 state.environment_diagnosis.perf_pmu_status 或
+   * --perf-status 参数。如果 perf 状态为 passed/degraded（即 perf record 可用），
+   * 但 hotspot_function_rank/hotspot_dso_rank 为空，则即使 --allow-degraded 也
+   * 拒绝通过——这是"误判后未补采"的场景，agent 必须回头用 perf record 补采。
+   *
+   * @param {string} [summaryPath]  performance_signal_summary.json 路径
+   * @param {boolean} [allowDegraded]  是否允许 perf 不可用时的降级模式
+   * @param {string} [perfStatus]  perf 状态 (passed/degraded/failed)；不传则从 state.environment_diagnosis.perf_pmu_status 读取
+   * @returns {{ passed: boolean, degraded: boolean, checks: Array, missing_fields: string[], degraded_reason: string|null, perf_status: string }}
+   */
+  verifyEvidenceCompleteness(summaryPath, allowDegraded = false, perfStatus = null) {
+    this._ensureState();
+    const checks = [];
+    const missing_fields = [];
+
+    let summary = null;
+    if (summaryPath) {
+      try {
+        summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
+      } catch (e) {
+        const result = { passed: false, degraded: false, checks: [{ item: 'summary_file_readable', result: 'FAIL', detail: e.message }], missing_fields: ['__file_unreadable__'], degraded_reason: null, perf_status: 'unknown' };
+        this._appendTrace(this.state.current_gate, 'evidence-completeness-check', result);
+        this._touch();
+        return result;
+      }
+    } else if (this.state.evidence_summary) {
+      summary = this.state.evidence_summary;
+    } else if (this.state.performance_signal_summary) {
+      summary = this.state.performance_signal_summary;
+    }
+
+    if (!summary) {
+      const result = { passed: false, degraded: false, checks: [{ item: 'summary_present', result: 'FAIL', detail: 'performance_signal_summary not provided and not found in state' }], missing_fields: ['__summary_missing__'], degraded_reason: null, perf_status: 'unknown' };
+      this._appendTrace(this.state.current_gate, 'evidence-completeness-check', result);
+      this._touch();
+      return result;
+    }
+    checks.push({ item: 'summary_present', result: 'PASS' });
+
+    // 确定 perf 状态
+    let perf = perfStatus;
+    if (!perf) {
+      const diag = this.state.environment_diagnosis || {};
+      perf = diag.perf_pmu_status || diag.perf_status || 'unknown';
+    }
+    checks.push({ item: 'perf_status', result: 'PASS', detail: `perf_pmu_status=${perf}` });
+
+    const isEmpty = (val, type) => type === 'array'
+      ? (!Array.isArray(val) || val.length === 0)
+      : (!val || typeof val !== 'object' || Object.keys(val).length === 0);
+
+    // perf record 依赖字段：perf=passed 或 perf=degraded 时必须非空（perf record 可用）
+    // 仅 perf=failed 时允许为空
+    const PERF_RECORD_FIELDS = [
+      { key: 'hotspot_function_rank', type: 'array', label: '热点函数排序' },
+      { key: 'hotspot_dso_rank',      type: 'array', label: '热点 DSO 排序' },
+    ];
+
+    // 硬件 PMU 依赖字段：perf=passed 时必须非空，perf=degraded 或 failed 时允许为空
+    const PMU_FIELDS = [
+      { key: 'topdown', type: 'object', label: 'topdown 指标' },
+    ];
+
+    // 非 perf 依赖字段：任何情况下都必须非空
+    const NON_PERF_FIELDS = [
+      { key: 'threading', type: 'object', label: '线程分布' },
+    ];
+
+    const perfRecordUsable = (perf === 'passed' || perf === 'degraded');
+    const pmuUsable = (perf === 'passed');
+
+    // 检查 perf record 依赖字段
+    for (const field of PERF_RECORD_FIELDS) {
+      const val = summary[field.key];
+      if (isEmpty(val, field.type)) {
+        if (perfRecordUsable) {
+          // perf record 可用但字段为空 → 必须补采，不允许降级
+          checks.push({ item: `field_${field.key}`, result: 'FAIL', detail: `${field.label} (${field.key}) 为空 — perf 状态为 ${perf}，perf record 可用，必须用 perf record 补采` });
+          missing_fields.push(field.key);
+        } else if (allowDegraded) {
+          // perf=failed，降级模式放行
+          checks.push({ item: `field_${field.key}`, result: 'WARN', detail: `${field.label} (${field.key}) 为空 — perf=${perf}，降级模式放行` });
+        } else {
+          checks.push({ item: `field_${field.key}`, result: 'FAIL', detail: `${field.label} (${field.key}) 为空 — perf=${perf}，如确属不可用请用 --allow-degraded` });
+          missing_fields.push(field.key);
+        }
+      } else {
+        checks.push({ item: `field_${field.key}`, result: 'PASS', detail: `${field.label}: ${val.length} 条` });
+      }
+    }
+
+    // 检查硬件 PMU 依赖字段
+    for (const field of PMU_FIELDS) {
+      const val = summary[field.key];
+      if (isEmpty(val, field.type)) {
+        if (pmuUsable) {
+          checks.push({ item: `field_${field.key}`, result: 'FAIL', detail: `${field.label} (${field.key}) 为空 — perf=passed，硬件 PMU 可用，必须采集` });
+          missing_fields.push(field.key);
+        } else if (allowDegraded) {
+          checks.push({ item: `field_${field.key}`, result: 'WARN', detail: `${field.label} (${field.key}) 为空 — perf=${perf}，硬件 PMU 不可用，降级模式放行` });
+        } else {
+          checks.push({ item: `field_${field.key}`, result: 'FAIL', detail: `${field.label} (${field.key}) 为空 — perf=${perf}，如硬件 PMU 确不可用请用 --allow-degraded` });
+          missing_fields.push(field.key);
+        }
+      } else {
+        checks.push({ item: `field_${field.key}`, result: 'PASS', detail: `${field.label}: ${Object.keys(val).length} 键` });
+      }
+    }
+
+    // 检查非 perf 依赖字段
+    for (const field of NON_PERF_FIELDS) {
+      const val = summary[field.key];
+      if (isEmpty(val, field.type)) {
+        checks.push({ item: `field_${field.key}`, result: 'FAIL', detail: `${field.label} (${field.key}) 为空 — 非 perf 依赖字段，任何情况下都必须非空` });
+        missing_fields.push(field.key);
+      } else {
+        checks.push({ item: `field_${field.key}`, result: 'PASS', detail: `${field.label}: ${Object.keys(val).length} 键` });
+      }
+    }
+
+    // 降级模式额外校验：有字段被降级放行时，必须提供 degraded_reason
+    const hasWarns = checks.some(c => c.result === 'WARN');
+    let degraded = false;
+    let degraded_reason = null;
+    if (allowDegraded && hasWarns) {
+      degraded_reason = summary.degraded_reason || summary.perf_degraded_reason || '';
+      if (!degraded_reason) {
+        checks.push({ item: 'degraded_reason', result: 'FAIL', detail: '降级模式下有字段为空，但 summary 中未提供 degraded_reason 说明原因' });
+        missing_fields.push('degraded_reason');
+      } else {
+        checks.push({ item: 'degraded_reason', result: 'PASS', detail: degraded_reason });
+        degraded = true;
+      }
+    }
+
+    const passed = missing_fields.length === 0;
+    const result = { passed, degraded, checks, missing_fields, degraded_reason, perf_status: perf };
+    this._appendTrace(this.state.current_gate, 'evidence-completeness-check', { passed, degraded, missing_count: missing_fields.length, perf_status: perf });
+    this._touch();
+    return result;
+  }
+
+  /**
+   * 验证 cpu-affinity-optimization 已排在候选首位且状态为 completed/stopped。
+   * 进入任何其他候选或 coverage skill 的分析/执行 subagent 前必须调用。
+   * exit≠0 时主 agent 必须阻塞。
+   *
+   * @returns {{ passed: boolean, checks: Array }}
+   */
+  verifyOrder() {
+    this._ensureState();
+    const result = this.validateCpuAffinityFirst();
+    this._appendTrace(this.state.current_gate, 'verify-order', { passed: result.passed });
+    this._touch();
+    return result;
+  }
+
+  /**
+   * 验证单个 skill 的全部 candidate_actions 是否都有结论。
+   * 任意 skill 标记为 completed 前必须调用。incomplete_skills 非空时禁止标记 completed。
+   *
+   * 校验来源：subagent_invocation_log 中该 skill 的分析 subagent 输出（result.candidate_actions），
+   * 以及 per_skill_iteration_state 中该 skill 的 applied_action_ids / rejected_actions。
+   *
+   * "有结论"的定义：
+   *   - action_id 出现在 applied_action_ids（已执行验证） 或
+   *   - action_id 出现在 rejected_optimization_actions（已显式拒绝，附原因） 或
+   *   - skill 状态为 stopped/blocked 且有 stop_reason/block_reason 覆盖全部未验证动作
+   *
+   * @param {string} [subskillName]  指定 skill；不传则校验所有已 completed 的 skill
+   * @returns {{ passed: boolean, incomplete_skills: Array<{subskill, unresolved_actions}>, checks: Array }}
+   */
+  verifySkillCompleteness(subskillName) {
+    this._ensureState();
+    const checks = [];
+    const incomplete_skills = [];
+
+    const log = this.state.subagent_invocation_log || [];
+    const iterState = this.state.per_skill_iteration_state || {};
+    const candidateList = this.state.candidate_skill_list || [];
+    const coverageList = this.state.coverage_skill_list || [];
+    const allSkills = [...candidateList, ...coverageList];
+
+    const skillsToCheck = subskillName
+      ? allSkills.filter(s => s.subskill_name === subskillName)
+      : allSkills.filter(s => s.status === 'completed');
+
+    if (skillsToCheck.length === 0 && subskillName) {
+      checks.push({ item: 'skill_found', result: 'FAIL', detail: `skill "${subskillName}" not found in candidate or coverage list` });
+      return { passed: false, incomplete_skills: [{ subskill: subskillName, unresolved_actions: [] }], checks };
+    }
+    checks.push({ item: 'skill_found', result: 'PASS', detail: `${skillsToCheck.length} skill(s) to check` });
+
+    for (const skillEntry of skillsToCheck) {
+      const name = skillEntry.subskill_name;
+      const skillStatus = skillEntry.status;
+
+      const analysisLogs = log.filter(
+        e => e.subskill === name && (e.phase === 'analysis' || !e.phase)
+      );
+      const analysisLog = analysisLogs.length > 0 ? analysisLogs[analysisLogs.length - 1] : null;
+      const candidate_actions = analysisLog && analysisLog.result && analysisLog.result.candidate_actions
+        ? analysisLog.result.candidate_actions
+        : (analysisLog && analysisLog.candidate_actions ? analysisLog.candidate_actions : []);
+
+      if (candidate_actions.length === 0) {
+        if (skillStatus === 'stopped' || skillStatus === 'blocked') {
+          const reason = (iterState[name] && (iterState[name].stop_reason || iterState[name].block_reason))
+            || (skillEntry.result && (skillEntry.result.stop_reason || skillEntry.result.block_reason))
+            || 'no candidate actions (skill stopped/blocked)';
+          checks.push({ item: `skill_${name}_no_actions_stopped`, result: 'PASS', detail: reason });
+        } else {
+          checks.push({ item: `skill_${name}_candidate_actions`, result: 'FAIL', detail: 'no candidate_actions found in analysis subagent log' });
+          incomplete_skills.push({ subskill: name, unresolved_actions: [], reason: 'no candidate_actions found' });
+        }
+        continue;
+      }
+
+      const applied = new Set(iterState[name] && iterState[name].applied_action_ids || []);
+      const rejected = new Set(
+        (iterState[name] && iterState[name].rejected_action_ids || [])
+          .concat(analysisLog && analysisLog.result && analysisLog.result.rejected_optimization_actions
+            ? analysisLog.result.rejected_optimization_actions.map(a => a.action_id || a)
+            : [])
+      );
+
+      // ④ executor 实施门控：该 skill 有已实施动作时，必须存在独立 executor 的实施记录。
+      //    主 agent 自行实施/验证（未启动执行验证 subagent）视为合规失败。
+      const implLogs = log.filter(
+        e => e.subskill === name && e.phase === 'implementation' && e.subagent_type === 'executor'
+      );
+      if (applied.size > 0 && implLogs.length === 0) {
+        checks.push({
+          item: `skill_${name}_executor_mandatory`,
+          result: 'FAIL',
+          detail: `${applied.size} applied actions but no executor implementation record found — main agent must not execute changes directly`,
+        });
+        incomplete_skills.push({
+          subskill: name,
+          unresolved_actions: [...applied],
+          reason: 'executor_mandatory_violation',
+        });
+        continue;
+      }
+      if (applied.size > 0) {
+        checks.push({
+          item: `skill_${name}_executor_mandatory`,
+          result: 'PASS',
+          detail: `${implLogs.length} executor implementation record(s) for ${applied.size} applied actions`,
+        });
+      }
+
+      const unresolved = [];
+      for (const action of candidate_actions) {
+        const aid = action.action_id || action.id || action;
+        if (!applied.has(aid) && !rejected.has(aid)) {
+          unresolved.push(aid);
+        }
+      }
+
+      if (unresolved.length === 0) {
+        checks.push({ item: `skill_${name}_completeness`, result: 'PASS', detail: `${candidate_actions.length} actions all resolved (${applied.size} applied, ${rejected.size} rejected)` });
+      } else {
+        if (skillStatus === 'stopped' || skillStatus === 'blocked') {
+          const reason = (iterState[name] && (iterState[name].stop_reason || iterState[name].block_reason)) || 'skill stopped/blocked';
+          checks.push({ item: `skill_${name}_completeness`, result: 'PASS', detail: `${unresolved.length} unresolved actions covered by stop/block reason: ${reason}` });
+        } else {
+          checks.push({ item: `skill_${name}_completeness`, result: 'FAIL', detail: `${unresolved.length} unresolved actions: ${unresolved.join(', ')}` });
+          incomplete_skills.push({ subskill: name, unresolved_actions: unresolved });
+        }
+      }
+
+      // steps_covered 覆盖校验：分析 subagent 输出的 steps_covered 必须覆盖 SKILL.md 定义的全部手段类别
+      const stepsCovered = analysisLog && analysisLog.result && analysisLog.result.steps_covered
+        ? analysisLog.result.steps_covered
+        : (analysisLog && analysisLog.steps_covered ? analysisLog.steps_covered : null);
+
+      if (stepsCovered && Array.isArray(stepsCovered) && stepsCovered.length > 0) {
+        const coveredSet = new Set(stepsCovered.map(s => typeof s === 'string' ? s : (s.category || s.name || s)));
+        const requiredCategories = this._getRequiredCategories(name);
+        const uncovered = requiredCategories.filter(c => !coveredSet.has(c));
+
+        if (uncovered.length === 0) {
+          checks.push({ item: `skill_${name}_steps_covered`, result: 'PASS', detail: `${stepsCovered.length} steps covered, all ${requiredCategories.length} required categories present` });
+        } else {
+          if (skillStatus === 'stopped' || skillStatus === 'blocked') {
+            const reason = (iterState[name] && (iterState[name].stop_reason || iterState[name].block_reason)) || 'skill stopped/blocked';
+            checks.push({ item: `skill_${name}_steps_covered`, result: 'PASS', detail: `${uncovered.length} uncovered categories covered by stop/block reason: ${reason}` });
+          } else {
+            checks.push({ item: `skill_${name}_steps_covered`, result: 'FAIL', detail: `${uncovered.length} uncovered categories: ${uncovered.join(', ')}` });
+            incomplete_skills.push({ subskill: name, unresolved_actions: [], uncovered_categories: uncovered });
+          }
+        }
+      } else if (skillStatus === 'completed') {
+        // completed skill 必须有 steps_covered
+        checks.push({ item: `skill_${name}_steps_covered`, result: 'WARN', detail: 'steps_covered not found in analysis subagent output — cannot verify multi-method coverage' });
+      }
+
+      // 独立分析声明校验：completed skill 的分析结果必须带有独立执行确认
+      const confirmationRaw = analysisLog && analysisLog.result
+        ? (analysisLog.result.independent_analysis_confirmation || analysisLog.independent_analysis_confirmation)
+        : (analysisLog && analysisLog.independent_analysis_confirmation ? analysisLog.independent_analysis_confirmation : null);
+      if (skillStatus === 'completed') {
+        if (confirmationRaw && typeof confirmationRaw === 'string' && confirmationRaw.trim().length > 0) {
+          checks.push({ item: `skill_${name}_independent_analysis`, result: 'PASS', detail: 'independent_analysis_confirmation present' });
+        } else {
+          checks.push({ item: `skill_${name}_independent_analysis`, result: 'FAIL', detail: 'independent_analysis_confirmation missing or empty — 无法证明分析由独立 subagent 完成' });
+          incomplete_skills.push({ subskill: name, unresolved_actions: [], reason: 'independent_analysis_confirmation_missing' });
+        }
+      }
+
+      // 行为级证据校验：completed 分析结果必须引用真实存在的证据文件（防凭空虚构结论）
+      const evidenceSources = analysisLog && analysisLog.result
+        ? (analysisLog.result.evidence_sources || analysisLog.evidence_sources)
+        : (analysisLog && analysisLog.evidence_sources ? analysisLog.evidence_sources : null);
+      if (skillStatus === 'completed' && confirmationRaw) {
+        if (Array.isArray(evidenceSources) && evidenceSources.length > 0) {
+          const missing = evidenceSources.filter(p => !fs.existsSync(p));
+          if (missing.length === 0) {
+            checks.push({ item: `skill_${name}_evidence_sources`, result: 'PASS', detail: `${evidenceSources.length} evidence sources all present on disk` });
+          } else {
+            checks.push({
+              item: `skill_${name}_evidence_sources`,
+              result: 'FAIL',
+              detail: `${missing.length}/${evidenceSources.length} evidence source paths do not exist on disk: ${missing.join(', ')}`,
+            });
+            incomplete_skills.push({ subskill: name, unresolved_actions: [], reason: 'evidence_sources_missing_on_disk' });
+          }
+        } else {
+          checks.push({
+            item: `skill_${name}_evidence_sources`,
+            result: 'FAIL',
+            detail: 'evidence_sources missing or empty — 分析结论必须引用现场证据文件而非凭空生成',
+          });
+          incomplete_skills.push({ subskill: name, unresolved_actions: [], reason: 'evidence_sources_missing' });
+        }
+      }
+    }
+
+    const passed = incomplete_skills.length === 0;
+    const result = { passed, incomplete_skills, checks };
+    this._appendTrace(this.state.current_gate, 'skill-completeness-check', { passed, incomplete_count: incomplete_skills.length });
+    this._touch();
+    return result;
+  }
+
+  /**
+   * 返回子 SKILL 的必填手段类别列表。
+   * 用于 steps_covered 覆盖校验——分析 subagent 必须覆盖这些类别。
+   * @param {string} subskillName
+   * @returns {string[]}
+   * @private
+   */
+  _getRequiredCategories(subskillName) {
+    const CATEGORY_MAP = {
+      'performance-library-selection': [
+        'allocators', 'hash_functions', 'compression', 'crypto', 'json',
+        'memory_operations', 'pattern_matching', 'linear_algebra',
+        'sparse_linear_algebra', 'math', 'dnn', 'fft', 'video',
+        'serialization', 'sql_acceleration', 'network', 'kv_storage',
+        'ascend_runtime',
+      ],
+    };
+    return CATEGORY_MAP[subskillName] || [];
+  }
+
+  // -----------------------------------------------------------------------
   // 执行日志与环境恢复
   // -----------------------------------------------------------------------
 
@@ -816,7 +1278,51 @@ class DynamicWorkflowManager {
     if (!this.state.per_skill_iteration_state) {
       this.state.per_skill_iteration_state = {};
     }
-    Object.assign(this.state.per_skill_iteration_state, iterationState);
+
+    // ① executor 强制关联校验：状态为 completed/stopped 且声明了轮次时，
+    //    必须存在 phase=implementation 且 subagent_type=executor 的实施记录。
+    //    防止主 agent 跳过执行验证 subagent 直接手写轮次结果。
+    const log = this.state.subagent_invocation_log || [];
+    const normalizedIteration = {};
+    for (const [key, value] of Object.entries(iterationState)) {
+      // 兼容两种格式：{subskill_name: {...}} 或 {subskill: "x", round: n, status: "y"}
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const subskillKey = value.subskill_name || value.subskill || key;
+        normalizedIteration[subskillKey] = value;
+      } else if (['subskill', 'subskill_name', 'skill'].includes(key)) {
+        normalizedIteration[value] = { ...iterationState };
+        delete normalizedIteration[key];
+      }
+    }
+    if (Object.keys(normalizedIteration).length === 0) {
+      normalizedIteration[iterationState.subskill || iterationState.subskill_name || ''] = { ...iterationState };
+    }
+    for (const [subskill, data] of Object.entries(normalizedIteration)) {
+      const declaredStatus = data && data.status;
+      const hasRound = data && (data.round !== undefined || data.rounds_attempted);
+      if (declaredStatus !== 'completed' && declaredStatus !== 'stopped') {
+        continue;
+      }
+      if (!hasRound) {
+        continue;
+      }
+      const executorRecords = log.filter(
+        e => e.subskill === subskill && e.phase === 'implementation'
+          && (e.subagent_type === 'executor' || e.stage === 'implementation')
+      );
+      if (executorRecords.length === 0) {
+        const err = new Error(
+          `[compliance] set-iteration-state rejected: skill "${subskill}" declared ${declaredStatus} but ` +
+          `no executor implementation record found in subagent_invocation_log. ` +
+          `执行验证必须由独立 executor subagent 完成（append-subagent-log --data '{"subskill":"...","phase":"implementation","subagent_type":"executor","subagent_id":"<real task id>","status":"completed"}'），` +
+          `主 agent 禁止自行实施/验证并手写轮次结果。`
+        );
+        err.code = 'EXECUTOR_MANDATORY_VIOLATION';
+        throw err;
+      }
+    }
+
+    Object.assign(this.state.per_skill_iteration_state, normalizedIteration);
     this._touch();
     return this.state;
   }
@@ -849,12 +1355,87 @@ class DynamicWorkflowManager {
     if (!this.state.subagent_invocation_log) {
       this.state.subagent_invocation_log = [];
     }
+
+    // ③ subagent 类型强制校验：OpenCode/Claude Code 等平台 must NOT 降级。
+    // 分析阶段 = analyzer（统一分析 agent），执行验证阶段 = executor；subagent_id 必须为真实平台任务 ID。
+    const phase = entry.phase || entry.stage || (entry.subagent_type ? undefined : 'analysis');
+    const subagentType = entry.subagent_type || inferSubagentType(phase);
+    const location = process.env.CLAUDE_CODE_ENTRYPOINT ? 'Claude Code' : 'OpenCode';
+
+    if (!['analyzer', 'executor', 'oracle'].includes(subagentType)) {
+      throw new Error(
+        `[compliance] append-subagent-log rejected: subagent_type "${subagentType}" invalid. ` +
+        `分析阶段必须用 analyzer（统一分析 agent），执行验证阶段必须用 executor。`
+      );
+    }
+    if (phase === 'implementation' && subagentType !== 'executor') {
+      throw new Error(
+        `[compliance] append-subagent-log rejected: phase=implementation requires subagent_type=executor, got "${subagentType}".`
+      );
+    }
+    if (phase === 'analysis' && subagentType === 'executor') {
+      throw new Error(
+        `[compliance] append-subagent-log rejected: phase=analysis requires subagent_type=analyzer, got "executor".`
+      );
+    }
+    if (phase === 'implementation' && (!entry.subagent_id || entry.subagent_id === 'platform_unavailable_degraded_context' || !this._isPlausibleSubagentId(entry.subagent_id))) {
+      throw new Error(
+        `[compliance] append-subagent-log rejected: executor record on ${location} must carry a real platform subagent_id. ` +
+        `${location} 禁止降级，必须使用平台 subagent/task 工具启动独立 executor。`
+      );
+    }
+    if (phase === 'analysis' && entry.subagent_id && entry.subagent_id !== 'platform_unavailable_degraded_context' && !this._isPlausibleSubagentId(entry.subagent_id)) {
+      throw new Error(
+        `[compliance] append-subagent-log rejected: analyzer record subagent_id "${entry.subagent_id}" is not a plausible platform task id. ` +
+        `分析 subagent 必须来自平台 subagent/task 工具的真实任务 ID，不得手写伪造 ID。`
+      );
+    }
+    // 同一真实 subagent_id 只能绑定一个 subskill（每次 task 调用独立创建任务）
+    if (entry.subagent_id && entry.subagent_id !== 'platform_unavailable_degraded_context') {
+      const existed = this.state.subagent_invocation_log.find(
+        e => e.subagent_id === entry.subagent_id && e.subskill && entry.subskill && e.subskill !== entry.subskill
+      );
+      if (existed && existed.subagent_id !== 'platform_unavailable_degraded_context') {
+        throw new Error(
+          `[compliance] append-subagent-log rejected: subagent_id "${entry.subagent_id}" already bound to subskill "${existed.subskill}", cannot reuse for "${entry.subskill}". ` +
+          `每个 skill 必须由独立 task 调用，subagent_id 不得跨 skill 复用。`
+        );
+      }
+    }
+    // result_path 若已声明必须真实存在（行为级校验：subagent 产物必须落盘可读）
+    if (entry.status === 'completed' && entry.result_path && !fs.existsSync(entry.result_path)) {
+      throw new Error(
+        `[compliance] append-subagent-log rejected: declared result_path "${entry.result_path}" does not exist on disk. ` +
+        `completed 记录必须指向 subagent 实际写入的结果文件。`
+      );
+    }
+
     this.state.subagent_invocation_log.push({
       ...entry,
+      subagent_type: subagentType,
       recorded_at: new Date().toISOString(),
     });
     this._touch();
     return this.state;
+  }
+
+  /**
+   * 判断 subagent_id 是否像平台返回的真实任务 ID。
+   * 真实平台 ID（OpenCode t开头任务 ID、Claude Code 任务 ID）通常为较长混合字符串；
+   * 手写降级/伪造 ID 通常为短词、纯中文、含空格或常见占位词。
+   * @private
+   */
+  _isPlausibleSubagentId(id) {
+    if (!id || typeof id !== 'string') return false;
+    const trimmed = id.trim();
+    if (trimmed.length < 8) return false;
+    if (/\s+/.test(trimmed)) return false;
+    if (/[\u4e00-\u9fff]/.test(trimmed)) return false;
+    const fakeTokens = ['manual', 'main-agent', 'mainagent', 'self', 'fake', 'test-id',
+      'handwrite', 'direct', 'local', 'placeholder', 'dummy', 'example'];
+    const lower = trimmed.toLowerCase();
+    if (fakeTokens.some(t => lower === t || lower === t.replace(/[-_]/g, ''))) return false;
+    return true;
   }
 
   /**
@@ -901,14 +1482,15 @@ class DynamicWorkflowManager {
 
   /**
    * 报告就绪检查（硬门控）。报告生成前必须调用。
-   * 同时执行 validateCompliance + validateReportInputs，
+   * 同时执行 validateCompliance + validateReportInputs + verifySkillCompleteness，
    * 任一项失败则 ready=false，必须补齐缺失数据后才能生成完成态报告。
    *
-   * @returns {{ ready: boolean, compliance: object, report_inputs: object, issues: string[], remediation: string[]|null }}
+   * @returns {{ ready: boolean, compliance: object, report_inputs: object, skill_completeness: object, issues: string[], remediation: string[]|null }}
    */
   reportReady() {
     const compliance = this.validateCompliance();
     const reportInputs = this.validateReportInputs();
+    const skillCompleteness = this.verifySkillCompleteness();
 
     const issues = [];
 
@@ -926,20 +1508,32 @@ class DynamicWorkflowManager {
       }
     }
 
-    const ready = compliance.passed && reportInputs.passed;
+    // 收集 skill-completeness FAIL 项
+    for (const check of skillCompleteness.checks) {
+      if (check.result === 'FAIL') {
+        issues.push(`[skill-completeness] ${check.item}: ${check.detail || 'incomplete skill'}`);
+      }
+    }
+    if (skillCompleteness.incomplete_skills && skillCompleteness.incomplete_skills.length > 0) {
+      issues.push(`[skill-completeness] ${skillCompleteness.incomplete_skills.length} skill(s) with unresolved actions: ${skillCompleteness.incomplete_skills.map(s => s.subskill).join(', ')}`);
+    }
+
+    const ready = compliance.passed && reportInputs.passed && skillCompleteness.passed;
 
     const result = {
       ready,
       compliance,
       report_inputs: reportInputs,
+      skill_completeness: skillCompleteness,
       issues,
-      remediation: ready ? null : this._buildRemediation(compliance, reportInputs),
+      remediation: ready ? null : this._buildRemediation(compliance, reportInputs, skillCompleteness),
     };
 
     this._appendTrace(this.state.current_gate, 'report-ready-check', {
       ready,
       compliance_passed: compliance.passed,
       report_inputs_passed: reportInputs.passed,
+      skill_completeness_passed: skillCompleteness.passed,
       issue_count: issues.length,
     });
     this._touch();
@@ -950,7 +1544,7 @@ class DynamicWorkflowManager {
    * 根据 validate 失败项生成可操作的修复步骤。
    * @private
    */
-  _buildRemediation(compliance, reportInputs) {
+  _buildRemediation(compliance, reportInputs, skillCompleteness) {
     const steps = [];
 
     // Compliance 修复建议
@@ -992,6 +1586,13 @@ class DynamicWorkflowManager {
           break;
         default:
           steps.push(`[report-inputs] 修复检查项 "${check.item}": ${check.detail || '手动补齐数据'}`);
+      }
+    }
+
+    // Skill-completeness 修复建议
+    if (skillCompleteness && skillCompleteness.incomplete_skills) {
+      for (const inc of skillCompleteness.incomplete_skills) {
+        steps.push(`[skill-completeness] skill "${inc.subskill}" 有 ${inc.unresolved_actions.length} 个未验证动作 (${inc.unresolved_actions.join(', ')})。必须补齐执行验证或显式拒绝（附原因）后重新运行 verify-skill-completeness --state <state> --subskill ${inc.subskill}`);
       }
     }
 
@@ -1087,6 +1688,9 @@ function printUsage() {
   node dynamic_workflow_manager.js mark-step-reverted --state <path> --index <n>
   node dynamic_workflow_manager.js validate --state <path>
   node dynamic_workflow_manager.js validate-report-inputs --state <path>
+  node dynamic_workflow_manager.js verify-evidence-completeness --state <path> [--summary-path <path>] [--allow-degraded] [--perf-status <passed|degraded|failed>]
+  node dynamic_workflow_manager.js verify-order --state <path>
+  node dynamic_workflow_manager.js verify-skill-completeness --state <path> [--subskill <name>]
   node dynamic_workflow_manager.js report-ready --state <path>       (合并硬门控 — 未就绪则阻塞)
   node dynamic_workflow_manager.js summary --state <path>            (自动调用 report-ready 后才输出)
 `);
@@ -1218,6 +1822,33 @@ function main() {
         const dwm = new DynamicWorkflowManager('temp');
         dwm.loadState(args.state);
         const result = dwm.validateReportInputs();
+        console.log(JSON.stringify(result, null, 2));
+        process.exit(result.passed ? 0 : 1);
+        break;
+      }
+
+      case 'verify-evidence-completeness': {
+        const dwm = new DynamicWorkflowManager('temp');
+        dwm.loadState(args.state);
+        const result = dwm.verifyEvidenceCompleteness(args['summary-path'], !!args['allow-degraded'], args['perf-status'] || null);
+        console.log(JSON.stringify(result, null, 2));
+        process.exit(result.passed ? 0 : 1);
+        break;
+      }
+
+      case 'verify-order': {
+        const dwm = new DynamicWorkflowManager('temp');
+        dwm.loadState(args.state);
+        const result = dwm.verifyOrder();
+        console.log(JSON.stringify(result, null, 2));
+        process.exit(result.passed ? 0 : 1);
+        break;
+      }
+
+      case 'verify-skill-completeness': {
+        const dwm = new DynamicWorkflowManager('temp');
+        dwm.loadState(args.state);
+        const result = dwm.verifySkillCompleteness(args.subskill);
         console.log(JSON.stringify(result, null, 2));
         process.exit(result.passed ? 0 : 1);
         break;

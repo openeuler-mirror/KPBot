@@ -20,6 +20,10 @@
 3. `ref-skills/network-io-performance/scripts/network_io_check.sh` 存在
 4. 运行环境满足基本网络诊断要求
 
+## 脚本入口
+
+可使用 `scripts/check_external_network_io_skill.sh` 预检外部网络专项是否可用（输出 `skill_source`：`repo_local_subskill` / `external_override` / `external_fallback` / `unavailable`）；预检通过后由 `scripts/run_external_network_io_check.sh` 调用 `ref-skills/network-io-performance/scripts/network_io_check.sh` 并汇总结果。
+
 ## 能力范围
 
 外部 `network-io-performance` 当前重点覆盖：

@@ -11,7 +11,11 @@ def load_json(path, default):
     file_path = Path(path)
     if not file_path.exists():
         return default
-    return json.loads(file_path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"warning: failed to parse {path}: {exc}")
+        return default
 
 
 def main():

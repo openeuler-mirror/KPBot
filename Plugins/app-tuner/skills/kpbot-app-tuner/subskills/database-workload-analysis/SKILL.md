@@ -128,4 +128,4 @@ description: 用于数据库或数据库驱动型工作负载的专项分析子 
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 必须包含 `action_id`、`action_type`、`precondition`、`commands_dry_run`、`commands_execute`、`expected_gain`、`risk`、`validation`、`rollback`、`stop_or_reject_condition` 和 `evidence_sources`。数据库参数、AHI、buffer/cache、连接池或后台线程相关动作默认回流到 `application-config-optimization`，rollback 必须包含恢复原参数和数据库健康检查。
+每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。数据库参数、AHI、buffer/cache、连接池或后台线程相关动作默认回流到 `application-config-optimization`，rollback 必须包含恢复原参数和数据库健康检查。

@@ -49,6 +49,9 @@ REQUIRED_FIELDS = [
     "next_steps",
     "case_archive_path",
     "historical_records_status",
+    "environment_diagnosis_confirmation_status",
+    "per_skill_gain_summary",
+    "skill_execution_order",
 ]
 
 COMPLETED_HARD_REQUIRED_FIELDS = [
@@ -275,6 +278,83 @@ def table_from_dicts(items, columns):
     for item in values:
         lines.append("| " + " | ".join(scalar(item.get(key, "")) for key, _ in columns) + " |")
     return "\n".join(lines)
+
+
+AI_INFERENCE_METRICS = [
+    ("output_throughput_tokps", "Output Throughput (tok/s)", "higher_better"),
+    ("ttft_ms", "TTFT (ms)", "lower_better"),
+    ("tpot_ms", "TPOT (ms)", "lower_better"),
+    ("e2e_ms", "E2E Latency (ms)", "lower_better"),
+    ("npu_utilization_pct", "NPU Utilization (%)", "context"),
+    ("hbm_bandwidth_pct", "HBM Bandwidth (%)", "context"),
+    ("kv_cache_hit_rate", "KV Cache Hit Rate", "higher_better"),
+    ("batch_utilization", "Batch Utilization", "higher_better"),
+]
+
+
+def _ai_metric_value(metrics, key):
+    if not isinstance(metrics, dict):
+        return ""
+    value = metrics.get(key)
+    if isinstance(value, dict):
+        value = value.get("value", value.get("v", ""))
+    return scalar(value)
+
+
+def _ai_metric_delta(baseline_value, final_value, direction):
+    try:
+        base = float(baseline_value)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        final_v = float(final_value)
+    except (TypeError, ValueError):
+        return ""
+    if base == 0:
+        return ""
+    delta_pct = (final_v - base) / base * 100.0
+    if direction == "higher_better":
+        sign = "+" if delta_pct >= 0 else ""
+        verdict = "improved" if delta_pct > 0 else ("regressed" if delta_pct < 0 else "unchanged")
+    elif direction == "lower_better":
+        sign = "+" if delta_pct >= 0 else ""
+        verdict = "improved" if delta_pct < 0 else ("regressed" if delta_pct > 0 else "unchanged")
+    else:
+        sign = "+" if delta_pct >= 0 else ""
+        verdict = "context"
+    return f"{sign}{delta_pct:.2f}% ({verdict})"
+
+
+def render_ai_inference_metrics_table(report_input):
+    """渲染 AI 推理专用指标对比表（baseline vs final）"""
+    baseline = as_dict(report_input.get("baseline_metrics"))
+    final = as_dict(report_input.get("improvement_summary"))
+    ai_baseline = as_dict(baseline.get("ai_inference_metrics", baseline))
+    ai_final = as_dict(final.get("ai_inference_metrics", final))
+
+    if not any(_ai_metric_value(ai_baseline, key) or _ai_metric_value(ai_final, key)
+               for key, _, _ in AI_INFERENCE_METRICS):
+        return "- None"
+
+    lines = [
+        "| Metric | Baseline | Final | Delta | Direction |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for key, title, direction in AI_INFERENCE_METRICS:
+        base_value = _ai_metric_value(ai_baseline, key)
+        final_value = _ai_metric_value(ai_final, key)
+        delta = _ai_metric_delta(base_value, final_value, direction) if base_value and final_value else ""
+        lines.append(f"| {title} | {base_value} | {final_value} | {delta} | {direction} |")
+    return "\n".join(lines)
+
+
+def render_npu_topology_section(report_input):
+    """渲染 NPU 拓扑占位章节（基于 environment_snapshot 中的 npu 段）"""
+    snapshot = as_dict(report_input.get("environment_snapshot"))
+    npu_snapshot = as_dict(snapshot.get("npu", snapshot.get("npu_topology")))
+    if not npu_snapshot:
+        return "- None"
+    return kv_lines(npu_snapshot)
 
 
 def has_downstream_claims(data):
@@ -737,6 +817,14 @@ def main():
                 ("max_latency_ms", "Max Latency ms"),
             ],
         ),
+        "",
+        "## AI Inference Metrics Comparison",
+        "",
+        render_ai_inference_metrics_table(data),
+        "",
+        "### NPU Topology",
+        "",
+        render_npu_topology_section(data),
         "",
         "## Improvement Summary",
         "",

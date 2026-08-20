@@ -64,6 +64,59 @@ echo "Current run ID: ${CURRENT_RUN_ID}"
 echo "Current run started at: ${CURRENT_RUN_STARTED_AT}"
 echo ""
 
+# === NPU 采集函数（新增）===
+
+collect_npu_utilization() {
+    # npu-smi info 采集 NPU 利用率（bare 命令，解析 AICore% 和 HBM-Usage）
+    # 注意：npu-smi 不支持 -t utilization 子命令，必须用 bare npu-smi info
+    local output_dir=$1
+    local duration=$2
+    if ! command -v npu-smi &>/dev/null; then
+        echo '{"npu_available": false}' > "$output_dir/npu_status.json"
+        return
+    fi
+    echo '{"npu_available": true}' > "$output_dir/npu_status.json"
+    local interval=1
+    local end_time=$((SECONDS + duration))
+    while [ $SECONDS -lt $end_time ]; do
+        echo "[$(date -Iseconds)]" >> "$output_dir/npu_utilization.log"
+        npu-smi info >> "$output_dir/npu_utilization.log" 2>&1 || true
+        sleep $interval
+    done
+}
+
+collect_npu_board_info() {
+    # npu-smi info -t board 采集静态硬件信息
+    local output_dir=$1
+    if command -v npu-smi &>/dev/null; then
+        npu-smi info -t board > "$output_dir/npu_board.txt" 2>&1 || true
+        npu-smi info -t usages -i 0 > "$output_dir/npu_usage.txt" 2>&1 || true
+    else
+        echo "npu-smi not available" > "$output_dir/npu_board.txt"
+    fi
+}
+
+collect_arm_perf_events() {
+    # ARM 平台 perf 事件名适配
+    # x86: L1-icache-load-misses, LLC-load-misses
+    # ARM: L1I_CACHE_REFILL, LLC_CACHE_MISS
+    local pid=$1
+    local output_dir=$2
+    local duration=$3
+    if ! command -v perf &>/dev/null; then
+        return
+    fi
+    local arch
+    arch=$(uname -m)
+    if [ "$arch" = "aarch64" ]; then
+        perf stat -p "$pid" -e L1I_CACHE_REFILL,LLC_CACHE_MISS,context-switches,cpu-migrations \
+            -I 1000 -- sleep "$duration" > "$output_dir/arm_perf_stat.log" 2>&1 || true
+    else
+        perf stat -p "$pid" -e L1-icache-load-misses,LLC-load-misses,context-switches,cpu-migrations \
+            -I 1000 -- sleep "$duration" > "$output_dir/x86_perf_stat.log" 2>&1 || true
+    fi
+}
+
 # --- 动态数据采集（需要在压测运行期间并发执行）---
 # 调用方应在启动压测后调用本脚本的 --collect-dynamic 阶段
 
@@ -90,6 +143,7 @@ sar -n DEV 1 "${DURATION}" > "${RUNNING_DIR}/sar_network.txt" 2>&1 &
 SAR_PID=$!
 
 # topdown/cache counters. Event names vary across CPU vendors, so failures are recorded as degraded evidence.
+# Kunpeng 920 等 ARM 平台不支持 TopdownL1，perf stat -M TopdownL1 会输出空文件。
 perf stat -p "${TARGET_PID}" \
     -e cycles,instructions,L1-icache-load-misses,L1-icache-loads,LLC-load-misses,LLC-loads,context-switches \
     -o "${RUNNING_DIR}/perf_stat_cache.txt" -- sleep "${DURATION}" 2>"${RUNNING_DIR}/perf_stat_cache.err" &
@@ -98,6 +152,13 @@ PERF_STAT_CACHE_PID=$!
 perf stat -M TopdownL1 -p "${TARGET_PID}" \
     -o "${RUNNING_DIR}/perf_stat_topdown_l1.txt" -- sleep "${DURATION}" 2>"${RUNNING_DIR}/perf_stat_topdown_l1.err" &
 PERF_STAT_TOPDOWN_PID=$!
+
+# NPU utilization sampling (Ascend npu-smi) and ARM/x86 perf event adaptation
+collect_npu_utilization "${RUNNING_DIR}" "${DURATION}" &
+NPU_UTIL_PID=$!
+
+collect_arm_perf_events "${TARGET_PID}" "${RUNNING_DIR}" "${DURATION}" &
+ARM_PERF_PID=$!
 
 # Instantaneous snapshots (mid-collection)
 sleep 5
@@ -127,6 +188,13 @@ wait "${MPSTAT_PID}" 2>/dev/null || true
 wait "${SAR_PID}" 2>/dev/null || true
 wait "${PERF_STAT_CACHE_PID}" 2>/dev/null || true
 wait "${PERF_STAT_TOPDOWN_PID}" 2>/dev/null || true
+wait "${NPU_UTIL_PID}" 2>/dev/null || true
+wait "${ARM_PERF_PID}" 2>/dev/null || true
+
+# TopdownL1 降级处理：鲲鹏 920 等 ARM 平台不支持 TopdownL1，输出空文件或 stderr 报错
+if [[ ! -s "${RUNNING_DIR}/perf_stat_topdown_l1.txt" ]]; then
+    echo "TopdownL1 not supported on this platform (empty output)" > "${RUNNING_DIR}/perf_stat_topdown_l1.degraded"
+fi
 
 if [[ -s "${RUNNING_DIR}/perf.data" ]]; then
     perf report --stdio -i "${RUNNING_DIR}/perf.data" --sort comm,dso,symbol --percent-limit 0.2 > "${RUNNING_DIR}/perf_report_by_process_dso_symbol.txt" 2>&1 || true
@@ -173,6 +241,9 @@ for q in /sys/class/net/"${IFACE}"/queues/rx-*/rps_cpus; do echo "$(basename "$(
 if [[ -n "${MYSQL_PORT}" ]]; then
     mysql -h 127.0.0.1 -P "${MYSQL_PORT}" -u root -e "SHOW VARIABLES" > "${STATIC_DIR}/mysql_variables.txt" 2>&1 || echo "MySQL variables collection skipped" > "${STATIC_DIR}/mysql_variables.txt"
 fi
+
+# NPU static board info (Ascend npu-smi)
+collect_npu_board_info "${STATIC_DIR}"
 
 echo "--- Phase 2 complete ---"
 
@@ -322,6 +393,55 @@ def parse_counter(text, event_name):
         return 0.0
     return float(match.group(1).replace(",", ""))
 
+def parse_npu_utilization_log(text):
+    # npu-smi info -t utilization output samples; each timestamp block starts with [ISO time].
+    # Per-chip utilization rows look like:
+    #   0           12       43
+    # where column 1 is chip id, column 2 is AI Core utilization (%), column 3 is ...
+    # We take the maximum AI Core utilization across all samples.
+    samples = []
+    current_block = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            if current_block:
+                samples.append(current_block)
+            current_block = []
+            continue
+        if not line:
+            continue
+        current_block.append(line)
+    if current_block:
+        samples.append(current_block)
+    max_util = 0.0
+    avg_util = 0.0
+    sample_count = 0
+    for block in samples:
+        for row in block:
+            parts = row.split()
+            if len(parts) < 2:
+                continue
+            try:
+                # AI Core utilization is typically the second numeric column after chip id
+                util = float(parts[1])
+            except (ValueError, IndexError):
+                continue
+            if util > max_util:
+                max_util = util
+            avg_util += util
+            sample_count += 1
+    if sample_count:
+        avg_util = round(avg_util / sample_count, 2)
+    return max_util, avg_util, sample_count
+
+def load_npu_status(running_dir):
+    path = os.path.join(running_dir, "npu_status.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {"npu_available": False}
+
 def pct(numerator, denominator):
     if denominator <= 0:
         return 0.0
@@ -343,6 +463,22 @@ context_switch_rate = round(context_switches / duration, 4) if context_switches 
 
 network_hotspot_pct = round(sum(item["percent"] for item in hotspot_functions if item.get("category") == "network"), 4)
 third_party_hotspot_pct = round(sum(item["percent"] for item in hotspot_dsos if item.get("classification") == "third_party"), 4)
+
+# NPU signal aggregation (Ascend npu-smi utilization log)
+npu_status = load_npu_status(running_dir)
+npu_available = bool(npu_status.get("npu_available", False))
+npu_max_util = 0.0
+npu_avg_util = 0.0
+npu_samples = 0
+if npu_available:
+    npu_max_util, npu_avg_util, npu_samples = parse_npu_utilization_log(read_text("npu_utilization.log"))
+
+# ARM vs x86 perf stat log detection
+arm_perf_text = read_text("arm_perf_stat.log")
+if arm_perf_text.strip():
+    l1_misses = parse_counter(arm_perf_text, "L1I_CACHE_REFILL") or l1_misses
+    llc_misses = parse_counter(arm_perf_text, "LLC_CACHE_MISS") or llc_misses
+    context_switches = parse_counter(arm_perf_text, "context-switches") or context_switches
 
 payload = {
     "schema_version": "1.0",
@@ -366,6 +502,14 @@ payload = {
         "l1_icache_miss_high": l1_icache_miss_pct >= 5.0,
         "l3_cache_miss_high": llc_miss_pct >= 5.0,
         "context_switch_high": context_switch_rate >= 1000.0,
+        "npu_compute_bottleneck": npu_available and npu_max_util >= 90.0,
+        "cpu_feed_bottleneck": npu_available and npu_max_util < 60.0,
+    },
+    "npu": {
+        "npu_available": npu_available,
+        "max_utilization_pct": round(npu_max_util, 2),
+        "avg_utilization_pct": round(npu_avg_util, 2),
+        "samples": npu_samples,
     },
     "degraded_capabilities": [],
 }

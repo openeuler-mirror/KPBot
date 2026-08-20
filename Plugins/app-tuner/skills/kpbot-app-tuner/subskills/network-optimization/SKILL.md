@@ -63,21 +63,28 @@ description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡�
 
 只有当路径存在、脚本存在、环境允许只读网络检测时才调用。缺失或不可执行时不要中断主流程，记录 `fallback_reason`，回到本 skill 内部通用网络分析。
 
+### 队列与中断优化脚本
+
+当需要计算最优网卡队列/RPS/XPS CPU mask 时，使用 `scripts/find_optimal_queues.sh`（自动检测网卡多队列、CPU 拓扑、生成 RSS/RPS/XPS 掩码建议）。该脚本只读探测并输出建议，不直接修改系统配置。
+
 ## 候选动作要求
 
 每个 `candidate_actions[]` 必须包含：
 
 - `action_id`
-- `action_type`
-- `precondition`
-- `commands_dry_run`
-- `commands_execute`
-- `expected_gain`
+- `title`
+- `category`
+- `priority`
+- `change_mode`
+- `requires_root`
 - `risk`
-- `validation`
+- `implementation_plan`
+- `validation_plan`
 - `rollback`
-- `stop_or_reject_condition`
-- `evidence_sources`
+- `expected_effect`
+- `expected_gain_metric`
+- `rejection_criteria`
+- `evidence_refs`
 
 危险动作包括但不限于：`ethtool -L/-C/-G/-K`、写 `/proc/sys`、写 `/sys/class/net/**/rps_*`、修改 IRQ affinity、停止 `irqbalance`、调整防火墙。危险动作不得在分析阶段执行。
 

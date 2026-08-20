@@ -25,7 +25,8 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 - 通用编译优化策略、知识库技术与案例、输出契约：`references/compiler-playbook.md`
 - MySQL ARM64/LSE/CRC 专项、补丁和二进制等价门控：`references/mysql-arm64-playbook.md`
-- MySQL LSE outline atomics patch：`patches/mysql-8.0.25-lse-outline-atomics.patch`
+- MySQL LSE outline atomics patch：见 `references/mysql-arm64-playbook.md` 中的补丁内容与应用方法
+- A+K 场景毕昇编译器自动化编译脚本（BiSheng Python/PyTorch/torch_npu LTO+PGO 编译流程）：`scripts/ak_compile_optimize.sh`
 - 公共依赖、perf/PMU 权限和降级：`../../references/prerequisites.md`
 
 > **⚠️ 涉及 A+K 场景（昇腾 NPU + 鲲鹏 CPU）的 Python/PyTorch/torch_npu 编译优化时，必须加载 `references/ak-compiler-playbook.md`。**
@@ -163,4 +164,259 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 必须包含 `action_id`、`action_type`、`precondition`、`commands_dry_run`、`commands_execute`、`expected_gain`、`risk`、`validation`、`rollback`、`stop_or_reject_condition` 和 `evidence_sources`。重编译、补丁、PGO/LTO/BOLT、编译器切换和二进制替换必须在 rollback 中记录恢复基线二进制、配置、运行库和目标实例身份复核步骤。
+每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。重编译、补丁、PGO/LTO/BOLT、编译器切换和二进制替换必须在 rollback 中记录恢复基线二进制、配置、运行库和目标实例身份复核步骤。
+
+## NPU 推理 PGO Profile 采集
+
+NPU 推理场景的 PGO profile 采集与 CPU 通用场景有本质区别，必须用真实推理负载在 instrumented build 上运行采集，不能用传统 `perf record` / `perf cpi` 栈采样替代。
+
+### 为什么不能用传统 perf 采样
+
+- NPU 算子在 device 侧（NPU 上）执行，host 侧 `perf` 只能采到 CPU 侧的 launch/wait/拷贝路径，采不到算子内部热点。
+- PGO 需要的是"哪些函数被调用、调用频率、分支走向"，而 perf 栈采样给的是"CPU 上热点函数排名"，两者目标不同。
+- 因此 NPU 推理 PGO 必须用编译器插桩（`-fprofile-generate`）+ 真实负载运行的方式采集。
+
+### vLLM 推理 PGO 采集流程
+
+完整流程（针对 PyTorch + torch_npu 两层）：
+
+```
+1. 编译 PGO1 instrumented 版本
+   - PyTorch: -flto=thin -fprofile-generate=/tmp/profile
+   - torch_npu: --enable_lto --enable_pgo=1
+   - 安装到运行环境（pip install --force-reinstall --no-deps）
+
+2. 启动 vLLM 服务，用真实模型和请求负载运行
+   export LLVM_PROFILE_FILE=/tmp/profile/default_%m.profraw
+   export OMP_PROC_BIND=false
+   # 启动 vLLM 服务（真实模型，如 qwen2.5-1.5b）
+   # 用真实请求负载压测，覆盖主要推理路径（prefill/decode）
+
+3. 收集 .profraw 文件，合并为 .profdata
+   llvm-profdata merge /tmp/profile -o /tmp/profile/default.profdata
+
+4. 用 profdata 编译 PGO2 版本
+   - PyTorch: -flto=thin -fprofile-use=/tmp/profile/default.profdata
+   - torch_npu: --enable_lto --enable_pgo=2
+   - 安装到运行环境
+```
+
+### Profile 必须匹配目标负载
+
+实战对比（Ascend910 + vLLM qwen2.5-1.5b）：
+
+| Profile 来源 | 收益（相对 PGO1 基线） | 说明 |
+|-------------|---------------------|------|
+| 通用 profile（w00664011 通用负载采集） | 基准 | profile 与目标负载不匹配 |
+| qwen2.5-1.5b 真实推理负载 profile | +1.33% | profile 与目标负载匹配 |
+
+- 用目标模型 + 目标请求形态采集的 profile，PGO2 收益显著高于通用 profile。
+- profile 采集时必须覆盖推理主要路径：prefill、decode、KV cache 读写、sampling。
+- 若服务有多种请求形态（不同 seq length、batch size），采集时应混合覆盖，否则 PGO2 只优化到部分路径。
+
+### Profile 覆盖率指标
+
+采集后用 `llvm-profdata` + `llvm-cov` 评估 profile 质量：
+
+```
+llvm-profdata show /tmp/profile/default.profdata -o text | head
+# 关注: 函数覆盖率、最大函数计数、总计数
+
+llvm-cov export -instr-profile=/tmp/profile/default.profdata \
+  -object <libtorch_cpu.so 路径> -summary-only > coverage.json
+```
+
+实战指标（qwen2.5-1.5b profile）：
+
+| 指标 | 实测值 | 说明 |
+|-----|-------|------|
+| profdata 大小 | 97MB | PyTorch + torch_npu 合并 |
+| 覆盖函数数 | 242610 | PyTorch libtorch_cpu.so + torch_npu libtorch_npu.so |
+| libtorch_cpu.so 大小（PGO2 产物） | 218MB | ThinLTO + PGO2 |
+| libtorch_npu.so 大小（PGO2 产物） | 108MB | ThinLTO + PGO2 |
+
+- 函数覆盖率过低（< 30%）→ profile 代表性不足，PGO2 收益打折，应延长采集时间或增加负载覆盖。
+- 热点函数命中率低 → 推理主路径未走 instrumented build，检查是否真的安装了 PGO1 版本。
+
+### PGO 是必须的，不能省
+
+实战对比（Ascend910 + vLLM qwen2.5-1.5b，相对 PGO1 基线）：
+
+| 编译方式 | tok/s | 相对基线 |
+|---------|-------|---------|
+| 纯 ThinLTO torch_npu（无 PGO） | 86.18 | -22.4% |
+| ThinLTO + PGO torch_npu | 125.71 | +0%（满收益） |
+
+- 纯 ThinLTO（无 PGO）不仅没收益反而退步 22.4%，说明 torch_npu 在无 profile 引导下 ThinLTO 的内联/布局决策劣于原版。
+- NPU 适配层有大量 device launch 路径，ThinLTO 的跨模块内联若无 profile 引导，可能把冷路径内联进热路径。
+- **结论：NPU 推理场景 torch_npu 必须 PGO，不能只做 ThinLTO。**
+
+## vLLM 算子编译优化
+
+vLLM 包含 C++/CUDA 扩展算子（attention、layernorm、activation、rotary embedding 等），在 NPU 场景下由 vLLM-Ascend 适配层用 AscendC/C++ 实现对应 NPU 算子。
+
+### vLLM 算子结构
+
+| 算子类别 | CPU/GPU 实现 | NPU 实现（vLLM-Ascend） |
+|---------|------------|----------------------|
+| attention | FlashAttention / xformers | AscendC flash attention |
+| layernorm | CUDA kernel | AscendC kernel |
+| activation | CUDA kernel（silu/gelu） | AscendC kernel |
+| KV cache | paged attention | paged attention NPU 版 |
+| sampling | CUDA kernel | AscendC kernel |
+
+### NPU 场景编译优化点
+
+- **算子内联**：vLLM-Ascend 的 C++ 适配层调用 torch_npu op，跨层内联能减少 dispatch 开销。
+- **LTO**：vLLM-Ascend 的 .so 用 `-flto=thin` 编译，与 PyTorch/torch_npu 一致。
+- **目标架构参数**：aarch64 + SVE，`-mcpu=klein -march=armv8.6-a+sve2+bf16`。
+- **PGO**：理论上可用 PyTorch/torch_npu 同一份 profdata 覆盖 vLLM-Ascend 算子路径。
+
+### 编译命令（vLLM-Ascend，理论路径）
+
+```
+export CC=clang
+export CXX=clang++
+export CMAKE_C_FLAGS="-flto=thin -fuse-ld=lld -mcpu=klein -march=armv8.6-a+sve2+bf16"
+export CMAKE_CXX_FLAGS="-flto=thin -fuse-ld=lld -mcpu=klein -march=armv8.6-a+sve2+bf16"
+# 若做 PGO:
+# export CMAKE_C_FLAGS="${CMAKE_C_FLAGS} -fprofile-use=/tmp/profile/default.profdata"
+# export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -fprofile-use=/tmp/profile/default.profdata"
+
+cd vllm-ascend
+pip install -e . --no-build-isolation
+# 或:
+# python setup.py bdist_wheel && pip install dist/*.whl --force-reinstall --no-deps
+```
+
+### 实战收益说明
+
+实战（Ascend910 + vLLM qwen2.5-1.5b，+94.5%）中 vLLM 本身未重编译，收益主要来自 PyTorch/torch_npu 重编译：
+
+| 优化轮次 | 动作 | tok/s | 累计收益 |
+|---------|------|-------|---------|
+| 基线 | gcc 预编译版 | 64.63 | 0% |
+| C6 | BiSheng 编译 Python LTO+PGO | 110.92 | +71.6% |
+| C7 | PyTorch ThinLTO+PGO + torch_npu ThinLTO+PGO + BiSheng tcmalloc | 125.71 | +94.5% |
+
+- vLLM-Ascend 算子层有增量空间，但优先级低于 PyTorch/torch_npu（后两者是基础库，影响所有算子 dispatch 路径）。
+- 若 PyTorch/torch_npu 已优化到顶，再考虑 vLLM-Ascend 重编译。
+- vLLM-Ascend 重编译需 profile 覆盖其算子调用路径，可复用 PyTorch/torch_npu 的 profdata。
+
+## torch_npu Adapter 编译
+
+torch_npu 是 PyTorch → CANN 的适配层，把 PyTorch op 调用转译为 CANN ge_graph 或 npugraph_ex 执行图。
+
+### 编译期图执行模式选择
+
+| 模式 | 编译开关 | 说明 |
+|-----|---------|------|
+| ge_graph | 默认 | 通过 GE（Graph Engine）构图执行 |
+| npugraph_ex | `-DENABLE_NPU_GRAPH_EX=ON` | 实验性 NPU 图执行，部分算子融合更激进 |
+
+- 推理场景默认 ge_graph 即可。
+- 若开启 npugraph_ex 需 CANN 版本匹配，且需回归验证算子融合正确性。
+
+### ThinLTO + PGO 编译参数
+
+```
+export CC=clang
+export CXX=clang++
+cd torch_npu
+git clean -dfx
+
+# PGO1（插桩）
+bash ci/build.sh --python=<Python版本> --enable_lto --enable_pgo=1 --disable_rpc
+
+# PGO2（使用 profile）
+bash ci/build.sh --python=<Python版本> --enable_lto --enable_pgo=2 --disable_rpc
+```
+
+参数说明：
+
+| 参数 | 作用 | 必要性 |
+|-----|------|-------|
+| `--enable_lto` | 开启 ThinLTO | 必须（NPU 推理场景） |
+| `--enable_pgo=1` | 一次编译（插桩） | PGO 流程必须 |
+| `--enable_pgo=2` | 二次编译（使用 profile） | PGO 流程必须 |
+| `--disable_rpc` | 禁用 RPC（训练场景才需要） | 推理场景必须，减少代码体积 |
+
+### ABI 兼容性（关键）
+
+`-D_GLIBCXX_USE_CXX11_ABI=0` 必须与 PyTorch 一致：
+
+```
+# 检查 PyTorch 的 ABI 值
+python3 -c "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
+
+# torch_npu 编译时必须设置相同值
+export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0"
+```
+
+- PyTorch 默认 `_GLIBCXX_USE_CXX11_ABI=0`（历史兼容），torch_npu 必须匹配。
+- 不一致会导致运行时 std::string/std::vector 等 STL 类型的符号不兼容，崩溃或乱码。
+
+### -D_GNU_SOURCE 解决 PGO 下 CLOCK_MONOTONIC_RAW 未声明
+
+PGO 编译时若报 `CLOCK_MONOTONIC_RAW` 未声明：
+
+```
+export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GNU_SOURCE"
+```
+
+- `CLOCK_MONOTONIC_RAW` 是 GNU 扩展，需 `_GNU_SOURCE` 才能声明。
+- PGO 插桩路径会引入额外的时钟读取代码，触发此问题。
+
+### 编译时间与产物
+
+实战数据（Ascend910 + vLLM qwen2.5-1.5b 优化）：
+
+| 阶段 | 编译时间 | 产物 | 产物大小 |
+|-----|---------|------|---------|
+| torch_npu PGO2 | 850s | libtorch_npu.so | 108MB |
+| PyTorch PGO2 | 502s | libtorch_cpu.so | 218MB |
+
+- torch_npu PGO2 编译时间约 14 分钟，需预留编译窗口。
+- 产物体积大（ThinLTO + PGO 保留大量元数据），运行环境磁盘需预留空间。
+
+## NPU 推理编译顺序依赖
+
+NPU 推理场景全链编译必须严格按依赖顺序，且全链 ABI、编译器、profile 一致。
+
+### 依赖图
+
+```
+Python (LTO+PGO) → PyTorch (ThinLTO+PGO) → torch_npu (ThinLTO+PGO) → vLLM-Ascend / MindSpeed-LLM
+```
+
+### 一致性要求
+
+| 一致项 | 要求 | 检查方法 |
+|-------|------|---------|
+| ABI | `-D_GLIBCXX_USE_CXX11_ABI=0` 全链统一 | `readelf -p .comment <so> \| grep bisheng` + `python3 -c "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"` |
+| 编译器 | 全链用同一毕昇编译器 | `readelf -p .comment <so> \| grep -i bisheng` |
+| Profile | PGO profile 在最终组合上采集 | profdata 覆盖所有目标组件的函数 |
+
+### 编译顺序规则
+
+1. **Python 先编译**：`--with-lto --enable-optimizations`，PGO 内置（Python 自带 benchmark）。
+2. **PyTorch 次之**：依赖毕昇版 Python，ThinLTO + PGO（需跑模型采集）。
+3. **torch_npu 再次**：依赖毕昇版 PyTorch，ThinLTO + PGO（需跑模型采集）。
+4. **vLLM-Ascend / MindSpeed-LLM 最后**：依赖毕昇版 torch_npu。
+
+- 前一层未完成不能开始后一层（组合编译时）。
+- 允许从中间开始：若前置已满足（毕昇版），可直接编译后续组件。
+- PGO profile 采集必须在最终组合上跑：先用 PGO1 编译 PyTorch + torch_npu，安装后跑真实负载采集，再用 profdata 编译 PGO2 版本。
+
+### 实战收益（Ascend910 + vLLM qwen2.5-1.5b）
+
+| 阶段 | 编译动作 | tok/s | 累计收益 |
+|-----|---------|-------|---------|
+| 基线 | gcc 预编译版 | 64.63 | 0% |
+| C6 | BiSheng Python LTO+PGO | 110.92 | +71.6% |
+| C7 | PyTorch ThinLTO+PGO + torch_npu ThinLTO+PGO + BiSheng tcmalloc | 125.71 | +94.5% |
+
+- Python LTO+PGO 单步收益最大（+71.6%），因为 Python 解释器是 vLLM 调度路径的核心。
+- PyTorch + torch_npu ThinLTO+PGO 增量 +13.3%（从 110.92 到 125.71），主要来自算子 dispatch 路径优化。
+- BiSheng tcmalloc 替换 glibc malloc 是 C7 增量的一部分，需与编译优化同轮验证。
+- 全链 PGO 是必须的：纯 ThinLTO（无 PGO）torch_npu 反而退步 22.4%。

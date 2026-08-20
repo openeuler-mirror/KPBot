@@ -150,3 +150,177 @@
 - 完成态报告必须能从 `subagent_invocation_log` 追溯每个候选和 coverage skill 的分析 subagent；执行过真实或 dry-run 验证的轮次必须能追溯执行验证 subagent。
 - 单 skill 停止条件和全局停止原因已记录。
 - review、还原和案例归档状态已记录。
+
+## AI 推理场景输入字段
+
+当 `workload_type` 为 `ai_inference` 时，报告必须额外记录以下输入字段（与 `references/input-contract.md` 的 AI 推理字段一致），用于案例归档复现：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ai_inference_subtype` | string | `ai_inference_llm` / `ai_inference_embedding` / `ai_inference_rerank`；未填时默认 `ai_inference_llm` |
+| `inference_framework` | string | `vllm` / `sglang` / `tgi` / `trt-llm` |
+| `device_type` | string | `npu` / `gpu` / `cpu` |
+| `npu_device_ids` | string | NPU 设备 ID 列表（逗号分隔），如 `"0"` 或 `"0,1"` |
+| `gpu_device_ids` | string | GPU 设备 ID 列表（逗号分隔） |
+| `tensor_parallel_size` | integer | TP 并行度（与 `deployment_topology.tensor_parallel_size` 一致） |
+| `pipeline_parallel_size` | integer | PP 并行度（与 `deployment_topology.pipeline_parallel_size` 一致） |
+| `model_name` | string | 模型名称，如 `qwen2.5-1.5b` |
+| `quantization` | string | `none` / `w8a8` / `w4a16` / `gptq` / `awq` |
+
+## AI 推理指标字段
+
+AI 推理场景（vLLM / SGLang / TGI on Ascend / GPU）必须在以下现有字段中扩展 AI 推理专用子字段。未涉及 AI 推理场景时，这些子字段为空数组或 null，不影响通用报告。
+
+### baseline_metrics 扩展
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `output_throughput_tokps` | number | output tokens/s（解码阶段输出吞吐）|
+| `ttft_ms` | number | Time To First Token（ms）|
+| `tpot_ms` | number | Time Per Output Token（ms）|
+| `e2e_ms` | number | 端到端请求延迟（ms）|
+| `npu_utilization_pct` | number | NPU 平均利用率（%）；GPU 场景用 `gpu_utilization_pct` |
+| `hbm_bandwidth_pct` | number | HBM 内存带宽利用率（%）|
+| `kv_cache_hit_rate` | number | KV cache 命中率（0-1）|
+| `batch_utilization` | number | 实际 batch / max batch 占比（0-1）|
+
+`baseline_metrics` 在 AI 推理场景下的示例：
+
+```json
+{
+  "output_throughput_tokps": 1820.5,
+  "ttft_ms": 42.3,
+  "tpot_ms": 18.7,
+  "e2e_ms": 1280.4,
+  "npu_utilization_pct": 78.2,
+  "hbm_bandwidth_pct": 64.1,
+  "kv_cache_hit_rate": 0.91,
+  "batch_utilization": 0.85
+}
+```
+
+### improvement_summary 扩展
+
+`improvement_summary` 在 AI 推理场景下必须按上述指标的前后对比输出：
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `output_throughput_tokps` | object | `{baseline, optimized, delta_pct}` |
+| `ttft_ms` | object | `{baseline, optimized, delta_pct}`；负 delta_pct 表示改善（降低）|
+| `tpot_ms` | object | `{baseline, optimized, delta_pct}` |
+| `e2e_ms` | object | `{baseline, optimized, delta_pct}` |
+| `npu_utilization_pct` | object | `{baseline, optimized, delta_pct}` |
+| `hbm_bandwidth_pct` | object | `{baseline, optimized, delta_pct}` |
+| `kv_cache_hit_rate` | object | `{baseline, optimized, delta_pct}` |
+| `batch_utilization` | object | `{baseline, optimized, delta_pct}` |
+| `multi_metric_tradeoff` | boolean | 是否存在 tokens/s ↑ 但 TTFT/TPOT 恶化的权衡场景 |
+
+### environment_snapshot 扩展
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `npu_topology` | object | `{ascend_chip, die, hccs_links}`；GPU 场景用 `gpu_topology` |
+| `cann_version` | string | CANN 工具链版本（Ascend 专用）|
+| `torch_npu_version` | string | torch_npu 版本（Ascend 专用）|
+| `vllm_version` | string | vLLM 版本；其他框架对应字段如 `sglang_version` / `tgi_version` |
+
+### deployment_topology 扩展
+
+当 `deployment_topology` 为 object 时，AI 推理场景追加以下子字段：
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `tensor_parallel_size` | integer | Tensor Parallel 并行度（与 `input-contract.md` 字段名一致） |
+| `pipeline_parallel_size` | integer | Pipeline Parallel 并行度（与 `input-contract.md` 字段名一致） |
+| `dp_degree` | integer | Data Parallel 并行度 |
+| `hccl_comm_group` | string | HCCL 通信组配置（Ascend 专用）；GPU 场景用 `nccl_comm_group` |
+
+### workflow_stage_trace 扩展
+
+AI 推理场景下，`workflow_stage_trace` 必须按 `round_N` 粒度记录每轮轨迹，每轮条目包含：
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `round_id` | integer | 轮次编号（1-based）|
+| `round_started_at` / `round_ended_at` | string | 轮次起止时间 |
+| `round_duration_seconds` | number | 轮次总耗时 |
+| `round_status` | string | `running` / `adopted` / `rejected` / `blocked` |
+| `round_metrics_before` / `round_metrics_after` | object | 该轮前后指标快照（含上述 8 个 AI 推理指标）|
+| `round_evidence_paths` | string[] | 该轮原始日志路径 |
+| `attribution_method` | string | 该轮归因方法，见下方枚举 |
+
+### attribution_method 枚举扩展
+
+`attribution_method` 字段在原通用枚举基础上增加 AI 推理耦合变量归因：
+
+| 枚举值 | 含义 | 使用场景 |
+|--------|------|---------|
+| `single_variable_round` | 单变量轮次（原有）| 通用单变量优化 |
+| `baseline_reset` | 回基线验证（原有）| 用户要求独立收益 |
+| `merged_unresolvable` | 合并不可拆分（原有）| 通用合并场景 |
+| `confounded` | 存在混淆因子（原有）| 通用混淆 |
+| `coupled_variable_group` | 耦合变量组 | **新增**：AI 推理弱耦合协同对（如 OMP_NUM_THREADS+OMP_WAIT_POLICY、gc_threshold+max_split_size）在同一轮次合并执行，组内变量无法独立归因 |
+
+> **注意**：强耦合（互斥对，如 TQE 与 async-scheduling）只取生效的一个，按 `single_variable_round` 处理，不使用本枚举值。
+
+当 `attribution_method=coupled_variable_group` 时，必须同时提供：
+
+- `coupled_variable_group_name`：耦合组名称（如 `omp_passive_synergy`、`gc_split_synergy`）
+- `coupled_variables`：组内变量列表
+- `coupling_synergy_gain_pct`：协同增量收益（弱耦合复测后填写）
+
+### config_diff_per_round 字段
+
+新增 `config_diff_per_round` 数组，记录每轮相对上一轮已采纳配置的 diff，用于案例归档复现：
+
+```json
+[
+  {
+    "round_id": 1,
+    "skill_name": "cpu-affinity-optimization",
+    "config_key": "cpu_affinity_mask",
+    "config_before": "0-95",
+    "config_after": "0-47",
+    "change_type": "online",
+    "attribution_method": "single_variable_round",
+    "adopted": true
+  },
+  {
+    "round_id": 8,
+    "skill_name": "application-config-optimization",
+    "config_key": "OMP_NUM_THREADS+OMP_WAIT_POLICY",
+    "config_before": "OMP_NUM_THREADS=4;OMP_WAIT_POLICY=ACTIVE",
+    "config_after": "OMP_NUM_THREADS=8;OMP_WAIT_POLICY=PASSIVE",
+    "change_type": "restart",
+    "attribution_method": "coupled_variable_group",
+    "coupled_variable_group_name": "omp_passive_synergy",
+    "coupled_variables": ["OMP_NUM_THREADS", "OMP_WAIT_POLICY"],
+    "coupling_synergy_gain_pct": 1.2,
+    "adopted": true
+  }
+]
+```
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `round_id` | integer | 轮次编号 |
+| `skill_name` | string | 该轮所属 skill |
+| `config_key` | string | 变更的配置项；耦合组用 `+` 连接 |
+| `config_before` / `config_after` | string | 变更前后值 |
+| `change_type` | string | `online` / `restart` / `rebuild` / `firmware` |
+| `attribution_method` | string | 归因方法枚举 |
+| `coupled_variable_group_name` | string | 耦合组名称（耦合组必填）|
+| `coupled_variables` | string[] | 组内变量（耦合组必填）|
+| `coupling_synergy_gain_pct` | number | 协同增量收益（弱耦合必填）|
+| `adopted` | boolean | 该轮是否采纳 |
+
+### 报告自检补充（AI 推理场景）
+
+当 `workload_type` 为 AI 推理（vLLM / SGLang / TGI 等）时，报告输出前额外确认：
+
+- `baseline_metrics` 包含全部 8 个 AI 推理指标，且预热完成后再采集。
+- `improvement_summary` 已按多指标权衡判定，矛盾场景已标注 `multi_metric_tradeoff`。
+- 回退阈值遵循 `references/iteration-execution.md` 的统一规则：通用配置轮 `≤0%` 回退 / `0-1%` 噪声区 / `>1%` 保留，二进制替换场景噪声阈值为 `>2%`；不得引用任何未定义的"AI 专用 5%"阈值。
+- 耦合变量组轮次已标记 `attribution_method=coupled_variable_group`，并填写耦合组名称和协同收益。
+- `config_diff_per_round` 完整记录每轮变更，可独立复现。
+- `workflow_stage_trace` 按 `round_N` 粒度记录，每轮含前后指标快照。

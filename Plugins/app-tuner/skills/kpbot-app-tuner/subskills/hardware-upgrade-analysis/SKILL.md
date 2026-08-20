@@ -34,8 +34,8 @@ description: 当瓶颈证据显示当前 CPU 核数、内存容量、内存带�
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 必须包含 `action_id`、`action_type`、`precondition`、`expected_gain`、`risk`、`validation`、`rollback_or_reversal`、`stop_or_reject_condition` 和 `evidence_sources`。硬件升级建议必须明确哪些软件优化已完成、停止或被证据否决，不能把未验证的软件空间直接包装成硬件不足。
+每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。硬件升级建议必须明确哪些软件优化已完成、停止或被证据否决，不能把未验证的软件空间直接包装成硬件不足。
 
 ## Knowledge Mapping
 
-参考 `references/knowledge-technique-routing.md` 判断硬件不足是否源自 L6 微架构、内存带宽、网卡带宽、磁盘 IOPS 或 GPU/NPU 规格。知识库案例只能用于规格候选和验证指标，当前收益必须来自用户确认的 A/B 或容量模型。
+参考 `../../references/knowledge-technique-routing.md` 判断硬件不足是否源自 L6 微架构、内存带宽、网卡带宽、磁盘 IOPS 或 GPU/NPU 规格。知识库案例只能用于规格候选和验证指标，当前收益必须来自用户确认的 A/B 或容量模型。

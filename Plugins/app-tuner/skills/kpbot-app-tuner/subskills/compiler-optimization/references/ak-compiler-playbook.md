@@ -378,3 +378,48 @@ Agent 采集当前编译环境后，向用户展示可用优化手段：
 - **torch_npu**: `pip install *.whl` 后 `python3 -c "import torch_npu; print(torch_npu.__version__)"`；`readelf -p .comment $(python3 -c "import torch_npu,os; print(os.path.dirname(torch_npu.__file__))")/*.so | grep -i bisheng` 确认毕昇编译；检查 libomp.so 链接
 - **功能 smoke test**: 跑一个最小的训练/推理脚本确认无报错
 - **性能对比**: 用相同模型和压测命令对比编译前后的训练/推理性能
+
+## PGO Profile 生成工作流（AI 推理场景）
+
+> 来源：Ascend910 + vLLM qwen2.5-1.5b 实战经验。PGO profile 必须由目标负载生成，否则无效甚至有害。
+
+### 有效性阈值
+
+- profile 文件大小 > 50MB
+- profile 函数数 > 100000
+- 不满足以上阈值的 profile 视为覆盖不足，禁止用于 `-fprofile-use` 编译
+
+### 被拒绝的 PGO 案例
+
+| profile 来源 | 收益 | 拒绝原因 |
+|---|---|---|
+| `w00664011` 通用 profile（非目标负载生成） | -1.33% | profile 非目标负载生成，不匹配 |
+| 纯 ThinLTO torch_npu 无 PGO | -22.4% | 无 PGO 的 LTO 可能破坏热点布局 |
+
+### 生成模板
+
+```bash
+# 1. 启动目标服务
+python -m vllm.entrypoints.openai.api_server \
+  --model qwen2.5-1.5b \
+  --tensor-parallel-size 1 &
+
+# 2. 运行代表性 workload 生成 profile（prompt 分布、batch size 须与正式压测一致）
+python benchmark_throughput.py \
+  --model qwen2.5-1.5b \
+  --input-len 1024 --output-len 256 \
+  --num-prompts 5000
+
+# 3. 收集并合并 profile（需 BiSheng compiler 的 profdata 工具）
+llvm-profdata merge /tmp/profile -o /tmp/profile/default.profdata
+
+# 4. 验证 profile 有效性
+ls -la /tmp/profile/default.profdata  # size > 50MB
+llvm-profdata show /tmp/profile/default.profdata --counts | wc -l  # functions > 100000
+```
+
+### 要求
+
+1. profile 采集运行必须使用与正式压测相同的 model、tokenizer、prompt 分布、batch size
+2. profile 来源必须记录在 `performance_signal_summary.json` 的编译信号字段中
+3. 源码变化超过约 10% 或热点路径明显变化时重新采集

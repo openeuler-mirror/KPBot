@@ -43,6 +43,8 @@
 | `perf` | PMU、热点、topdown、火焰图和硬件事件采集 | 推荐/按采集阶段必需 | 环境诊断中标记 perf/PMU 能力降级或阻断 |
 | root 或 `CAP_PERFMON`/`CAP_SYS_ADMIN` | 非 root perf 硬件事件、内核符号、容器内采集 | 推荐/按采集阶段必需 | 提前告知权限不足，建议宿主机采集或补 capability |
 | PMU 虚拟化/容器映射 | VM/容器内硬件事件采集 | 推荐/按采集阶段必需 | 只能采软件事件或无法采集，topdown/cache/cycles 结论降级 |
+| Python 3.9+ | `create_subagent_tasks.py` 等脚本使用 `argparse.BooleanOptionalAction`（Python 3.9 引入）和 PEP 585 泛型语法 | 必需 | Python < 3.9 时脚本启动失败，阻断任务包生成与报告生成 |
+| `node` | `dynamic_workflow_manager.js` 状态机管理 | 必需 | 缺失时阻断 workflow state 管理 |
 
 ## 子 Skill 依赖矩阵
 

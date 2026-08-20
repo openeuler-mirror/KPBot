@@ -38,36 +38,57 @@ description: 综合瓶颈分析结果输出线程数、队列、批量、缓存�
 
 本子 skill 统一承接昇腾 NPU 上 LLM 推理型工作负载的应用层参数推荐。当检测到 `workload_type == npu_llm_infer`，或检测到 CANN/torch_npu、`infer.sh`、Qwen/DeepSeek/GPT-OSS 等 LLM 推理入口时，按下表输出候选动作。
 
-### 推荐参数
+实战经验（Ascend910 + vLLM qwen2.5-1.5b 优化案例的实测收益记录、线程数调优实证、vLLM 进阶参数、参数耦合互斥规则与单变量执行顺序）见 `references/ascend-vllm-config.md`；LLM 推理性能指标体系（吞吐/延迟/资源指标、压测工具、采集规范）见 `references/llm-inference-metrics.md`。
+
+### 调度类参数
 
 | 参数 | 推荐值 | 配置位置 | 作用 | 适用场景 | 风险 | 验证 | 回退 |
 |---|---|---|---|---|---|---|---|
 | `TASK_QUEUE_ENABLE` | `export TASK_QUEUE_ENABLE=2` | 环境变量 | 开启 task queue 流水调度，重叠 AI Core 计算与 Host→Device 算子下发，减少流水气泡 | NPU 推理（ge_graph / npugraph_ex），prefill/decode 延迟型 | 低：环境变量级，不改图结构与权重 | 重启服务后对比 prefill/decode ms（越低越好） | `unset TASK_QUEUE_ENABLE` 或设为 `0` 重启 |
-| `--async-scheduling` | server 启动追加 `--async-scheduling` | vllm/server 启动命令 | 异步调度，Host 端异步下发算子，降低 decode 串行等待 | online / server 启动模式；offline 单次推理收益有限 | 中：仅 server 模式生效；须确认入口支持该 flag | 启动日志确认 flag 生效 + 复测 decode 延迟 | 移除 flag 重启 |
-| `--enable-chunked-prefill` | server 启动追加 `--enable-chunked-prefill` | vllm/server 启动命令 | 分块 prefill，将长 prefill 拆为 chunk 与 decode 交替执行，降低长序列首 token 延迟、改善 prefill/decode 混排调度 | 长 input / 在线服务多请求场景；短序列离线单请求收益有限 | 中：改变 prefill 调度路径，可能影响吞吐-延迟权衡；须确认入口支持 | 复测 prefill 延迟 + 监控吞吐是否回退 | 移除 flag 重启 |
-| `--block-size` | `--block-size=16` | vllm 启动命令 | KV cache block 大小，影响显存碎片与 decode 访存效率 | paged/block KV 实现的解码路径 | 中：过大浪费显存或与 max_batch 不匹配；过小访存放大 | 复测 decode 延迟 + 监控 OOM/显存占用 | 还原默认 block-size 重启 |
+| `--async-scheduling` | server 启动追加 `--async-scheduling` | vllm/server 启动命令 | 异步调度，Host 端异步下发算子，降低 decode 串行等待 | online / server 启动模式；offline 单次推理收益有限 | 中：**与 `TASK_QUEUE_ENABLE=2` 冲突**，NPU 场景优先 TQE=2；仅 server 模式生效；须确认入口支持该 flag | 启动日志确认 flag 生效 + 复测 decode 延迟 | 移除 flag 重启 |
+| `--enable-chunked-prefill` | server 启动追加 `--enable-chunked-prefill` | vllm/server 启动命令 | 分块 prefill，将长 prefill 拆为 chunk 与 decode 交替执行，降低长序列首 token 延迟、改善 prefill/decode 混排调度 | 长 input / 在线服务多请求场景；**短序列离线单请求有害**（实测 -1.63%） | 中：改变 prefill 调度路径，可能影响吞吐-延迟权衡；须确认入口支持 | 复测 prefill 延迟 + 监控吞吐是否回退 | 移除 flag 重启 |
+| `--enforce-eager` | 小模型（≤3B）开启；大模型关闭 | vllm 启动命令 | 强制禁用图捕获。小模型图捕获开销 > 收益 | 小模型 / shape 频变场景；大模型图捕获收益高则关闭 | 低：启动 flag 级 | 对比 TTFT + throughput | 移除 flag 重启 |
 
-### 协同与冲突
+### vLLM 启动参数
 
-- `TASK_QUEUE_ENABLE=2` 与 `--async-scheduling` 均作用于 Host-Device 调度流水，组合后可能叠加或相互替代，须按 Synergy Detection 规则先单独测再组合测。
-- `--enable-chunked-prefill` 与 `--async-scheduling` 均为 server 启动 flag 且都作用于调度路径：chunked-prefill 改 prefill 拆分调度，async-scheduling 改算子下发时序，组合须实测是否冲突或抵消。
-- `--block-size=16` 与 `batch_size`、`max_new_tokens`、可用 HBM 耦合，调整时须保证 `block_size * num_blocks * kv_dim` 不超显存上限。
-- 与 YAML 内 `exe_mode` 协同：`npugraph_ex` 已固化部分调度，`TASK_QUEUE_ENABLE=2` 收益可能减弱，须实测确认。
-- 与 `accelerator-optimization` 边界：本节只输出应用层启动参数（环境变量 + vllm/server flag）；HBM 带宽、算子 fallback、AI Core 利用率等硬件侧证据由 `accelerator-optimization` 提供。
+| 参数 | 默认值 | NPU 建议 | 适用场景 | 风险/注意事项 |
+|---|---|---|---|---|
+| `--gpu-memory-utilization` | 0.9 | 0.85–0.95（HBM 32GB 卡建议 0.90，64GB 卡可至 0.95；预留 CANN/runtime 开销） | 所有场景；控制 KV cache 与权重占用 HBM 比例 | 过高触发 OOM 或 CANN runtime 申请失败 |
+| `--max-num-seqs` | 256 | 按 HBM 容量与 `max-model-len` 反推；小卡（32GB）建议 32–128，大卡（64GB+）可至 256 | 高并发在线服务 | 过大导致 decode batch 抖动、TTFT 上升 |
+| `--max-model-len` | 模型上限 | 与 KV cache 预分配耦合；按业务最长 prompt+output 设定，避免预留过多 | 长 prompt / 长输出场景 | 过大将挤占 `max-num-seqs` 空间；建议贴近 P99 实际长度 |
+| `--enable-prefix-caching` | False | 开启；NPU 支持 paged KV，前缀命中场景收益明显 | 共享 system prompt / 多轮对话 / RAG | 命中率低时管理开销可能为负 |
+| `--tensor-parallel-size` (`-tp`) | 1 | 多卡时按设备数设；NPU 须配合 `ASCEND_RT_VISIBLE_DEVICES` 与 HCCL | 模型单卡装不下或需降延迟 | 小模型（<7B）单卡更快 |
+| `--block-size` | 16 | **保留默认**（NPU 实测变更无收益，-0.64% 噪声） | paged KV decode 路径 | 变更须监控 OOM 与 decode 访存 |
+| `--cpu-offload-gb` | 0 | **不推荐**，Host↔Device 带宽瓶颈 | — | NPU 场景优先扩容 tp |
+| `--swap-space` | 4 (GB) | NPU 慎用 CPU swap，HBM↔Host 带宽受限 | 显存不足时降级 | 优先优化 `gpu-memory-utilization` 与 `max-num-seqs` |
+| `--dtype` | auto | NPU 推荐 `float16`；`bfloat16` 须确认 CANN 支持 | 所有场景 | 影响显存与精度 |
 
-### 内存参数优化
+### 内存参数
 
-来源：[昇腾 PyTorch 内存优化文档](https://www.hiascend.com/document/detail/zh/Pytorch/600/ptmoddevg/trainingmigrguide/performance_tuning_0040.html)。以下参数为 torch_npu 通用内存优化手段，适用于 NPU LLM 推理场景中显存碎片、内存复用不足、多流内存隔离或 GC 抖动导致的性能问题。
+来源：[昇腾 PyTorch 内存优化文档](https://www.hiascend.com/document/detail/zh/Pytorch/600/ptmoddevg/trainingmigrguide/performance_tuning_0040.html)。适用于 NPU LLM 推理场景中显存碎片、内存复用不足、多流内存隔离或 GC 抖动导致的性能问题。
 
 | 参数 | 推荐值 | 配置位置 | 作用 | 适用场景 | 风险 | 验证 | 回退 |
 |---|---|---|---|---|---|---|---|
-| `PYTORCH_NPU_ALLOC_CONF` (expandable_segments) | `export PYTORCH_NPU_ALLOC_CONF="expandable_segments:True"` | 环境变量 | 使能内存池扩展段功能，由 PyTorch 自管理虚拟地址与物理地址映射，降低内存碎片 | 动态 shape 场景（LLM 推理 prefill/decode shape 变化大）；内存碎片导致复用率低 | 低：环境变量级；**不能与 `garbage_collection_threshold` 和 `max_split_size_mb` 共用** | 对比显存碎片率（`npu-smi info` + 内存 profiling）+ 复测 prefill/decode ms | `unset PYTORCH_NPU_ALLOC_CONF` 重启 |
+| `PYTORCH_NPU_ALLOC_CONF` (expandable_segments) | `export PYTORCH_NPU_ALLOC_CONF="expandable_segments:True"` | 环境变量 | 使能内存池扩展段功能，降低内存碎片 | 动态 shape 场景（LLM 推理 prefill/decode shape 变化大）；内存碎片导致复用率低 | 低：环境变量级；**不能与 `garbage_collection_threshold` 和 `max_split_size_mb` 共用** | 对比显存碎片率（`npu-smi info` + 内存 profiling）+ 复测 prefill/decode ms | `unset PYTORCH_NPU_ALLOC_CONF` 重启 |
 | `PYTORCH_NPU_ALLOC_CONF` (garbage_collection_threshold) | `export PYTORCH_NPU_ALLOC_CONF="garbage_collection_threshold:0.95"` | 环境变量 | 垃圾回收阈值，为内存上限的百分比；内存申请到阈值时触发内存池空闲块回收 | 内存使用率高、空闲块堆积场景；建议由大到小调试 | 低：环境变量级；**不能与 `expandable_segments:True` 共用** | 监控内存回收频率 + 复测性能稳定性（抖动是否减少） | `unset PYTORCH_NPU_ALLOC_CONF` 重启 |
 | `PYTORCH_NPU_ALLOC_CONF` (max_split_size_mb) | `export PYTORCH_NPU_ALLOC_CONF="max_split_size_mb:50"` | 环境变量 | 内存块允许切分上限（MB），大于等于该值的块不允许切分，减少碎片 | 内存碎片严重、大块被频繁切分场景；**须先采集内存 profiling，按算子内存申请降序排列，由大到小尝试** | 中：值过小可能导致大算子申请失败 OOM；不能与 `expandable_segments:True` 共用 | 监控 OOM + 对比碎片率 + 复测性能 | `unset PYTORCH_NPU_ALLOC_CONF` 重启 |
 | `MULTI_STREAM_MEMORY_REUSE` | `export MULTI_STREAM_MEMORY_REUSE=1` | 环境变量 | 使能多流内存复用，让通信流内存提前释放供计算流复用，降低多流内存隔离开销 | 多流并行推理（计算流 + 通信流）；单流场景收益有限 | 低：环境变量级 | 对比显存占用 + 复测 prefill/decode ms | `unset MULTI_STREAM_MEMORY_REUSE` 重启 |
 | `set_per_process_memory_fraction` | `torch_npu.npu.set_per_process_memory_fraction(0.95)` | 代码（Python） | 设置进程申请的内存上限（0~1），避免 PyTorch 耗尽 Device 内存导致其他组件申请失败 | 显存容量紧张、多组件共存场景 | 低：代码级；值过低可能导致 OOM | 监控显存使用上限 + 无 OOM | 移除该代码行重启 |
 | `HCCL_BUFFSIZE` | `export HCCL_BUFFSIZE=200` | 环境变量 | HCCL 通信缓存大小（MB），默认 200；减小可释放显存 | 分布式多卡推理（world_size>1）；单卡无收益 | 中：值过小严重劣化通信速度；仅多卡场景适用 | 监控通信延迟 + 显存释放量 + 复测整体性能 | `unset HCCL_BUFFSIZE` 重启 |
 | Python GC 优化 | `gc.set_threshold(700, 10, 5)` 或 `gc.disable()` | 代码（Python） | 调整 Python GC 回收频率或关闭自动回收，减少大量对象触发频繁 GC 导致的性能抖动 | 大量 Python 对象创建/销毁、GC 频繁触发导致性能抖动 | 中：关闭 GC 可能导致内存持续增长；须监控内存泄漏 | 监控 GC 频率 + 性能抖动是否减少 + 长时间运行内存稳定性 | 移除代码恢复默认 GC 策略重启 |
+
+### 线程数参数
+
+| 参数 | 推荐值 | 配置位置 | 作用 | 适用场景 | 风险 | 验证 | 回退 |
+|---|---|---|---|---|---|---|---|
+| `OMP_NUM_THREADS` | **等于实际并行需求**（实战 8），而非 CPU 核数 | 环境变量 | 控制 OpenMP 线程数，防止过提交 | NPU 推理 Host 侧算子下发 / CPU 密集算子 | 低：环境变量级 | 复测 TTFT + 线程数（`ps -T`） | `unset OMP_NUM_THREADS` 重启 |
+| `OMP_WAIT_POLICY` | `PASSIVE` | 环境变量 | 让等待线程不占 CPU，减少争用 | 配合 `OMP_NUM_THREADS` | 低：环境变量级 | 复测 TTFT | `unset OMP_WAIT_POLICY` 重启 |
+| `MKL_NUM_THREADS` | 与 `OMP_NUM_THREADS` 一致 | 环境变量 | 防止 MKL 单独过提交 | MKL 算子 | 低：环境变量级 | 复测 TTFT | `unset MKL_NUM_THREADS` 重启 |
+| `OPENBLAS_NUM_THREADS` | 与 `OMP_NUM_THREADS` 一致 | 环境变量 | 防止 OpenBLAS 单独过提交 | OpenBLAS 算子 | 低：环境变量级 | 复测 TTFT | `unset OPENBLAS_NUM_THREADS` 重启 |
+
+> **线程数调优实证**：默认 `OMP_NUM_THREADS=CPU核数` → 826 线程 → 大量上下文切换 → TTFT 高。设 `OMP_NUM_THREADS=8` + `OMP_WAIT_POLICY=PASSIVE` + `MKL_NUM_THREADS=8` + `OPENBLAS_NUM_THREADS=8` → 82 线程 → **TTFT -68%**。关键原则：`OMP_NUM_THREADS` 应等于实际并行需求，而非 CPU 核数。
+>
+> **边界归属**：`OMP_NUM_THREADS`、`MKL_NUM_THREADS`、`OPENBLAS_NUM_THREADS` 等线程数参数调优**由本 skill 独占负责**。`cpu-affinity-optimization` 只负责识别线程过提交现象和 CPU 绑核/NUMA 亲和性优化，不输出线程数参数变更动作。两个 skill 在 NPU 推理场景中协同工作：cpu-affinity 先绑核，application-config 再调线程数。
 
 ### 内存参数冲突矩阵
 
@@ -95,27 +116,79 @@ description: 综合瓶颈分析结果输出线程数、队列、批量、缓存�
 **调度类参数（优先执行）：**
 
 1. 先开 `TASK_QUEUE_ENABLE=2`（环境变量，单变量，低风险，复测 prefill/decode）
-2. 再单独验证 `--async-scheduling`（仅 server 模式）
-3. 单独验证 `--enable-chunked-prefill`（长序列/在线场景，重点看 prefill 延迟）
-4. 最后调 `--block-size=16`（影响显存，须监控 OOM）
+2. OMP/MKL/OpenBLAS 线程数统一（低风险，可与步骤 1 同轮）
+3. `--enforce-eager`（小模型开启）或图捕获模式（大模型，二选一）
+4. `--gpu-memory-utilization` + `--max-num-seqs` + `--max-model-len` 联调
+5. `--enable-prefix-caching`（有共享前缀时）
+6. `--enable-chunked-prefill`（**仅高并发长 prompt 场景**，单流跳过）
+7. `--block-size` 实测（NPU 默认倾向保留）
+8. `--async-scheduling`（**与 TQE=2 互斥**，非 NPU 场景或 TQE 无效时单独验证）
 
 **内存类参数（调度类完成后执行）：**
 
-5. 先开 `expandable_segments:True`（环境变量，低风险，动态 shape 场景优先；与步骤 6/7 互斥）
-6. 若步骤 5 无收益或不适用，改用 `garbage_collection_threshold:0.95`（须先 profiling）
-7. 与步骤 6 组合 `max_split_size_mb:50`（逗号分隔；须先采集内存 profiling 确定阈值）
-8. 单独验证 `MULTI_STREAM_MEMORY_REUSE=1`（多流场景）
-9. 单独验证 `set_per_process_memory_fraction(0.95)`（代码级，显存紧张场景）
-10. 多卡场景调 `HCCL_BUFFSIZE`（单卡跳过）
-11. 验证 Python GC 优化（代码级，GC 抖动场景）
+9. 先开 `expandable_segments:True`（环境变量，低风险，动态 shape 场景优先；与步骤 10/11 互斥）
+10. 若步骤 9 无收益或不适用，改用 `garbage_collection_threshold:0.95`（须先 profiling）
+11. 与步骤 10 组合 `max_split_size_mb:50`（逗号分隔；须先采集内存 profiling 确定阈值）
+12. 单独验证 `MULTI_STREAM_MEMORY_REUSE=1`（多流场景）
+13. 单独验证 `set_per_process_memory_fraction(0.95)`（代码级，显存紧张场景）
+14. 多卡场景调 `HCCL_BUFFSIZE`（单卡跳过）
+15. 验证 Python GC 优化（代码级，GC 抖动场景）
 
 **组合验证：**
 
-12. 组合正向项与 `synergy_candidate`，按 Synergy Detection 决定最终组合
+16. 组合正向项与 `synergy_candidate`，按 Synergy Detection 决定最终组合
+
+> **关键提醒**：任何涉及调度路径的参数（TQE / async-scheduling / chunked-prefill / enforce-eager / num-scheduler-steps）变更后，须完整复测 TTFT + TPOT + throughput，不可仅看单一指标。
+
+## 昇腾 NPU LLM 训练专项承接
+
+本子 skill 统一承接昇腾 NPU 上 LLM 训练型工作负载的应用层参数推荐。当检测到 `workload_type == ai_training`，或检测到 torchtitan-npu / torchrun / `run_train*.sh` / DeepSeek / `--training.steps` 等训练入口时，按下表输出候选动作。
+
+实战经验（Ascend910 + torchtitan-npu DeepSeek-V4 训练优化案例的正向实测收益、参数详解、HBM 容量决策树与参数冲突矩阵）见 `references/ascend-torchtitan-training-config.md`。
+
+### 优化器参数
+
+| 参数 | 推荐值 | 配置位置 | 作用 | 适用场景 | 风险 | 验证 | 回退 |
+|---|---|---|---|---|---|---|---|
+| `--optimizer.no_swap_optimizer` | 添加此 flag | CLI 参数 (EXTRA_ARGS) | 禁用 SwapOptimizer，optimizer state 全部保留在 NPU HBM，消除 H2D/D2H swap 同步等待 | HBM 充足（<30% 使用率） | 低：HBM +~2.3GB | profiling `Optimizer.step` 从 ~700ms 降至 <50ms；Free time -15~25% | 移除该 flag |
+| `--optimizer.swap_optimizer_times N` | N=1（如不能禁用 swap） | CLI 参数 | 减少 swap 分批数从默认 16 到 1 | HBM 30-60% | 低 | `swap_to_device_event` 次数从 16 降至 1 | 移除该参数 |
+
+> **决策规则**：HBM <30% → `no_swap_optimizer`；30-60% → `swap_optimizer_times=1`；>60% → 保持默认 16。
+
+### 激活检查点参数
+
+| 参数 | 推荐值 | 配置位置 | 作用 | 适用场景 | 风险 | 验证 | 回退 |
+|---|---|---|---|---|---|---|---|
+| `--activation_checkpoint.mode none` | 添加此 flag | CLI 参数 (EXTRA_ARGS) | 禁用激活检查点，forward activation 全保留在 HBM，backward 不需重计算 | HBM 充足（<40% 使用率） | 低：HBM +~860MB | profiling backward 无 recomputation kernel；Free time -10~30% | 移除该 flag |
+
+> **决策规则**：`HBM_usage + AC_activation_size < 80% HBM_total` → `none`；否则保持 `full` 或用 `selective`。
+
+### FSDP 参数
+
+| 参数 | 推荐值 | 配置位置 | 作用 | 适用场景 | 风险 | 验证 | 回退 |
+|---|---|---|---|---|---|---|---|
+| `--parallelism.fsdp_reshard_after_forward never` | 添加此 flag | CLI 参数 (EXTRA_ARGS) | forward 后不释放 FSDP 分片参数，backward 不需 re-all_gather | HBM 充足（<50% 使用率） | 低：HBM +~300MB | `hcom_allGather` 次数减少 ~50%；Node@launch count -20% | 移除该 flag |
+
+> **决策规则**：`HBM_usage + unshard_param_size < 70% HBM_total` → `never`；否则保持 `always`。
+
+### HBM 容量决策树
+
+```
+HBM 使用率（含模型权重 + optimizer state + activation）:
+  ├─ <30%: 全部 3 项启用
+  │   ├─ --optimizer.no_swap_optimizer        (+~2.3GB)
+  │   ├─ --activation_checkpoint.mode none     (+~860MB)
+  │   └─ --parallelism.fsdp_reshard_after_forward never  (+~300MB)
+  ├─ 30-50%: 部分启用（swap_times=1 + AC=none + reshard=never）
+  ├─ 50-70%: 谨慎选择（swap_times=2 + reshard=never）
+  └─ >70%: 保持默认，通过其他 skill 优化
+```
+
+> 实战累计收益（3 项组合）：Device Free time **-50.4%**，Node@launch 平均间隔 **-30.0%**，稳态步耗时 2.10s→1.17s。
 
 ## Recommended Inputs
 
-- `workload_type` — 工作负载类型（database、compute、rpc、npu_llm_infer 等）
+- `workload_type` — 工作负载类型（database、compute、rpc、npu_llm_infer、ai_training 等）
 - `baseline_metrics` — 基线测试结果（含 TPS、QPS、p99 延迟等）
 - `target_pid` — 目标进程 PID
 - `current_round` — 当前优化轮次
@@ -181,19 +254,6 @@ done
 - 是否纳入下一轮串行累计验证
 - 哪些配置应作为 `next_round_candidate_configs`
 
-## Dynamic Ordering
-
-应用配置优化顺序不是固定不变的。
-
-- 若 `bottleneck_classification == cpu_bottleneck` 且 `workload_type == database`
-  - 推荐顺序：应用配置 → 性能库 → 亲和性 → OS → BIOS → 编译
-- 若 `bottleneck_classification == cpu_bottleneck` 且 `workload_type == compute`
-  - 推荐顺序：编译 → 性能库 → 亲和性 → OS → BIOS → 应用配置
-- 若 `bottleneck_classification == accelerator_bottleneck` 且 `workload_type == npu_llm_infer`
-  - 推荐顺序：编译/exe_mode → 应用配置（task_queue/async-scheduling/block-size）→ 性能库 → 亲和性 → OS → BIOS
-
-输出应给出建议值、适用负载、风险、复测方法、推荐测试方法，以及配置协同关系说明。
-
 在迭代编排语义下，本子 skill 还应补充：
 
 - 哪些配置是当前轮最值得验证的动作
@@ -202,4 +262,4 @@ done
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 或 `selected_optimization_actions[]` 必须包含 `action_id`、`action_type`、`precondition`、`commands_dry_run`、`commands_execute`、`expected_gain`、`risk`、`validation`、`rollback`、`stop_or_reject_condition` 和 `evidence_sources`。需要重启服务的配置必须明确 `restart_required=true`，并在 rollback 中给出恢复原配置和重启验证步骤。
+每个 `candidate_actions[]` 或 `selected_optimization_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。需要重启服务的配置必须在 `change_mode` 中标注 `restart_required`，并在 rollback 中给出恢复原配置和重启验证步骤。

@@ -16,7 +16,7 @@
     "reason": "hotspot DSO shows libssl.so at 12.4%",
     "source_signal": "third_party_library_hotspot",
     "required_evidence": ["evidence_snapshot_dir/performance_signal_summary.json"],
-    "stop_rule": "stop this subskill after 5 rounds with gain < 1%"
+    "stop_rule": "stop this subskill after all subskill recommendations are verified"
   }
 ]
 ```
@@ -69,7 +69,7 @@
   - 当信号未全部命中 → `source_signal=mandatory_baseline_check`，`reason=CPU 亲和性是所有服务器应用的基础优化，必须作为基线检查`
 - 该 skill 不受 coverage 阶段追加规则影响：已在候选列表中的 skill 不会重复加入 coverage。
 
-### cpu-affinity 完整检查清单（6 项，缺一不可）
+### cpu-affinity 完整检查清单（7 项，缺一不可）
 
 执行 cpu-affinity-optimization 时，**必须按以下顺序逐项检查**。`Step 0` 是**物理拓扑发现**，必须在任何 IRQ/进程调整之前完成。
 
@@ -142,6 +142,8 @@ Step 0 产出的物理拓扑:
 | 5 | **irqbalance 状态** | `systemctl stop irqbalance` | 手动设置 IRQ 后必须停止 irqbalance，或配置 banned_cpus |
 | 6 | **设备 NUMA 冲突实测** | 分别部署在两个候选 NUMA node 上，各执行 ≥120s benchmark | 当 NIC_NODE ≠ DISK_NODE 时**必须实测**（禁止理论推测）。对比 TPS/P95，取最优方案。差异 <2% 时选用内存更大的 node。|
 
+**线程-CPU 均衡性初筛**：可使用 `scripts/check_cpu_balance.sh <pid>` 一键读取目标进程线程的 CPU 分布，输出 `balance_status`、`hot_cpu_list`、`thread_distribution` 和 `skew_notes`，作为第 2/6 项检查的前置线索。
+
 **⚠️ 常见遗漏**：
 1. 只检查"设备 IRQ 不在目标进程核心上"而**不查设备的物理 NUMA 节点** → IRQ 可能被绑在与设备不同 NUMA 节点的 CPU 上，网络 DMA 跨节点开销可达 100%+ 延迟增加。
 2. 不先查 `/sys/class/net/<dev>/device/numa_node` 和 `/sys/block/<dev>/device/numa_node` → 不知道设备物理位置就做亲和性优化是盲目的。
@@ -154,6 +156,8 @@ Step 0 产出的物理拓扑:
 2. **覆盖执行阶段**：证据候选全部完成后，把未进入证据候选列表的主优化 skill 追加为 `phase=coverage`，逐个启动分析 subagent 并做必要验证，确保最终所有主优化 skill 都有结论。
 3. **报告阶段**：最终报告必须区分证据命中候选、覆盖执行 skill、未产生动作的 skill、被阻塞 skill 和停止原因。
 4. **执行顺序硬约束**：`candidate_skill_list` 的执行顺序是硬约束，不允许在 cpu-affinity-optimization 完成前跳到后续 skill。主 agent 必须在每次进入迭代轮次前校验当前 skill 是否为 `candidate_skill_list` 中第一个未完成的 skill，且 cpu-affinity-optimization 必须是第一个被执行的 skill。
+5. **性能库先于 OS 顺序规则**：当 `performance-library-selection` 与 `os-optimization` 同时进入候选列表（evidence_candidate 或 coverage 任一阶段）时，`performance-library-selection` 必须排在 `os-optimization` 之前。原因：tcmalloc/jemalloc 等库替换会改变 malloc 路径并影响 OS 侧大页/GLIBC_TUNABLES 调优的有效性；os-playbook 中 tcmalloc-hugepage 动作的 `precondition_skill=performance-library-selection` 已声明该依赖。主 agent 在生成 `candidate_skill_list` 时必须调整两者相对顺序，并在 `reason` 中注明"performance-library 先于 os"。`dynamic_workflow_manager.js` 的 `set-candidates` 会自动归一化该顺序。
+6. **编译优化排最后规则**：当 `compiler-optimization` 进入候选列表（evidence_candidate 或 coverage 任一阶段）时，它**必须排在候选列表最末位**，晚于其他所有证据候选与覆盖 skill。原因：编译级改造（PGO/LTO、重编译、融合策略调整）通常在应用配置、性能库、加速卡、OS 等运行时手段验证完毕后仍需要继续压测才能完成收益隔离，且重编译动作会重建二进制，干扰其他 skill 的现场 A/B 归因。主 agent 生成或调整 `candidate_skill_list` 时必须把 `compiler-optimization` 移动到列表尾部，并在 `reason` 中注明"compiler 排最后"。即使用户显式指定候选顺序，也按"compiler 最后"原则归一化（用户明确推翻该默认时以用户指令为准并在 trace 记录）。
 
 主优化 skill 覆盖集合：
 
@@ -172,8 +176,7 @@ Step 0 产出的物理拓扑:
 
 ## 停止规则
 
-- 单个 skill 最多尝试 5 轮。
-- 同一 skill 5 轮阶段收益均 `< 1%` 时停止该 skill。
+- 单个 skill 需验证完全 subskill 给出的所有推荐。
 - 停止单个 skill 不等于全局停止；必须继续执行 `candidate_skill_list` 中尚未完成的 skill，包括 coverage 阶段 skill。
 - 所有主优化 skill 均完成、停止、阻塞并已说明原因后，才能进入最终报告、review、还原和归档。
 
@@ -181,5 +184,29 @@ Step 0 产出的物理拓扑:
 
 - 候选列表生成阶段只生成 `candidate_skill_list` 和任务包，不实施变更。
 - 子 skill 分析阶段只能由分析 subagent 读取证据并输出候选动作，不得修改系统。
+- **任务包 `instructions` 字段是背景参考非执行指令**：subagent 必须独立执行 subskill SKILL.md 的完整流程，基于现场证据独立判断推荐内容，不得直接照搬任务包中的预设路径或参数。
 - 真实变更只允许在串行执行验证 subagent 阶段发生，且必须满足 `approved_execute`、目标实例身份、证据新鲜度、回退计划和风险门禁。
 - 基线确认后不得逐个 skill 请求用户批准；执行验证 subagent 只校验已确认授权边界，超出边界时阻塞并交回主 agent 统一确认。
+
+## AI 推理采集信号路由
+
+AI 推理场景（Ascend NPU + vLLM/PyTorch、NVIDIA GPU + vLLM 等）在通用采集信号之外，需补充以下专属信号到候选 skill 的路由规则。信号采集写入 `performance_signal_summary.json` 的 `inference_signals` 字段。
+
+| 采集信号 | 判定方式 | 加入候选 skill |
+|---|---|---|
+| 线程过提交 | `thread_count > 4×CPU_cores` 且 `OMP_NUM_THREADS=CPU_cores` 未设置 | `cpu-affinity-optimization` + `application-config-optimization`（OMP/线程数） |
+| NPU util 低 + CPU 高 | `NPU util < 60%` 且 host `CPU > 80%` | `cpu-affinity-optimization` + `application-config-optimization` |
+| malloc 热点 | perf 热点函数含 `malloc`/`free`/`calloc`/`realloc` 且 DSO=glibc | `performance-library-selection` |
+| libtorch_cpu.so 热点 | `hotspot_dso_rank` 含 `libtorch_cpu.so` 且占比 `>= 3%` | `compiler-optimization`（PGO/LTO） |
+| libtorch_npu.so 热点 | `hotspot_dso_rank` 含 `libtorch_npu.so` 且占比 `>= 3%` | `compiler-optimization`（PGO/LTO） |
+| TTFT 高 | `TTFT > 目标值`（首 Token 延迟基线对比） | `application-config-optimization`（OMP/线程数/批量） |
+| KV cache 碎片 | OOM 事件或 throughput 抖动 `std/mean > 10%` | `application-config-optimization`（`gc_threshold`/`max_split_size`） |
+
+判定补充说明：
+
+- `thread_count > 4×CPU_cores`：常见于 PyTorch DataLoader/线程池过提交，导致上下文切换放大。同时检查 `OMP_NUM_THREADS`、`MKL_NUM_THREADS`、`TORCH_NUM_THREADS` 是否等于 CPU 核数。
+- `NPU util < 60%` 且 host CPU 高：典型 CPU feed 瓶颈，NPU 空等。优先 `cpu-affinity-optimization` 绑核 + `application-config-optimization` 调整线程数，而非直接动 NPU 侧配置。
+- `libtorch_cpu.so`/`libtorch_npu.so` 热点：说明框架自身代码成为热点，进入 `compiler-optimization` 做 PGO/LTO 重编译。实战案例：Ascend910 + vLLM qwen2.5-1.5b，libtorch_npu.so PGO 后 S0→C7 累计 +94.5%。
+- TTFT 高与 KV cache 碎片：vLLM 专属信号，需从 vLLM metrics 端点或日志采集，不来自 perf。
+
+> **多轮迭代动态决策**：AI 推理场景的多轮迭代决策规则（收益阈值、首轮探索→后续细化、瓶颈重分类）见 `optimization-decision-tree.md` "AI 推理多轮动态决策"章节。

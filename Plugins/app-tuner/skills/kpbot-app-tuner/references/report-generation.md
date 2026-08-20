@@ -75,3 +75,5 @@ python3 scripts/generate_report.py \
 - 历史记录状态：未确认的历史记录不得进入收益表。
 
 不得把 query mix、硬件规格变化或测试方法变化包装成服务器配置收益。
+
+单轮收益计算可复用 `scripts/summarize_improvement.py --baseline <baseline.json> --candidate <tuned.json> [--round-name <name>]`：按指标名自动识别 `higher_is_better`（延迟/RT/P50-P99 等为越低越好，其余为越高越好），输出每项 `improvement_percent` 与 `direction`，据此生成阶段收益与累计收益对照。

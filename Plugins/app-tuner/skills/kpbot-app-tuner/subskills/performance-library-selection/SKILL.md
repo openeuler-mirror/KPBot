@@ -32,8 +32,10 @@ description: kpbot-app-tuner 的统一高性能库选型入口。基于热点证
 按需加载：
 
 - 通用安装 SOP、运行时调优参数、推荐规则细则、验证方法学：`references/library-playbook.md`
-- Ascend NPU 场景经验线索与推荐策略：`references/ascend-playbook.md`
+- Ascend NPU 场景经验线索与推荐策略（含 host 侧 malloc 优化、tcmalloc 依赖陷阱、vLLM Caching Allocator 交互）：`references/ascend-playbook.md`
+- 内存分配器选型决策树（场景→分配器决策路径、依据映射、跨场景经验）：`references/allocator-decision-guide.md`
 - 全类别库替换知识库（库画像、最佳场景、验证步骤、Ascend 经验）：`references/optimization_kb.json`
+- 在线 PID 采样参考脚本（在线模式下获取目标 PID 并启动 perf 采样）：`references/scripts/sample_online_pid.sh`
 - 公共依赖、perf/PMU 权限和降级：`../../references/prerequisites.md`
 
 ## 安全与架构红线
@@ -81,20 +83,20 @@ description: kpbot-app-tuner 的统一高性能库选型入口。基于热点证
 **硬门控**：采集完成前禁止生成候选库列表。顺序不可打乱。
 
 ```
-Step 1: 采集热点（前置判定 / 环境指纹 / 进程采样 / malloc·memcpy 占比）
-         ↓ 产出: library_selection_mode, malloc_hotspot_pct, memcpy_hotspot_pct, hotspot_dso_rank, detected_libraries
+Step 1: 采集热点（前置判定 / 环境指纹 / 进程采样 / 全类别热点占比）
+         ↓ 产出: library_selection_mode, category_hotspot_pct{allocators,memory_operations,...}, hotspot_dso_rank, detected_libraries
 Step 2: 库类型识别 + 规则引擎匹配 + 证据分级与经验推荐
-         ↓ 产出: candidate_library_list（中间态，含每库的 recommendation / confidence）
+          ↓ 产出: candidate_library_list（中间态，含每库的 recommendation / confidence）
 Step 3: 输出验证流程设计（不执行真实 LD_PRELOAD），作为候选库推荐的配套验证计划
-         ↓ 产出: all_library_verification_results（最终输出，= candidate_library_list 追加验证计划字段，
-                  均标 verification_status=not_verified）
+          ↓ 产出: all_library_verification_results（最终输出，= candidate_library_list 追加验证计划字段，
+                   均标 verification_status=not_verified）
 ```
 
 **违规判定**：候选库列表或推荐结论在 Step 1 完成前已开始 → 流程违规，列表无效，回退 Step 1。
 
 ### Step 1：热点采集与进程采样
 
-在评估任何库替换之前，必须先在当前场景采集 malloc 和 memcpy 相关函数的 CPU 占比，并完成进程依赖与热点采样。采集方式按环境能力选择，不得因某一种工具缺失而放弃采集。
+在评估任何库替换之前，必须先在当前场景采集**全 18 类别**对应的热点函数 CPU 占比，并完成进程依赖与热点采样。采集方式按环境能力选择，不得因某一种工具缺失而放弃采集。
 
 #### 1.1 前置判定（路径决策）
 
@@ -115,9 +117,9 @@ fi
 - **aarch64 检测路径**（`aarch64_full_detection`）：走"全类别库检测工作流"（Step 1.2 采样 → Step 2 识别+规则匹配 → Step 3 验证流程设计），覆盖上表全部 18 类库。
 - **通用经验路径**（`generic_experience`）：不中断主流程，记录 `fallback_reason`，走简化流程：
   - Step 1.2-1.4：仅执行环境指纹 + 进程采样 + 热点占比提取。
-  - Step 2：跳过脚本检测，直接基于 malloc/memcpy 热点占比 + "关键方案：候选库类型映射"表匹配候选库，`confidence` 最高为 `experience_only`。
+  - Step 2：跳过脚本检测，直接基于全类别热点占比 + "关键方案：候选库类型映射"表匹配候选库，`confidence` 最高为 `experience_only`。
   - Step 3：同 aarch64 路径，输出验证流程设计。
-  - 覆盖 malloc/memcpy/压缩/加密/校验等常见类型。
+  - 覆盖全 18 类别（malloc/memcpy/压缩/加密/校验/JSON/正则/BLAS/数学/DNN/FFT/视频/序列化/SQL/网络/KV/算子/ascend_runtime）。
 
 #### 1.2 环境指纹采集
 
@@ -155,21 +157,39 @@ bash scripts/run_and_profile_offline.sh <command> [args...]
 
 > 因禁止跨脚本传递活动进程 PID，启动目标程序和执行 perf 采样必须在单一脚本内一站式完成，并以纯文本返回结果。若脚本执行失败（非零退出码），提示"离线分析闭环执行异常"并报告错误。
 
-#### 1.4 malloc / memcpy 热点占比提取
+#### 1.4 全类别热点占比提取
 
-从 Step 1.3 产出的数据中提取占比，**不要重复执行 `perf record`**：
+从 Step 1.3 产出的数据中提取**所有 18 类库对应的热点占比**，**不要重复执行 `perf record`**。每个类别按"核心概念"综合检测映射表的动态关键词匹配，存在热点的类别必须进入 Step 2 推荐流程。
 
 **在线模式**（`perf_sampling_online.sh` 输出 `perf_data` 路径，用 `--no-children` 取 self%）：
 
 ```bash
 # PERF_DATA 为 Step 1.3 输出的 perf_data 路径（.data 文件）
-PERF_DATA=<Step1.3 输出的 perf_data 路径>
+# 必须用 --no-children 取 self%，否则 call graph 下百分比会重复累加
+PERF_REPORT=$(perf report --stdio -i "$PERF_DATA" --no-children 2>/dev/null)
 
-# malloc 热点占比（必须用 --no-children 取 self%，否则 call graph 下百分比会重复累加）
-perf report --stdio -i "$PERF_DATA" --no-children 2>/dev/null | grep -E 'malloc|free|calloc|realloc|__libc_malloc|_int_malloc|tc_malloc|je_malloc' | awk '{sum+=$1} END {print sum}'
-# memcpy 热点占比
-perf report --stdio -i "$PERF_DATA" --no-children 2>/dev/null | grep -E 'memcpy|memmove|memset|memcmp' | awk '{sum+=$1} END {print sum}'
+# 全类别热点占比提取（关键词来自综合检测映射表"动态关键词"列）
+echo "$PERF_REPORT" | grep -E 'malloc|free|calloc|realloc|__libc_malloc|_int_malloc|tc_malloc|je_malloc' | awk '{sum+=$1} END {print "allocators: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'memcpy|memmove|memset|memcmp' | awk '{sum+=$1} END {print "memory_operations: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'xxh64|xxh32|xxhash|XXH' | awk '{sum+=$1} END {print "hash_functions: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'deflate|inflate|crc32|compress' | awk '{sum+=$1} END {print "compression: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'AES|SHA|MD5|SM4|SSL|EVP_' | awk '{sum+=$1} END {print "crypto: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'json_parse|sonic_parse|rapidjson' | awk '{sum+=$1} END {print "json: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'hyperscan|regex|pcre' | awk '{sum+=$1} END {print "pattern_matching: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'gemv|gemm|blas|cblas' | awk '{sum+=$1} END {print "linear_algebra: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'spmv|spgemm|sparse_blas' | awk '{sum+=$1} END {print "sparse_linear_algebra: " sum "%"}'
+echo "$PERF_REPORT" | grep -E '\bsin\b|\bcos\b|\bexp\b|\blog\b|vml|svml' | awk '{sum+=$1} END {print "math: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'conv[0-9]|pool[0-9]|relu|matmul|dnn' | awk '{sum+=$1} END {print "dnn: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'fft|ifft|dft' | awk '{sum+=$1} END {print "fft: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'encode|decode|h26' | awk '{sum+=$1} END {print "video: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'protobuf|ParseFromArray|SerializeToString' | awk '{sum+=$1} END {print "serialization: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'sparksql|codegen|native_sql' | awk '{sum+=$1} END {print "sql_acceleration: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'tls_tx|tls_rx|tcp_|udp_' | awk '{sum+=$1} END {print "network: " sum "%"}'
+echo "$PERF_REPORT" | grep -E 'rocksdb::|DBImpl|CompactionJob|MemTable|BlockBasedTable' | awk '{sum+=$1} END {print "kv_storage: " sum "%"}'
+echo "$PERF_REPORT" | grep -E '__pthread_mutex_lock|__pthread_rwlock_unlock|std::_Rb_tree|std::vector::_M_realloc_insert|std::_Hashtable' | awk '{sum+=$1} END {print "ascend_runtime: " sum "%"}'
+
 # DSO 热点排名
+echo "$PERF_REPORT" | grep -E '^\s+[0-9]' --sort=dso 2>/dev/null | head -20
 perf report --stdio -i "$PERF_DATA" --no-children --sort=dso 2>/dev/null | grep -E '^\s+[0-9]' | head -20
 ```
 
@@ -177,17 +197,41 @@ perf report --stdio -i "$PERF_DATA" --no-children --sort=dso 2>/dev/null | grep 
 
 ```bash
 # REPORT_JSON 为 Step 1.3 输出的 JSON 报告文件路径
-# 从 hotspots 数组按 symbol 聚合 malloc/memcpy 占比
+# 从 hotspots 数组按 symbol 聚合全 18 类别占比
 python3 -c "
 import json, re
 with open('$REPORT_JSON') as f:
     data = json.load(f)
 hotspots = data.get('hotspots', [])
-malloc_pct = sum(float(h['overhead'].rstrip('%')) for h in hotspots if re.search(r'malloc|free|calloc|realloc', h.get('symbol','')))
-memcpy_pct = sum(float(h['overhead'].rstrip('%')) for h in hotspots if re.search(r'memcpy|memmove|memset|memcmp', h.get('symbol','')))
-print(f'malloc: {malloc_pct}, memcpy: {memcpy_pct}')
+
+categories = {
+    'allocators': r'malloc|free|calloc|realloc|__libc_malloc|_int_malloc|tc_malloc|je_malloc',
+    'memory_operations': r'memcpy|memmove|memset|memcmp',
+    'hash_functions': r'xxh64|xxh32|xxhash|XXH',
+    'compression': r'deflate|inflate|crc32|compress',
+    'crypto': r'AES|SHA|MD5|SM4|SSL|EVP_',
+    'json': r'json_parse|sonic_parse|rapidjson',
+    'pattern_matching': r'hyperscan|regex|pcre',
+    'linear_algebra': r'gemv|gemm|blas|cblas',
+    'sparse_linear_algebra': r'spmv|spgemm|sparse_blas',
+    'math': r'\bsin\b|\bcos\b|\bexp\b|\blog\b|vml|svml',
+    'dnn': r'conv[0-9]|pool[0-9]|relu|matmul|dnn',
+    'fft': r'fft|ifft|dft',
+    'video': r'encode|decode|h26',
+    'serialization': r'protobuf|ParseFromArray|SerializeToString',
+    'sql_acceleration': r'sparksql|codegen|native_sql',
+    'network': r'tls_tx|tls_rx|tcp_|udp_',
+    'kv_storage': r'rocksdb::|DBImpl|CompactionJob|MemTable|BlockBasedTable',
+    'ascend_runtime': r'__pthread_mutex_lock|__pthread_rwlock_unlock|std::_Rb_tree|std::vector::_M_realloc_insert|std::_Hashtable',
+}
+for cat, pattern in categories.items():
+    pct = sum(float(h['overhead'].rstrip('%')) for h in hotspots if re.search(pattern, h.get('symbol','')))
+    if pct >= 0.5:
+        print(f'{cat}: {pct}%')
 "
 ```
+
+> **关键**：任何类别热点占比 ≥ 0.5% 即表示该类别存在性能瓶颈信号，必须进入 Step 2 推荐流程。低于 0.5% 的类别跳过，不输出推荐。不要只关注 malloc/memcpy 而忽略其他类别。
 
 ### Step 2：库类型识别与推荐
 
@@ -235,14 +279,19 @@ FOR each item in detected_libraries:
 
 #### 2.3 证据分级与推荐策略
 
-| malloc/memcpy 热点合计 | 证据等级 | 推荐策略 | 建议主框架验证次数 |
-|------------------------|----------|----------|--------------------|
+**全类别统一分级标准**：每个类别的热点占比独立评估，存在即推荐。
+
+| 热点占比（按类别独立计算） | 证据等级 | 推荐策略 | 建议主框架验证次数 |
+|---|---|---|---|
 | > 5% | 高证据 | 强推荐匹配的候选库（`confidence: high`） | ≥3 次基准对比 |
 | 2-5% | 中证据 | 推荐匹配的候选库（`confidence: medium`） | ≥2 次基准对比 |
-| < 2% | 低证据 | 按经验推荐或判定不推荐（`confidence: low`） | 可选；经验判断低收益/不匹配时可直接 `not_recommended` |
+| 0.5-2% | 低证据 | 按经验推荐（`confidence: low`） | ≥1 次基准对比 |
+| < 0.5% | 无证据 | 该类别不推荐（`not_recommended`） | 跳过 |
 | 无法采集 | 无证据 | 仅按经验给候选清单（`confidence: experience_only`） | 可选 |
 
 > ascend_runtime 类别在"无法采集"时标记 `blocked`（见红线 #3）。
+>
+> **关键**：每个类别独立评估，不要求所有类别都达到阈值才推荐。只要某类别热点 ≥ 0.5%，就应给出对应的替换推荐。低于 0.5% 的类别视为噪声，跳过不推荐。
 
 **经验推荐合法性**（可直接作为推荐/不推荐依据，无需强制实测）：
 1. 热点函数与库匹配关系：malloc/free→allocator 类；memcpy/memset→stringlib 类。匹配则推荐，不匹配则不推荐。
@@ -262,13 +311,28 @@ FOR each item in detected_libraries:
 
 ## 关键方案：候选库类型映射
 
-| 热点类型 | 候选库 | 选型优先顺序依据 |
-|----------|--------|------------------|
-| malloc/free | jemalloc、tcmalloc | 通用服务/中小对象/线程<32→jemalloc 优先；多线程高并发/线程>32→tcmalloc 优先；Ascend 场景→tcmalloc 优先（见 `references/ascend-playbook.md`） |
-| memcpy/memset/memmove | bisheng-stringlib（含 optimized-routines 来源） | aarch64 预期 3-8% 加速；BiSheng 解压即用优先，optimized-routines 源码可控（详见 KB `memory_operations.bisheng-stringlib`） |
-| 压缩（deflate/inflate） | zlib、ISA-L | 按架构与压缩/速度偏好选 |
-| 加密（AES/SHA/RSA） | openssl、isa-l_crypto、GMSSL | 通用→openssl；批量 AES→isa-l_crypto；国密合规→GMSSL |
-| 校验（CRC32/Adler32/XXHash） | ISA-L CRC、xxhash | 按 CPU 架构选 |
+> 当某类别热点占比 ≥ 0.5% 时，按下表给出替换推荐。每类独立评估，不要求全部类别都有热点才推荐。低于 0.5% 的类别跳过。
+
+| 热点类型 | 类别 | 候选库 | 选型优先顺序依据 |
+|---|---|---|---|
+| malloc/free | allocators | jemalloc、tcmalloc | 通用服务/中小对象/线程<32→jemalloc 优先；多线程高并发/线程>32→tcmalloc 优先；Ascend 场景→tcmalloc 优先（见 `references/ascend-playbook.md`） |
+| memcpy/memset/memmove | memory_operations | bisheng-stringlib（含 optimized-routines 来源） | aarch64 预期 3-8% 加速；BiSheng 解压即用优先，optimized-routines 源码可控（详见 KB `memory_operations.bisheng-stringlib`） |
+| 压缩（deflate/inflate） | compression | zlib、ISA-L | 按架构与压缩/速度偏好选 |
+| 加密（AES/SHA/RSA） | crypto | openssl、isa-l_crypto、GMSSL | 通用→openssl；批量 AES→isa-l_crypto；国密合规→GMSSL |
+| 校验（CRC32/Adler32/XXHash） | hash_functions | ISA-L CRC、xxhash | 按 CPU 架构选 |
+| JSON 解析（json_parse/sonic_parse） | json | sonic-cpp、RapidJSON | sonic-cpp 在 aarch64 上性能最优；RapidJSON 跨平台兼容好 |
+| 正则匹配（regex/pcre） | pattern_matching | Hyperscan | 高吞吐正则匹配，aarch64 需确认编译支持 |
+| 矩阵运算（gemv/gemm/cblas） | linear_algebra | OpenBLAS、vectorBLAS | OpenBLAS 通用；vectorBLAS 在鲲鹏上 SVE 优化 |
+| 稀疏矩阵（spmv/spgemm） | sparse_linear_algebra | SparseBLAS | 稀疏矩阵专用 |
+| 数学函数（sin/cos/exp/log） | math | Libm、VML、SVML、autoGEMM | VML/SVML 向量化加速；autoGEMM 矩阵专用 |
+| 深度学习算子（conv/pool/matmul） | dnn | oneDNN | CPU 侧 DNN 算子加速 |
+| 傅里叶变换（fft/ifft） | fft | FFTW | 通用 FFT 库 |
+| 视频编解码（encode/decode） | video | X264、X265 | 按编码格式选 |
+| 序列化（protobuf） | serialization | Protobuf | 协议层优化 |
+| SQL 加速（sparksql） | sql_acceleration | sparksql_native | Spark SQL 原生加速 |
+| 网络 TLS/TCP（tls/tcp/udp） | network | KTLS | 内核 TLS 卸载 |
+| KV 存储（rocksdb） | kv_storage | RocksDB、KAL-rocksdb | 嵌入式 KV 存储优化 |
+| CANN runtime 锁竞争 | ascend_runtime | tcmalloc_for_cann | Ascend NPU host 侧 malloc 优化（需本轮 perf 证据门控） |
 
 **替换方式**：始终优先构建期集成（符号绑定可靠），LD_PRELOAD 仅在完全无法重编译时作为 fallback，且必须先确认进程未链接优化分配器。详细安装 SOP、LD_PRELOAD 接入、运行时调优参数（MALLOC_CONF / TCMALLOC_*）见 `references/library-playbook.md`。
 
@@ -284,7 +348,7 @@ FOR each item in detected_libraries:
 ├── all_library_verification_results[]   → [4][5][6]
 │   └── { library_name, verification_status:not_verified, confidence, recommendation, reason, evidence_sources, ... }
 ├── candidate_actions[]                  → [7]
-│   └── { action_id, action_type, commands_dry_run, rollback, expected_gain, ... }
+│   └── { action_id, title, category, priority, change_mode, implementation_plan, validation_plan, rollback, expected_gain_metric, evidence_refs, ... }
 └── Markdown 体检报告                     → [1]-[8] 全文，内容取自上述结构化数据
 ```
 
@@ -373,7 +437,7 @@ FOR each item in detected_libraries:
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 必须包含 `action_id`、`action_type`、`precondition`、`commands_dry_run`、`expected_gain`、`risk`、`validation`、`rollback`、`stop_or_reject_condition` 和 `evidence_sources`。`commands_execute` 由主框架执行阶段填充（本子 skill 仅输出 `commands_dry_run` 候选命令）。LD_PRELOAD、重新链接、替换 allocator/string/crypto/compression 库和运行时环境变量调整必须在 rollback 中包含恢复原启动环境、库路径、二进制链接关系和目标实例身份复核步骤。
+每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。`implementation_plan` 中包含候选 dry-run 命令（`commands_dry_run`）；`commands_execute` 由主框架执行阶段基于 `implementation_plan` 填充。LD_PRELOAD、重新链接、替换 allocator/string/crypto/compression 库和运行时环境变量调整必须在 rollback 中包含恢复原启动环境、库路径、二进制链接关系和目标实例身份复核步骤。
 
 `not_recommended` 库不出现在 `candidate_actions[]`（仅在 results 中标注）。无法安装/编译时标记 `inconclusive`，记录 `installation_feasibility=not_feasible` 和通过只读检查（如包管理器查询 `yum list available` / 源码仓库可达性）获取的错误信息。本子 skill 不输出实测负收益结论；若主框架执行阶段验证出负收益，由主框架回写 `verification_status=verified` + `confidence=measured` + `recommendation=not_recommended`。
 
@@ -407,3 +471,12 @@ FOR each item in detected_libraries:
 | `scripts/detect_all_libraries.sh` | 统一库类型识别（静态+动态） | 库类型识别降级 |
 | `scripts/perf_sampling_online.sh` | 在线进程 perf 采样 | 在线采样降级为内联方式 |
 | `scripts/run_and_profile_offline.sh` | 离线闭环启动与采样 | 离线分析降级为内联方式 |
+
+## Ascend NPU 实战经验与分配器选型（按需加载）
+
+以下内容已沉淀到 references，按需加载：
+
+- **Ascend NPU 推理 Host 侧 Malloc 优化**（背景/瓶颈/tcmalloc vs jemalloc 对比/LD_PRELOAD 注入/实战收益表/验证流程）→ `references/ascend-playbook.md` "Ascend NPU 推理 Host 侧 Malloc 优化" 章节
+- **tcmalloc 运行时依赖陷阱**（libarcher TSAN 死锁/诊断方法/正确配置/rollback 要求）→ `references/ascend-playbook.md` "tcmalloc 运行时依赖陷阱" 章节
+- **vLLM Caching Allocator 交互**（两层 allocator 架构/PYTORCH_NPU_ALLOC_CONF 调优/协同收益）→ `references/ascend-playbook.md` "vLLM Caching Allocator 交互" 章节
+- **内存分配器选型决策树**（场景→分配器决策路径/依据映射/跨场景经验）→ `references/allocator-decision-guide.md`

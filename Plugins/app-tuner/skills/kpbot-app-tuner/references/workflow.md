@@ -40,28 +40,22 @@
 - `next_gate`：下一门控。
 - `gate_status`：各门控状态列表。
 
-推荐门控顺序：
+推荐门控顺序（门控名必须与 `scripts/dynamic_workflow_manager.js` 的 `GATE_SEQUENCE` 完全一致，全部为 kebab-case；下方次序号即 `gate-enter`/`gate-complete`/`gate-block` 可接受的合法 gate 名）：
 
-1. `skill_entry_loaded`
-2. `startup_input_confirmed`
-3. `optimization_entry_mode_confirmed`
-4. `scenario_input_recorded`
-5. `agent_action_confirmed`
-6. `current_run_initialized`
-7. `bmc_redfish_prompted`
-8. `environment_backup_created`
-9. `environment_diagnosis_completed`
-10. `environment_diagnosis_confirmation`
-11. `service_health_check`
-12. `target_instance_identity_checked`
-13. `baseline_run`
-14. `baseline_confirmation_status`
-15. `bottleneck_classification`
-16. `evidence_snapshot_collected`
-17. `candidate_skill_list`
-18. `per_skill_iteration_state`
-19. `final_report_path`
-20. `review_restore_archive`
+1. `bootstrap`
+2. `scenario-intake`
+3. `environment-backup`
+4. `environment-diagnosis`
+5. `service-health-check`
+6. `baseline`
+7. `evidence-collection`
+8. `candidate-routing`
+9. `candidate-skill-iteration`
+10. `coverage-skill-iteration`
+11. `report`
+12. `review-restore-archive`
+
+更细粒度的确认点（如 `bmc_redfish_prompted`、`environment_diagnosis_confirmation`、`baseline_confirmation_status` 等 snake_case 名称）是阶段内状态字段，不作为 CLI 门控名；它们通过 `_confirmation_status` 系列字段记录，不进 `completed_gates`/`blocked_gate`。`blocked_gate` 只能取上述 12 个合法门控名之一。
 
 同时必须维护 `workflow_stage_trace`。每条记录最低字段：
 
@@ -92,20 +86,24 @@
 - 没有 `current_run_id` 的文件只能归入历史记录，不能作为当前基线、瓶颈或收益结论。
 - `current_evidence_status != current` 时，不得进入候选 skill 列表生成、候选动作生成或收益统计。
 - 发现历史产物与当前产物冲突时，当前异常优先；报告必须展示当前失败状态，而不是引用历史成功结论。
-- 若证据 run_id 不一致、采集时间早于本轮启动时间、目标 PID/容器/端口不一致，必须设置 `overall_progress.status=blocked`，`blocked_gate=evidence_freshness_check`。
+- 若证据 run_id 不一致、采集时间早于本轮启动时间、目标 PID/容器/端口不一致，必须设置 `overall_progress.status=blocked`，`blocked_gate=evidence-collection`。
 
-## Claude Code Dynamic Workflow 映射
+## Dynamic Workflow 门控映射（OpenCode / Claude Code 通用）
 
-Claude Code 运行时必须维护 `current_workflow_state`，并把本文件的门控映射到动态 workflow：
+OpenCode 与 Claude Code 运行时都必须维护 `current_workflow_state`，并把本文件的门控映射到动态 workflow。**以下 workflow 名称必须与 `scripts/dynamic_workflow_manager.js` 的 `GATE_SEQUENCE` 完全一致**（与上文 12 个合法门控同名），这些名称即是 `gate-enter`/`gate-complete`/`gate-block` 可接受的合法 gate 名：
 
 - `bootstrap`：加载主源、强制 references、用户交互门控和检查清单。
 - `scenario-intake`：完成场景摘要、入口模式、节点/容器和操作边界确认。
-- `environment-baseline`：完成环境备份、环境诊断、服务健康、目标实例身份和基线确认。
-- `bottleneck-detection`：采集性能指标和深度证据，输出 `bottleneck_classification` 与 `performance_signal_summary.json`。
+- `environment-backup`：完成环境备份（含逐节点 BMC/Redfish 采集确认）。
+- `environment-diagnosis`：完成环境诊断并向用户确认。
+- `service-health-check`：完成服务健康检查和目标实例身份确认。
+- `baseline`：在目标规格下建立并确认基线。
+- `evidence-collection`：采集性能指标和深度证据，输出 `bottleneck_classification` 与 `performance_signal_summary.json`。
 - `candidate-routing`：读取 `candidate-skill-list.md`，生成 `candidate_skill_list`；该列表是动态 workflow 的主要调度来源。
 - `candidate-skill-iteration`：只加载候选列表命中的 subskill，串行执行分析和执行验证 subagent。
 - `coverage-skill-iteration`：候选完成后加载未命中的主优化 subskill，并形成执行验证或阻塞结论。
-- `closeout`：报告、review、还原计划和案例归档。
+- `report`：输出报告。
+- `review-restore-archive`：review、环境还原计划和案例归档。
 
 `current_workflow_state` 至少包含 `current_gate`、`completed_gates`、`blocked_gate`、`next_gate`、`current_run_id`、`evidence_status`、`candidate_skill_list`、`active_workflow` 和 `workflow_trace`。每个 workflow 只能在上游 gate 完成后进入。若证据缺失、权限不足、基线未确认或 run_id 不一致，当前 workflow 必须进入 `blocked` 或 `degraded`，并记录 `blocked_gate`、`fallback_reason` 和下一步补采要求。
 
@@ -314,12 +312,14 @@ Claude Code 运行时必须维护 `current_workflow_state`，并把本文件的�
 
 候选生成规则见 `candidate-skill-list.md`。核心原则：
 
+- **`cpu-affinity-optimization` 始终作为第一优先级候选 skill**：无论采集信号是否命中，`cpu-affinity-optimization` 必须始终位于 `candidate_skill_list` 首位（`priority=highest`），在所有其他候选 skill 之前执行。它是唯一不受信号阈值约束的强制候选 skill。进入任何其他候选 skill 的执行轮次前，必须确认 `cpu-affinity-optimization` 已完成（状态为 `completed` 或 `stopped`）。
 - 高热点第三方 `.so` 或外部库热点：加入 `performance-library-selection`。
 - 网络相关热点函数高：加入 `network-optimization`。
 - L1 icache miss 高：加入 `compiler-optimization`，重点分析 PGO/LTO、代码布局、内联和目标架构选项。
-- 线程切换高且 L3/LLC miss 高：加入 `cpu-affinity-optimization`。
+- 线程切换高且 L3/LLC miss 高：`cpu-affinity-optimization` 已作为强制首位存在；证据触发时追加证据命中理由，未触发时理由为强制基线检查。
 - 数据库/连接池/队列/缓存/锁等待等应用内部状态解释瓶颈：加入 `application-config-optimization`。
 - OS、BIOS、GPU/NPU、硬件规格、Other 等信号命中时，加入对应 skill。
+- **`performance-library-selection` 先于 `os-optimization`**：当两者同时进入候选列表（evidence_candidate 或 coverage）时，`performance-library-selection` 必须排在 `os-optimization` 之前。库替换改变 malloc 路径，是 OS 大页/GLIBC_TUNABLES 调优的前置依赖（见 `candidate-skill-list.md` 执行顺序节与 `os-playbook.md` 的 tcmalloc-hugepage precondition）。
 - 未识别瓶颈时仍生成降级报告；不得直接执行高风险调参。
 
 `candidate_skill_list` 可以一次包含多个 skill，但必须记录顺序和原因。执行分两段：
@@ -351,11 +351,10 @@ Claude Code 运行时必须维护 `current_workflow_state`，并把本文件的�
 
 - `round_count`
 - `recent_gain_pct`
-- `consecutive_sub_1pct_rounds`
 - `skill_stop_reason`
 - `timing_records`
 
-单个 skill 最多尝试 5 轮；若 5 轮收益均小于 1%，停止该 skill，并继续执行 `candidate_skill_list` 中下一个 skill。全局停止条件：
+单个 skill 需验证完全 subskill 给出的所有推荐；该 skill 停止后继续执行 `candidate_skill_list` 中下一个 skill。全局停止条件：
 
 - `no_active_bottleneck`
 - `unknown_bottleneck`

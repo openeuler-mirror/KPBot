@@ -7,7 +7,7 @@
 | --- | --- | --- | --- |
 | `scenario_description` | string | 是 | 测试场景描述 |
 | `application_name` | string | 否 | 应用名称 |
-| `workload_type` | string | 否 | `database` / `rpc` / `web` / `batch` / `compute` / `ai_inference` / `unknown` |
+| `workload_type` | string | 否 | `database` / `rpc` / `web` / `batch` / `compute` / `ai_inference` / `npu_llm_infer` / `ai_training` / `unknown`；`npu_llm_infer` 与 `ai_training` 为昇腾 NPU 场景专用子值，统一视为 `ai_inference` 家族成员 |
 | `deployment_topology` | object/string | 否 | 本机压测、远程压测、客户端/服务端组网、容器或虚拟化形态 |
 | `benchmark_command` | string | 否 | 压测命令或脚本路径 |
 | `benchmark_script_provided` | boolean | 是 | 是否提供测试脚本 |
@@ -232,6 +232,45 @@
 | `restore_result` | object | 环境还原结果或待人工执行项 |
 | `case_archive_path` | string | 归档案例路径 |
 | `global_stop_reason` | string | `unidentified_bottleneck` / `all_skills_completed` / `risk_budget_exhausted` / `user_stopped` |
+## AI 推理场景输入字段
+
+> **条件生效**：以下字段仅当 `workload_type=ai_inference` 时生效，通用场景无需读取。
+
+当 `workload_type` 为 `ai_inference` 时，除通用字段外应补充以下推理专属字段。
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `model_name` | string | 是 | 模型名称，如 `qwen2.5-1.5b` |
+| `model_path` | string | 是 | 模型权重路径 |
+| `tokenizer_path` | string | 是 | tokenizer 路径 |
+| `inference_framework` | enum | 是 | `vllm` / `sglang` / `tgi` / `trt-llm` |
+| `device_type` | enum | 是 | `npu` / `gpu` / `cpu` |
+| `npu_device_ids` | string (逗号分隔) | 否 | NPU 设备 ID，如 `"0"` 或 `"0,1"`；`device_type=npu` 时填写 |
+| `gpu_device_ids` | string (逗号分隔) | 否 | GPU 设备 ID，如 `"0"` 或 `"0,1"`；`device_type=gpu` 时填写 |
+| `tensor_parallel_size` | int | 否 | TP 并行度，默认 1 |
+| `pipeline_parallel_size` | int | 否 | PP 并行度，默认 1 |
+| `max_concurrent_requests` | int | 否 | 最大并发请求数，用于多流场景 |
+| `max_seq_length` | int | 否 | 最大序列长度 |
+| `quantization` | enum | 否 | `none` / `w8a8` / `w4a16` / `gptq` / `awq` |
+| `vllm_launch_args` | object | 否 | vLLM 启动参数键值对，如 `{"enable_chunked_prefill": false}` |
+| `benchmark_tool` | enum | 否 | `vllm_benchmark` / `sglang_bench` / `tgi_benchmark` |
+| `target_metrics` | object | 否 | 目标指标，包含 `target_tps`、`target_ttft`、`target_tpot` |
+| `rebuild_allowed` | boolean | 否 | 是否允许重编译 Python/PyTorch/torch_npu 等推理栈组件 |
+| `pgo_profile_source` | string | 否 | PGO 训练集来源，如 `vllm_benchmark_single_stream`；缺失时按实际负载采样 |
+| `ld_preload_candidates` | array | 否 | 候选 LD_PRELOAD 库清单，如 `[tcmalloc, jemalloc]` |
+
+### `workload_type` 枚举扩展说明
+
+`workload_type` 取值为 `database` / `rpc` / `web` / `batch` / `compute` / `ai_inference` / `npu_llm_infer` / `ai_training` / `unknown`。其中 `ai_inference`（及 `npu_llm_infer`）进一步细分为以下子类型，由 `ai_inference_subtype` 字段标识：
+
+| 子类型 | 说明 | 典型框架 |
+| --- | --- | --- |
+| `ai_inference_llm` | 大语言模型推理 | vLLM / SGLang / TGI / TRT-LLM |
+| `ai_inference_embedding` | 嵌入模型推理 | sentence-transformers / BGE / Text Embeddings Inference |
+| `ai_inference_rerank` | 重排序模型推理 | bge-reranker / Cohere Rerank |
+
+子类型字段 `ai_inference_subtype` 为可选；未填时默认按 `ai_inference_llm` 处理并要求 `inference_framework` 字段。`npu_llm_infer` 等价于 `ai_inference_llm` 的 NPU 场景表达。
+
 ## 兼容旧字段
 
 旧字段 `baseline_targets`、`analysis_findings`、`optimization_actions`、`cumulative_validation_summary` 继续允许出现在报告中，但新任务包和案例归档应优先使用本文字段。

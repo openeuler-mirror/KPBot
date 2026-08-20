@@ -476,6 +476,303 @@ def diagnose_kernel_patches(path, backup_dir, timeout):
     }
 
 
+def diagnose_npu_device(backup_dir):
+    """NPU 设备诊断：发现、驱动、CANN、torch_npu、HBM、NUMA 拓扑。
+
+    针对华为 Ascend NPU（Ascend910/920/930/950 系列）采集：
+      1. npu-smi info 设备发现与健康检查
+      2. CANN 版本（/usr/local/Ascend/ascend-toolkit/latest/version.cfg）
+      3. torch_npu 版本（pip show torch_npu）
+      4. NPU-NUMA 拓扑（lspci -d 19e5: -v | grep NUMA）
+      5. HBM 使用率（npu-smi info -t usages -i 0）
+
+    任何外部命令缺失都降级为 issues 中的提示信息，不抛出异常。
+    """
+    result = {
+        "npu_available": False,
+        "npu_devices": [],
+        "device_count": 0,
+        "cann_version": None,
+        "torch_npu_version": None,
+        "npu_numa_topology": {},
+        "hbm_status": {},
+        "issues": [],
+    }
+
+    # 1. NPU 设备发现 + 健康检查
+    npu_smi_path = shutil.which("npu-smi")
+    if not npu_smi_path:
+        result["issues"].append("npu-smi not found, NPU diagnostics skipped")
+        result["status"] = "not_present"
+        return result
+    try:
+        code, stdout, stderr = run_command([npu_smi_path, "info"], timeout=15)
+        if code != 0:
+            result["issues"].append(
+                f"npu-smi info failed (rc={code}): {(stderr or stdout).strip()[:300]}"
+            )
+            result["status"] = "failed"
+            return result
+        result["npu_available"] = True
+        # 解析 npu-smi info 表格中的设备条目
+        # 实际输出格式（Ascend 26.0.rc1）：
+        #   | 0     Ascend910           | OK            | ... |
+        #   | 0     0                   | 0000:9D:00.0  | ... |
+        # 注意：NPU ID 和 Name 在同一 cell 内用多空格分隔（split("|") 后 cells[0]="0     Ascend910"）
+        # 芯片行格式：| ChipID  PhyID | Bus-Id | AICore(%) | ... |
+        # 需要将 cells[0] 按空格拆分，第一个 token 是 ID，其余是 Name
+        devices = []
+        for line in stdout.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if len(cells) < 2:
+                continue
+            # 跳过表头/分隔行
+            if "Health" in cells[0] or cells[0].lower().startswith("chip") or cells[0].lower().startswith("npu"):
+                continue
+            # cells[0] 可能是 "0     Ascend910" 或纯数字 "0"
+            # 按空格拆分，第一个 token 尝试作为 device_id
+            first_cell_tokens = cells[0].split()
+            if not first_cell_tokens:
+                continue
+            try:
+                device_id = int(first_cell_tokens[0])
+            except ValueError:
+                continue
+            # 跳过芯片行：芯片行的 cells[1] 是 Bus-Id（含冒号和点），不是健康状态
+            # 设备行：cells[1] 是 "OK"/"Warning"/"Critical" 等健康状态
+            # 芯片行：cells[1] 是 "0000:9D:00.0" 格式
+            health = cells[1] if len(cells) > 1 else ""
+            if ":" in health and "." in health:
+                # 这是芯片行（Bus-Id 格式），跳过
+                continue
+            name = " ".join(first_cell_tokens[1:]) if len(first_cell_tokens) > 1 else ""
+            devices.append({
+                "id": device_id,
+                "name": name,
+                "health": health,
+            })
+        if devices:
+            # 按 id 去重
+            seen_ids = set()
+            unique_devices = []
+            for dev in devices:
+                if dev["id"] in seen_ids:
+                    continue
+                seen_ids.add(dev["id"])
+                unique_devices.append(dev)
+            result["npu_devices"] = unique_devices
+            result["device_count"] = len(unique_devices)
+        else:
+            result["issues"].append("npu-smi info succeeded but no devices parsed")
+    except FileNotFoundError:
+        result["issues"].append("npu-smi not found, NPU diagnostics skipped")
+        result["status"] = "not_present"
+        return result
+    except Exception as exc:  # pragma: no cover - defensive
+        result["issues"].append(f"npu-smi discovery raised: {exc}")
+        result["status"] = "failed"
+        return result
+
+    # 2. CANN 版本
+    cann_version_path = "/usr/local/Ascend/ascend-toolkit/latest/version.cfg"
+    try:
+        if Path(cann_version_path).exists():
+            cann_text = read_text(cann_version_path).strip()
+            if cann_text:
+                result["cann_version"] = cann_text
+            else:
+                result["issues"].append("CANN version.cfg is empty")
+        else:
+            # 兜底：尝试 backup 目录或环境变量
+            cann_env = os.environ.get("ASCEND_TOOLKIT_VERSION", "")
+            if cann_env:
+                result["cann_version"] = cann_env
+            else:
+                result["issues"].append(
+                    "CANN version.cfg not found at default path and ASCEND_TOOLKIT_VERSION unset"
+                )
+    except Exception as exc:  # pragma: no cover - defensive
+        result["issues"].append(f"CANN version read failed: {exc}")
+
+    # 3. torch_npu 版本
+    try:
+        code, stdout, stderr = run_command(["pip", "show", "torch_npu"], timeout=15)
+        if code == 0:
+            version = None
+            location = None
+            for line in stdout.splitlines():
+                if line.startswith("Version:"):
+                    version = line.split(":", 1)[1].strip()
+                elif line.startswith("Location:"):
+                    location = line.split(":", 1)[1].strip()
+            if version:
+                result["torch_npu_version"] = version
+                if location:
+                    result.setdefault("torch_npu_location", location)
+            else:
+                result["issues"].append("torch_npu installed but Version field missing")
+        else:
+            # pip 可能不在 PATH，尝试 pip3
+            code3, stdout3, _ = run_command(["pip3", "show", "torch_npu"], timeout=15)
+            if code3 == 0:
+                for line in stdout3.splitlines():
+                    if line.startswith("Version:"):
+                        result["torch_npu_version"] = line.split(":", 1)[1].strip()
+                        break
+            else:
+                result["issues"].append("torch_npu not installed or pip unavailable")
+    except FileNotFoundError:
+        result["issues"].append("pip not found; torch_npu version check skipped")
+    except Exception as exc:  # pragma: no cover - defensive
+        result["issues"].append(f"torch_npu version check failed: {exc}")
+
+    # 4. NPU-NUMA 拓扑
+    try:
+        code, stdout, stderr = run_command(
+            ["lspci", "-d", "19e5:", "-v"], timeout=15
+        )
+        if code == 0 and stdout:
+            topology = {}
+            current_device = None
+            for line in stdout.splitlines():
+                stripped = line.strip()
+                # 设备块以设备地址行开始，如 "08:00.0 ..."
+                if stripped and not line.startswith("\t") and not line.startswith(" "):
+                    # 新设备块
+                    header = stripped.split()[0] if stripped.split() else None
+                    if header and ":" in header:
+                        current_device = header
+                        topology.setdefault(current_device, {})
+                elif "NUMA node:" in stripped and current_device:
+                    # 形如 "NUMA node: 0"
+                    numa_value = stripped.split("NUMA node:", 1)[1].strip()
+                    topology[current_device]["numa_node"] = numa_value
+                elif "Subsystem:" in stripped and current_device:
+                    topology[current_device]["subsystem"] = stripped.split(
+                        "Subsystem:", 1
+                    )[1].strip()
+            if topology:
+                result["npu_numa_topology"] = topology
+            else:
+                result["issues"].append("lspci succeeded but no NPU NUMA bindings parsed")
+        else:
+            result["issues"].append(
+                f"lspci NPU topology unavailable (rc={code}): {(stderr or '').strip()[:200]}"
+            )
+    except FileNotFoundError:
+        result["issues"].append("lspci not found; NPU-NUMA topology skipped")
+    except Exception as exc:  # pragma: no cover - defensive
+        result["issues"].append(f"NPU-NUMA topology check failed: {exc}")
+
+    # 5. HBM 状态（首张卡）
+    try:
+        code, stdout, stderr = run_command(
+            ["npu-smi", "info", "-t", "usages", "-i", "0"], timeout=15
+        )
+        if code == 0 and stdout:
+            hbm = {}
+            for line in stdout.splitlines():
+                stripped = line.strip()
+                if "HBM" in stripped and ":" in stripped:
+                    # 形如 "HBM Usage : 13.4 GB / 32.0 GB (41.8%)"
+                    try:
+                        label, value = stripped.split(":", 1)
+                        hbm[label.strip().lower().replace(" ", "_")] = value.strip()
+                    except ValueError:
+                        continue
+                elif stripped and "GB" in stripped and "%" in stripped:
+                    # 兜底匹配
+                    hbm["raw_line"] = stripped
+            if hbm:
+                result["hbm_status"] = hbm
+            else:
+                # fallback：用 npu-smi info 主表中的 HBM 数字
+                for dev in result["npu_devices"]:
+                    # npu-smi info 主表已解析到设备，但 HBM 字段未单独提取
+                    pass
+                result["issues"].append("HBM usages command succeeded but no usage parsed")
+        else:
+            result["issues"].append(
+                f"npu-smi usages failed (rc={code}): {(stderr or '').strip()[:200]}"
+            )
+    except FileNotFoundError:
+        result["issues"].append("npu-smi unavailable for HBM check")
+    except Exception as exc:  # pragma: no cover - defensive
+        result["issues"].append(f"HBM status check failed: {exc}")
+
+    # 派生状态
+    if result["npu_available"] and not result["npu_devices"]:
+        result["status"] = "degraded"
+    elif result["issues"]:
+        # 存在 issue 但设备可用：降级
+        result["status"] = "degraded" if result["npu_available"] else "failed"
+    else:
+        result["status"] = "passed" if result["npu_available"] else "not_present"
+
+    return result
+
+
+def diagnose_arm_pmu():
+    """ARM PMU 事件可用性检查。
+
+    检查 ARM 平台常见 PMU 事件是否可被 perf list 枚举，
+    以及 /sys/bus/event_source/devices/ 下是否存在 ARM PMU 节点。
+    """
+    arm_events = ["L1I_CACHE_REFILL", "LLC_CACHE_MISS", "BR_INDIRECT"]
+    result = {
+        "platform": "arm",
+        "events": {},
+        "available_count": 0,
+        "issues": [],
+    }
+
+    # 通过 perf list 检查
+    perf_path = shutil.which("perf")
+    if not perf_path:
+        result["issues"].append("perf not found; ARM PMU event enumeration skipped")
+        result["status"] = "degraded"
+        return result
+
+    code, stdout, stderr = run_command([perf_path, "list"], timeout=10)
+    combined = (stdout + stderr).lower() if code == 0 or stdout else ""
+    available = 0
+    for event in arm_events:
+        present = event.lower() in combined
+        result["events"][event] = "present" if present else "missing"
+        if present:
+            available += 1
+    result["available_count"] = available
+
+    # /sys 兜底
+    arm_pmu_devices = []
+    try:
+        devices_root = Path("/sys/bus/event_source/devices")
+        if devices_root.exists():
+            for entry in devices_root.iterdir():
+                name = entry.name.lower()
+                if "arm" in name or "pmu" in name or "cortex" in name or "neoverse" in name:
+                    arm_pmu_devices.append(entry.name)
+    except OSError as exc:
+        result["issues"].append(f"failed to enumerate /sys PMU devices: {exc}")
+    result["arm_pmu_devices"] = arm_pmu_devices
+
+    if available == len(arm_events):
+        result["status"] = "passed"
+    elif available > 0:
+        result["status"] = "degraded"
+        result["issues"].append(
+            f"only {available}/{len(arm_events)} ARM PMU events visible via perf list"
+        )
+    else:
+        result["status"] = "failed"
+        result["issues"].append("none of the key ARM PMU events are visible via perf list")
+
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="Diagnose environment after backup and before service health checks.")
     parser.add_argument("--backup-dir", required=True)
@@ -491,6 +788,8 @@ def main():
     bios = diagnose_bios(backup_dir)
     perf_pmu = diagnose_perf_pmu(backup_dir, args.timeout)
     kernel = diagnose_kernel_patches(args.kernel_patch_manifest, backup_dir, args.timeout)
+    npu_device = diagnose_npu_device(backup_dir)
+    arm_pmu = diagnose_arm_pmu()
 
     blocked_items = []
     degraded_items = []
@@ -500,6 +799,8 @@ def main():
         ("bios_performance", bios),
         ("perf_pmu", perf_pmu),
         ("kernel_patches", kernel),
+        ("npu_device", npu_device),
+        ("arm_pmu", arm_pmu),
     ):
         findings.append({"category": category, "result": result})
         blocked_items.extend(f"{category}:{item}" for item in result.get("blocked_items", []))
@@ -507,12 +808,20 @@ def main():
         if result.get("status") in ("degraded", "invalid", "not_applicable_or_unknown"):
             degraded_items.append(category)
 
+    # NPU 设备相关的 issue 也作为降级项汇总
+    for issue in npu_device.get("issues", []):
+        degraded_items.append(f"npu_device:{issue[:80]}")
+    for issue in arm_pmu.get("issues", []):
+        degraded_items.append(f"arm_pmu:{issue[:80]}")
+
     if (
         blocked_items
         or reference["status"] == "failed"
         or bios["status"] == "failed"
         or perf_pmu["status"] == "failed"
         or kernel["status"] == "failed"
+        or npu_device.get("status") == "failed"
+        or arm_pmu.get("status") == "failed"
     ):
         status = "failed"
     elif degraded_items or bios["status"] in ("degraded", "unknown") or perf_pmu["status"] == "degraded":
@@ -528,6 +837,8 @@ def main():
         "bios_performance_status": bios["status"],
         "perf_pmu_status": perf_pmu["status"],
         "kernel_patch_status": kernel["status"],
+        "npu_device_status": npu_device.get("status", "not_present"),
+        "arm_pmu_status": arm_pmu.get("status", "degraded"),
         "reference_issue_checks": reference.get("checks", []),
         "bios_performance_findings": bios.get("findings", []),
         "perf_pmu_checks": {
@@ -543,6 +854,8 @@ def main():
         },
         "perf_pmu_findings": perf_pmu.get("findings", []),
         "kernel_patch_checks": kernel.get("checks", []),
+        "npu_device": npu_device,
+        "arm_pmu": arm_pmu,
         "findings": findings,
         "blocked_items": blocked_items,
         "degraded_items": degraded_items,
