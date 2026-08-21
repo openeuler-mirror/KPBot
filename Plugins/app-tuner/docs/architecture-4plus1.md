@@ -15,7 +15,7 @@
 - 架构图映射以 `skills/kpbot-app-tuner/references/application-agent-architecture.md` 为准。
 - 细节契约以 `skills/kpbot-app-tuner/references/` 为准。
 - 专项能力以 `skills/kpbot-app-tuner/subskills/` 为准。
-- `ref-skills/` 只作为仓库内置外部能力源，由统一入口子 skill 条件接入。
+
 ## 2. 架构设计原则
 
 - 单一主源：`skills/kpbot-app-tuner/` 是唯一事实来源。
@@ -24,7 +24,7 @@
 - 采集先行：先分类磁盘、网卡、内存、CPU、GPU/NPU 或硬件规格瓶颈，再基于火焰图、热点 so、topdown 和线程信号生成候选 skill 列表。
 - 证据驱动：优化建议基于基线、火焰图、热点函数、进程/线程、topdown、系统采样和环境快照。
 - 可降级执行：工具缺失、权限不足或外部依赖不可用时显式降级并记录置信度。
-- 统一入口：主 skill 不直接路由 `ref-skills/`，只调用框架内 subskill。
+- 统一入口：主 skill 只调用框架内 subskill。
 - 候选优先：先执行 `candidate_skill_list` 中 `phase=evidence_candidate` 的 skill，再执行 `phase=coverage` 的未命中主优化 skill。
 - 单 skill 停止：单个 skill 最多尝试 5 轮，5 轮收益均小于 1% 时停止该 skill，并继续候选列表中的下一个 skill。
 - 多平台接入：`.claude/`、`.opencode/`、`.agents/` 是轻量发现入口；Codex、Cursor 等编程 Agent 可直接加载主源目录，逻辑仍回到 `skills/kpbot-app-tuner/`。
@@ -34,7 +34,7 @@
 本 skill 的 4+1 视图映射如下：
 
 - 用例视图：用户如何触发和使用该 skill，支持的调用形式和最终交付物。
-- 逻辑视图：主 skill、subskill、ref-skill、references、scripts 如何协作。
+- 逻辑视图：主 skill、subskill（含 scripts/references）、references、scripts 如何协作。
 - 开发视图：仓库如何组织，维护者如何扩展。
 - 运行视图：一次优化任务如何从输入、基线、瓶颈识别、候选 skill 列表、迭代验证到报告闭环。
 - 物理视图：不同代理平台如何加载主源，以及运行环境如何约束能力。
@@ -48,8 +48,7 @@ kpbot-app-tuner 4+1 视图
 │   └── 最终输出产物
 ├── 逻辑视图
 │   ├── 主编排 skill
-│   ├── 统一入口 subskill
-│   ├── 内置 ref-skill
+│   ├── 统一入口 subskill（含 scripts/references）
 │   ├── references 契约
 │   ├── scripts 工具
 │   └── 报告交付
@@ -141,17 +140,14 @@ kpbot-app-tuner 4+1 视图
   └──► subskills ─────────────────────┤
        │                              │
        ├── io-memory-network-bottleneck-analysis
-       ├── cpu-affinity-optimization ──► ref-skills/cpu-affinity-optimization
-       │    └── (不满足时) ──► 内部轻量规则路径
-       ├── os-optimization
-       ├── bios-optimization
-       ├── network-optimization ───────► ref-skills/network-io-performance
-       │    └── (不满足时) ──► 内部通用网络路径
-       ├── application-config-optimization
-       │    └── (按需引用) database-workload-analysis
-       ├── compiler-optimization ──► ref-skills/compiler-option-optimization
-       │    └── (不满足时) ──► 内部编译选项分析路径
-        └── performance-library-selection ──► 内置 aarch64 全类别库检测
+        ├── cpu-affinity-optimization ──► scripts/ (诊断+策略+验证+回滚)
+        ├── os-optimization
+        ├── bios-optimization
+        ├── network-optimization ───────► scripts/ (采集+队列寻优)
+        ├── application-config-optimization
+        │    └── (按需引用) database-workload-analysis
+        ├── compiler-optimization ──► scripts/ (perf热点采集) + references/ (编译选项playbook)
+         └── performance-library-selection ──► 内置 aarch64 全类别库检测
              └── (非 aarch64 或知识库缺失) ──► 内部通用性能库路径
        │                              │
        └──────────────────────────────┘
@@ -173,10 +169,10 @@ kpbot-app-tuner 4+1 视图
 │契约层  │ │subskills │ │scripts   │
 │refs    │ └────┬─────┘ └────┬─────┘
 └──┬─────┘      │            │
-   │      ┌─────▼──────┐     │
-   │      │外部能力源   │     │
-   │      │ref-skills  │     │
-   │      └─────┬──────┘     │
+    │      ┌─────▼──────┐     │
+    │      │scripts/    │     │
+    │      │references/ │     │
+    │      └─────┬──────┘     │
    │            │            │
    └──────┬─────┴──────┬─────┘
           ▼            ▼
@@ -208,31 +204,34 @@ kpbot-app-tuner 4+1 视图
 - `create_subagent_tasks.py`、`merge_subagent_results.py`：候选 skill 任务包生成和候选池合并。
 - `record_timing.py`、`summarize_improvement.py`：耗时与收益汇总。
 - `generate_report.py`、`init_report.sh`：报告生成和目录初始化。
-- 外部能力检查与包装脚本：`check_external_*`、`run_external_network_io_check.sh`。
 
 交付层：
 
 - 承接原始证据、中间结论、候选动作、串行验证结果、耗时统计、依赖降级和风险回退。
 - 最终报告必须自动生成，并通过 Step 9.5 自检。
 
-### 5.3 subskill 与 ref-skill 关系
+### 5.3 subskill 内部能力组织
 
 ```
 主 skill (只调用框架内 subskill)
   │
-  ├──► cpu-affinity-optimization (统一入口)
-  │     ├── 路径和依赖满足 ──► ref-skills/cpu-affinity-optimization
-  │     │                       (拓扑 / 线程 / IRQ / 策略 / 回滚)
-  │     └── 不满足 ──► 内部轻量规则路径
+  ├──► cpu-affinity-optimization
+  │     └── scripts/ (拓扑 / 线程 / IRQ / 策略 / 验证 / 回滚)
   │
-  ├──► network-optimization (统一入口)
-  │     ├── 路径和依赖满足 ──► ref-skills/network-io-performance
-  │     │                       (接口 / IRQ / 丢包 / 队列)
-  │     └── 不满足 ──► 内部通用网络路径
+  ├──► network-optimization
+  │     └── scripts/ (接口发现 / IRQ / 丢包 / 队列寻优)
   │
-   ├──► performance-library-selection (统一入口)
-   │     ├── aarch64 且知识库可加载 ──► 内置 aarch64 全类别库检测工作流
-   │     └── 不满足 ──► 内部通用性能库路径
+  ├──► compiler-optimization
+  │     ├── scripts/ (perf 热点采集)
+  │     └── references/ (编译选项 playbook)
+  │
+  ├──► application-config-optimization
+  │     ├── scripts/ (Spark/Flink 配置推荐器 + benchmark + TM 启动)
+  │     └── references/ (大数据 playbook)
+  │
+  ├──► performance-library-selection
+  │     ├── scripts/ (库检测 + perf 采样)
+  │     └── references/ (优化知识库)
   │
   └──► application-config-optimization (数据库专项对外入口)
         └── (按需引用) database-workload-analysis (内部数据库分析)
@@ -241,22 +240,21 @@ kpbot-app-tuner 4+1 视图
 统一接入原则：
 
 - 主 skill 只依赖框架内 subskill。
-- 统一入口 subskill 决定是否接入 `ref-skills/`。
-- `ref-skills/` 不应绕过统一入口直接进入主流程。
-- 路径缺失、依赖不足、权限不足时必须记录 fallback reason。
+- bigdata 脚本已改造为推荐器模式（输出候选命令 JSON，主框架门控执行）。
+
 
 ### 5.4 子 skill 职责边界
 
 | 子 skill | 职责 | 特殊边界 |
 |---|---|---|
 | `io-memory-network-bottleneck-analysis` | 判断网络、磁盘、内存、CPU 等瓶颈并输出统一分类 | 性能采集层，不直接实施优化 |
-| `cpu-affinity-optimization` | 绑核、NUMA、内存绑定、线程 CPU 均衡、中断冲突 | 可适配 `ref-skills/cpu-affinity-optimization` |
+| `cpu-affinity-optimization` | 绑核、NUMA、内存绑定、线程 CPU 均衡、中断冲突 | 内置 scripts/ 诊断+策略+验证+回滚 |
 | `os-optimization` | Kernel、THP、HugePages、irqbalance、sysctl 等建议 | 区分在线、服务重启和系统重启动作 |
 | `bios-optimization` | Power Profile、SMT、C-State、NUMA BIOS 配置建议 | 默认只输出人工确认建议 |
-| `network-optimization` | 网络瓶颈或次级瓶颈下的网卡、队列、中断、协议栈建议 | 可适配 `ref-skills/network-io-performance` |
-| `application-config-optimization` | 线程数、队列、批量、缓存、连接池和数据库型工作负载专项 | 数据库专项唯一对外入口 |
+| `network-optimization` | 网络瓶颈或次级瓶颈下的网卡、队列、中断、协议栈建议 | 内置 scripts/ 采集+队列寻优 |
+| `application-config-optimization` | 线程数、队列、批量、缓存、连接池和数据库型工作负载专项 | 内置 scripts/ 推荐器模式（Spark/Flink 配置+benchmark+TM 启动） |
 | `database-workload-analysis` | 数据库内部状态分析，MySQL/InnoDB 和 AHI 判断 | 仅供 application-config 按需引用 |
-| `compiler-optimization` | 编译器版本、架构选项、LTO、PGO、AutoFDO、向量化 | ARM64 可适配 `ref-skills/compiler-option-optimization` |
+| `compiler-optimization` | 编译器版本、架构选项、LTO、PGO、AutoFDO、向量化 | 内置 scripts/ perf热点采集 + references/ 编译选项playbook |
 | `performance-library-selection` | malloc、memcpy、压缩、加密、校验等性能库选型 | 内置 aarch64 全类别库检测（含 `references/optimization_kb.json` 知识库与 `scripts/` 检测脚本） |
 | `accelerator-optimization` | GPU/NPU 利用率、显存/内存、拷贝带宽和设备错误分析 | 无设备时标记 not_present |
 | `hardware-upgrade-analysis` | 判断当前规格是否达到容量边界 | 只输出硬件建议，不执行采购或变更 |
@@ -309,13 +307,6 @@ skills/kpbot-app-tuner/   # [唯一主源]
     io-memory-network-bottleneck-analysis/
     network-optimization/
     performance-library-selection/
-  ref-skills/                       # 仓库内置外部能力源，由统一入口 subskill 条件接入
-    README.md                         # 外部 skill 说明
-    SOURCES.md                        # 来源声明
-    bigdata-framework-optimization/   # Spark/Flink 框架配置
-    compiler-option-optimization/     # 来自 KunpengSDK
-    cpu-affinity-optimization/
-    network-io-performance/
 
 opencode/kpbot-app-tuner/SKILL.md  # OpenCode 平台覆盖层（差异文件，install 时覆盖主源）
 
@@ -616,16 +607,15 @@ aarch64 场景应联合判断：
 - 为更多数据库和应用类型增加专项模板。
 - 增强 `generate_report.py` 与 report schema 的结构化报告能力。
 - 为轻量入口增加自动同步或一致性检查脚本。
-- 继续标准化外部 skill 的接入协议和 fallback 输出。
 
 ## 11. 结论
 
-`kpbot-app-tuner` 当前架构是“主编排 skill + references 契约 + 多专项 subskill + 仓库内置 ref-skill + 工具脚本 + 标准报告”的可扩展优化编排框架。
+`kpbot-app-tuner` 当前架构是“主编排 skill + references 契约 + 多专项 subskill（含 scripts/references）+ 工具脚本 + 标准报告”的可扩展优化编排框架。
 
 从 4+1 视角看：
 
 - 用例视图覆盖客户端调用方式、整体编排调用、子 skill 独立调用和最终交付物。
-- 逻辑视图明确主 skill、subskill、ref-skill、references、scripts 和报告边界。
-- 开发视图以单一主源和轻量轻量入口降低维护成本。
+- 逻辑视图明确主 skill、subskill、references、scripts 和报告边界。
+- 开发视图以单一主源和轻量入口降低维护成本。
 - 运行视图以用户确认、环境备份、瓶颈识别、候选 skill 列表、迭代验证、review、还原和归档形成证据闭环。
 - 物理视图明确平台加载、环境约束和依赖降级对分析能力的影响。

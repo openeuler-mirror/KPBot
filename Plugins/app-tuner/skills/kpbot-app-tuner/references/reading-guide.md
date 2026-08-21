@@ -26,18 +26,17 @@ skills/kpbot-app-tuner/
     review-restore-archive.md      ← review、环境还原和案例归档
     platform-tuning-notes.md       ← NUMA/THP/ARM 平台注意事项
     database-analysis.md           ← MySQL/InnoDB 专项与 AHI 决策
-    external-network-io-integration.md           ← network-io-performance 接入
     report-schema.md       ← 报告字段定义（report-template.md 的 schema）
     examples.md            ← 端到端优化场景走查示例
     reading-guide.md       ← 本文件
   subskills/               ← 子 skill（各专项分析逻辑）
-    bios-optimization/SKILL.md
-    os-optimization/SKILL.md
-    network-optimization/SKILL.md
-    cpu-affinity-optimization/SKILL.md
-    performance-library-selection/SKILL.md
-    compiler-optimization/SKILL.md
-    application-config-optimization/SKILL.md
+    bios-optimization/SKILL.md + scripts/ + references/
+    os-optimization/SKILL.md + scripts/ + references/
+    network-optimization/SKILL.md + scripts/ + references/ + evals/
+    cpu-affinity-optimization/SKILL.md + scripts/
+    performance-library-selection/SKILL.md + scripts/ + references/
+    compiler-optimization/SKILL.md + scripts/ + references/
+    application-config-optimization/SKILL.md + scripts/ + references/
     accelerator-optimization/SKILL.md
     hardware-upgrade-analysis/SKILL.md
     other-optimization/SKILL.md
@@ -47,11 +46,6 @@ skills/kpbot-app-tuner/
   agents/
     analyzer.md            ← 统一分析 subagent（按 subskill_name 加载对应 skill）
     executor.md            ← 统一执行验证 subagent
-  ref-skills/              ← skill 内置的第三方 skill
-    bigdata-framework-optimization/
-    compiler-option-optimization/
-    network-io-performance/
-    cpu-affinity-optimization/
 
 opencode/kpbot-app-tuner/SKILL.md  ← OpenCode 平台覆盖层（差异文件）
 # 安装后目标（由 install.sh 在目标项目/用户目录生成）：
@@ -109,7 +103,6 @@ Codex / Cursor             ← 可直接读取 skills/kpbot-app-tuner/ 主源
 | 优化方向选择 | `optimization-decision-tree.md` | 主流程引用"详见决策树" |
 | review/恢复/归档 | `review-restore-archive.md` | 报告生成和收尾阶段引用 |
 | 数据库 AHI 决策 | `database-analysis.md` | database-workload-analysis 子 skill 引用 |
-| 外部 skill 接入 | 对应 external-*-integration.md | 子 skill 引用"详见接入说明" |
 
 ## 必读 vs 按需查阅
 
@@ -134,5 +127,4 @@ Codex / Cursor             ← 可直接读取 skills/kpbot-app-tuner/ 主源
 **特定场景：**
 - database-analysis.md — 数据库型工作负载
 - platform-tuning-notes.md — ARM/容器/虚拟化环境
-- external-*-integration.md — 外部 skill 集成
 - examples.md — 端到端优化场景走查示例

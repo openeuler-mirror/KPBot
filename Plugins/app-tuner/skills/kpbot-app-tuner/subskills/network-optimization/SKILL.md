@@ -22,7 +22,6 @@ description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡�
 按场景加载，避免一次性把所有网络细节放入上下文：
 
 - 队列数、IRQ 隔离、RPS/XPS、TCP、coalesce、ring buffer、容器限制和案例：`references/network-playbook.md`
-- 外部 network-io-performance 集成规则：`../../references/external-network-io-integration.md`
 - 公共依赖和权限降级：`../../references/prerequisites.md`
 
 ## 输入证据
@@ -53,15 +52,22 @@ description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡�
    - 短诊断 15-20s 判断方向，最终候选至少 120s 或用户认可的正式窗口验证。
    - 以 QPS/吞吐、P99/P999、retrans/drops、IRQ max/min delta、softirq 分布、业务 CPU 利用率联合判断。
 
-## 外部 Skill 路由
+## 采集脚本
 
-优先尝试仓库内外部网络 IO skill：
+本 subskill 提供以下只读采集脚本，用于网络数据采集和队列数寻优：
 
-- 默认路径：`ref-skills/network-io-performance`
-- 入口：`ref-skills/network-io-performance/SKILL.md`
-- 脚本：`ref-skills/network-io-performance/scripts/network_io_check.sh`
+| 脚本 | 用途 | 操作性质 |
+|------|------|---------|
+| `scripts/network_io_check.sh` | 综合入口：接口发现 + 中断收集 + 中断负载 + 丢包检测 + 报告生成 | 只读采集 |
+| `scripts/01_network_interfaces.sh` | 发现活跃网络接口（link up + sar 流量采样） | 只读采集 |
+| `scripts/02_irq_info.sh` | 收集中断号、NUMA 节点、CPU 亲和性 | 只读采集 |
+| `scripts/03_interrupt_load.sh` | irqtop 中断负载分析（>10% 高负载检测） | 只读采集 |
+| `scripts/04_packet_loss.sh` | netstat 丢包/错误/冲突统计 | 只读采集 |
+| `scripts/find_optimal_queues.sh` | 队列数二分寻优 + IRQ 绑定 + 压测 + 收敛 | 修改环境（主框架门控执行） |
 
-只有当路径存在、脚本存在、环境允许只读网络检测时才调用。缺失或不可执行时不要中断主流程，记录 `fallback_reason`，回到本 skill 内部通用网络分析。
+`network_io_check.sh` 是综合入口，内联了 01-04 的逻辑。01-04 作为分步执行备选方案，通过 `/tmp/active_interfaces.txt` 传递状态。
+
+> `find_optimal_queues.sh` 会修改环境（`ethtool -L`、`systemctl stop irqbalance`、`taskset`），必须在主框架执行验证阶段调用。
 
 ### 队列与中断优化脚本
 
@@ -93,8 +99,6 @@ description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡�
 至少输出：
 
 - `network_analysis_mode`
-- `external_network_skill_used`
-- `fallback_reason`
 - `active_iface`
 - `network_numa_topology`
 - `irq_isolation_status`

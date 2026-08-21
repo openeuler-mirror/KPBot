@@ -10,7 +10,7 @@ description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中
 本子 skill 是统一入口：
 
 - 通用 CPU 亲和性分析入口
-- skill 内置 `ref-skills/cpu-affinity-optimization` 的适配层
+- 诊断脚本工作流的统一调度层
 - 平台判断、依赖检查和回退决策中心
 
 实战经验与案例存放在 `references/` 目录：
@@ -31,9 +31,37 @@ description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中
 - `change_scope` — 用户允许的变更范围
 - `restart_allowed` — 是否允许重启
 
-## Repo-local Integration
+## 诊断脚本
 
-默认优先接入 `ref-skills/cpu-affinity-optimization`（入口文件 `SKILL.md`，脚本目录 `scripts/`）。如果缺失或依赖不足，记录 `fallback_reason` 并回退到当前内部轻量规则路径。
+本 subskill 提供完整的诊断→策略→验证→回滚脚本工作流：
+
+| 脚本 | 用途 | 操作性质 |
+|------|------|---------|
+| `scripts/init_workspace.sh` | 工作目录初始化 | 只读（创建本地输出目录） |
+| `scripts/analyze_system_topology.sh` | CPU 拓扑 + NUMA 拓扑采集 | 只读采集 |
+| `scripts/collect_thread_affinity.sh` | 线程/进程当前亲和性采集 | 只读采集 |
+| `scripts/collect_thread_distribution.sh` | 线程 CPU 分布采集 | 只读采集 |
+| `scripts/collect_thread_migration.sh` | 线程迁移分析 | 只读采集 |
+| `scripts/collect_irq_affinity.sh` | IRQ 亲和性采集 | 只读采集 |
+| `scripts/aggregate_diagnosis.sh` | 诊断结果聚合为 JSON | 只读（写本地输出文件） |
+| `scripts/generate_affinity_strategy.sh` | CPU 亲和性策略生成 | 只读（生成策略文件，不执行修改） |
+| `scripts/verify_affinity.sh` | 绑核验证 | 只读采集 |
+| `scripts/rollback.sh` | 回滚说明（只打印步骤，不执行） | 推荐（无执行能力） |
+| `scripts/common_functions.sh` | 公共函数库（日志、JSON、线程列表） | 辅助（被其他脚本 source） |
+
+脚本间依赖关系：
+
+```
+init_workspace.sh → analyze_system_topology.sh（source common_functions.sh）
+  → collect_thread_affinity.sh（source common_functions.sh）
+  → collect_thread_distribution.sh（source common_functions.sh）
+  → collect_thread_migration.sh（source common_functions.sh）
+  → collect_irq_affinity.sh（source common_functions.sh）
+  → aggregate_diagnosis.sh → generate_affinity_strategy.sh
+  → verify_affinity.sh → rollback.sh
+```
+
+`common_functions.sh` 被其他脚本通过 `source "${SCRIPT_DIR}/common_functions.sh"` 引用，`SCRIPT_DIR` 基于脚本自身位置计算，路径自适应。
 
 ## Device-NUMA Topology Alignment（强制首步）
 
@@ -316,6 +344,8 @@ cat /proc/<pid>/environ | tr '\0' '\n' | grep -E 'OMP_NUM_THREADS|MKL_NUM_THREAD
 - 容器 cpuset 内是否出现局部拥塞
 
 输出字段：`cpu_balance_status`、`thread_cpu_skew`、`hot_cpu_list`、`rebalance_recommendation`、`irq_cpu_conflict_notes`
+
+当前框架建议使用 `scripts/collect_thread_distribution.sh` 和 `scripts/collect_irq_affinity.sh` 采集线程-CPU 均衡性数据。
 
 ## Thread Scheduling Interference Analysis
 

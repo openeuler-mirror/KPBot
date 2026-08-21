@@ -24,6 +24,7 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 按需加载：
 
 - 通用编译优化策略、知识库技术与案例、输出契约：`references/compiler-playbook.md`
+- ARM64 编译选项 5 阶段操作工作流（项目分析→CPU特性检测→运行时分析→优化配置生成→验证）：`references/compiler-option-playbook.md`
 - MySQL ARM64/LSE/CRC 专项、补丁和二进制等价门控：`references/mysql-arm64-playbook.md`
 - MySQL LSE outline atomics patch：见 `references/mysql-arm64-playbook.md` 中的补丁内容与应用方法
 - A+K 场景毕昇编译器自动化编译脚本（BiSheng Python/PyTorch/torch_npu LTO+PGO 编译流程）：`scripts/ak_compile_optimize.sh`
@@ -59,6 +60,11 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 - `readelf -A`、`objdump -d`、`perf annotate`、`nm`、编译器 vectorization/optimization report。
 - 源码是否允许修改、热点函数对应源码文件、三方库源码或构建方式。
 - 基线二进制身份：版本、hash、`/proc/<pid>/exe`、启动参数、链接库和配置。
+
+## 采集脚本
+
+- `scripts/perf_hotspot.sh <pid> [duration] [output_dir]` — 采集 ARM64 热点函数（top 50 + 火焰图数据），用于编译选项推荐。仅只读采集，不修改环境。
+  - 用法详见 `references/compiler-option-playbook.md` 阶段 3。
 
 ## 分析流程
 

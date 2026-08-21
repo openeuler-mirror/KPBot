@@ -351,7 +351,6 @@ node scripts/dynamic_workflow_manager.js record-execution \
 - `references/candidate-skill-analysis.md` — 候选 skill 分析清单与输出校验
 - `references/subagent-orchestration.md` — subagent 任务包、JSON schema 和候选池合并
 - `references/platform-tuning-notes.md` — 平台调优笔记
-- `references/external-network-io-integration.md` — 外部网络 IO 集成
 
 ### Phase 3 按需读取
 
@@ -365,4 +364,3 @@ node scripts/dynamic_workflow_manager.js record-execution \
 
 - 主源目录为 `skills/kpbot-app-tuner/`。
 - `.claude/`、`.opencode/`、`.agents/` 中的入口只做发现和跳转；Codex、Cursor 等编程 Agent 可直接加载主源目录，所有行为以本主源为准。
-- 仓库内 `ref-skills/` 作为外部能力源，必须通过本 skill 的候选列表和安全门禁接入。

@@ -1,13 +1,10 @@
----
-name: bigdata-framework-optimization
-description: 提供 Spark、Flink 等大数据框架的参数推荐，支持自动检测容器/物理机环境并应用推荐参数。被 application-config-optimization 按需引用。
----
-
 # Big Data Framework Optimization
 
-> **本文件是底层能力定义，不应被主流程或外部工具直接引用。** 上层调用应通过 `skills/kpbot-app-tuner/subskills/application-config-optimization/SKILL.md`（统一入口适配层）进行，该适配层负责决定是否委派给本文件以及如何回退。
+> **本参考文档提供 Spark、Flink 等大数据框架的参数推荐和配置应用指引。**
+>
+> **脚本安全约束**：`scripts/` 下的脚本已改造为推荐器模式，只分析环境并输出候选命令 JSON（stdout），不直接执行任何修改操作。主框架读取 JSON 后通过安全门控执行 `commands_execute` 中的命令。Agent 调用脚本后，将输出的 JSON 作为 `candidate_actions` 提交主框架审核执行。
 
-当检测到工作负载为 Spark 或 Flink 等大数据框架时，使用本 skill 提供的参数推荐。
+当检测到工作负载为 Spark 或 Flink 等大数据框架时，使用本参考文档提供的参数推荐。
 
 ## 识别条件
 
@@ -301,157 +298,74 @@ taskmanager.memory.process.size = 容器内存 / 容器内TM进程数 = 32 GiB /
 
 **3. 变更汇总**（仅列出有改动的参数）
 
-## 配置应用 (apply_config)
+## 配置推荐脚本
 
-本 skill 支持将推荐配置**自动应用到目标 Spark 环境**，支持自动检测、公式计算、对比、重启验证。
+脚本已改造为推荐器模式：只分析环境并输出候选命令 JSON（stdout），不直接执行任何修改操作。主框架读取 JSON 后通过安全门控执行 `commands_execute` 中的命令。
 
-### 输入参数
+### apply_spark_config.sh
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `--target` | string | 目标容器名或主机（如 `server2-spark`） |
-| `--apply-all` | flag | **推荐** 自动检测 Spark 容器并批量应用配置 |
+| `--target` | string | 目标容器名或主机 |
+| `--apply-all` | flag | 自动检测 Spark 容器并批量分析 |
 | `--spark-home` | string | Spark 安装路径（默认 `/usr/local/spark`） |
 | `--config-file` | string | 配置文件名（默认 `spark-defaults.conf`） |
 | `--deploy-mode` | string | 部署方式：`docker`（默认）或 `ssh` |
-| `--spark-mode` | string | Spark 模式：`yarn`/`standalone`/`auto`（默认 auto，自动检测） |
-| `--detect-only` | flag | 仅检测环境，不应用配置 |
-| `--dry-run` | flag | 仅输出命令，不执行 |
-| `--restart` | flag | 应用后重启 Spark 集群（standalone 模式） |
-| `--driver-memory` | string | 手动指定 driver 内存（可选，覆盖自动计算） |
-| `--executor-instances` | integer | 手动指定 executor 数量（可选，覆盖自动计算） |
-| `--executor-cores` | integer | 手动指定 executor 核数（可选，覆盖自动计算） |
-| `--executor-memory` | string | 手动指定 executor 内存（可选，覆盖自动计算） |
-| `--no-compare` | flag | 跳过当前配置 vs 推荐配置对比 |
-| `--compare-only` | flag | 仅对比当前配置与推荐配置，不应用（隐含 --dry-run） |
+| `--spark-mode` | string | Spark 模式：`yarn`/`standalone`/`auto`（默认 auto） |
+| `--driver-memory` | string | 手动指定 driver 内存（覆盖自动计算） |
+| `--executor-instances` | integer | 手动指定 executor 数量（覆盖自动计算） |
+| `--executor-cores` | integer | 手动指定 executor 核数（覆盖自动计算） |
+| `--executor-memory` | string | 手动指定 executor 内存（覆盖自动计算） |
 
-### 自动检测流程
-
-```
-1. 自动发现 Spark 容器（按名称/端口匹配 master/worker）
-2. 检测 Spark 模式：standalone 或 YARN
-3. 获取各容器 CPU 核数（NanoCpus 优先）和内存
-4. 汇总集群总 vcores 和总内存
-5. 计算推荐参数：
-   - spark.driver.memory = 8g（固定推荐值）
-   - spark.executor.instances = 物理机 24 / 64U容器 12 / 小规格 max(2, vcores/4)
-   - spark.executor.cores = 总 vcores / instances
-   - spark.executor.memory = (总内存 × 0.95 - driver内存) / instances
-6. 生成 spark-defaults.conf 配置
-7. 对比当前配置与推荐配置（逐参数差异表）
-8. 备份原配置并应用新配置
-```
-
-### 使用方式
+使用方式：
 
 ```bash
-# 【推荐】一键批量配置：自动检测 Spark 容器并应用
-scripts/apply_spark_config.sh --apply-all --restart
-
-# 预览将要执行的变更（不实际修改）
-scripts/apply_spark_config.sh --apply-all --dry-run
+# 自动检测 Spark 容器并输出推荐命令 JSON
+scripts/apply_spark_config.sh --apply-all
 
 # 单容器模式
 scripts/apply_spark_config.sh --target server2-spark
-scripts/apply_spark_config.sh --target server2-spark --detect-only
 
 # 手动覆盖参数
 scripts/apply_spark_config.sh --apply-all --driver-memory 10g --executor-instances 16
-
-# 仅对比不应用
-scripts/apply_spark_config.sh --apply-all --compare-only
 ```
 
-### 应用后的 spark-submit 命令示例
+脚本输出 JSON 包含：环境检测结果、推荐参数、当前参数对比、配置内容、`commands_execute`（备份+写入）、`restart_commands`、`rollback`。Agent 将 JSON 作为 `candidate_actions` 提交主框架审核执行。
 
-基于自动检测的推荐参数，生成的 spark-submit 命令：
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode cluster \
-  --driver-memory 8g \
-  --executor-memory 18g \
-  --executor-cores 5 \
-  --num-executors 12 \
-  --conf spark.sql.autoBroadcastJoinThreshold=100m \
-  --conf spark.sql.shuffle.partitions=600 \
-  --conf spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold=0 \
-  --conf spark.sql.sources.parallelPartitionDiscovery.parallelism=60 \
-  --conf spark.executor.extraJavaOptions="-XX:+UseG1GC -XX:ParallelGCThread=4 -XX:MetaspaceSize=256m -XX:+UseBiasedLocking" \
-  your_app.jar
-```
-
-> 将以上参数写入 `spark-defaults.conf` 后，`spark-submit` 无需重复指定这些参数。使用 `--apply-all` 脚本自动完成写入。}
-
-## Flink 配置应用 (apply_config_flink)
-
-本 skill 支持将推荐配置**自动应用到目标 Flink 环境**，支持**容器和物理机**两种场景。
-
-### 输入参数
+### apply_flink_config.sh
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `--target` | string | 目标容器名或主机（如 `flink_JM`） |
-| `--apply-all` | flag | **推荐** 自动检测 JM + 所有 TM 容器并批量应用配置 |
+| `--target` | string | 目标容器名 |
+| `--apply-all` | flag | 自动检测 JM + 所有 TM 容器并批量分析 |
 | `--flink-home` | string | Flink 安装路径（默认 `/usr/local/flink`） |
 | `--config-file` | string | 配置文件名（默认 `flink-conf.yaml`） |
-| `--deploy-mode` | string | 部署方式：`docker`（默认）或 `ssh` |
-| `--detect-only` | flag | 仅检测环境，不应用配置 |
-| `--dry-run` | flag | 仅输出命令，不执行 |
-| `--restart` | flag | 应用后重启 Flink 集群 |
-| `--parallelism` | integer | 手动指定 parallelism（可选，自动计算） |
-| `--task-slots` | integer | 手动指定 task slots（可选，自动计算） |
-| `--tm-per-container` | integer | 手动指定每容器 TM 进程数（覆盖自动检测） |
-| `--object-reuse` | string | object-reuse: true/false/auto（默认 auto，根据 state-backend 决定） |
-| `--mini-batch` | string | mini-batch: true/false/auto（默认 auto） |
-| `--state-backend` | string | 状态后端: memory/rocksdb（默认 auto=memory，影响 object-reuse 默认值） |
-| `--no-compare` | flag | 跳过当前配置 vs 推荐配置对比（默认开启对比） |
-| `--compare-only` | flag | 仅对比当前配置与推荐配置，不应用（隐含 --dry-run） |
+| `--parallelism` | integer | 手动指定 parallelism（覆盖自动计算） |
+| `--task-slots` | integer | 手动指定 task slots（覆盖自动计算） |
+| `--tm-per-container` | integer | 每容器 TM 进程数（覆盖自动检测） |
+| `--object-reuse` | string | true/false/auto（默认 auto） |
+| `--mini-batch` | string | true/false/auto（默认 auto） |
+| `--state-backend` | string | memory/rocksdb（默认 auto=memory） |
+| `--role` | string | jobmanager/taskmanager/auto（默认 auto） |
 
-### 自动检测流程
-
-```
-1. 检测目标是否为容器（Docker inspect 或 cgroup）
-2. 获取 CPU 核心数（容器场景优先用 NanoCpus/1e9，物理机用 nproc；不要用 cpuset 范围）
-3. 获取内存大小（容器场景用 docker inspect Memory 字段，物理机用 /proc/meminfo）
-4. 获取 TM 容器数及各容器内 TaskManager 进程数（docker exec <tm-container> ps aux | grep -c TaskManagerRunner）
-5. 计算推荐参数：
-   - parallelism.default = 所有TM容器总核数 / 2（8U小规格≤8核时不除以2）
-   - taskmanager.numberOfTaskSlots = parallelism.default / TM容器数 / 容器内TM进程数
-   - taskmanager.memory.process.size = 容器内存 / 该容器内TM进程数（容器场景）
-6. 生成 flink-conf.yaml 配置
-7. **对比当前配置与推荐配置**（默认开启），逐容器展示差异表
-8. 备份原配置并应用新配置
-```
-
-### 使用方式
+使用方式：
 
 ```bash
-# 【推荐】一键批量配置：自动检测 JM + 所有 TM 容器并应用
-scripts/apply_flink_config.sh --apply-all --restart
+# 自动检测 JM + TM 容器并输出推荐命令 JSON
+scripts/apply_flink_config.sh --apply-all
 
-# 预览将要执行的变更（不实际修改）
-scripts/apply_flink_config.sh --apply-all --dry-run
-
-# 单容器模式：仅配置特定容器
+# 单容器模式
 scripts/apply_flink_config.sh --target flink_JM
-scripts/apply_flink_config.sh --target flink_JM --detect-only
-scripts/apply_flink_config.sh --target flink_JM --dry-run
 
-# 手动指定参数覆盖自动计算
+# 手动覆盖参数
 scripts/apply_flink_config.sh --apply-all --parallelism 16 --task-slots 8
-
-# 指定每容器 TM 进程数（不自动检测）
-scripts/apply_flink_config.sh --apply-all --tm-per-container 2
-
-# SSH 模式（物理机）
-scripts/apply_flink_config.sh --target root@flink-server --deploy-mode ssh --restart
 ```
+
+脚本输出 JSON 包含：环境检测结果（JM/TM 容器、CPU、内存、TM 进程数）、推荐参数（parallelism、slots、memory、object-reuse、mini-batch）、当前参数对比、每个容器的 `config_content` + `commands_execute` + `restart_commands` + `rollback`。
 
 ### 容器场景示例
 
-当前检测到容器配置：
+检测到容器配置：
 - flink_JM: 8 核 (NanoCpus=8000000000), 内存 32 GiB
 - flink_TM1: 8 核 (NanoCpus=8000000000), 内存 32 GiB, 容器内 4 个 TM 进程
 - flink_TM2: 8 核 (NanoCpus=8000000000), 内存 32 GiB, 容器内 4 个 TM 进程
@@ -473,104 +387,29 @@ scripts/apply_flink_config.sh --target root@flink-server --deploy-mode ssh --res
 | taskmanager.numberOfTaskSlots | 32 / 2 | **16** |
 | taskmanager.memory.process.size | 256 GiB / 2 | **128g** |
 
-> 物理机场景：`taskmanager.numberOfTaskSlots = parallelism.default / TM进程总数`，无需容器数和容器内进程数的中间层。`taskmanager.memory.process.size = 机器总内存 / TM进程总数`。
+### 其他脚本
 
-### 生成配置示例
+| 脚本 | 用途 | 输出 |
+|------|------|------|
+| `scripts/cleanup_benchmark_env.sh` | 清理 benchmark 残留进程和端口 | 候选命令 JSON（pkill/stop-cluster/start-cluster） |
+| `scripts/run_tpcds_benchmark.sh` | 执行 TPC-DS SQL 并统计性能 | 候选命令 JSON（spark-sql 执行命令） |
+| `scripts/start_tm.sh` | 启动指定数量的 TM 进程 | 候选命令 JSON（pkill + flink-daemon.sh start） |
 
-```yaml
-# Flink 推荐配置 (TM 容器)
-# 自动生成，基于: 8核/32GiB 容器, 4 TM进程
-
-# 并行度设置 (JM 容器配置)
-parallelism.default: 8
-
-# TaskManager 设置
-taskmanager.numberOfTaskSlots: 1
-taskmanager.memory.process.size: 8192m
-
-# 对象复用（内存状态后端推荐开，RocksDB状态后端建议关）
-pipeline.object-reuse: true
-
-# Mini-batch 攒批（增加吞吐，劣化时延）
-table.exec.mini-batch.enabled: true
-table.exec.mini-batch.allow-latency: 2s
-table.exec.mini-batch.size: 50000
-```
+> `start_tm.sh` 合并了原 `start-multiple-tm.sh` 和 `start-tm-cluster.sh`。
 
 ### AI Agent 使用指南
 
 当用户请求 Flink 或 Spark 参数优化时，AI Agent 应按以下步骤操作：
 
-**Flink:**
-```
-1. 先运行 --apply-all --dry-run 获取环境检测结果和推荐参数
-   脚本会自动拉取各容器当前 flink-conf.yaml 的值，与推荐值进行对比
-2. 向用户展示完整对比结果（必须逐容器、逐参数展示，禁止仅输出汇总结论）
-3. 用户确认后运行 --apply-all --restart 应用并重启
-```
-
-**Spark:**
-```
-1. 先运行 --apply-all --dry-run 获取环境检测结果和推荐参数
-   脚本会自动拉取当前 spark-defaults.conf 的值，与推荐值进行对比
-2. 向用户展示完整对比结果（9 个参数的当前值 vs 推荐值对比表）
-3. 用户确认后运行 --apply-all --restart 应用并重启（YARN 模式无需重启）
-```
-
-#### 第 2 步强制输出要求
-
-**必须原样展示脚本输出的以下内容，不得省略或仅给汇总：**
-
-1. **环境检测结果** — 每个容器的 CPU、内存、TM 进程数
-2. **公式计算过程** — parallelism、slots、memory 的计算推导
-3. **逐容器参数对比表** — 每个容器一张表，列出全部参数及其 `当前值 | 推荐值 | 状态 | formula`：
-
-```
-### flink_JM (角色: jobmanager)
-
-  参数                                        | 当前值    | 推荐值              | 是否一致 | formula
-  ----------------------------------------------|--------------|------------------------|--------------|--------
-  parallelism.default                           | 8            | 8                      | ✓ 一致   | 是
-  pipeline.object-reuse                         | true         | true                   | ✓ 一致   | 否
-  ...
-
-### flink_TM1 (角色: taskmanager)
-
-  参数                                        | 当前值    | 推荐值              | 是否一致 | formula
-  ...
-```
-
-**关键约束**：
-- 对比表由脚本内置的 `show_comparison_table()` 自动生成，AI Agent 只需**完整转发**，禁止只给"全部一致"之类的结论
-- **即使所有参数都是 ✓ 一致，也必须逐容器、逐参数展示完整表格**
-- 差异行标注 ✗ 差异，一致行标注 ✓ 一致，缺失的参数显示"缺失"
-- 对比表之后可以附加一句话汇总（如"N 容器 × M 参数 = X 项，全部 ✓ 一致"），但不能替代完整展示
-
-> **对比展示是脚本内置能力**：`--apply-all` 默认开启当前配置 vs 推荐配置的对比（可通过 `--no-compare` 跳过）。
-> 使用 `--compare-only` 可仅对比不应用，适合审计/检查场景。
-
-**优化建议**：
-- 如果容器内 TM 进程数 ≥ 2，建议用户考虑合并 TM 进程（减少进程数，增大每个 TM 的 slots 和内存）以减少 JVM 开销。可通过 `--tm-per-container` 参数指定合并后的进程数
-- 8U 小规格（≤8核）容器自动使用 `parallelism.default = cores`（不除以 2），脚本已内置此逻辑
-- 合并 TM 后需同步修改 TM 启动脚本（如 `start-tm-cluster.sh` 或 `start-multiple-tm.sh`）
-
-### 配置应用后的验证
-
-```bash
-# 查看新配置
-docker exec flink_JM cat /usr/local/flink/conf/flink-conf.yaml | grep -E "parallelism|taskmanager|object-reuse|mini-batch"
-
-# 重启集群使配置生效 (--apply-all --restart 已自动包含此步骤)
-docker exec flink_JM /usr/local/flink/bin/stop-cluster.sh
-docker exec flink_JM /usr/local/flink/bin/start-cluster.sh
-
-# 检查 Flink Web UI
-curl http://localhost:8081
-```
+1. 执行脚本获取推荐命令 JSON（脚本不执行任何修改）
+2. 解析 JSON 中的 `environment`、`recommended_params`、`current_params` 展示对比
+3. 将 `actions` 作为 `candidate_actions` 提交主框架安全门控
+4. 门控通过后，主框架执行 `commands_execute` 中的命令
+5. 执行后按 `validation` 验证，失败则执行 `rollback`
 
 ### 兼容性说明
 
 - **容器场景**：自动检测 cpuset 和 memory limit，确保参数不超过容器限制
 - **物理机场景**：自动使用全部资源，根据 CPU 和内存计算推荐值
-- **混合部署**：支持 Docker 容器和 SSH 物理机两种部署模式
-- **配置备份**：应用前自动备份原配置到 `.bak` 文件
+- **混合部署**：Spark 支持 Docker 容器和 SSH 物理机两种部署模式；Flink 仅支持容器模式
+- **配置备份**：`commands_execute` 中包含备份命令，`rollback` 中包含恢复命令
