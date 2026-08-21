@@ -47,6 +47,27 @@
 
 若运行平台提供 subagent / Task / multi-agent 工具，主 agent 必须使用该工具启动子任务，并把工具返回的任务 ID 写入 `subagent_invocation_log.subagent_id`。
 
+**`subagent_id` 真实性强制规则（ID Authenticity）**：
+- 每次 `task`/`Agent` 工具调用返回结果中**都会包含真实任务 ID**（如 OpenCode 的 `ses_<hash>`），主 agent 必须先从工具结果中取出该真实 ID，再调用 `append-subagent-log`（启动时刻 `status=running`，完成时刻更新 `status=completed`）。
+- **禁止**使用 subagent 自拟/自报的 ID（例如 `ses_exec_<skill>_r<n>_<date>`、`ses_analyze_...` 等非平台返回格式的 ID）写入日志；禁止用主 agent 自造的簿记号、伪随机串、空串或 `platform_unavailable_degraded_context` 顶替（后者的降级语义仅限平台完全不提供 subagent 工具的降级场景）。
+- 无论 executor 在结果 JSON 的 `subagent_id` 字段写入什么值，`subagent_invocation_log` 中的记录都必须以**平台工具返回的真实 task ID** 为准；两者不一致时以平台返回值为准，并在结果校验时提示回写修正。
+- `dynamic_workflow_manager.js append-subagent-log` 仅做格式级合法性校验（`_isPlausibleSubagentId`），无法验证 ID 与平台会话的真实绑定；**真实绑定的唯一责任在主 agent**，未从工具结果中取 ID 而手写 ID 视为合规失败。
+
+### 执行验证 Subagent 越权边界（No Overreach）
+执行验证 subagent 在同一时刻是唯一的"环境修改主体"，但该权限**严格限定在本轮被指派 skill 的动作**：
+- **允许**：实施/复测/回退当前轮动作；向 `execution_log` 追加本轮的 `forward_cmd`/`reverse_cmd`；把本轮结果写入任务包 `required_output_path` 与 `rounds/round_N_summary.json`（含自己的本轮 JSON 产物与归档文件）。
+- **禁止**：
+  - 修改 `workflow_state.json` 中**其他 skill** 的 `candidate_skill_list[].status` / `coverage_skill_list[].status` / `subagent_invocation_log` / `per_skill_iteration_state` / `per_skill_gain_summary` / `candidate_pool.json` / 其他 skill 的结果 JSON 或任务包。
+  - 调用 `update-candidate-status`、`set-iteration-state`、`set-per-skill-gains`、`verify-skill-completeness` 等只应由主 agent 调用的全局门控命令（除 `record-execution` 追加本轮变更外）。
+  - 对其他 skill 的分析结论、候选动作、当前 skill 之外的收益做出评估或写入结论。
+  - 越权修改一经发现（通过文件时间戳、内容 diff 或后续 `report-ready` 校验定位），该轮收益在 `per_skill_gain_summary` 中标记为 `confounded` 并回滚被篡改字段。
+
+### 互斥/替代候选方案验证（Mutually-Exclusive Full Validation）
+当同一 skill 的分析输出包含**互斥或相互替代**的候选方案（针对同一优化目标、不能同时保留），主 agent 必须：
+- 在 `candidate_actions` 中识别 `mutually_exclusive_with` 组，为组内**每个方案逐一创建独立验证轮次**（仍遵守单变量原则，每轮只变更一个方案）。
+- **全部互斥方案都完成 A/B 验证**后才能裁决：比较相对同一基准的 `after_metrics`/`stage_gain_pct`，选收益最优者保留（该 skill 唯一有效配置，`accepted`），其余全部 `rejected` 并执行 `reverse_cmd` 回退，写入 `rejected_optimization_actions` 并附各方案对比表。
+- **禁止**在第一个方案获得正收益后就以"收益已为正、单变量原则、节省轮次"为由跳过其余互斥方案；若确因外部限制（如无充分验证窗口）跳过，必须把跳过方案标记为 `blocked`/`deferred` 并说明，`verify-skill-completeness` 将该 skill 判为 `incomplete` 直至补齐。
+
 **主流平台不可降级**：Claude Code 内置 `Agent` 工具、OpenCode 提供 `task` 工具，均始终可用，因此在这两个平台上**绝对禁止**使用降级模式，每个候选 skill 和 coverage skill 都必须启动独立 subagent 执行。违反此规则视为合规失败。
 
 只有在下述平台完全不支持任何 subagent 工具时，才允许降级为”显式独立上下文执行”：必须为每个 skill 写出任务包、单独读取对应 `subskills/<name>/SKILL.md`、生成独立结果 JSON，并在日志中标记 `subagent_id=platform_unavailable_degraded_context`。Claude Code、Codex CLI、OpenCode 和 Cursor Agent 均不在此列，不得降级。降级执行不能与主 agent 手写全量候选结果混同。
@@ -62,6 +83,7 @@
 - 从 `evidence_snapshot_dir` 读取预采集证据作为起点；**当 subskill SKILL.md 要求采集的证据在预采集快照中缺失或不完整时，subagent 必须现场补充采集**（如 perf record、lsof、detect_all_libraries.sh），不得以"预采集未覆盖"为由跳过 subskill 的 Step 1。
 - **禁止以任务包 instructions 中的预设路径替代 subskill 流程**：例如任务包写明"S5: tcmalloc LD_PRELOAD"，subagent 仍必须执行 performance-library-selection 的完整流程（热点采集 → 库类型识别+规则匹配 → 验证流程设计），独立判断应推荐哪些库（可能包括 tcmalloc 之外的其他库如 stringlib）。
 - 输出候选动作、风险、验证方法、回退方法和停止条件。
+- **互斥关系声明**：若存在针对同一目标、不能同时保留的多个候选动作（如不同 allocator、同一动作的开关 vs 降级档、不同绑核策略），必须通过 `candidate_actions[].mutually_exclusive_with` 字段显式声明互斥组（值为同组其他 action_id 数组），并在 `findings` 中说明组内预期收益排序与选择标准；未声明互斥关系时，主 agent 默认按独立可叠加动作处理。
 - 不执行正式收益验证，不修改系统。
 - 输出中必须包含 `timing.analysis_seconds` 和 `result_path`；主 agent 必须把它折算进 `optimization_timing_details`。
 - 输出中必须包含 `independent_analysis_confirmation` 字段，声明"本分析已独立执行 subskill SKILL.md 完整流程，任务包背景信息未替代现场证据采集和独立判断"。

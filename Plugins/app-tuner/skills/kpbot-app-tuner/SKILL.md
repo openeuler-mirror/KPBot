@@ -224,7 +224,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
    - 真实危险动作仍必须处于 `approved_execute` 且有回退计划；但该批准应来自启动阶段或基线确认后的批量执行授权，不得退化为每个子 skill 的重复确认。
    - 每个 skill、每轮候选动作和每次验证都必须记录 `analysis_seconds`、`implementation_seconds`、`validation_seconds`、`total_seconds`，并写入 `optimization_timing`、`optimization_timing_details` 和 `timing_jsonl_path`。推荐使用 `scripts/record_timing.py`，也可生成等价 JSONL。
    - **单 skill 收益归因要求**：每个 skill 完成后必须记录其独立可量化的收益归因，写入 `per_skill_gain_summary`。归因必须包含 skill 名称、执行轮次、各轮阶段收益、累计收益、归因方法（`single_variable_round` / `baseline_reset` / `merged_unresolvable` / `confounded`）、证据路径和停止原因。合并轮次或无法隔离的收益必须标记为 `confounded` 并说明不可归因的原因。
-   - 每轮必须启动一个独立的**执行验证 subagent**（OpenCode 使用 `task` 工具，`subagent_type: "executor"`）串行负责当前 skill 的实施、复测、回退和结果记录。**禁止主 agent 自行执行验证、伪造 before/after_metrics 或手写轮次结果**；验证动作必须在独立 subagent 上下文中完成，并通过 `append-subagent-log` 记录真实的 `subagent_id`。同一时间只允许一个执行主体修改环境。未产生 subagent 任务包、subagent ID 或结果 JSON 的 skill 不能标记为完成。主 agent 只负责调度与整理各 skill 的推荐优化方案及最终各方案的优化效果（轮次收益、累计收益、归因表），不代替执行验证。
+   - 每轮必须启动一个独立的**执行验证 subagent**（OpenCode 使用 `task` 工具，`subagent_type: "executor"`）串行负责当前 skill 的实施、复测、回退和结果记录。**禁止主 agent 自行执行验证、伪造 before/after_metrics 或手写轮次结果**；验证动作必须在独立 subagent 上下文中完成，并通过 `append-subagent-log` 记录真实的 `subagent_id`。**`subagent_id` 必须是主 agent 从平台 `task`/`Agent` 工具返回结果中取得的真实任务 ID（如 OpenCode 的 `ses_<hash>`），禁止使用 subagent 自拟的 ID（如 `ses_exec_<skill>_r<n>`）、禁止用主 agent 簿记号或降级上下文 ID 顶替真实 ID**；主 agent 必须先获取真实 task ID 再调用 `append-subagent-log`（启动时 `status=running`，完成后更新为 `completed`）。同一时间只允许一个执行主体修改环境。未产生 subagent 任务包、subagent ID 或结果 JSON 的 skill 不能标记为完成。主 agent 只负责调度与整理各 skill 的推荐优化方案及最终各方案的优化效果（轮次收益、累计收益、归因表），不代替执行验证。
    - **经验库伴随输入（Experience Library Guidance）**：主 agent 在启动每个候选/coverage skill 的【分析 subagent】和【执行验证 subagent】时，除任务包/证据外，必须同时将**对应 skill 的 reference 经验库路径列表**随提示/任务包一并输入，供 subagent 在独立判断时参考：
       - 通用路由映射：`references/knowledge-technique-routing.md`（技术层→镜像信号→subskill 映射）。
       - skill 专属经验库：优先读取 `subskills/<skill_name>/references/` 目录下全部 `.md`/`.json` 资源（如 `performance-library-selection/references/allocator-decision-guide.md`、`optimization_kb.json`；`application-config-optimization/references/ascend-torchtitan-training-config.md`；`cpu-affinity-optimization/references/ascend-vllm-binding.md`；`compiler-optimization/references/*-playbook.md`）。
@@ -238,13 +238,16 @@ node scripts/dynamic_workflow_manager.js record-execution \
      4. dry-run 模式下允许使用模拟验证数据（如 before/after_metrics），但必须显式标记 `simulated: true` 并在 `after_metrics` 中注明"非现场实跑，不计入真实收益"。
      5. 每轮结果写入 `rounds/round_N_summary.json`，必须包含 `round`、`subskill_name`、`current_run_id`、`action_ids[]`、`execution_status`、`target_instance_identity`、`before_metrics`、`after_metrics`、`stage_gain_pct`、`cumulative_gain_pct`、`per_skill_gain_pct`（归因受污染时为 `null`）、`applied_changes[]`、`rollback_result`、`logs[]`、`timing{analysis_seconds,implementation_seconds,validation_seconds,total_seconds}`、`subagent_id`。
      6. 覆盖该 skill 分析结果中的全部推荐动作；无法/不验证的动作必须显式进入 `rejected_optimization_actions`（附原因）或由 `stop_reason`/`block_reason` 覆盖。未覆盖的动作导致 `verify-skill-completeness` 的 `incomplete_skills` 非空时，该 skill 不得标记为 `completed`。
-     7. 验证失败、收益为负、身份不一致或触发拒绝条件时执行回退并输出 `rejected_optimization_actions`；结果标记为 `rolled_back`/`rejected`。
-     8. 标记真实变更已应用必须伴随 `record-execution`（forward+reverse），否则轮次不得标记为完成。
+7. 验证失败、收益为负、身份不一致或触发拒绝条件时执行回退并输出 `rejected_optimization_actions`；结果标记为 `rolled_back`/`rejected`。
+      8. 标记真实变更已应用必须伴随 `record-execution`（forward+reverse），否则轮次不得标记为完成。
+      9. **越权禁止（No Overreach）**：executor 只负责当前轮被指派 skill 的动作实施、复测、回退与本轮结果写入。**禁止修改其他候选方案或任何其他 skill 的状态和评估结果**，包括：不得调用 `update-candidate-status`/`append-subagent-log`/`set-iteration-state`/`set-per-skill-gains` 改变其他 skill 的 `status`/`result`；不得改写其他 skill 的结果 JSON、`candidate_pool.json` 或任务包；不得对未指派 skill 的候选动作给出评估结论。`per_skill_state_path` 与 `candidate_pool_path` 是本轮**只读输入**，评估结果只能通过任务包 `required_output_path` 写回。仅允许追加本轮 `forward_cmd`/`reverse_cmd` 到 `execution_log`。其他 skill 状态变更只能由主 agent 在下发其专属轮次时执行。
+      10. **互斥/替代方案必须全量验证（Mutually-Exclusive Full Validation）**：当分析 subagent 针对同一目标输出多个互斥或相互替代的候选方案（如 tcmalloc vs jemalloc、SwapOptimizer 开关 vs 降级次数、不同绑核策略等）时，主 agent 必须为**每个互斥方案分别创建独立轮次并全部完成 A/B 验证**，不得在第一个方案验证为正收益后就以"已有正收益、单变量原则"为由拒绝其余互斥方案。全部互斥方案均得到 `after_metrics` 后，由主 agent 选择收益最优者保留（标记 `accepted` 为唯一有效配置），其余进入 `rejected_optimization_actions` 并附各方案对比数据（after_metrics + stage_gain）。前一方案若仅因最优结果覆盖而落选，必须执行其 `reverse_cmd` 回退并在结果中注明 `superseded_by=<最优action_id>`。凡是提案存在互斥关系，`candidate_actions` 中必须显式声明 `mutually_exclusive_with` 字段。
     - **验证决策硬规则（每轮单变量 + 正向保留 / 负向回退）**：
       - **单变量**：遵循上文"单变量原则（Single-Variable Principle）"，每轮只允许变更一个候选 skill 的一个或一组绑定动作，禁止跨 skill 合并。
       - **正向 > 1% 保留**：本轮阶段收益（相对上一轮有效配置）> 1% 时，标记 `accepted`，保留变更进入下一轮。
       - **负向回退**：本轮阶段收益 ≤ 0%（含负收益）时，标记 `rejected`，执行验证 subagent 必须**立即执行回退**（`reverse_cmd`），恢复上一轮有效配置，记录到 `rejected_optimization_actions`。
       - **噪声区（0%-1%）**：本轮阶段收益在 0%-1% 之间时，标记 `inconclusive`，保留变更但记录噪声。
+      - **互斥方案选优（Mutually-Exclusive Selection）**：互斥方案各自独立成轮全部验证后，统一比较相对同一基准的 `after_metrics`/`stage_gain_pct`，收益最优者 `accepted` 并保留，其余 `rejected` 并回退；严格按"每个互斥方案都验证完再选最优"，禁止只验证一个就下结论。收益接近（差值 ≤1%）时选风险更低或实现更简单者，并在 track 记录选优理由。
     - **归档原始数据**：执行验证 subagent 每轮必须归档以下原始数据到 `rounds/round_N_<skill_name>/` 目录：
      - `benchmark_raw.csv` — 压测原始 CSV 输出
      - `env_before.json` — 变更前环境变量和进程状态快照
