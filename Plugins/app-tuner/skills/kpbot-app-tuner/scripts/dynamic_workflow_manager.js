@@ -1431,9 +1431,25 @@ class DynamicWorkflowManager {
     if (trimmed.length < 8) return false;
     if (/\s+/.test(trimmed)) return false;
     if (/[\u4e00-\u9fff]/.test(trimmed)) return false;
+    // 平台真实 task ID 不含自拟标记。拦截常见自拟/簿记模式（区分大小写宽松），
+    // 这些模式曾用于伪造 executor 记录但不来自 task 工具返回值。
+    const lower = trimmed.toLowerCase();
+    const selfMadePatterns = [
+      /\bses[-_](exec|analy|analyse|analysis|oracle|appcfg|app_config|pls|cpuaff)[-_]/, // ses_exec_<skill>_r<n> 自拟ID
+      /\bses[-_]executor\b/,
+      /\bsubagent[-_](1|2|\d+)\b/,                     // subagent_1
+      /\br[0-9]+_\d{8}\b/,                            // _r1_20260820 日期后缀
+      /^\d{8}$/,                                      // 纯日期
+      /\b(skip|skipped|cancelled|preempted)\b/i,      // 状态词伪装 ID
+    ];
+    if (selfMadePatterns.some(p => p.test(lower))) return false;
+    // 若以平台惯用前缀开头（ses_、agt_、claude 等），要求主体为紧凑随机 hash（无内部下划线分隔的语义片段）
+    if (/^ses[-_]/.test(lower) || /^agt[-_]/.test(lower)) {
+      const main = trimmed.replace(/^[A-Za-z]{2,5}[-_]/, '');
+      if (!/^[a-z0-9]+$/i.test(main)) return false; // 主体中出现 _/日期/语义词 → 自拟 ID
+    }
     const fakeTokens = ['manual', 'main-agent', 'mainagent', 'self', 'fake', 'test-id',
       'handwrite', 'direct', 'local', 'placeholder', 'dummy', 'example'];
-    const lower = trimmed.toLowerCase();
     if (fakeTokens.some(t => lower === t || lower === t.replace(/[-_]/g, ''))) return false;
     return true;
   }

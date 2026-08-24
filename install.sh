@@ -283,8 +283,30 @@ echo ""
 step "[1/4] Setting up KPBot skills..."
 mkdir -p "$CONFIG_ROOT/skills"
 
-# 清理目标目录下旧内容（幂等重装）
-rm -rf "$CONFIG_ROOT/skills"/*
+# 仅替换 KPBot 所属的 skills，保留用户自有的 skills：
+# 1) 与当前插件源同名的 skill（KPBot 管理的名字，重装时整体刷新）
+# 2) 上次安装清单 kpbot-manifest.json 中记录的 skill（覆盖已改名/下线的无主残留）
+CLEAN_LIST="$SKILLS_TO_INSTALL"
+if [ -f "$CONFIG_ROOT/kpbot-manifest.json" ]; then
+    manifest_skills=$(python3 -c "
+import json
+m = json.load(open('$CONFIG_ROOT/kpbot-manifest.json'))
+for s in m.get('installed_skills', []):
+    print(s)" 2>/dev/null || true)
+    for ms in $manifest_skills; do
+        case " $CLEAN_LIST " in
+            *" $ms "*) ;;
+            *) CLEAN_LIST="$CLEAN_LIST $ms" ;;
+        esac
+    done
+fi
+clean_count=0
+for name in $CLEAN_LIST; do
+    if [ -e "$CONFIG_ROOT/skills/$name" ] || [ -L "$CONFIG_ROOT/skills/$name" ]; then
+        rm -rf "$CONFIG_ROOT/skills/$name"
+        clean_count=$((clean_count + 1))
+    fi
+done
 
 # 基底：拷贝全部 plugins 的 skills（claude 格式）
 for plugin_dir in "$PLUGINS_DIR"/*/; do
