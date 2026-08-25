@@ -30,6 +30,17 @@
       "source": "./Plugins/app-tuner",
       "version": "0.1.0",
       "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64"]
+    },
+    {
+      "name": "tf-inference-optimizer",
+      "description": "TensorFlow 纯 CPU 推理优化 — 图优化(kernel 融合/remapper/rewriter) + 自定义 fused kernel(KDNN) 工作流，覆盖环境验证→多维 profiling(静态图/trace/perf)→优化实施→Top-1 正确性验证→收益归因全流程，适配鲲鹏 aarch64",
+      "author": {
+        "name": "Kunpeng Acceleration Team"
+      },
+      "category": "performance",
+      "source": "./Plugins/tf-inference-optimizer",
+      "version": "0.1.0",
+      "tags": ["tensorflow", "inference", "cpu", "arm", "kunpeng", "aarch64", "graph-optimization", "kernel", "kdnn", "profiling"]
     }
   ]
 }
