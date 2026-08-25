@@ -8,6 +8,7 @@
 |------|------|------|
 | **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline（36 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
+| **[tf-inference-optimizer](Plugins/tf-inference-optimizer/)** | performance | TensorFlow 纯 CPU 推理优化 — 图优化 + 自定义 fused kernel(KDNN) 工作流（7 skills，仅 OpenCode） |
 
 ### 即将推出
 
@@ -326,6 +327,10 @@ KPBot/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
 │       └── skills/                #   技能源目录
+│   └── tf-inference-optimizer/    # TF 纯 CPU 推理优化插件 (仅 OpenCode)
+│       ├── .claude-plugin/
+│       │   └── plugin.json
+│       └── skills/                #   技能源目录（7 skills，remote-exec 模板 + 案例在各自 skill 的 scripts/、references/ 下）
 ├── install.sh                     # 统一安装脚本（Claude Code + OpenCode）
 ├── README.md
 └── LICENSE
