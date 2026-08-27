@@ -1,0 +1,66 @@
+devkit_meta:
+  version: "26.1.rc1"
+  display_version: "26.1.RC1"
+  supported_arch: [aarch64]
+  supported_os: [any]
+
+download:
+  base_url: "https://kunpeng-repo.obs.cn-north-4.myhuaweicloud.com/Kunpeng%20DevKit/Kunpeng%20DevKit%20{DISPLAY_VERSION}"
+
+install:
+  root_dir: /opt/devkit
+  binary_subpath: usr/local/devkit/devkit
+  lib_subpath: usr/local/devkit/tuner/lib
+
+packages:
+  - name: devkit
+    required: true
+    description: CLI entrance
+    sha256: "4394f40c6fffb410fc49a3852f093eef129f9d16d08d51c61e9d9a0c403900c2"
+
+  - name: devkit-tuner
+    required: true
+    description: Tuner plugin (turbostat/top-down/hotspot/miss/numafast/memory/roofline/hpc-perf)
+    sha256: "871c1cc9cae852a126cf2c390edd54be51e90398f2e27d62f85ad7bfd585732f"
+
+tuner_tasks:
+  - name: turbostat
+    function: core/uncore frequency collection
+    requires_spe: false
+    output_format: console
+    produces_tar: false
+
+  - name: top-down
+    function: CPU microarchitecture topdown analysis
+    requires_spe: false
+    output_format: console
+    produces_tar: false
+
+  - name: numafast
+    function: NUMA memory access traffic matrix analysis
+    requires_spe: true
+    output_format: console
+    produces_tar: true
+    tar_flag: "--package"
+    no_vm: true
+
+  - name: hotspot
+    function: hotspot function analysis with flamegraph
+    requires_spe: false
+    output_format: console
+    produces_tar: true
+    tar_flag: "--package"
+
+  - name: memory
+    function: memory bandwidth and cache hit rate
+    requires_spe: false
+    output_format: console
+    produces_tar: false
+
+  - name: miss
+    function: cache miss and latency function-level attribution
+    requires_spe: true
+    output_format: console
+    produces_tar: true
+    tar_flag: "--package"
+    no_vm: true
