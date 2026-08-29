@@ -19,9 +19,23 @@ description: 综合瓶颈分析结果输出线程数、队列、批量、缓存�
 
 本子 skill 统一承接大数据框架工作负载的专项分析。当检测到 `workload_type` 匹配 spark/flink 或检测到相关配置文件时，按需引用：
 
-- `ref-skills/bigdata-framework-optimization/SKILL.md`
+- `references/bigdata-playbook.md`
 
-`bigdata-framework-optimization` 提供 Spark、Flink 等大数据框架的参数推荐表格和适用条件。其分析结果由本子 skill 汇总后统一输出给主 skill。
+`bigdata-playbook.md` 提供 Spark、Flink 等大数据框架的参数推荐表格、环境检测规则和配置应用脚本指引。其分析结果由本子 skill 汇总后统一输出给主 skill。
+
+> **脚本安全约束**：`scripts/` 下的脚本已改造为推荐器模式，只分析环境并输出候选命令 JSON（stdout），不直接执行任何修改操作。主框架读取 JSON 后通过安全门控执行 `commands_execute` 中的命令。
+
+## 推荐脚本
+
+| 脚本 | 用途 | 操作性质 |
+|------|------|---------|
+| `scripts/apply_spark_config.sh` | Spark 环境检测 + 推荐参数计算 + 输出候选命令 JSON | 推荐器（不执行修改） |
+| `scripts/apply_flink_config.sh` | Flink 环境检测 + 推荐参数计算 + 输出候选命令 JSON | 推荐器（不执行修改） |
+| `scripts/cleanup_benchmark_env.sh` | 输出 benchmark 环境清理命令 JSON | 推荐器（不执行修改） |
+| `scripts/run_tpcds_benchmark.sh` | 输出 TPC-DS benchmark 执行命令 JSON | 推荐器（不执行修改） |
+| `scripts/start_tm.sh` | 输出启动 TM 进程命令 JSON | 推荐器（不执行修改） |
+
+> 用法详见 `references/bigdata-playbook.md`。
 
 重点关注：
 

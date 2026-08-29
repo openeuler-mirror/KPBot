@@ -1,16 +1,11 @@
----
-name: compiler-option-optimization
-description: 优化C/C++应用的编译配置以提升目标应用在ARM64/AArch64平台的运行时性能。当用户提到ARM64/AArch64优化、ARM NEON/SVE/SME优化、编译选项优化、LTO、PGO、PLT、大页优化时使用此skill。
----
-
 # C/C++应用编译优化（ARM64平台）
 
-此skill帮助您**优化**C/C++应用的编译配置以提升目标应用在ARM64平台的运行时性能。支持GCC和Clang编译器，以及CMake和Make构建系统，专注于ARM64架构的极致性能优化。
+本参考文档帮助您**优化**C/C++应用的编译配置以提升目标应用在ARM64平台的运行时性能。支持GCC和Clang编译器，以及CMake和Make构建系统，专注于ARM64架构的极致性能优化。
 
 **重要说明**：
-- 此skill专注于**运行时性能最大化**，会推荐激进的优化选项
+- 本参考文档专注于**运行时性能最大化**，会推荐激进的优化选项
 - 激进优化可能带来副作用：增加编译时间、增大二进制文件、可能影响调试能力
-- 此skill只提供优化建议和配置示例，不会主动修改您的工程代码
+- 本参考文档只提供优化建议和配置示例，不会主动修改您的工程代码
 - 所有修改都需要您手动应用，建议在测试环境验证后再部署到生产环境
 
 ## 工作流程
@@ -193,7 +188,7 @@ lscpu
 如果用户提供了PID，使用脚本`scripts/perf_hotspot.sh`采集热点：
 
 ```bash
-bash ref-skills/compiler-option-optimization/scripts/perf_hotspot.sh <PID>
+bash scripts/perf_hotspot.sh <PID>
 ```
 
 如果用户选择跳过或未提供PID，则跳过本阶段，后续阶段4.2中基于热点函数的推荐将不可用，需在报告中标注"未采集热点数据，热点相关推荐不可用"。

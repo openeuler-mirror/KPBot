@@ -10,7 +10,6 @@ app-tuner 提供 1 个主编排 skill(`kpbot-app-tuner`)及其内部资源:
 
 - **主 skill**: `skills/kpbot-app-tuner/` — 编排器,负责环境采集→瓶颈识别→动态路由→迭代验证→报告输出
 - **分析型子 skill**(subskills,自研,12 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/其他兜底
-- **执行型引用 skill**(ref-skills,第三方,4 个): 网络IO/CPU亲和性/编译选项/大数据框架的执行采集能力
 - **质量保障**: 对抗性审查、current_run 门控、subagent 独立上下文执行
 
 ## 安装
@@ -74,18 +73,6 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `database-workload-analysis` | 数据库专项分析(MySQL/InnoDB) |
 | `other-optimization` | 其他优化方向兜底 |
 
-### 执行型引用 skill(ref-skills,第三方)
-
-| 技能 | 来源 | 说明 |
-|------|------|------|
-| `network-io-performance` | 第三方 | 网络 IO 综合检查 |
-| `cpu-affinity-optimization` | 第三方 | CPU 亲和性采集执行 |
-| `compiler-option-optimization` | 第三方 | 编译热点采集 |
-| `bigdata-framework-optimization` | 第三方 | Spark/Flink 框架配置 |
-
-> subskill(自研)负责分析决策,ref-skill(第三方)负责执行采集,通过安全门禁接入。
-> `library-replacement` 的能力已吸收合并到 `subskills/performance-library-selection/`(内置 aarch64 全类别库检测),不再作为独立 ref-skill 存在。
-
 ## 目录结构
 
 ```
@@ -105,8 +92,7 @@ app-tuner/
 │       ├── agents/                    # 平台 agent 配置
 │       ├── references/                # 参考文档(22 个)
 │       ├── scripts/                   # 脚本(22 个)
-│       ├── subskills/                 # 自研分析型子 skill(12 个)
-│       └── ref-skills/                # 第三方执行型引用 skill(4 个)
+│       └── subskills/                 # 自研分析型子 skill(12 个，含 scripts/ 和 references/)
 └── opencode/                          # OpenCode 覆盖层(差异文件)
 ```
 
@@ -140,7 +126,7 @@ app-tuner/
 
 ## 文档
 
-- [架构设计(4+1)](docs/architecture-4plus1.md) — 主 skill 编排、子 skill/ref-skill 关系、运行闭环
+- [架构设计(4+1)](docs/architecture-4plus1.md) — 主 skill 编排、子 skill 关系、运行闭环
 - [使用指南](docs/usage-guide.md) — 不同平台如何加载和使用
 - [报告模板](docs/report-template.md) — 首版优化报告模板
 

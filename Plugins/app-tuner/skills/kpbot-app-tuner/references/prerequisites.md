@@ -91,7 +91,7 @@
 | `lscpu` | CPU 拓扑与 SMT 信息 | 推荐 | 降级拓扑与物理核映射分析 |
 | `numactl` | NUMA 拓扑与亲和性 | 推荐 | 降级 NUMA 分析 |
 | `perf` | 线程迁移监控 | 推荐 | 跳过迁移分析，仅保留静态分布判断 |
-| `ref-skills/cpu-affinity-optimization` | 仓库内置 CPU 亲和性专项 skill | 推荐 | 回退到内部轻量规则路径 |
+| `subskills/cpu-affinity-optimization/scripts` | CPU 亲和性诊断脚本集 | 推荐 | 回退到内部轻量规则路径 |
 
 ### `network-optimization`
 
@@ -102,8 +102,7 @@
 | `netstat` | 丢包与错误统计 | 推荐 | 降级丢包分析 |
 | `ethtool` | 队列与 NIC 统计 | 推荐 | 降级队列平衡分析 |
 | `irqtop` | IRQ 负载热点分析 | 推荐 | 跳过中断负载热点识别 |
-| `ref-skills/network-io-performance` | 仓库内置网络专项 skill | 推荐 | 继续检查兼容 fallback 或回退内部路径 |
-| 外部 `network-io-performance` 路径 | 兼容 fallback 网络专项 skill | 推荐 | 回退到内部通用网络路径 |
+| `subskills/network-optimization/scripts` | 网络采集脚本集 | 推荐 | 回退到内部通用网络路径 |
 
 ### `os-optimization`
 

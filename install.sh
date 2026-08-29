@@ -338,7 +338,7 @@ fi
 # Nested packages → tool-discoverable symlinks
 # When a plugin directory has skills/<inner>/SKILL.md, the tool scans one-level
 # deep only. Mirror the inner skill at root via symlinks so relative paths
-# (subskills/, references/, ref-skills/) still resolve correctly.
+# (subskills/, references/, scripts/, agents/) still resolve correctly.
 link_count=0
 for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
     [ -d "$pkg_dir" ] || continue
@@ -355,11 +355,11 @@ for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
         # Copy main SKILL.md (the tool reads content from here)
         cp "$inner_dir/SKILL.md" "$target/"
         # Symlink sub-resources so relative path references resolve
-        for sub in subskills references scripts agents ref-skills; do
+        for sub in subskills references scripts agents; do
             if [ -d "$inner_dir/$sub" ] && [ ! -e "$target/$sub" ]; then
                 ln -s "../$pkg_name/skills/$inner_name/$sub" "$target/$sub"
             elif [ -d "$pkg_dir/$sub" ] && [ ! -e "$target/$sub" ]; then
-                # Fallback: package-level resource (e.g. ref-skills/)
+                # Fallback: package-level resource
                 ln -s "../$pkg_name/$sub" "$target/$sub"
             fi
         done

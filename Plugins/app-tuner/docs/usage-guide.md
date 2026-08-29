@@ -79,20 +79,6 @@ mysql/mysql_sysbench_test.md，不确定的先找我确认
 | `hardware-upgrade-analysis` | 更高规格硬件建议和容量边界判断 |
 | `other-optimization` | 既有 skill 无法覆盖的专项分析 |
 
-### ref-skill 独立调用
-
-`ref-skills/` 中的第三方或参考 skill 也可单独用于专项分析，例如：
-
-| ref-skill | 适用场景 |
-|---|---|
-| `ref-skills/cpu-affinity-optimization` | 只做 CPU 亲和性策略分析或脚本生成 |
-| `ref-skills/network-io-performance` | 只做网络 IO、队列、中断和网卡参数专项分析 |
-| `ref-skills/compiler-option-optimization` | 只做编译器选项、目标架构和代码生成分析 |
-
-在完整服务器应用优化 Agent 流程中，ref-skill 不直接替代主流程；应由对应 subskill 作为统一入口接入，确保安全门禁、证据路径、候选池和报告口径一致。
-
-> malloc、memcpy、压缩、加密等库替换评估已内置到 `subskills/performance-library-selection/`(含 `references/optimization_kb.json` 知识库与 `scripts/` 检测脚本)，无需独立 ref-skill。
-
 ## 3. 输出
 
 优化完成后，`output/` 目录下获得：
