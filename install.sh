@@ -143,8 +143,48 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
 # Plugins: iterate all plugin skill directories dynamically
 PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
-# claude-only 的 skill：opencode 无对应工具，安装时跳过
-OPENCODE_SKIP="drive-claude-optimize-pipeline batch-drive-optimize-pipeline"
+
+# Read JSON field from a plugin.json with a tiny python fallback.
+# Usage: plugin_matches_platform <plugin_dir>
+plugin_supports_tool() {
+    local plugin_dir="$1"
+    local pjson="$plugin_dir/.claude-plugin/plugin.json"
+    [ -f "$pjson" ] || return 0   # legacy plugin without metadata: install everywhere
+    python3 - "$pjson" "$TOOL" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    platforms = d.get("platforms")
+except Exception:
+    platforms = None
+if not platforms:
+    sys.exit(0)  # no platform declaration: treat as supported everywhere
+sys.exit(0 if sys.argv[2] in platforms else 1)
+PY
+}
+
+# Get skills excluded on the current tool from a plugin.json.
+# Usage: plugin_skill_excludes <plugin_dir>
+plugin_skill_excludes() {
+    local plugin_dir="$1"
+    local pjson="$plugin_dir/.claude-plugin/plugin.json"
+    [ -f "$pjson" ] || return 0
+    python3 - "$pjson" "$TOOL" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    excludes = (d.get("opencode") or {}).get("exclude")
+except Exception:
+    excludes = None
+if not excludes:
+    sys.exit(0)
+# Current tool is not opencode: no per-skill exclusions apply.
+if sys.argv[2] != "opencode":
+    sys.exit(0)
+for name in excludes:
+    print(name)
+PY
+}
 
 # --- No arguments: show error + usage ---
 if [ $# -eq 0 ]; then
@@ -210,16 +250,25 @@ echo ""
 # --- Step 0: Preview ---
 step "[0/4] Checking items to be installed..."
 
-# Collect skills from all plugins (including nested packages)
+# Collect skills from all plugins supported by the target tool (including nested packages)
 SKILL_COUNT=0
 SKILLS_TO_INSTALL=""
 for plugin_dir in "$PLUGINS_DIR"/*/; do
     [ -d "$plugin_dir" ] || continue
+    # Skip plugins that do not declare support for the target tool
+    if ! plugin_supports_tool "$plugin_dir"; then
+        warn "skip plugin: $(basename "$plugin_dir") (not supported on $TOOL)"
+        continue
+    fi
     skill_src="$plugin_dir/skills"
     [ -d "$skill_src" ] || continue
     for skill_dir in "$skill_src"/*/; do
         [ -d "$skill_dir" ] || continue
         name=$(basename "$skill_dir")
+        # Per-plugin exclusions (e.g. opencode-only skips for claude-only skills)
+        if plugin_skill_excludes "$plugin_dir" | grep -qx "$name"; then
+            continue
+        fi
         SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $name"
         SKILL_COUNT=$((SKILL_COUNT + 1))
         # Detect package: skills/<name>/skills/<inner>/SKILL.md
@@ -308,12 +357,14 @@ for name in $CLEAN_LIST; do
     fi
 done
 
-# 基底：拷贝全部 plugins 的 skills（claude 格式）
+# 基底：拷贝目标工具支持的 plugins 的 skills（claude 格式）
 for plugin_dir in "$PLUGINS_DIR"/*/; do
     [ -d "$plugin_dir" ] || continue
+    if ! plugin_supports_tool "$plugin_dir"; then
+        continue
+    fi
     skill_src="$plugin_dir/skills"
     [ -d "$skill_src" ] || continue
-    plugin_name=$(basename "$plugin_dir")
     cp -r "$skill_src/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
 done
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
@@ -322,15 +373,26 @@ if [ "$TOOL" = "opencode" ]; then
     # 应用每个插件的 opencode/ 覆盖层（差异文件覆盖 claude 版本）
     for plugin_dir in "$PLUGINS_DIR"/*/; do
         [ -d "$plugin_dir" ] || continue
+        if ! plugin_supports_tool "$plugin_dir"; then
+            continue
+        fi
         if [ -d "$plugin_dir/opencode" ]; then
             cp -r "$plugin_dir/opencode/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
         fi
     done
     ok "OpenCode overlays applied"
-    # 跳过 claude-only 的 skill（opencode 无对应工具）
-    for skip_name in $OPENCODE_SKIP; do
-        [ -e "$CONFIG_ROOT/skills/$skip_name" ] && rm -rf "$CONFIG_ROOT/skills/$skip_name"
+    # 应用各插件声明的排除列表（拷贝与覆盖层完成后统一删除，防止被重新带回来）
+    for plugin_dir in "$PLUGINS_DIR"/*/; do
+        [ -d "$plugin_dir" ] || continue
+        if ! plugin_supports_tool "$plugin_dir"; then
+            continue
+        fi
+        plugin_skip="$(plugin_skill_excludes "$plugin_dir")"
+        for skip_name in $plugin_skip; do
+            rm -rf "$CONFIG_ROOT/skills/$skip_name" 2>/dev/null || true
+        done
     done
+    ok "OpenCode skill exclusions applied"
 else
     :
 fi
