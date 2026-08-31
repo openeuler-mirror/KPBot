@@ -36,10 +36,22 @@ description: >
 `scripts/` 目录包含 JSON 格式的指令延迟/吞吐数据库：
 
 - `tsv110_full.json` — Kunpeng-0xd01 (TSV110) 指令延迟数据
-- `[REDACTED]_full.json` — Kunpeng-0xd03 指令延迟数据
+- `uarch_b_full.json` — Kunpeng-0xd03 指令延迟数据
 
 ```bash
 # 查询特定指令延迟
-python3 scripts/query.py --arch tsv110 --instruction "FADD"
-python3 scripts/query.py --arch 0xd03 --instruction "FMLA"
+python3 scripts/query_tsv110.py "FADD"
+python3 scripts/query_uarch_b.py "FMLA"
 ```
+
+## 目标平台 ISA 能力
+
+`scripts/isa_capabilities.json` 提供鲲鹏各型号的 SIMD/ISA 能力矩阵（NEON/SVE/SME/DotProd/FP16/BF16/I8MM），供向量化选型使用：
+
+```bash
+# 查看目标平台能力（以能力矩阵为准，不依赖本机）
+detect_isa_features.sh --target 0xd01 --json
+detect_isa_features.sh --target 0xd06 --require sve
+```
+
+0xd01 (TSV110) 仅有 NEON，无 SVE/SME；0xd03/0xd06 支持 SVE/SVE2、DotProd、FP16、BF16、I8MM。SME 在三个型号上均不支持。

@@ -175,7 +175,7 @@ Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 
 - `batch-drive-optimize-pipeline` — 批量自动化评估 _(claude-only)_
 
 **平台知识**
-- `kunpeng_microarch` — Kunpeng-0xd01/0xd03/0xd06 微架构知识库
+- `kunpeng_microarch` — Kunpeng-0xd01/0xd03/0xd06 微架构知识库（含目标平台 ISA 能力矩阵，供向量化选型判断 SVE/SME/DotProd/BF16 等是否可用）
 - `arm-instructions-query` — ARM 指令集查询（1527+ 条）
 
 **质量保障**

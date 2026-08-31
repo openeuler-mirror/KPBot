@@ -1,0 +1,47 @@
+{
+  "_comment": "Kunpeng 目标平台微架构 → SIMD/ISA 能力矩阵。用于 detect_isa_features.sh --target 的目标平台能力判定。数据来源：本 skill 微架构文档（kunpeng920-microarchitecture.md / kunpeng_uarch_b-microarchitecture.md / kunpeng950-microarchitecture.md）。能力键与 detect_isa_features.sh 的 capability 保持一致。",
+  "platforms": {
+    "0xd01": {
+      "aliases": ["tsv110", "kunpeng920", "0xd01"],
+      "arch": "aarch64",
+      "isa": {
+        "neon": true,
+        "sve": false,
+        "sme": false,
+        "dotprod": false,
+        "fp16": false,
+        "bf16": false,
+        "i8mm": false
+      },
+      "notes": "TaiShan v110 (TSV110)：无 SVE/SME、无 dotprod。NEON 为唯一 SIMD 路径。"
+    },
+    "0xd03": {
+      "aliases": ["kunpeng_uarch_b", "kunpeng950", "0xd03"],
+      "arch": "aarch64",
+      "isa": {
+        "neon": true,
+        "sve": true,
+        "sme": false,
+        "dotprod": true,
+        "fp16": true,
+        "bf16": true,
+        "i8mm": true
+      },
+      "notes": "ARMv9 核心，支持 SVE/SVE2、BF16、I8MM、DotProd、FP16；不支持 SME。"
+    },
+    "0xd06": {
+      "aliases": ["kunpeng950p", "0xd06"],
+      "arch": "aarch64",
+      "isa": {
+        "neon": true,
+        "sve": true,
+        "sme": false,
+        "dotprod": true,
+        "fp16": true,
+        "bf16": true,
+        "i8mm": true
+      },
+      "notes": "支持 SVE256/SVE2、BF16、I8MM、DotProd、FP16；不支持 SME。"
+    }
+  }
+}
