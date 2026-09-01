@@ -8,6 +8,7 @@ usage() {
   detect_isa_features.sh --list
   detect_isa_features.sh --json
   detect_isa_features.sh --require <item>
+  detect_isa_features.sh --target <0xd01|0xd03|0xd06> [--json|--require <item>]
 
 支持的能力项:
   neon
@@ -17,6 +18,14 @@ usage() {
   fp16
   bf16
   i8mm
+
+目标平台（--target）:
+  0xd01  Kunpeng-0xd01 (TSV110)
+  0xd03  Kunpeng-0xd03
+  0xd06  Kunpeng-0xd06
+
+未指定 --target 时检测本机能力；指定 --target 时以目标平台微架构能力矩阵为准，
+本机探测仅作为附加参考（source=target-profile）。
 
 退出码:
   0  成功，且支持当前能力项
@@ -28,6 +37,25 @@ EOF
 mode="list"
 format="text"
 required_item=""
+target_platform=""
+capability_json=""
+
+# Path of the Kunpeng microarch ISA capability matrix (relative to this skill).
+ISA_CAPABILITIES_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/kunpeng_microarch/scripts/isa_capabilities.json"
+
+apply_target_profile() {
+  target_platform="$1"
+  local profile
+  profile="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["platforms"].get(sys.argv[2]);
+print(" ".join("1" if p["isa"].get(k) else "0" for k in ["neon","sve","sme","dotprod","fp16","bf16","i8mm"]))' "$ISA_CAPABILITIES_FILE" "$target_platform" 2>/dev/null)"
+  if [[ -z "$profile" ]]; then
+    echo "[错误] 未知目标平台或无法读取能力矩阵: $target_platform（支持: 0xd01/0xd03/0xd06）" >&2
+    exit 1
+  fi
+
+  read -r neon sve sme dotprod fp16 bf16 i8mm <<<"$profile"
+  source_name="target-profile"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,6 +75,15 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       required_item="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+      ;;
+    --target)
+      mode="list"
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "[错误] --target 需要平台型号参数" >&2
+        exit 1
+      fi
+      target_platform="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
       ;;
     -h|--help)
       usage
@@ -184,6 +221,11 @@ if [[ "$source_name" == "unknown" ]]; then
   detect_fallback
 fi
 
+# Target platform profile overrides local detection when --target is given.
+if [[ -n "$target_platform" ]]; then
+  apply_target_profile "$target_platform"
+fi
+
 available=()
 for capability in neon sve sme dotprod fp16 bf16 i8mm; do
   if [[ "${!capability}" -eq 1 ]]; then
@@ -197,7 +239,7 @@ os=$os
 arch=$arch
 source=$source_name
 native_arm64=$(detect_native_arm64 && echo true || echo false)
-available=$(IFS=,; echo "${available[*]}")
+available=$(IFS=,; echo "${available[*]-}")
 neon=$(bool_json "$neon")
 sve=$(bool_json "$sve")
 sme=$(bool_json "$sme")
@@ -215,9 +257,22 @@ print_json() {
   else
     native_arm64_json=false
   fi
-  cat <<EOF
-{"os":"$os","arch":"$arch","source":"$source_name","native_arm64":$native_arm64_json,"available":[$(for item in "${available[@]}"; do printf '"%s",' "$item"; done | sed 's/,$//')],"capabilities":{"neon":$(bool_json "$neon"),"sve":$(bool_json "$sve"),"sme":$(bool_json "$sme"),"dotprod":$(bool_json "$dotprod"),"fp16":$(bool_json "$fp16"),"bf16":$(bool_json "$bf16"),"i8mm":$(bool_json "$i8mm")}}
-EOF
+  local available_json=""
+  local first=1
+  local item
+  for item in ${available[@]+"${available[@]}"}; do
+    if [[ "$first" -eq 1 ]]; then
+      available_json="\"$item\""
+      first=0
+    else
+      available_json="$available_json,\"$item\""
+    fi
+  done
+  printf "{\"os\":\"%s\",\"arch\":\"%s\",\"source\":\"%s\",\"native_arm64\":%s,\"available\":[%s],\"capabilities\":{\"neon\":%s,\"sve\":%s,\"sme\":%s,\"dotprod\":%s,\"fp16\":%s,\"bf16\":%s,\"i8mm\":%s}}\n" \
+    "$os" "$arch" "$source_name" "$native_arm64_json" "$available_json" \
+    "$(bool_json "$neon")" "$(bool_json "$sve")" "$(bool_json "$sme")" \
+    "$(bool_json "$dotprod")" "$(bool_json "$fp16")" "$(bool_json "$bf16")" \
+    "$(bool_json "$i8mm")"
 }
 
 supports_item() {
