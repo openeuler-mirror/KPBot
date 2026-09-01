@@ -19,5 +19,15 @@
     "vectorization",
     "assembly",
     "compiler"
-  ]
+  ],
+  "platforms": [
+    "claude",
+    "opencode"
+  ],
+  "opencode": {
+    "exclude": [
+      "drive-claude-optimize-pipeline",
+      "batch-drive-optimize-pipeline"
+    ]
+  }
 }

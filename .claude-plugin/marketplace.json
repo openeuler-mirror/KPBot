@@ -18,6 +18,7 @@
       "category": "performance",
       "source": "./Plugins/code-optimizer",
       "version": "0.1.0",
+      "platforms": ["claude", "opencode"],
       "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling"]
     },
     {
@@ -29,6 +30,7 @@
       "category": "performance",
       "source": "./Plugins/app-tuner",
       "version": "0.1.0",
+      "platforms": ["claude", "opencode"],
       "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64"]
     },
     {
@@ -40,6 +42,7 @@
       "category": "performance",
       "source": "./Plugins/tf-inference-optimizer",
       "version": "0.1.0",
+      "platforms": ["opencode"],
       "tags": ["tensorflow", "inference", "cpu", "arm", "kunpeng", "aarch64", "graph-optimization", "kernel", "kdnn", "profiling"]
     }
   ]

@@ -69,8 +69,9 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
+   - 平台过滤：安装器按各插件 `plugin.json` 中的 `platforms` 声明决定是否安装该插件（如 `tf-inference-optimizer` 仅安装到 OpenCode）
    - Claude Code：拷贝全部 36 个 skills（claude 格式）
-   - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并跳过 2 个 claude-only skill（共 34 个）
+   - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并按各插件 `opencode.exclude` 跳过 2 个 claude-only skill（共 34 个）
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -84,6 +85,17 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 # Claude Code
 # 启动 claude 后，skills 会根据上下文自动激活
 ```
+
+### 平台过滤回归测试
+
+```bash
+bash tests/test_install_platform.sh
+```
+
+该测试在临时目录分别执行 `install.sh project claude` 和 `install.sh project opencode`，验证：
+
+- Claude 模式不安装 OpenCode-only 的 `tf-inference-optimizer`
+- OpenCode 模式安装全部 7 个 `tf-*` skill，且不安装 `opencode.exclude` 声明的 claude-only skill
 
 ---
 
@@ -133,7 +145,7 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 
 ### 可用技能列表
 
-Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 2 个 claude-only）。
+Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 2 个 claude-only）。此外 `tf-inference-optimizer` 仅安装到 OpenCode（7 个 skill）。
 
 <details>
 <summary>点击展开完整列表</summary>

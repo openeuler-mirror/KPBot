@@ -14,5 +14,9 @@
     "arm",
     "kunpeng",
     "aarch64"
+  ],
+  "platforms": [
+    "claude",
+    "opencode"
   ]
 }
