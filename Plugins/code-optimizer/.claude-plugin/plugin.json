@@ -1,7 +1,7 @@
 {
   "name": "code-optimizer",
   "version": "0.1.0",
-  "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
+  "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel），覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
   "author": {
     "name": "Kunpeng Acceleration Team"
   },
@@ -18,7 +18,12 @@
     "profiling",
     "vectorization",
     "assembly",
-    "compiler"
+    "compiler",
+    "tensorflow",
+    "inference",
+    "graph-optimization",
+    "kernel",
+    "kdnn"
   ],
   "platforms": [
     "claude",

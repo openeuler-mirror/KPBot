@@ -6,7 +6,7 @@
 
 ## 概述
 
-code-optimizer 提供 36 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
+code-optimizer 提供 43 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
 
 - **性能分析**: 热点分析、火焰图解析、Top-down 分析、SPE 分析、调用上下文分析
 - **优化决策**: 意图解析、任务分解、优化策略决策、架构分析
@@ -14,6 +14,7 @@ code-optimizer 提供 36 个专业技能（skills），覆盖从热点分析到�
 - **平台支持**: Kunpeng-0xd01/0xd03/0xd06 微架构深度优化
 - **ARM 指令**: 完整的 ARM 指令集查询（Base/SVE/NEON/SME，共 1527+ 条指令）
 - **质量保障**: 对抗性审查、优化验证、修复代码
+- **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
 
 ## 安装
 
@@ -32,7 +33,7 @@ opencode
 ```
 
 安装后 `init.sh` 会自动：
-1. 将 36 个技能软链接到 `.opencode/skills/`
+1. 将 43 个技能软链接到 `.opencode/skills/`
 2. 生成 `AGENTS.md` 系统提示词
 
 验证安装：
@@ -111,6 +112,17 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `fix-code` | 代码修复 |
 | `evolve-skill` | 技能演化 |
 
+### TF 推理优化 (TF Inference)
+| 技能 | 描述 |
+|------|------|
+| `tf-inference-optimizer` | TF 推理优化统一工作流（主入口） |
+| `tf-env-verify` | 环境验证 |
+| `tf-profile-collector` | 多维 profiling（静态图/trace/perf） |
+| `tf-graph-optimize` | 图优化（remapper/rewriter） |
+| `tf-kernel-optimize` | 自定义 fused kernel |
+| `tf-result-verify` | 结果验证与归因 |
+| `tf-benchmark` | 端到端基准测试 |
+
 ## 使用方式
 
 ### 在 OpenCode 中
@@ -137,6 +149,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | 逐函数交互优化 | "逐函数分析并优化这个模块" | `interactive-optimizer` |
 | 查 ARM 指令 | "查询 vaddq_f32 的用法" | `arm-instructions-query` |
 | SPE 采样分析 | "用 ARM SPE 分析缓存 miss" | `arm-spe-analysis` |
+| TF 推理优化 | "帮我优化这个 TF 模型的推理性能" | `tf-inference-optimizer` |
 
 ### 在 Claude Code 中
 

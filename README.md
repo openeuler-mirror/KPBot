@@ -6,9 +6,8 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline（36 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 推理优化（43 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
-| **[tf-inference-optimizer](Plugins/tf-inference-optimizer/)** | performance | TensorFlow 纯 CPU 推理优化 — 图优化 + 自定义 fused kernel(KDNN) 工作流（7 skills，仅 OpenCode） |
 
 ### 即将推出
 
@@ -69,9 +68,8 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-   - 平台过滤：安装器按各插件 `plugin.json` 中的 `platforms` 声明决定是否安装该插件（如 `tf-inference-optimizer` 仅安装到 OpenCode）
-   - Claude Code：拷贝全部 36 个 skills（claude 格式）
-   - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并按各插件 `opencode.exclude` 跳过 2 个 claude-only skill（共 34 个）
+    - Claude Code：拷贝全部 43 个 skills（claude 格式）
+    - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并按各插件 `opencode.exclude` 跳过 2 个 claude-only skill（共 41 个）
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -94,8 +92,7 @@ bash tests/test_install_platform.sh
 
 该测试在临时目录分别执行 `install.sh project claude` 和 `install.sh project opencode`，验证：
 
-- Claude 模式不安装 OpenCode-only 的 `tf-inference-optimizer`
-- OpenCode 模式安装全部 7 个 `tf-*` skill，且不安装 `opencode.exclude` 声明的 claude-only skill
+- OpenCode 模式不安装 `opencode.exclude` 声明的 claude-only skill
 
 ---
 
@@ -145,7 +142,7 @@ bash tests/test_install_platform.sh
 
 ### 可用技能列表
 
-Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 2 个 claude-only）。此外 `tf-inference-optimizer` 仅安装到 OpenCode（7 个 skill）。
+Claude Code 安装全部 **43 个** skill；OpenCode 安装 **41 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -330,7 +327,7 @@ KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (36 skills)
+│   ├── code-optimizer/            # 代码优化插件 (43 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
@@ -339,10 +336,6 @@ KPBot/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
 │       └── skills/                #   技能源目录
-│   └── tf-inference-optimizer/    # TF 纯 CPU 推理优化插件 (仅 OpenCode)
-│       ├── .claude-plugin/
-│       │   └── plugin.json
-│       └── skills/                #   技能源目录（7 skills，remote-exec 模板 + 案例在各自 skill 的 scripts/、references/ 下）
 ├── install.sh                     # 统一安装脚本（Claude Code + OpenCode）
 ├── README.md
 └── LICENSE

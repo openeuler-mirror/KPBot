@@ -4,8 +4,8 @@
 #
 # Verifies that install.sh:
 #   - claude   mode: installs code-optimizer + app-tuner, keeps claude-only
-#                   skills, and excludes the opencode-only tf-inference-optimizer
-#   - opencode mode: installs all three plugins, skips claude-only skills
+#                   skills
+#   - opencode mode: installs both plugins, skips claude-only skills
 #                   declared via plugin.json `opencode.exclude`
 #
 # Usage:
@@ -47,15 +47,12 @@ check "installs code-optimizer skills"        '[ -d "$CLAUDE_SKILLS/kpbot-code-o
 check "installs app-tuner skills"             '[ -d "$CLAUDE_SKILLS/kpbot-app-tuner" ]'
 check "keeps claude-only drive skill"         '[ -d "$CLAUDE_SKILLS/drive-claude-optimize-pipeline" ]'
 check "keeps claude-only batch skill"         '[ -d "$CLAUDE_SKILLS/batch-drive-optimize-pipeline" ]'
-check "excludes opencode-only tf plugin"      '[ -z "$(find "$CLAUDE_SKILLS" -maxdepth 1 -type d -name "tf-*" -print)" ]'
 
 echo "== opencode mode =="
 run_install opencode
 OPENCODE_SKILLS="$TMPROOT/opencode/.opencode/skills"
 check "installs code-optimizer skills"        '[ -d "$OPENCODE_SKILLS/kpbot-code-optimizer" ]'
 check "installs app-tuner skills"             '[ -d "$OPENCODE_SKILLS/kpbot-app-tuner" ]'
-check "installs tf-inference-optimizer"       '[ -d "$OPENCODE_SKILLS/tf-inference-optimizer" ]'
-check "installs all 7 tf-* skills"            '[ "$(find "$OPENCODE_SKILLS" -maxdepth 1 -type d -name "tf-*" | wc -l | tr -d " ")" -eq 7 ]'
 check "excludes claude-only drive skill"      '[ ! -e "$OPENCODE_SKILLS/drive-claude-optimize-pipeline" ]'
 check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-drive-optimize-pipeline" ]'
 
