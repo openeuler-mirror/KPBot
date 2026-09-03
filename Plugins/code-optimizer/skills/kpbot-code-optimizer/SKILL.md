@@ -17,6 +17,23 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 
 该 banner 只在全流程首次启动时打印一次，后续阶段不再重复。
 
+## 路由判断（场景选择）
+
+Startup Banner 完成后，首先询问用户选择优化场景：
+
+1. **性能库开发**（C/C++ 代码性能优化）→ 继续本流水线（GatherContext → ParseIntent → ...）
+2. **TF 推理优化**（TensorFlow 推理性能优化）→ 调用 tf-inference-optimizer skill 接管
+
+**路由逻辑**：
+```
+若用户选择"TF 推理优化"：
+  1. 检查当前平台：若为 Claude Code，提示"TF 推理优化目前仅在 OpenCode 下可用"并终止
+  2. 调用 Skill({ skill: "tf-inference-optimizer", args: "$ARGUMENTS" })
+  3. 当前 orchestrator 终止，后续流程完全由 tf-inference-optimizer 编排
+若用户选择"性能库开发"：
+  继续进入 GatherContext 阶段
+```
+
 ## 架构
 
 ```
