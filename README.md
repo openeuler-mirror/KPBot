@@ -350,3 +350,7 @@ KPBot/
 5. 提交 PR
 
 ## License
+
+KPBot 采用 [木兰宽松许可证，第2版（Mulan PSL v2）](http://license.coscl.org.cn/MulanPSL2) 开源许可证。
+
+详见 [LICENSE](LICENSE) 文件。
