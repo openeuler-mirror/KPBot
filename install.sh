@@ -82,7 +82,6 @@ safe_install_file() {
 
 
 BRAND="kpbot"
-VERSION="0.1.0"
 
 show_banner() {
   echo ""
@@ -141,6 +140,7 @@ TOOL="claude"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
+VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "unknown")
 # Plugins: iterate all plugin skill directories dynamically
 PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
 

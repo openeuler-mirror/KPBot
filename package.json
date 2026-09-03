@@ -1,0 +1,46 @@
+{
+  "name": "kpbot",
+  "version": "1.0.0",
+  "description": "鲲鹏/ARM 高性能计算工具集 — 面向 Claude Code 和 OpenCode 的性能优化 Agent 插件",
+  "bin": {
+    "kpbot": "bin/kpbot"
+  },
+  "files": [
+    "bin/",
+    "Plugins/",
+    ".claude-plugin/",
+    "install.sh",
+    "docs/STANDARDS.md",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "pack:inspect": "npm pack --dry-run",
+    "prepublishOnly": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MulanPSL-2.0",
+  "homepage": "https://atomgit.com/openeuler/KPBot",
+  "repository": {
+    "type": "git",
+    "url": "https://atomgit.com/openEuler/KPBot.git"
+  },
+  "keywords": [
+    "kunpeng",
+    "arm",
+    "aarch64",
+    "performance",
+    "optimization",
+    "claude-code",
+    "opencode",
+    "skills",
+    "neon",
+    "sve"
+  ],
+  "author": {
+    "name": "Kunpeng Acceleration Team"
+  }
+}

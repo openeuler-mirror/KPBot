@@ -2,12 +2,12 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kpbot-marketplace",
   "description": "KPBot Marketplace — 面向鲲鹏/ARM 生态的高性能计算工具集，涵盖代码优化、系统 profiling、平台迁移等插件",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "owner": {
     "name": "Kunpeng Acceleration Team"
   },
-  "license": "Apache-2.0",
-  "homepage": "https://atomgit.com/openEuler/KPBot",
+  "license": "MulanPSL-2.0",
+  "homepage": "https://atomgit.com/openeuler/KPBot",
   "plugins": [
     {
       "name": "code-optimizer",
@@ -17,7 +17,7 @@
       },
       "category": "performance",
       "source": "./Plugins/code-optimizer",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling", "tensorflow", "inference", "graph-optimization", "kernel", "kdnn"]
     },
@@ -29,7 +29,7 @@
       },
       "category": "performance",
       "source": "./Plugins/app-tuner",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64"]
     }

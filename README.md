@@ -20,6 +20,33 @@
 
 ## 安装
 
+KPBot 提供两种安装方式：npm 包（推荐，正式版本）和 git clone（开发者，获取最新 HEAD）。
+
+### 方式一：npm 安装（推荐）
+
+```bash
+# 全局安装 CLI
+npm install -g kpbot
+
+# 安装 skills 到目标工具
+kpbot install global opencode      # 全局安装到 OpenCode
+kpbot install project claude       # 项目级安装到 Claude Code
+kpbot install project opencode /path/to/project  # 指定路径
+```
+
+安装后验证：
+```bash
+npm ls -g kpbot                    # 确认版本
+opencode debug skill | grep optimize  # 确认 skills 注册（OpenCode）
+```
+
+卸载：
+```bash
+kpbot uninstall global opencode
+```
+
+### 方式二：git clone（开发者，获取最新 HEAD）
+
 KPBot 提供统一的安装脚本 `install.sh`，同时支持 Claude Code 和 OpenCode。
 
 ### 前置条件
