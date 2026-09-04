@@ -1,5 +1,5 @@
 {
-  "name": "kpbot",
+  "name": "@kunpengbot/kpbot",
   "version": "1.0.0",
   "description": "鲲鹏/ARM 高性能计算工具集 — 面向 Claude Code 和 OpenCode 的性能优化 Agent 插件",
   "bin": {
