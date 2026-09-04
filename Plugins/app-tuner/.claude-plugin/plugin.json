@@ -1,12 +1,12 @@
 {
   "name": "app-tuner",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "应用级调优 — 针对具体应用场景的深度性能调优",
   "author": {
     "name": "Kunpeng Acceleration Team"
   },
   "homepage": "https://atomgit.com/openeuler/KPBot/tree/master/Plugins/app-tuner",
-  "license": "Apache-2.0",
+  "license": "MulanPSL-2.0",
   "keywords": [
     "performance",
     "tuning",
