@@ -1,6 +1,6 @@
 ---
 name: cpu-affinity-optimization
-description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 kpbot-app-tuner 的子 skill 使用。
+description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中断分布进行绑核、绑内存与中断亲和性优化，作为 kpbot-app-tuner 的子 skill 使用。也覆盖鲲鹏 CCL/SCCL/Die 的 L3 Cluster 拓扑分析与同域绑核、PTA 热点线程分级，以及 hostbound 训练场景的 NPU 设备-NUMA 对齐与 L3 Cluster 宽松池绑核（禁止下发主线程单核独占）。
 ---
 
 # CPU Affinity Optimization
@@ -17,6 +17,7 @@ description: 在确认瓶颈主要位于 CPU 侧后，基于线程、NUMA 和中
 
 - `references/ascend-vllm-binding.md` — Ascend NPU + vLLM 线程绑核实战案例、线程过提交分析、多卡 TP 绑核
 - `references/database-remote-benchmark.md` — MySQL + 远程 Sysbench 设备-NUMA 对齐实测案例
+- `references/train-hostbound-binding.md` — torchrun 训练 Hostbound 场景 CPU 亲和性实战案例（NPU 设备对齐 + L3 Cluster 宽松池 + 防迁移）
 
 ## Recommended Inputs
 
@@ -182,6 +183,108 @@ done
 - `npu_numa_source`：NUMA node 来源（`/sys` / `npu-smi` / `实测验证`）
 - `hbm_access_cross_socket`：host 进程是否跨 socket 访问 HBM
 - `npu_binding_recommendation`：EngineCore / acl_thread 应绑的 CPU 范围
+
+---
+
+## Cluster / Die / L3 拓扑分析
+
+> 本节在 Device-NUMA 对齐的基础上，进一步细化到 **L3 Cluster（共享缓存域）** 粒度。CPU 亲和若只到 NUMA 节点级，同一 node 内跨 L3 域的线程仍会互相污染缓存、增加跨域访问延迟。本 section 提供 L3/Cluster/Die 拓扑采集与"同域连续绑核"原则。
+
+### 拓扑层级关系（鲲鹏）
+
+内存层次（时延递增）：**L1 → L2 → L3（同域共享）→ 隔壁域 L3 → 本地 DDR → 跨片**。
+
+| 缩写 | 全称 | 说明 |
+|---|---|---|
+| CCL | Core Cluster | 基础计算单元，**每 4 个 CPU Core 共享一组 L2/L3** |
+| SCCL | Super Core Cluster | 即 CPU Die，含 6 个 CCL + 2 个 ICL + 4 个 DDRC 及对应 L3 |
+| DIE | CPU Die | 具备独立 DDRC 的 Die 通常即一个**NUMA 节点** |
+| ICL | IO Cluster | IO 集群，物理相近、共享总线与接口的设备组合 |
+
+**实测注意**：鲲鹏 SMT 开启时（Thread(s) per core=2），`sysfs` 的 `thread_siblings` 会把核心对暴露为连续编号（如 192-193）。因此 `shared_cpu_list` 显示的 L3 共享组大小可能是"4核心×SMT×2"（即 16 逻辑核），而非文档字面的 4 核。**务必以 `sysfs` 实测为准，不要照搬文档的 4 核假设。**
+
+### L3 / Cluster 拓扑采集
+
+```bash
+# 1. 查看缓存层级（确认有几个层级的 cache）
+lscpu -C
+
+# 2. 逐 CPU 查 L3 (index3) 共享域（推荐，最可靠）
+for cpu in <node2_cpu_range>; do
+  l3=$(cat /sys/devices/system/cpu/cpu$cpu/cache/index3/id 2>/dev/null)
+  share=$(cat /sys/devices/system/cpu/cpu$cpu/cache/index3/shared_cpu_list 2>/dev/null)
+  echo "CPU $cpu -> L3(id=$l3) shared: $share"
+done
+
+# 3. 汇总同 L3 共享域的 CPU 分组（同一 L3 id 的 CPU 为一组）
+for cpu in <node2_cpu_range>; do
+  cat /sys/devices/system/cpu/cpu$cpu/cache/index3/id 2>/dev/null
+done | sort | uniq -c
+```
+
+### 同 L3 域绑核原则
+
+- **热点线程组优先绑在同一 L3 Cluster 的连续核**：共享 L3 减少跨域缓存拉取，提升数据局部性（尤其单进程多线程并发下发场景）。
+- **通信线程（hccl/MPI）优先同域**：避免跨片通信延迟。
+- **业务隔离**：无关的高热度业务绑不同 L3 域，避免缓存污染。
+- 决策顺序：**先 NPU 设备对齐（选对 NUMA node）→ 再在 node 内按 L3 Cluster 分组绑核**。
+
+### 实测参考（本机 node2）
+
+```
+L3 id 301: CPU 192-207   L3 id 326: CPU 208-223
+L3 id 351: CPU 224-239   L3 id 376: CPU 240-255
+L3 id 401: CPU 256-271   L3 id 426: CPU 272-287
+```
+（每个 L3 域 16 逻辑核 = 8 物理核 × SMT2；具体以目标机实测为准）
+
+---
+
+## 细粒度线程模型（PTA 热点分级 + 负载类型判定）
+
+> 本节融合 PTA（PyTorch+Ascend）线程热点分级模型与负载类型判定，作为 Thread Scheduling Interference 的补充分析框架。**重要**：固定紧核段绑核仅适用于 vLLM-EngineCore 等**多进程静态线程**场景（本 skill 的 vLLM 推理基线为固定 **8 核段**而非单核，见下方"NPU 推理进程线程角色识别"绑核表）；**hostbound 训练场景必须使用宽松 CPU 池，不得把负责算子下发的热点主线程锁死单核**（否则下发并发被串行化，性能严重回退，见下方警示）。
+
+### 负载类型判定 → 绑核取向
+
+| 负载类型 | 判定依据 | 绑核取向 |
+|---|---|---|
+| CPU 密集型 | 高 CPU 利用率（主线程 >70%）、worker/计算线程占高 | 热点线程可用较紧绑核 + L3 分区 |
+| **hostbound/算子下发** | **NPU Free 高、host task-clock 极低、cswch/s >1000、单 step 数十万算子** | **宽松 CPU 池**（主线程需多核并发下发），**禁止单核独占主线程** |
+| 内存密集型 | 跨 NUMA 访问比例高、pagefault 频发、memory 绑定缺失 | CPU+内存同 NUMA 绑定 |
+| IO/网络密集型 | 网卡流量高、中断亲和差、跨片搬运明显 | 设备/NIC 中断亲和 + 同域绑核 |
+
+**hostbound 警示（本 skill 已在实测中验证）**：当负载被判定为 hostbound（NPU 78% 空闲等 host，host 下发算子 host/device 时间比 >10），**把负责下发的主线程绑到单个逻辑核会使其从多核并发退化为串行，step 时间劣化 2.5 倍以上**。此时应：
+- 进程级 `taskset` 绑到 NPU 所在 node 的**宽松大池**（如 node2 全部 192-287）
+- 或按 L3 Cluster 分组但每组内保留足够核（≥8）
+- 关闭 `numa_balancing`（`echo 0 > /proc/sys/kernel/numa_balancing`）防跨 NUMA 迁移
+
+### PTA 热点线程分级模型
+
+按 CPU 占用与职责对线程分级，用于**有明确标识**的线程。
+
+**命名映射（重要）**：本表 PTA 线程名为模型逻辑命名（camelCase），`ps -L` 实际观察到的是 snake_case/命名空间实名——两者是同一组 CANN/框架线程的不同来源视角，与下文 "vLLM 框架线程"表及 `references/train-hostbound-binding.md` 线程表的对应关系：
+
+| PTA 逻辑名（本表） | vLLM 推理场景实名 | torchrun 训练场景实名 |
+|---|---|---|
+| mainThread | `VLLM::EngineCor`（EngineCore 子进程主线程；APIServer 主进程的 python3.11 不承担算子下发） | `python3.11` 主线程（第一热点） |
+| npuGuardThread | —（推理无反向传播） | 暂无实名记录（反向算子下发热点，需现场溯源） |
+| aclThread | `acl_thread` | `acl_thread` |
+| releaseThread | `release_thread` | `release_thread` |
+| hcclCommWatchdogThread | `hccl` / `Hccl*` | `hccl_watchdog_t` / `Hccl_HeartBeat` |
+| unknownThread | PyTorch 线程池 worker | PyTorch 线程池 worker（**不是** `python3.11` 主线程） |
+
+| 线程名称 | 核心职责 | 热点等级 | 适用绑核 |
+|---|---|---|---|
+| mainThread | PTA 前向算子下发 | 第一热点 | vLLM 绑固定 8 核段（见下方绑核表）；hostbound 训练**多核宽松池** |
+| npuGuardThread | PTA 反向算子下发 | 第二热点 | 固定绑核区间后续核 |
+| aclThread | PTA 二级流水（task queue）调度 | 第三热点 | 固定绑定，与主线程分核 |
+| releaseThread | PTA 资源释放 | 非热点 | 辅助核心池，物理隔离 |
+| hcclCommWatchdogThread | HCCL 通信监控 | 非热点 | 辅助核心池 |
+| unknownThread | Pytorch 线程池数据并行 | 非热点 | 辅助核心池 |
+
+**功能维度补充**：通信线程（hccl/hccl_watchdog_t）高优先级同 NUMA 部署；Profiling 线程（msprof）需多核分配避免争抢；监控线程（watchdog/monitor）绑辅助池。
+
+**未命名线程**：线程名为数字或纯框架名（如 `python3.11`）时**禁止未经溯源直接套用 PTA 分级绑核取向**，需先做线程溯源（识别其热点等级），否则易引发调度异常。
 
 ---
 
