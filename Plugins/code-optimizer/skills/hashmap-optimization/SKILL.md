@@ -1,6 +1,16 @@
 ---
 name: hashmap-optimization
-description: 哈希表性能优化标准流程 — 按"识别调用链路 → 瓶颈建模 → 仿真测试 → 杠杆实施"四阶段优化 hashmap，基于 PMU/top-down/SPE 数据判定访存延迟、计算、带宽三类瓶颈，查杠杆知识库（预取流水线/锁行写意图预取/SoA 布局/SeqLock 无锁读/owner 分片/NEON SIMD/value 压缩）实施并 A/B 交错验证，负结果回滚记账。适用于 cuckoo/swiss/F14/自研哈希表在鲲鹏 AArch64 平台的查询与插入热路径调优。当用户提到： 哈希表优化、hashmap 性能、哈希表查询慢、query 吞吐、探测路径、桶布局、锁争用、rdlock 乒乓、预取调优、prefetch distance、锁延迟、锁 RMW、写意图预取、pstl1keep、top-down 分析哈希表、SeqLock、SoA 布局、packed、value 内联、负载因子、shard/分片优化、cuckoo/swiss/F14 优化、哈希表瓶颈建模等。
+description: >
+  哈希表性能优化标准流程 — 按"识别调用链路 → 瓶颈建模 → 仿真测试 → 杠杆实施"四阶段优化
+  hashmap，基于 PMU/top-down/SPE 数据判定访存延迟、计算、带宽三类瓶颈，查杠杆知识库
+  （预取流水线/锁行写意图预取/SoA 布局/SeqLock 无锁读/owner 分片/NEON SIMD/value 压缩）
+  实施并 A/B 交错验证，负结果回滚记账。适用于 cuckoo/swiss/F14/自研哈希表在鲲鹏
+  AArch64 平台的查询与插入热路径调优。
+  场景入口类触发：哈希表优化、hashmap 性能、哈希表查询慢、query 吞吐、
+  cuckoo/swiss/F14 优化。
+  瓶颈建模类触发：哈希表瓶颈建模、top-down 分析哈希表、探测路径、桶布局、负载因子。
+  杠杆实施类触发：预取调优、prefetch distance、写意图预取、pstl1keep、锁争用、
+  rdlock 乒乓、锁延迟、锁 RMW、SeqLock、SoA 布局、packed、value 内联、shard/分片优化。
 ---
 
 # 哈希表性能优化
