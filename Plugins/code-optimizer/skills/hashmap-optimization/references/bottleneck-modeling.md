@@ -1,7 +1,7 @@
 # 哈希表瓶颈建模与判定（bottleneck-modeling）
 
 > 供 hashmap-optimization skill 在优化前/优化中按需 Read：先判定瓶颈类，再进对应杠杆库。
-> 所有实测数字标注来源；命令与阈值以 kp-perf skill 及其 `references/devkit-tuner.md` 为准。
+> 所有实测数字标注来源；采集命令与阈值以本文件 2.2 命令模板与 2.3 采集要点为准，阈值使用前在本机以 DevKit CLI 实测标定。
 
 来源缩写：
 
@@ -15,7 +15,6 @@
 | CUCKOO_Q | hashmap-0902 仓库根 CUCKOO_QUERY_OPTIMIZATION_REPORT.md |
 | CUCKOO_R2 | hashmap-0902 仓库根 CUCKOO_QUERY_OPTIMIZATION_R2_REPORT.md |
 | CUCKOO_FB | hashmap-0902 仓库根 SKILL_FEEDBACK_AND_CYCLE_TIME_REPORT.md |
-| devkit-tuner | kp-perf skill references/devkit-tuner.md |
 
 ## 一、三类瓶颈总览
 
@@ -27,11 +26,11 @@
 
 锁/同步是独立第四轴（见第五节）：锁开销在 top-down 中散布于 Backend/Core 且与其余 stall 在乱序核上重叠，不归入三分类，必须用 hotspot 函数占比独立检查。
 
-## 二、采集工作流（kp-perf / devkit tuner）
+## 二、采集工作流（DevKit tuner CLI）
 
 ### 2.1 分层采集流程
 
-`top-down -L 1` 定性 → 按结果分流（kp-perf skill 推荐工作流）：
+`top-down -L 1` 定性 → 按结果分流（推荐工作流）：
 
 1. **Backend → Memory Bound** → `top-down -L 3` 看 L1/L2/L3/DRAM 档；部分鲲鹏平台 `-L 3` 无法区分 L3-bound 与 DRAM-bound（以实测确认），需三路三角印证：`miss -m 1`（SPE 源行归因）+ `memory -m 2`（cache/miss 计数）+ `memory -m 3`（DDR 实测带宽）
 2. **Backend → Core Bound** → `top-down -L 2` → `hotspot`
@@ -68,9 +67,9 @@ DEVKIT=<DevKit CLI 安装路径> && cd $DEVKIT
 | 要点 | 内容 | 来源 |
 |---|---|---|
 | attach 真身 PID | `top-down`/`miss` 必须 attach benchmark 真身进程，不是 numactl 父进程——后者 Cycles=0 全零假象 | F14 §6 |
-| per-process 优先 | 多线程用 `-p <PID>` 而非 `-c` 按核：自动隔离共享机他人负载（kernel 项 miss <0.1%）；`memory` 无 per-process 模式，只能 `-c` 按核、结果为系统级 | F14 §6；devkit-tuner |
+| per-process 优先 | 多线程用 `-p <PID>` 而非 `-c` 按核：自动隔离共享机他人负载（kernel 项 miss <0.1%）；`memory` 无 per-process 模式，只能 `-c` 按核、结果为系统级 | F14 §6 |
 | -L 3 归层失效 | 部分鲲鹏平台 `top-down -L 3` 把 L3-bound 与 DRAM-bound 合并报 L3 档；且部分平台 memory PMU 不暴露独立 L3 命中率（仅 L1D/L2D+DDR）——L3 vs DDR 归层只能三角印证 | F14 §5 / §6.3 |
-| SPE 前提 | `dmesg \| grep -i spe` 验证可用性（openEuler 20.xx/22.xx 配置 SPE）；行级 LLC/TLB miss 归因需 root `perf_event_paranoid=-1`，受限时标记降级、以 per-PID top-down 的 L3 Bound 分解为准 | devkit-tuner；CUCKOO §9 |
+| SPE 前提 | `dmesg \| grep -i spe` 验证可用性（openEuler 20.xx/22.xx 配置 SPE）；行级 LLC/TLB miss 归因需 root `perf_event_paranoid=-1`，受限时标记降级、以 per-PID top-down 的 L3 Bound 分解为准 | CUCKOO §9 |
 | 行级注解 | `--dwarf -s` 需 `-g` 构建；`-O3` release 无行表时退化为函数级归因（函数级 + 代码映射仍足够定轴） | SWISS |
 | 系统级污染 | `memory` 系统级采集含共享机他人负载，DDR 数仅作量级旁证 | F14 §6.3 |
 | 测量协议 | 满并发为主判据、1T 仅参考；绑核单 NUMA 偶数物理核（SMT 首线程）；交错 A/B 取多轮中位；访存层级计数（LLC miss）为工作量内禀量，作机制证据 | CUCKOO §10 |
@@ -95,7 +94,7 @@ perf 无现成分级 top-down 事件组，L3/DRAM 归层只能靠事件计数差
 
 ## 三、阈值判读表
 
-（devkit-tuner 核实）
+（阈值为鲲鹏平台经验值，使用前在本机标定）
 
 | 指标 | 阈值 | 含义 | 下一步 |
 |---|---|---|---|
