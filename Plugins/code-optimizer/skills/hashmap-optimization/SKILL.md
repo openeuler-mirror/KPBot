@@ -173,6 +173,7 @@ IPC、Retiring、Backend/Memory/Frontend/BadSpec 一级占比。
 
 - 采集命令细节与阈值：本 skill `references/bottleneck-modeling.md`
 - 杠杆知识库：`references/latency-levers.md` / `references/bandwidth-levers.md` / `references/compute-levers.md`
+- 实测数据来源：作者内部 hashmap-0902 优化仓库的优化报告（references 中 CUCKOO/SWISS/F14 等来源缩写均指向该仓库，未随本仓库分发）
 - 鲲鹏微架构参数（IPC 校准/指令延迟）：`kunpeng-microarch` skill
 - 计算侧静态仿真：`llvm-mca-analysis` skill
 - SPE 专项采集：`arm-spe-analysis` skill
