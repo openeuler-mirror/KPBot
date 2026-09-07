@@ -201,6 +201,10 @@ NPU 推理场景的 PGO profile 采集与 CPU 通用场景有本质区别，必�
    - 安装到运行环境
 ```
 
+### vLLM v1 多进程 PGO 采集（实战要点）
+
+> **上述基础流程在 vLLM v1 多进程模型（APIServer/EngineCore/Worker）下不适用**：CANN 子进程初始化会重建环境变量，导致 `LLVM_PROFILE_FILE` 丢失、Worker 不落盘，需 `sitecustomize.py` 注入 + 全进程一次性 SIGINT 刷盘。完整实战细节（排查命令、PGO2 不再产 profraw、多机一致性坑）见 `references/ak-compiler-playbook.md` § 多机分布式 vLLM PGO 采集与多机一致性实战坑（A+K 场景必读，见"必读 Reference"）。
+
 ### Profile 必须匹配目标负载
 
 实战对比（Ascend910 + vLLM qwen2.5-1.5b）：
@@ -356,6 +360,12 @@ export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0"
 - PyTorch 默认 `_GLIBCXX_USE_CXX11_ABI=0`（历史兼容），torch_npu 必须匹配。
 - 不一致会导致运行时 std::string/std::vector 等 STL 类型的符号不兼容，崩溃或乱码。
 
+> **⚠️ 实战大坑：PyTorch 与 torch_npu 读取 ABI 环境变量的「变量名不同」**（DeepSeek-V4-Flash 实测）：**PyTorch** 读 `GLIBCXX_USE_CXX11_ABI`（**无下划线**，设带下划线变量对 PyTorch 无效，会按默认编成新 ABI=1）；**torch_npu** 的 `setup.py` 读 `_GLIBCXX_USE_CXX11_ABI`（**有下划线**）——同一变量不可能同时控制两者，须**分变量名设置且值统一**，否则出现 `pytorch=新ABI(1)` / `torch_npu=旧ABI(0)` 错配，torch_npu import 直接失败（mangled 符号 `Ss` 对不上）。错配报错解析、分变量设置与 `nm` 核实命令见 `references/ak-compiler-playbook.md`「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 2。
+
+### PyTorch ThinLTO 折叠 COMDAT 弱符号（`new_qtensor`）
+
+PyTorch 用 `-flto=thin` 时，ThinLTO 会把某些 COMDAT 弱符号折叠掉不再导出（最常见 `at::new_qtensor`），导致 torch_npu import 报 undefined symbol（`nm -D libtorch_cpu.so | grep -c new_qtensor` 为 0 = 已折叠）。修复：PyTorch 编译 `LDFLAGS` 加 `-Wl,-u,<mangled 全名>` 强制导出；同源码双机可能出现一个导出、一个不导出（折叠与源码/构建环境相关），必须逐节点 `nm` 核实。完整 mangled 符号与 LDFLAGS 命令见 `references/ak-compiler-playbook.md`「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 3。
+
 ### -D_GNU_SOURCE 解决 PGO 下 CLOCK_MONOTONIC_RAW 未声明
 
 PGO 编译时若报 `CLOCK_MONOTONIC_RAW` 未声明：
@@ -366,6 +376,10 @@ export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GNU_SOURCE"
 
 - `CLOCK_MONOTONIC_RAW` 是 GNU 扩展，需 `_GNU_SOURCE` 才能声明。
 - PGO 插桩路径会引入额外的时钟读取代码，触发此问题。
+
+### torch_npu / PyTorch 重编译环境与多机一致性实战坑
+
+DeepSeek-V4-Flash（P/D 双机）实测 6 类坑：**隔离 venv 构建被跳过**（`build/packages/torch_npu 不存在`，构建日志无 `[n/m] Building` 记录）、**`Python.h` not found**（构建 python 的 include 路径解析错误）、**op-plugin `reinterpret_cast ... casts away qualifiers`**（clang17 严格，改源码加 `const_cast` 最可靠）、**`setuptools.command.bdist_wheel` / `wheel` 模块缺失**（PyTorch 与 torch_npu 的 setup.py 依赖不同）、**`ls dist/*.whl | head -1` 按字母序选错旧包**（须显式 `--force-reinstall --no-deps` 指定新 whl 并用 `direct_url.json` 复核来源）、**容器 `/usr/local` 本地层持久性**（SIGKILL 后 `docker start` 重启同一容器，勿重建）。各坑现象/根因/排查/解法命令见 `references/ak-compiler-playbook.md`「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 4。
 
 ### 编译时间与产物
 
