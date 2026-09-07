@@ -77,7 +77,7 @@ IPC、Retiring、Backend/Memory/Frontend/BadSpec 一级占比。
 - Bad Speculation / Frontend：`hotspot -e br_mis_pred` / hotspot。
 - devkit 不可用 → 降级 perf stat 事件组 + perf record（见降级处理）。
 
-2d. **锁/同步轴独立检查 + 前置定界**：热点中锁/原子操作函数占比；多线程下 rdlock 是否出现缓存行乒乓（占比随线程数放大）。警惕两个形态误判：扩展良好但锁占比高 → 延迟型锁（latency-lock，判读见 bottleneck-modeling.md §五）；扩展劣化且占比随 T 放大 → 争用型锁（contention-lock）。**锁轴前置定界**：hotspot -g 结果一出，若锁/原子函数 IP 占比 >30%，立即执行锁消融实验（临时宏跳锁 + objdump 确认 0 原子指令 + 3 对交错 + manifest 还原校验），再决定是否继续其余 PMU 腿——~15min 成本即可定界最大杠杆并直接改写杠杆排序（cuckoo lock_two 占 75.77% cycles，消融定界 +184.3%，CUCKOO_QUERY_OPTIMIZATION_REPORT.md §3/§4）。锁结论需单变量 A/B 归因（仅切锁实现、其余不变），警惕仅凭占比归因。
+2d. **锁/同步轴独立检查 + 前置定界**：热点中锁/原子操作函数占比；多线程下 rdlock 是否出现缓存行乒乓（占比随线程数放大）。警惕两个形态误判：扩展良好但锁占比高 → 延迟型锁（latency-lock，判读见 bottleneck-modeling.md §五）；扩展劣化且占比随 T 放大 → 争用型锁（contention-lock）。**锁轴前置定界**：hotspot -g 结果一出，若锁/原子函数 IP 占比 >30%，立即执行锁消融实验（临时宏跳锁 + objdump 确认 0 原子指令 + 3 对交错 + manifest 还原校验），再决定是否继续其余 PMU 腿——~15min 成本即可定界最大杠杆并直接改写杠杆排序（cuckoo lock_two 占 75.77% cycles，消融定界 +184.3%）。锁结论需单变量 A/B 归因（仅切锁实现、其余不变），警惕仅凭占比归因。
 
 2e. **并发扩展曲线**（多线程目标时）：1/2/4/…/满并发吞吐表。早饱和 + 锁占比低 + DDR 未打满 → MLP/MSHR 并发度受限而非带宽（判定规则见 bottleneck-modeling.md §六）。
 
@@ -141,8 +141,8 @@ IPC、Retiring、Backend/Memory/Frontend/BadSpec 一级占比。
 - **读数筛选**：cv% 超阈值的轮次剔除；时间相邻的样本配对比较
 - **口径一致**：value 尺寸/hit rate/batch 长度/表规模逐项核对 benchmark 配置回显；分 bin/permute 等预处理开销是否计入 QPS 必须前后一致并声明
 - **单一入口**：所有对比经同一 run 脚本/命令产生
-- **基线二进制管理**：复用历史 A 腿二进制前先验参数面（`strings $BIN | grep <参数名>`——旧二进制可能不含新 CLI 参数）；协议若要求 pilot/decision 产物，其绑定二进制 sha256，换二进制必须重跑 pilot 腿；基线构建用干净 worktree 而非脏工作区（CUCKOO_R2 §6）
-- **调试环路三件套**（每个新表/新项目一次性投入，调试期提速 ~6×）：① 热路径运行时开关（class-static atomic，每 batch 一次 relaxed load，如 `--find-prefetch on/off/alternate`）；② 并行 preload（chunk 认领式并发建表，24 线程实测 19× 加速且 QPS 等价）；③ 同进程 alternate 交替 A/B（每 pass 翻转臂位，6 measured = 3 对，消除跨进程漂移）。调试期杠杆验证从 ~35min/轮 压到 ~6min/轮。**正式交付结论仍需独立二进制跨进程交错 A/B**——防运行时开关分支本身改变代码生成（hashmap-0902 仓库 `SKILL_FEEDBACK_AND_CYCLE_TIME_REPORT.md` §C）
+- **基线二进制管理**：复用历史 A 腿二进制前先验参数面（`strings $BIN | grep <参数名>`——旧二进制可能不含新 CLI 参数）；协议若要求 pilot/decision 产物，其绑定二进制 sha256，换二进制必须重跑 pilot 腿；基线构建用干净 worktree 而非脏工作区
+- **调试环路三件套**（每个新表/新项目一次性投入，调试期提速 ~6×）：① 热路径运行时开关（class-static atomic，每 batch 一次 relaxed load，如 `--find-prefetch on/off/alternate`）；② 并行 preload（chunk 认领式并发建表，24 线程实测 19× 加速且 QPS 等价）；③ 同进程 alternate 交替 A/B（每 pass 翻转臂位，6 measured = 3 对，消除跨进程漂移）。调试期杠杆验证从 ~35min/轮 压到 ~6min/轮。**正式交付结论仍需独立二进制跨进程交错 A/B**——防运行时开关分支本身改变代码生成。
 
 ## 降级处理
 
@@ -183,7 +183,6 @@ IPC、Retiring、Backend/Memory/Frontend/BadSpec 一级占比。
 
 - 采集命令细节与阈值：本 skill `references/bottleneck-modeling.md`
 - 杠杆知识库：`references/latency-levers.md` / `references/bandwidth-levers.md` / `references/compute-levers.md`
-- 实测数据来源：作者内部 hashmap-0902 优化仓库的优化报告（references 中 CUCKOO/SWISS/F14 等来源缩写均指向该仓库，未随本仓库分发）
 - 鲲鹏微架构参数（IPC 校准/指令延迟）：`kunpeng-microarch` skill
 - 计算侧静态仿真：`llvm-mca-analysis` skill
 - SPE 专项采集：`arm-spe-analysis` skill
