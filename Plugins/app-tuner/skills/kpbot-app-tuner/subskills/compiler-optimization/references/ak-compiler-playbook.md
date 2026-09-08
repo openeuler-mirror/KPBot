@@ -423,3 +423,84 @@ llvm-profdata show /tmp/profile/default.profdata --counts | wc -l  # functions >
 1. profile 采集运行必须使用与正式压测相同的 model、tokenizer、prompt 分布、batch size
 2. profile 来源必须记录在 `performance_signal_summary.json` 的编译信号字段中
 3. 源码变化超过约 10% 或热点路径明显变化时重新采集
+
+## 多机分布式 vLLM PGO 采集与多机一致性实战坑（DeepSeek-V4-Flash / DSV4 用例）
+
+> 来源：Ascend910 + 鲲鹏双机（prefill P 节点 + decode D 节点）、DeepSeek-V4-Flash、vLLM + Mooncake KV、毕昇 PGO2 全链编译实战。
+
+### 1. vLLM v1 多进程：profile 采集不到 Worker 热点
+
+vLLM v1 的 `APIServer`、`EngineCore`、`Worker` 多进程 + vLLM-Ascend/CANN 在子进程初始化时重建/扩展环境（实测 Worker 环境由 ~84 变量扩到 ~2500），导致 `LLVM_PROFILE_FILE` 只在最外层 APIServer、**EngineCore/Worker 全部丢失**。真正承担算子计算的 Worker 退出时不落盘或落到 CWD 默认 `default.profraw` 互相覆盖。
+
+**排查**（逐进程确认 + 按 pid 后缀统计 profraw）：
+```bash
+for p in $(pgrep -f "VLLM::Worker_"); do tr '\0' '\n' < /proc/$p/environ | grep '^LLVM_PROFILE_FILE='; done
+# 若 Worker 有 __LLVM_PROFILE_RT_INIT_ONCE 但无 LLVM_PROFILE_FILE → 环境被重建丢弃
+ls <profile_dir>/*.profraw | sed 's/.*_\([0-9]*\)\.profraw/\1/' | sort | uniq -c   # 无 Worker pid → 没刷盘
+```
+
+**修复 A：`sitecustomize.py` 注入**（env 继承在 fork 层就被破坏，改 `run_dp_template.sh` 无效——实测 APIServer 有该变量、EngineCore/Worker 无）。
+```python
+# /usr/local/python3.11.10/lib/python3.11/site-packages/sitecustomize.py
+import os
+os.environ["LLVM_PROFILE_FILE"] = "/path/profile_o3_default/default_%m_%p.profraw"
+```
+- 必须 `%p`（pid）保证每进程独立文件；只用 `%m` 会让 fork 同源进程写同一文件互相覆盖。
+- sitecustomize 在解释器启动即执行，早于 CANN/vLLM 线程，能穿透环境重建。
+
+**修复 B：优雅关闭必须对「全部」vllm 进程一次性 SIGINT**：
+- LLVM profile 运行时靠 **atexit** 刷盘；Python 默认对 **SIGTERM 不执行 atexit**（SIGTERM 关 Worker 不刷盘）。
+- 只对 `vllm serve` 发 SIGINT → vLLM 优雅关闭会**级联强杀**（不经 atexit）Worker → 数据再丢。
+- 正确：先建全部 pid 列表一次性 `kill -INT`，Worker/EngineCore/APIServer 各自独立走 atexit 刷盘：
+```bash
+ps -eo pid,args | grep -E "vllm serve|VLLM::EngineCore|VLLM::Worker_" | grep -v grep | awk '{print $1}' > pids.txt
+while read p; do kill -INT $p; done < pids.txt    # 勿顺序 pkill
+```
+
+**注意**：PGO2 二进制是 `-fprofile-use`（非插桩），服务跑 PGO2 后**不再产 profraw**；采集必须用 instrumented 的 PGO1 二进制。
+
+### 2. PyTorch 与 torch_npu 的 ABI 环境变量「变量名不同」
+
+- **PyTorch** 读取 `GLIBCXX_USE_CXX11_ABI`（**无下划线**）；设 `_GLIBCXX_USE_CXX11_ABI=0`（有下划线）对 PyTorch **无效**，PyTorch 按默认编成**新 ABI=1**。
+- **torch_npu** 的 `setup.py` 读取 `_GLIBCXX_USE_CXX11_ABI`（**有下划线**）。
+- 同一带下划线变量不可能同时控制两者 → 出现 `pytorch=新ABI(1)` / `torch_npu=旧ABI(0)` 错配。
+
+**错配报错**：
+```
+ImportError: libtorch_npu.so: undefined symbol: _ZN5torch7LibraryC1ENS0_4KindESsSt8optionalIN3c1011DispatchKeyEEPKcj
+```
+mangled 里 `Ss` = 旧 ABI `std::string` → 与 libtorch_cpu.so 新 ABI 的 `NSt7__cxx1112basic_string...` 对不上。
+
+**正确做法（按目标分变量名、值统一）**：
+```bash
+export GLIBCXX_USE_CXX11_ABI=0    # PyTorch（无下划线）
+export _GLIBCXX_USE_CXX11_ABI=0   # torch_npu（有下划线），值与 PyTorch 一致
+```
+核实：
+```bash
+python3 -c "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
+nm -D .../torch_npu/lib/libtorch_npu.so | grep " U _ZN5torch7LibraryC1.*Ss"    # 旧ABI符号（应为0）
+nm -D .../torch_npu/lib/libtorch_npu.so | grep -c NSt7__cxx1112basic_string    # 新ABI符号数
+nm -D .../torch/lib/libtorch_cpu.so | grep "LibraryC1.*NSt7__cxx11"            # PyTorch 侧新/旧ABI符号
+```
+
+### 3. PyTorch ThinLTO 折叠 COMDAT 弱符号 `new_qtensor`
+
+现象：torch_npu import 报 `undefined symbol: at::new_qtensor(...)`。
+检查：`nm -D .../torch/lib/libtorch_cpu.so | grep -c new_qtensor` 为 0 = 被折叠。
+修复（PyTorch LDFLAGS 加 `-Wl,-u` 强制导出）：
+```bash
+NEWQT="_ZN2at11new_qtensorEN3c108ArrayRefIlEERKNS0_13TensorOptionsENS0_13intrusive_ptrINS_9QuantizerENS0_6detail34intrusive_target_default_null_typeIS7_EEEE"
+export LDFLAGS="-O3 -Wl,-mllvm,-instcombine-reorder-sum-of-reduce-add=false -fuse-ld=lld -Wl,-u,$NEWQT"
+```
+> 同源码双机可能「一个导出、一个不导出」——必须逐节点 `nm` 核实，不能一台 pass 就认为另一台 OK。
+
+### 4. 重编译环境与多机一致性
+
+- **`build/packages/torch_npu 不存在`**：往往是 CMake 原生编译(`build_clib/build_ext`)被跳过（`has_ext_modules()/has_c_libraries()` 判定失败），构建日志只有几十行无 `[n/m] Building`（成功机 6 万行 + 上千 Building 记录；排查：`grep -cE "\[[0-9]+/[0-9]+\] Building" 构建日志`，成功机上千、失败机 0）。解法：用与成功机相同的**隔离 venv 完整构建**（`include-system-site-packages=false` 的 venv，含 torch+setuptools+wheel+ninja+pyyaml，走 `ci/build.sh --enable_lto --enable_pgo=2`）；不要用 `prefix=/usr` 损坏的 python 建的 venv。
+- **`Python.h not found`**（torchair `npu_wrapper.cpp` 或 PyTorch `torch/csrc/stub.c`）：构建 python 的 include 解析错误 → 补 `CPLUS_INCLUDE_PATH`/`C_INCLUDE_PATH` 指向真实 `.../include/python3.11`。
+- **op-plugin `reinterpret_cast ... casts away qualifiers`**（clang17 严格）：源码加 `const_cast<void*>`；op-plugin 是独立 CMake 子项目，`-Wno-cast-qual` 未必传导，改源码最可靠。
+- **`No module named 'setuptools.command.bdist_wheel'`**（PyTorch setup.py 用）vs `No module named 'wheel'`（torch_npu setup.py 用）：ensurepip 自带 setuptools 常缺 bdist_wheel。按成功机版本装：`pip install "setuptools==68.2.2" "wheel==0.41.3"`，逐机验证 `import setuptools.command.bdist_wheel`。
+- **`ls dist/*.whl | head -1` 选错旧包**：会按字母序选旧的（如 git449b176 而非新编 gitunknown）。必须显式 `pip install --force-reinstall --no-deps <指定新 whl>`，并用 `torch-*.dist-info/direct_url.json` 复核实际来源。
+- **容器持久性**：`/home`、`/data` 常是 host bind-mount（构建产物/profile 安全）；`/usr/local`（系统 python、sitecustomize、已装 whl）是容器本地层。容器被 `SIGKILL`(ExitCode=137) 后用 `docker start <cid>` 重启同一容器保留本地层，不要重建；`docker inspect -f '{{.State.Status}} {{.State.OOMKilled}} {{.State.FinishedAt}}' <cid>` 判断退出原因。
+
