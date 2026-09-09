@@ -6,7 +6,7 @@
 
 ## 概述
 
-code-optimizer 提供 43 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
+code-optimizer 提供 50 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
 
 - **性能分析**: 热点分析、火焰图解析、Top-down 分析、SPE 分析、调用上下文分析
 - **优化决策**: 意图解析、任务分解、优化策略决策、架构分析
@@ -33,7 +33,7 @@ opencode
 ```
 
 安装后 `init.sh` 会自动：
-1. 将 43 个技能软链接到 `.opencode/skills/`
+1. 将 50 个技能软链接到 `.opencode/skills/`
 2. 生成 `AGENTS.md` 系统提示词
 
 验证安装：
@@ -83,6 +83,19 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `precision-transform` | 精度变换优化 |
 | `special-case-optimization` | 特例优化 |
 | `compiler-flag-tuning` | 编译选项调优 |
+
+### 推理框架优化 (Inference)
+| 技能 | 描述 |
+|------|------|
+| [`ort-kdnn-attention-opt`](skills/ort-kdnn-attention-opt/SKILL.md) | ONNX Runtime + KDNN 的 Attention/MHA 子图识别、融合内核、框架接入、正确性验证与 A/B 基准 |
+| [`tf-inference-opt`](skills/tf-inference-opt/SKILL.md) | TensorFlow CPU 推理与 Serving 的图优化、算子库接入、线程调度、序列化与构建调优 |
+
+两个技能共用 canonical 内容，Claude Code 和 OpenCode 均通过 `install.sh` 自动安装。
+ORT 技能的模型扫描脚本依赖 Python `onnx` 包；A/B 脚本需已有的 ORT/KDNN benchmark 和模型，
+从目标 ORT 源码根目录运行，或用 `REPO_ROOT` 指定该目录。技能内的源码相对路径指向待优化项目；
+TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运行依赖。
+
+这两个技能可独立调用，尚未接入通用代码优化流水线内部的策略路由。
 
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |
