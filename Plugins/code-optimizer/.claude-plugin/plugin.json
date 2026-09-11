@@ -30,12 +30,14 @@
     "vector-search",
     "batch-search",
     "openblas",
-    "pytorch",
-    "unique",
-    "embedding",
-    "openmp",
-    "custom-op",
-    "torch-compile"
+    "brgemm",
+    "matmul",
+    "gemm",
+    "packb",
+    "prepack",
+    "blocked-layout",
+    "onnxruntime",
+    "onednn"
   ],
   "platforms": [
     "claude",

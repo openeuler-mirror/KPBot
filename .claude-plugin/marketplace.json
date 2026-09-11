@@ -19,7 +19,7 @@
       "source": "./Plugins/code-optimizer",
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
-      "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling", "tensorflow", "inference", "graph-optimization", "kernel", "kdnn", "vsag", "rabitq", "hgraph", "vector-search", "batch-search", "openblas", "pytorch", "unique", "embedding", "openmp", "custom-op", "torch-compile"]
+      "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling", "tensorflow", "inference", "graph-optimization", "kernel", "kdnn", "vsag", "rabitq", "hgraph", "vector-search", "batch-search", "openblas", "brgemm", "matmul", "gemm", "packb", "prepack", "blocked-layout", "onnxruntime", "onednn"]
     },
     {
       "name": "app-tuner",
