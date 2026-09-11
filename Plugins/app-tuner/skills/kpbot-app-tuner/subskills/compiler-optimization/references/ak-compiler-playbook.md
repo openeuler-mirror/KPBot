@@ -1,11 +1,40 @@
 # A+K 场景编译优化经验库
 
-> A+K = Ascend + Kunpeng（昇腾 NPU + 鲲鹏 CPU 组合场景）。基于昇腾官方文档（Ascend Extension for PyTorch 6.0.0 - 编译优化章节）整理。
-> 平台限定: openEuler（22.03/24.03）
+> A+K = Ascend + Kunpeng（昇腾 NPU + 鲲鹏 CPU 组合场景）。基于昇腾官方文档（Ascend Extension for PyTorch 6.0.0 - 编译优化章节）与全链编译实战经验整理。
+> 平台限定: openEuler（22.03/24.03），aarch64 架构。
 >
 > **⚠️ 本节经验值用于对照判断，不是可直接输出给用户的答案。**
 > 必须先采集当前编译环境后，将当前状态与本节推荐配置对照，才能生成 candidate_actions。
 > A+K 场景识别逻辑见 `compiler-optimization/SKILL.md` 分析流程步骤 2。
+
+## 适用场景与预期收益
+
+### 场景定义
+
+A+K 场景指在鲲鹏 aarch64 CPU 主机上搭配昇腾 NPU 运行 PyTorch 负载的组合。典型特征：
+
+- 主机：鲲鹏 aarch64 架构，多核，多 NUMA node
+- 加速器：昇腾 NPU，配套 CANN
+- 软件栈：PyTorch + torch_npu + torchair inductor 扩展
+- 负载：训练或推理（本文重点覆盖训练场景全链编译）
+
+触发条件：profiling 显示 Computing/Stage 偏低、Free/Stage 偏高、大量算子 device_total=0（纯 host 开销）时，瓶颈在 host 侧 CPU 计算，用毕昇编译器对 Python/PyTorch/torch_npu 做全链 LTO+PGO 优化收益最大。
+
+注意：hostbound 结论必须用同卡稳态 TPS 证实，不能仅凭单步 profiling 下结论。
+
+### 实证收益（对照参考）
+
+以下为全链毕昇编译（ThinLTO+PGO）在训练场景的同卡 A/B 实证结果，作为收益量级对照参考，非可直接输出的答案。测试负载为 DeepSeek V4 1B 训练，同卡对比，稳态 TPS 取 steps 21-30 均值。
+
+| 指标 | GCC baseline | BiSheng ThinLTO+PGO | 提升 |
+|------|-------------|----------------------|------|
+| 稳态 TPS | 620.2 | 824.6 | +33.0% |
+| MFU | 1.10% | 1.45% | +31.8% |
+| step 耗时 | ~0.92s | ~0.70s | -24% |
+
+### 收益归因
+
+PGO 是全链优化的必要条件，不是可选项。纯 ThinLTO 无 PGO 会负收益，因为 LTO 内联决策缺乏运行时 profile 引导，反而劣化热路径。PGO profile 必须由目标负载（训练负载）生成，不能跨场景复用。
 
 ## 编译顺序
 
@@ -21,6 +50,12 @@ Python → PyTorch → torch_npu
 
 允许从中间开始：如果前置依赖已满足（毕昇版），可直接编译后续组件。
 
+每步前置验证清单（前一步未通过不进下一步）：
+
+1. `readelf -p .comment <artifact> | grep -i bisheng` 命中（确认是毕昇编译的，不是系统 GCC）
+2. import 无 segfault（确认 dlopen 正常，链接段修复生效）
+3. 功能 smoke test 通过（Python import ssl/hashlib 等；PyTorch matmul；torch_npu device_count）
+
 ## 前置环境检查与准备
 
 ### 源码获取
@@ -35,7 +70,7 @@ Agent 询问用户是否有源码路径：
 - 用户无源码 → Agent 采集当前安装版本，自动下载对应版本源码：
   - Python: `python3 --version` → 从 https://www.python.org/downloads/source/ 下载对应版本
   - PyTorch: `python3 -c "import torch; print(torch.__version__)"` → `git clone -b v<版本号> https://github.com/pytorch/pytorch.git`
-  - torch_npu: `python3 -c "import torch_npu; print(torch_npu.__version__)"` → `git clone -b v<版本号> https://gitee.com/ascend/pytorch.git`
+  - torch_npu: `python3 -c "import torch_npu; print(torch_npu.__version__)"` → `git clone -b v<版本号> https://github.com/ascend/pytorch.git`
 
 > **版本一致性要求**：编译优化版的版本号必须与当前安装版本一致，只优化编译选项，不升级版本。
 
@@ -64,17 +99,23 @@ Agent 询问用户是否有源码路径：
 
 ### 毕昇编译器检测与安装
 
-Agent 检测毕昇编译器是否已安装：
+Agent 检测毕昇编译器是否已安装。**没有固定安装路径要求，按真实环境探测**（先看 PATH 中是否有毕昄，再按用户提供的实际安装位置检查；不要先 source 任何 env，避免裸 shell 误判）：
 
 ```
-bash -c 'clang --version 2>/dev/null | grep -i "bisheng"'
+which clang && clang --version | grep -i "bisheng"     # PATH 中直接可用的毕昇
+ls <bisheng-prefix>/bin/clang 2>/dev/null && <bisheng-prefix>/bin/clang --version | grep -i "bisheng"   # 按真实安装位置检查
+ls <bisheng-prefix>/lib/libomp.so   # LTO 构建的 PyTorch/torch_npu 运行时需要
 ```
+
+> `<bisheng-prefix>` 为毕昇编译器的**实际安装前缀**，由真实环境决定（预装位置、用户指定路径或下文安装步骤选择的位置均可），不预设固定值。
 
 - 输出包含 "BiSheng" → 已安装，确认环境变量配置（PATH、LD_LIBRARY_PATH、CC、CXX）
 - 输出为空 → 未安装（注意：系统自带的 LLVM clang 不是毕昇编译器），Agent 询问用户是否安装：
   > 未检测到毕昇编译器（系统自带的 clang 不是毕昇编译器）。是否需要安装？
   > 是 → Agent 执行以下安装步骤
   > 否 → 编译优化无法进行，标注限制原因
+
+**关键陷阱：毕昇可能已装但未接入 PATH。** 若 `/etc/profile.d/bisheng.sh` 缺失，裸 shell 里 `clang --version` 会返回系统自带 LLVM（如 openEuler 17.0.x）而非毕昇，`clang --version | grep -i bisheng` 检测会失败，尽管毕昇确实存在于其真实安装位置。检测时按真实安装路径直接检查 `<bisheng-prefix>/bin/clang`，或先 source profile.d 再检测。若 profile.d 不存在，创建它（见下文安装步骤）。
 
 **安装步骤**：
 
@@ -83,30 +124,37 @@ bash -c 'clang --version 2>/dev/null | grep -i "bisheng"'
    wget -O /tmp/BiShengCompiler.tar.gz "https://kunpeng-repo.obs.cn-north-4.myhuaweicloud.com/BiSheng%20Enterprise/BiSheng%20Enterprise%20206.0.0/BiShengCompiler-5.2.0-aarch64-linux.tar.gz"
    ```
 
-2. 解压安装到 `/opt/bisheng`：
+2. 解压安装到 `<bisheng-prefix>`（按真实环境选择安装位置）：
    ```
-   mkdir -p /opt/bisheng
-   tar -xzf /tmp/BiShengCompiler.tar.gz -C /opt/bisheng --strip-components=1
+   mkdir -p <bisheng-prefix>
+   tar -xzf /tmp/BiShengCompiler.tar.gz -C <bisheng-prefix> --strip-components=1
    ```
 
 3. 配置环境变量（写入 `/etc/profile.d/bisheng.sh` 持久化）：
    ```
    cat > /etc/profile.d/bisheng.sh << 'EOF'
-   export PATH=/opt/bisheng/bin:$PATH
-   export LD_LIBRARY_PATH=/opt/bisheng/lib:$LD_LIBRARY_PATH
+   export PATH=<bisheng-prefix>/bin:$PATH
+   export LD_LIBRARY_PATH=<bisheng-prefix>/lib:$LD_LIBRARY_PATH
    export CC=clang
    export CXX=clang++
    EOF
    source /etc/profile.d/bisheng.sh
    ```
 
-4. 验证安装：
+4. 验证安装（全部通过才继续）：
    ```
-   clang --version | grep -i bisheng
+   which clang          # 应返回 <bisheng-prefix>/bin/clang
+   which clang++        # 应返回 <bisheng-prefix>/bin/clang++
+   clang --version | grep -i bisheng    # 非空
+   $CC --version        # 返回毕昇
+   $CXX --version       # 返回毕昇
+   clang -E -x c /dev/null              # 编译通过
+   ls <bisheng-prefix>/lib/libomp.so    # 存在
    ```
-   输出包含 "BiSheng" 表示安装成功。
 
-**容器内安装**：通过 `docker exec` 在容器内执行上述步骤，安装路径同 `/opt/bisheng`。
+**容器内安装**：通过 `docker exec` 在容器内执行上述步骤，安装位置按容器内真实环境选择。如毕昇为容器内预装，不要重新下载（既浪费带宽又有覆盖风险），仅需补全 profile.d 并 source。
+
+**所有组件编译前必须设置** `export CC=clang`、`export CXX=clang++`（缺省时 cmake 探测用系统 g++，拒绝毕昇专属标志如 `-fGNU-compatibility`）。运行环境的 libomp 依赖见"运行时环境配置"章。
 
 ### 容器环境处理
 
@@ -121,7 +169,7 @@ bash -c 'docker ps --format "{{.ID}} {{.Names}} {{.Image}}" 2>/dev/null || crict
 - 未发现容器 → 检查 Agent 自身是否在容器内（`cat /proc/1/cgroup`），如果是则直接在当前环境编译
 
 **容器内编译流程**：
-- Agent 通过 `docker exec` 或 `kubectl exec` 进入容器执行编译命令
+- Agent 通过 `docker exec` 或 `kubectl exec` 进入容器执行编译命令，或通过 SSH 连接目标主机后再进入容器
 - 编译前检查容器内环境：
   - 毕昇编译器是否在容器内安装（容器内独立安装，与物理机隔离）
   - 编译依赖是否齐全（容器内可能缺少 dnf/yum 或开发包）
@@ -134,29 +182,68 @@ bash -c 'docker ps --format "{{.ID}} {{.Names}} {{.Image}}" 2>/dev/null || crict
 **编译后安装**：
 - 编译生成的 whl 包在容器内安装（`pip install *.whl --force-reinstall --no-deps`）
 - 运行环境也需要毕昇编译器运行时（libomp.so），确保容器内 LD_LIBRARY_PATH 配置正确
-- ThinLTO 编译的 PyTorch 运行时需要 LD_PRELOAD `libsleef.so` + `libtlfloat.so`（SVE 矢量化数学库），否则 SVE 符号未定义
+- ThinLTO 编译的 PyTorch 运行时需 LD_PRELOAD SVE 运行库（见"运行时环境配置"章）
 
-**运行时环境变量配置**：
+**运行时环境变量**：PATH/LD_LIBRARY_PATH 与 SVE LD_PRELOAD 的完整配置，见"运行时环境配置"章。
+
+### 编译范围决策
+
+Agent 采集环境后，向用户展示编译范围选项并等待选择。推荐全链 LTO+PGO（Python + PyTorch + torch_npu 全部毕昇编译），收益最大。
+
+- **全链 vs 局部**：选全链。**vLLM-Ascend、PyTorch、torch_npu 三者 ABI 必须一致**（统一 `_GLIBCXX_USE_CXX11_ABI=1`），局部编译收益有限
+- **LTO vs LTO+PGO**：选 LTO+PGO。PGO 是必要条件（纯 ThinLTO 无 PGO 负收益，见"收益归因"）
+- **ThinLTO vs full LTO**：选 ThinLTO（`-flto=thin`）。full LTO 链接 libtorch_cpu 需 1-2h、60-100GB 内存，仅诊断用
+
+## ABI 双栈共存
+
+> 双 ABI 栈并存是全链编译最大的坑。inductor 源码里的 ABI 硬编码是全链唯一真源，处理不当会让 GCC 生产栈的 wrapper.so 全部编译成错误 ABI，清 JIT 缓存无效。
+
+### 双栈 ABI 事实
+
+- **ABI 一致性硬要求：vLLM-Ascend、PyTorch、torch_npu 三者必须一致，统一 `ABI=1`（NEW/cxx11）**
+- 生产 GCC torch/torch_npu = NEW ABI（cxx11 符号）
+- 毕昇全链同用 NEW ABI=1（与官方生态一致）
+- 两套栈各自自洽，不混用。混用则 dlopen 报 undefined symbol
+
+### inductor 源码 ABI 硬编码是全链唯一真源
+
+`torchair/experimental/_inductor_npu_ext/python/inductor_npu_ext/compiler/_compiler.py` 里有 ABI 硬编码：
+
+```python
+ABI = "-D_GLIBCXX_USE_CXX11_ABI=0"    # 错误硬编码：与全链 ABI=1 不符
 ```
-export PATH=/opt/bisheng/bin:$PATH
-export LD_LIBRARY_PATH=/opt/bisheng/lib:$LD_LIBRARY_PATH
-# ThinLTO 编译的 PyTorch 额外需要:
-export LD_PRELOAD="<torch_lib_dir>/libsleef.so:<torch_lib_dir>/libtlfloat.so"
+
+当它存在时，ABI=1 栈（含 GCC 生产栈与毕昇栈）编译的 wrapper.so 全用错误 ABI，dlopen 失败报：
+
+```
+undefined symbol: _ZN6at_npu6native9OpCommand10RunOpApiV2ERKSs...
 ```
 
-## 毕昇编译器环境配置
+清 JIT 缓存无效。曾出现反复清缓存不解决的情况，直到定位到这个硬编码才是真根因，不要把 ABI 硬编码问题误判为 kernel 缓存污染。
 
-**安装毕昇编译器**：参考昇腾官方文档安装毕昇编译器并配置环境变量。
+`revert_ascir.py` 同样有 ABI 硬编码（`.bak` 为 `=1`，被改成 `=0`），需同步处理。
 
-**环境变量配置**（所有组件编译前必须设置）：
+### 正确做法
+
+**方案 A（推荐，适合生产长期共存）：ABI 改为运行时读 env**
+
+`_compiler.py` 改为运行时读 `_GLIBCXX_USE_CXX11_ABI` 环境变量（不设时默认 1）：
+
+```python
+import os
+ABI = "-D_GLIBCXX_USE_CXX11_ABI=" + os.environ.get("_GLIBCXX_USE_CXX11_ABI", "1")
 ```
-export CC=clang
-export CXX=clang++
-```
 
-**运行环境要求**：
-- 运行环境需安装毕昇编译器包，设置 LD_LIBRARY_PATH 找到 libomp.so
-- 如报 `Error while loading shared libraries: libomp.so`，检查毕昇编译器安装和 LD_LIBRARY_PATH
+毕昇栈与生产栈 activate 均 `_GLIBCXX_USE_CXX11_ABI=1`（或不设走默认）。`revert_ascir.py` 同理修改。修改前必须备份（`.bak_abifix_<timestamp>`）。
+
+**方案 B（适合 A/B 对比验证）：每组跑前 sed swap + 清缓存**
+
+用既有 A/B harness（`<ab-harness-script>`），在每次运行前：
+
+1. sed 替换 `_compiler.py` 的 ABI 值为 `=1`（与全链一致）
+2. 清 JIT 缓存（`/tmp/.npu_kernels_root` 等）
+3. 清 pycache
+4. 固定同卡
 
 ## 编译优化-Python
 
@@ -174,7 +261,7 @@ export CXX=clang++
 ```
 export CC=clang
 export CXX=clang++
-./configure --prefix=<安装目录> --with-lto --enable-optimizations --enable-shared
+./configure --prefix=<isolation-prefix>/python311-lto --with-lto --enable-optimizations --enable-shared
 make -j
 make install
 ```
@@ -183,6 +270,27 @@ make install
 - `--with-lto`：开启 LTO
 - `--enable-optimizations`：开启 PGO（Python 3.6+ 支持 LTO 与 PGO，跑 Python 自带 benchmark，耗时可能超过 30 分钟）
 - `--enable-shared`：生成共享库 libpython3.x.so（PyTorch 编译时需要链接，必须开启）
+
+**rpath 坑（必须修复）**：`--enable-shared` 不自动设置 rpath。隔离前缀的 python3 二进制在无 LD_LIBRARY_PATH 时会加载系统 libpython（版本不匹配），产生危险 ABI 不匹配。编译安装后用 patchelf 修复 rpath：
+
+```
+# 备份后修复
+cp <isolation-prefix>/python311-lto/bin/python3.<minor> \
+   <isolation-prefix>/python311-lto/bin/python3.<minor>.orig
+patchelf --set-rpath '$ORIGIN/../lib' \
+   <isolation-prefix>/python311-lto/bin/python3.<minor>
+```
+
+修复后 python3 自解析到 prefix/lib/libpython3.x.so，无需 LD_LIBRARY_PATH。
+
+**PGO 期间的正常现象（非缺陷）**：PROFILE_TASK 运行时个别测试报 "env changed" 或少量失败属 PGO 插桩构建的正常产物，profile-opt 内部用 `|| true` 继续，llvm-profdata merge 成功即可。mpdecimal 不在 openEuler repo 不是问题（Python 3.11 自带 libmpdec）。libuuid-devel 由 util-linux-devel 提供。
+
+**后续步骤的环境前置**：
+```
+source /etc/profile.d/bisheng.sh
+export PATH=<isolation-prefix>/python311-lto/bin:$PATH
+export LD_LIBRARY_PATH=<isolation-prefix>/python311-lto/lib:$LD_LIBRARY_PATH
+```
 
 **注意事项**：
 - 编译完的 Python 可迁移到其他机器，注意 glibc 版本（低→高可以，高→低不行）
@@ -267,7 +375,7 @@ pip3 install /path/to/*.whl --force-reinstall --no-deps
 - 需修改 CMakeLists.txt 屏蔽 `-Werror=cast-function-type` 告警
 - 运行模型前必须设置 `OMP_PROC_BIND=false`（影响性能）
 - 运行环境需安装毕昇编译器包，设置 LD_LIBRARY_PATH 找到 libomp.so
-- 如报 c++11 abi 不一致，设置 `export _GLIBCXX_USE_CXX11_ABI=0` 重新编译
+- 如报 c++11 abi 不一致，统一全链 ABI（vLLM-Ascend/PyTorch/torch_npu 三者，默认 `=1`）后重新编译
 - `USE_TENSORPIPE=0`：clang 19 与 libnop 模板不兼容，必须禁用
 - `USE_KINETO=0`：kineto 子模块可能缺失，禁用后需创建占位头文件 `ActivityType.h`（包含完整枚举值）
 - ONNX FetchContent 下载 protobuf 卡住时，设置 `FETCHCONTENT_SOURCE_DIR_PROTOBUF` 指向本地源码
@@ -330,7 +438,7 @@ pip3 install /path/to/*.whl --force-reinstall --no-deps
 **注意事项**：
 - PyTorch 和 torch_npu 的 profile 生成路径可相同，可合并使用同一个 profdata
 - 运行环境需安装毕昇编译器包，设置 LD_LIBRARY_PATH 找到 libomp.so
-- 如报 c++11 abi 不一致，检查 PyTorch 和 torch_npu 的 DGLIBCXX_USE_CXX11_ABI 值是否一致
+- 如报 c++11 abi 不一致，检查 vLLM-Ascend、PyTorch 和 torch_npu 三者的 DGLIBCXX_USE_CXX11_ABI 值是否一致（默认 1）
 - clang 19 严格 const 检查可能导致 `op_api_common.cpp` 的 `reinterpret_cast` 报错，需用 `const_cast<void*>` 修复
 
 ## 优化手段选择决策
@@ -362,20 +470,21 @@ Agent 采集当前编译环境后，向用户展示可用优化手段：
   - torch_npu: not_compiled | compiling | compiled | failed | skipped
 
 规则:
+  - bisheng编译顺序按python、pytorch、torch_npu（前一个未完成不能开始下一个）
   - 用户指定单组件时，只编译该组件，其他标记 skipped
-  - 用户指定全编时，按顺序编译，前一个未完成不能开始下一个
   - Python PGO 为内置 PGO（跑 Python 自带 benchmark），不需要用户跑模型，但耗时较长（可能超过 30 分钟）
   - PyTorch/torch_npu PGO 为工作负载 PGO，需要: 插桩编译 → 安装 → 跑模型 → 采集 profile → 二次编译 → 安装
 ```
 
 > **编译前预检**: 完整编译三个组件需要 10-15GB 磁盘空间，编译前检查可用空间是否充足。
+> 以上流程可用 `scripts/ak_compile_optimize.sh` 自动化（`--component python|pytorch|torch_npu --optimize lto|lto_pgo --stage profile_gen|profile_use|compile`，支持 `--container`/`--source-dir`/`--install-dir`/`--check-only`/`--verify`/`--dry-run`）。
 
 ## 验证方法
 
 每个组件编译完成后验证：
-- **Python**: `./bin/python3 --version` 确认版本；`readelf -p .comment ./bin/python3 | grep -i bisheng` 确认使用毕昇编译器编译
-- **PyTorch**: `pip3 install *.whl` 后 `python3 -c "import torch; print(torch.__version__)"`；`readelf -p .comment $(python3 -c "import torch,os; print(os.path.join(os.path.dirname(torch.__file__), '_C'))")*.so | grep -i bisheng` 确认毕昇编译；检查 libomp.so 链接（`ldd $(which python3) | grep omp`）
-- **torch_npu**: `pip install *.whl` 后 `python3 -c "import torch_npu; print(torch_npu.__version__)"`；`readelf -p .comment $(python3 -c "import torch_npu,os; print(os.path.dirname(torch_npu.__file__))")/*.so | grep -i bisheng` 确认毕昇编译；检查 libomp.so 链接
+- **Python**: `<isolation-prefix>/python311-lto/bin/python3 --version` 确认版本；`readelf -p .comment ./bin/python3 | grep -i bisheng` 确认使用毕昇编译器编译；`import ssl, hashlib, decimal, sqlite3, ctypes, lzma, bz2, zlib, _uuid, readline` 全部通过；`ldd` 确认 libpython 自解析到 prefix/lib（rpath 修复生效）
+- **PyTorch**: `pip3 install *.whl` 后 `python3 -c "import torch; print(torch.__version__)"`（从干净 CWD 运行）；`readelf -p .comment $(python3 -c "import torch,os; print(os.path.join(os.path.dirname(torch.__file__), '_C'))")*.so | grep -i bisheng` 确认毕昇编译；检查 libomp.so 链接（`ldd $(which python3) | grep omp`）；matmul smoke test 通过
+- **torch_npu**: `pip install *.whl` 后 `python3 -c "import torch_npu; print(torch_npu.npu.is_available(), torch_npu.npu.device_count())"`；`readelf -p .comment $(python3 -c "import torch_npu,os; print(os.path.dirname(torch_npu.__file__))")/*.so | grep -i bisheng` 确认毕昇编译；检查 libomp.so 链接
 - **功能 smoke test**: 跑一个最小的训练/推理脚本确认无报错
 - **性能对比**: 用相同模型和压测命令对比编译前后的训练/推理性能
 
@@ -393,7 +502,7 @@ Agent 采集当前编译环境后，向用户展示可用优化手段：
 
 | profile 来源 | 收益 | 拒绝原因 |
 |---|---|---|
-| `w00664011` 通用 profile（非目标负载生成） | -1.33% | profile 非目标负载生成，不匹配 |
+| 通用 profile（非目标负载生成） | -1.33% | profile 非目标负载生成，不匹配 |
 | 纯 ThinLTO torch_npu 无 PGO | -22.4% | 无 PGO 的 LTO 可能破坏热点布局 |
 
 ### 生成模板
@@ -459,22 +568,22 @@ while read p; do kill -INT $p; done < pids.txt    # 勿顺序 pkill
 
 **注意**：PGO2 二进制是 `-fprofile-use`（非插桩），服务跑 PGO2 后**不再产 profraw**；采集必须用 instrumented 的 PGO1 二进制。
 
-### 2. PyTorch 与 torch_npu 的 ABI 环境变量「变量名不同」
+### 2. PyTorch 与 torch_npu 的 ABI 环境变量「变量名不同」（vLLM-Ascend/PyTorch/torch_npu 三者须一致，统一 ABI=1）
 
-- **PyTorch** 读取 `GLIBCXX_USE_CXX11_ABI`（**无下划线**）；设 `_GLIBCXX_USE_CXX11_ABI=0`（有下划线）对 PyTorch **无效**，PyTorch 按默认编成**新 ABI=1**。
+- **PyTorch** 读取 `GLIBCXX_USE_CXX11_ABI`（**无下划线**）；设带下划线变量对 PyTorch **无效**，PyTorch 按默认编成**新 ABI=1**。
 - **torch_npu** 的 `setup.py` 读取 `_GLIBCXX_USE_CXX11_ABI`（**有下划线**）。
-- 同一带下划线变量不可能同时控制两者 → 出现 `pytorch=新ABI(1)` / `torch_npu=旧ABI(0)` 错配。
+- 同一带下划线变量不可能同时控制两者 → 显式设置时须分变量名设置且值统一（=1），否则两者 ABI 错配。
 
 **错配报错**：
 ```
 ImportError: libtorch_npu.so: undefined symbol: _ZN5torch7LibraryC1ENS0_4KindESsSt8optionalIN3c1011DispatchKeyEEPKcj
 ```
-mangled 里 `Ss` = 旧 ABI `std::string` → 与 libtorch_cpu.so 新 ABI 的 `NSt7__cxx1112basic_string...` 对不上。
+mangled 里 `Ss` 表示报错组件是旧 ABI 构建 → 与 ABI=1 组件的 `NSt7__cxx1112basic_string...` 对不上，据此定位错配组件并重编为 ABI=1。
 
-**正确做法（按目标分变量名、值统一）**：
+**正确做法（按目标分变量名、值统一为 1）**：
 ```bash
-export GLIBCXX_USE_CXX11_ABI=0    # PyTorch（无下划线）
-export _GLIBCXX_USE_CXX11_ABI=0   # torch_npu（有下划线），值与 PyTorch 一致
+export GLIBCXX_USE_CXX11_ABI=1    # PyTorch（无下划线），默认 NEW ABI=1
+export _GLIBCXX_USE_CXX11_ABI=1   # torch_npu（有下划线），值与 PyTorch 一致；vLLM-Ascend 侧同样须为 1
 ```
 核实：
 ```bash
@@ -497,10 +606,8 @@ export LDFLAGS="-O3 -Wl,-mllvm,-instcombine-reorder-sum-of-reduce-add=false -fus
 
 ### 4. 重编译环境与多机一致性
 
-- **`build/packages/torch_npu 不存在`**：往往是 CMake 原生编译(`build_clib/build_ext`)被跳过（`has_ext_modules()/has_c_libraries()` 判定失败），构建日志只有几十行无 `[n/m] Building`（成功机 6 万行 + 上千 Building 记录；排查：`grep -cE "\[[0-9]+/[0-9]+\] Building" 构建日志`，成功机上千、失败机 0）。解法：用与成功机相同的**隔离 venv 完整构建**（`include-system-site-packages=false` 的 venv，含 torch+setuptools+wheel+ninja+pyyaml，走 `ci/build.sh --enable_lto --enable_pgo=2`）；不要用 `prefix=/usr` 损坏的 python 建的 venv。
-- **`Python.h not found`**（torchair `npu_wrapper.cpp` 或 PyTorch `torch/csrc/stub.c`）：构建 python 的 include 解析错误 → 补 `CPLUS_INCLUDE_PATH`/`C_INCLUDE_PATH` 指向真实 `.../include/python3.11`。
+- **`build/packages/torch_npu 不存在`**：往往是 CMake 原生编译(`build_clib/build_ext`)被跳过（`has_ext_modules()/has_c_libraries()` 判定失败），构建日志只有几十行无 `[n/m] Building`（成功机 6 万行 + 上千 Building 记录；排查：`grep -cE "\[[0-9]+/[0-9]+\] Building" 构建日志`，成功机上千、失败机 0）。解法：用与成功机相同的**隔离 venv 完整构建**（`include-system-site-packages=false` 的 venv，含 torch+setuptools+wheel+ninja+pyyaml）；`ci/build.sh` 的 `build` vs `build_py` 命令行差异与预创建包目录解法见 `torchnpu-wheel-packaging-playbook.md`。
 - **op-plugin `reinterpret_cast ... casts away qualifiers`**（clang17 严格）：源码加 `const_cast<void*>`；op-plugin 是独立 CMake 子项目，`-Wno-cast-qual` 未必传导，改源码最可靠。
-- **`No module named 'setuptools.command.bdist_wheel'`**（PyTorch setup.py 用）vs `No module named 'wheel'`（torch_npu setup.py 用）：ensurepip 自带 setuptools 常缺 bdist_wheel。按成功机版本装：`pip install "setuptools==68.2.2" "wheel==0.41.3"`，逐机验证 `import setuptools.command.bdist_wheel`。
-- **`ls dist/*.whl | head -1` 选错旧包**：会按字母序选旧的（如 git449b176 而非新编 gitunknown）。必须显式 `pip install --force-reinstall --no-deps <指定新 whl>`，并用 `torch-*.dist-info/direct_url.json` 复核实际来源。
-- **容器持久性**：`/home`、`/data` 常是 host bind-mount（构建产物/profile 安全）；`/usr/local`（系统 python、sitecustomize、已装 whl）是容器本地层。容器被 `SIGKILL`(ExitCode=137) 后用 `docker start <cid>` 重启同一容器保留本地层，不要重建；`docker inspect -f '{{.State.Status}} {{.State.OOMKilled}} {{.State.FinishedAt}}' <cid>` 判断退出原因。
+- **`No module named 'setuptools.command.bdist_wheel'`**（PyTorch setup.py 用）vs `No module named 'wheel'`**（torch_npu setup.py 用）**：ensurepip 自带 setuptools 常缺 bdist_wheel。按成功机版本装：`pip install "setuptools==68.2.2" "wheel==0.41.3"`，逐机验证 `import setuptools.command.bdist_wheel`。
+- **构建环境与多机一致性**：`Python.h` include 路径（`CPLUS_INCLUDE_PATH`/`C_INCLUDE_PATH`）、whl 内容指纹校验、安装选包（勿 `ls dist/*.whl | head -1`）、容器 `/usr/local` 本地层持久性——详见 `torchnpu-wheel-packaging-playbook.md`（多机一致性 / 验证清单章节）。
 

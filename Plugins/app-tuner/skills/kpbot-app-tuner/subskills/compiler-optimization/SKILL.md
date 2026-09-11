@@ -27,6 +27,8 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 - MySQL ARM64/LSE/CRC 专项、补丁和二进制等价门控：`references/mysql-arm64-playbook.md`
 - MySQL LSE outline atomics patch：见 `references/mysql-arm64-playbook.md` 中的补丁内容与应用方法
 - A+K 场景毕昇编译器自动化编译脚本（BiSheng Python/PyTorch/torch_npu LTO+PGO 编译流程）：`scripts/ak_compile_optimize.sh`
+- A+K 训练场景全链编译实战（源码获取/毕昇安装/容器处理/ABI 双栈共存/rpath）：`references/ak-compiler-playbook.md`
+- torch_npu Wheel 打包（setuptools≥84 绕过 build_py 导致 csrc/include/third_party 缺失）、BdistWheelBuild 修复、增量 vs 全新构建、whl 内容指纹与多机一致性：`references/torchnpu-wheel-packaging-playbook.md`
 - 公共依赖、perf/PMU 权限和降级：`../../references/prerequisites.md`
 
 > **⚠️ 涉及 A+K 场景（昇腾 NPU + 鲲鹏 CPU）的 Python/PyTorch/torch_npu 编译优化时，必须加载 `references/ak-compiler-playbook.md`。**
@@ -323,18 +325,7 @@ torch_npu 是 PyTorch → CANN 的适配层，把 PyTorch op 调用转译为 CAN
 
 ### ThinLTO + PGO 编译参数
 
-```
-export CC=clang
-export CXX=clang++
-cd torch_npu
-git clean -dfx
-
-# PGO1（插桩）
-bash ci/build.sh --python=<Python版本> --enable_lto --enable_pgo=1 --disable_rpc
-
-# PGO2（使用 profile）
-bash ci/build.sh --python=<Python版本> --enable_lto --enable_pgo=2 --disable_rpc
-```
+编译命令与 PGO1/PGO2 两阶段完整流程见 `references/ak-compiler-playbook.md`「编译优化-torch_npu」（`bash ci/build.sh --python=<版本> --enable_lto --enable_pgo=1/2`，`--python` 从 `python3 --version` 采集不硬编码）。
 
 参数说明：
 
@@ -343,24 +334,25 @@ bash ci/build.sh --python=<Python版本> --enable_lto --enable_pgo=2 --disable_r
 | `--enable_lto` | 开启 ThinLTO | 必须（NPU 推理场景） |
 | `--enable_pgo=1` | 一次编译（插桩） | PGO 流程必须 |
 | `--enable_pgo=2` | 二次编译（使用 profile） | PGO 流程必须 |
-| `--disable_rpc` | 禁用 RPC（训练场景才需要） | 推理场景必须，减少代码体积 |
 
 ### ABI 兼容性（关键）
 
-`-D_GLIBCXX_USE_CXX11_ABI=0` 必须与 PyTorch 一致：
+**vLLM-Ascend、PyTorch、torch_npu 三者 ABI 必须一致，默认配置 `ABI=1`（NEW/cxx11）**：
 
 ```
-# 检查 PyTorch 的 ABI 值
+# 检查 PyTorch 的 ABI 值（默认 1）
 python3 -c "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
 
-# torch_npu 编译时必须设置相同值
-export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0"
+# torch_npu 编译时必须设置相同值（默认 1）
+export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1"
 ```
 
-- PyTorch 默认 `_GLIBCXX_USE_CXX11_ABI=0`（历史兼容），torch_npu 必须匹配。
-- 不一致会导致运行时 std::string/std::vector 等 STL 类型的符号不兼容，崩溃或乱码。
+- 默认配置 `ABI=1`（NEW/cxx11，与新版 PyTorch 官方构建及 vLLM-Ascend 生态一致），全链统一，不可混用。
+- 三者任一不符都会导致运行时 std::string/std::vector 等 STL 类型的符号不兼容，崩溃或乱码。
 
-> **⚠️ 实战大坑：PyTorch 与 torch_npu 读取 ABI 环境变量的「变量名不同」**（DeepSeek-V4-Flash 实测）：**PyTorch** 读 `GLIBCXX_USE_CXX11_ABI`（**无下划线**，设带下划线变量对 PyTorch 无效，会按默认编成新 ABI=1）；**torch_npu** 的 `setup.py` 读 `_GLIBCXX_USE_CXX11_ABI`（**有下划线**）——同一变量不可能同时控制两者，须**分变量名设置且值统一**，否则出现 `pytorch=新ABI(1)` / `torch_npu=旧ABI(0)` 错配，torch_npu import 直接失败（mangled 符号 `Ss` 对不上）。错配报错解析、分变量设置与 `nm` 核实命令见 `references/ak-compiler-playbook.md`「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 2。
+> **⚠️ ABI 实战大坑（详见 `references/ak-compiler-playbook.md`）**：
+> 1. **变量名不同**（DeepSeek-V4-Flash 实测）：**PyTorch** 读 `GLIBCXX_USE_CXX11_ABI`（**无下划线**，设带下划线变量对 PyTorch 无效，按默认编成新 ABI=1）；**torch_npu** 的 `setup.py` 读 `_GLIBCXX_USE_CXX11_ABI`（**有下划线**）——显式设置须**分变量名且值统一（=1）**，否则两者 ABI 错配、torch_npu import 直接失败。错配报错解析与 `nm` 核实命令见「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 2。
+> 2. **双栈共存**（训练场景）：毕昇栈与生产 GCC 栈并存时（ABI 统一为 1），inductor `_compiler.py` 的 ABI 硬编码是全链唯一真源，处理不当会让 ABI=1 栈的 wrapper.so 全部编译成错误 ABI，**清 JIT 缓存无效**（勿误判为 kernel 缓存污染）。ABI 判断以 `_GLIBCXX_USE_CXX11_ABI` 环境变量为准（`torch.compiled_with_cxx11_abi()` 历史版本有误报，勿作唯一判据）。修复方案见「ABI 双栈共存」章节。
 
 ### PyTorch ThinLTO 折叠 COMDAT 弱符号（`new_qtensor`）
 
@@ -407,7 +399,7 @@ Python (LTO+PGO) → PyTorch (ThinLTO+PGO) → torch_npu (ThinLTO+PGO) → vLLM-
 
 | 一致项 | 要求 | 检查方法 |
 |-------|------|---------|
-| ABI | `-D_GLIBCXX_USE_CXX11_ABI=0` 全链统一 | `readelf -p .comment <so> \| grep bisheng` + `python3 -c "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"` |
+| ABI | vLLM-Ascend/PyTorch/torch_npu 三者统一，默认 `GLIBCXX_USE_CXX11_ABI=1` | `readelf -p .comment <so> \| grep bisheng` + `python3 -c "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"` |
 | 编译器 | 全链用同一毕昇编译器 | `readelf -p .comment <so> \| grep -i bisheng` |
 | Profile | PGO profile 在最终组合上采集 | profdata 覆盖所有目标组件的函数 |
 
@@ -424,13 +416,9 @@ Python (LTO+PGO) → PyTorch (ThinLTO+PGO) → torch_npu (ThinLTO+PGO) → vLLM-
 
 ### 实战收益（Ascend910 + vLLM qwen2.5-1.5b）
 
-| 阶段 | 编译动作 | tok/s | 累计收益 |
-|-----|---------|-------|---------|
-| 基线 | gcc 预编译版 | 64.63 | 0% |
-| C6 | BiSheng Python LTO+PGO | 110.92 | +71.6% |
-| C7 | PyTorch ThinLTO+PGO + torch_npu ThinLTO+PGO + BiSheng tcmalloc | 125.71 | +94.5% |
+收益数据（基线 gcc 64.63 → C6 BiSheng Python LTO+PGO 110.92（+71.6%）→ C7 PyTorch+torch_npu ThinLTO+PGO+BiSheng tcmalloc 125.71（+94.5%））见上文「实战收益说明」表。要点：
 
 - Python LTO+PGO 单步收益最大（+71.6%），因为 Python 解释器是 vLLM 调度路径的核心。
-- PyTorch + torch_npu ThinLTO+PGO 增量 +13.3%（从 110.92 到 125.71），主要来自算子 dispatch 路径优化。
+- PyTorch + torch_npu ThinLTO+PGO 增量 +13.3%，主要来自算子 dispatch 路径优化。
 - BiSheng tcmalloc 替换 glibc malloc 是 C7 增量的一部分，需与编译优化同轮验证。
-- 全链 PGO 是必须的：纯 ThinLTO（无 PGO）torch_npu 反而退步 22.4%。
+- 全链 PGO 是必须的：纯 ThinLTO（无 PGO）torch_npu 反而退步 22.4%（详见上文「PGO 是必须的，不能省」）。
