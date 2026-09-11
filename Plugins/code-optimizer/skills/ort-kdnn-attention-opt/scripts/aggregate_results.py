@@ -42,6 +42,7 @@ def main():
     args = ap.parse_args()
 
     runs = {}
+    invalid = False
     for path in sorted(glob.glob(os.path.join(args.logdir, f"{args.label}_*_r*.log"))):
         base = os.path.basename(path)
         m = re.match(rf"{re.escape(args.label)}_(\w+)_r(\d+)\.log", base)
@@ -49,13 +50,19 @@ def main():
             continue
         cfg, rnd = m.group(1), int(m.group(2))
         lat = parse_latency(path)
-        if lat is not None:
+        if lat is not None and math.isfinite(lat) and lat > 0:
             runs.setdefault(cfg, {})[rnd] = (lat, path)
+        else:
+            print(f"invalid latency log: {path}")
+            invalid = True
 
     if not runs:
         print("no parseable logs found")
         return 1
 
+    paired = (set(runs) == {"A", "B"} and set(runs["A"]) == set(runs["B"]))
+    invalid = invalid or not paired
+    print("Metric: per-run mean latency; CV across round means (sample stdev).")
     print(f"| config | rounds | mean_ms | median_ms | min_ms | max_ms | CV% | verdict |")
     print(f"|---|---|---|---|---|---|---|---|")
     results = {}
@@ -64,10 +71,10 @@ def main():
         mean = statistics.mean(vals)
         med = statistics.median(vals)
         cv = (statistics.stdev(vals) / mean * 100) if len(vals) > 1 else 0.0
-        ok = cv <= args.cv_threshold
+        ok = len(vals) >= 3 and cv <= args.cv_threshold and not invalid
         results[cfg] = (med, cv, ok)
         print(f"| {cfg} | {len(vals)} | {mean:.3f} | {med:.3f} | {min(vals):.3f} | "
-              f"{max(vals):.3f} | {cv:.2f} | {'OK' if ok else 'CV>5% INVALID'} |")
+              f"{max(vals):.3f} | {cv:.2f} | {'OK' if ok else 'INVALID (rounds/pairing/logs/CV)'} |")
 
     if len(results) == 2:
         (ca, (ma, cva, oka)), (cb, (mb, cvb, okb)) = list(results.items())[:2]
@@ -76,8 +83,8 @@ def main():
             print(f"\n{ca} -> {cb}: {(ma - mb):.3f} ms, {speedup:+.2f}% "
                   f"({'B 更快' if speedup > 0 else 'A 更快/无差异'})")
         else:
-            print("\n(有配置 CV 超标,不给出结论 — 重跑)")
-    return 0
+            print("\n(日志、配对轮次或 CV 不满足协议，不给出结论 — 检查后重跑)")
+    return 0 if all(v[2] for v in results.values()) else 1
 
 
 if __name__ == "__main__":

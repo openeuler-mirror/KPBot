@@ -1,5 +1,7 @@
 # ORT 集成:新增一个 KDNN 融合算子的完整 checklist
 
+> 路径与 API 是定制分支的定位示例。先用当前源码确认注册入口、构建文件收集方式和 pass 顺序；KDNN 安装目录由 KDNN_INSTALL_DIR 配置，不要求源码内固定布局。
+
 Phase 3 使用。假设代码库里已有 KDNN 域接入(或按 §0 从零接入);行号以本仓库 kdnn_* 系列实现为参照。
 
 ## 0. 一次性:引入 KDNN 域/库(若库里还没有任何 com.kdnn 算子)
@@ -11,7 +13,7 @@ Phase 3 使用。假设代码库里已有 KDNN 域接入(或按 §0 从零接入
 | `cmake/onnxruntime_providers_cpu.cmake` | `target_include_directories(onnxruntime_providers PRIVATE ${KDNN_INCLUDE_DIR})` |
 | `onnxruntime/core/session/environment.cc` | `domainToVersionRangeInstance.AddDomainToVersion(kKdnnDomain, 1, 1);`(在 call_once 块内,缺了图解析报 unknown domain) |
 
-KDNN 必须先构建并 install 到 `onnxruntime/core/kdnn/out`(见 benchmarking.md §1)。
+使用 KDNN 时先构建并 install 到配置的 `KDNN_INSTALL_DIR`(见 benchmarking.md §1)。
 
 ## 1. 每个新算子:7 处改动
 
@@ -39,10 +41,12 @@ KDNN 必须先构建并 install 到 `onnxruntime/core/kdnn/out`(见 benchmarking
    create-info 列表 `BuildKernelCreateInfo<...>`。
 7. **测试** `onnxruntime/test/optimizer/kdnn_<name>_fusion_test.cc`(写法见 validation.md)。
 
-**CMake:每个新算子零改动**——optimizer/graph/providers_cpu/test 四处源码树全是 glob 收集,新文件
+**案例 CMake:每个新算子零改动（当前分支须核实）**——optimizer/graph/providers_cpu/test 四处源码树全是 glob 收集,新文件
 自动编译。例外:minimal build 的 optimizer 清单是显式的。
 
-## 2. 环境变量门控(三级时机,全部 raw getenv 不做 static 缓存)
+## 2. 配置门控（以下为历史 env 方案）
+
+优先使用当前集成支持的 session 配置，并在初始化时解析为不可变选项。env 是进程级状态：只在独立进程启动前设置，或用于确认无并发的测试；不要并发 setenv/getenv 来隔离 session。以下逐 Compute 读取模式仅作旧实现说明，不建议在线切换。
 
 | 改什么 | 读取时机 | 模式 |
 |---|---|---|
@@ -66,8 +70,7 @@ session 初始化**前**设置。
 - **插入节点必须继承 EP**:`SetExecutionProviderType(ep)`(被替换节点的),否则可能被派去别的
   provider。
 - **mask 重建**:从原始常量和 pre-Tile keepmask 重建干净 `[B|1,1,Sk]` bias,与未融合图 bit-identical。
-- **scale 省略规则**:图上 scale==1/sqrt(d)(相对误差<1e-6)时省略属性、kernel 运行时推导——两边
-  用同一个公式,保证 bit-exact。
+- **scale 省略规则**:保留原图实际 scale；无 scale 节点时传 1。近似相等不保证 bit-exact，不自动省略属性。
 - 完成后打 INFO 日志(fused N blocks)当冒烟信号。
 
 ## 4. kernel Compute() 防御性校验顺序(逐层递进,全部 ORT_RETURN_IF_NOT)

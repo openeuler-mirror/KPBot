@@ -1,5 +1,6 @@
 # 三方优化对比与并发域分析：skill agent / noskill agent / 人工版
 
+> 历史案例：模型名、分支和提交号仅用于区分实验对象，不是当前环境前提。`${EXPERIMENT_ROOT}` 为用户提供的历史产物根目录，`${TF_SOURCE_DIR}`、`${SERVING_BUILD_DIR}`、`${TRANSCRIPT_DIR}` 分别为源码、构建与会话记录目录；未随 skill 打包的日志不可视为已核验或可访问的证据。
 > **日期**：2026-09-07
 > **数据来源**：`REPORT.md` §2.1–2.8（消融实验、头对头、8/12 口径两轮）、`bench_812_round2/summary.json`（全并发梯度）、双侧 agent 报告（`results/{skill,noskill}/REPORT.md`）、round-2 server 日志的融合命中取证（本文 §2.3 新证据）
 > **回答的问题**：① 两个 agent 与人工版各自的优化点有什么不同；② 为什么高并发下人工版更好、低并发下 agent 更好
@@ -131,4 +132,4 @@ skill agent 在消融实验中曾把这个门控扩成 `{0xd01,0xd02,0xd03,0xd06
 - 平台门控代码：`ws-manual-latest/tf/tensorflow/core/grappler/optimizers/graph_optimizer/graph_opt.cc:1222`（`enabled_fused_matmul_rewriters`，仅 0xd06）
 - profile 数据：`results/{skill,noskill}/REPORT.md` §1/§3（pack 占比、调度占比、GEMM 能力标定）
 - 线程扫描（convoy 肥尾）：`results/noskill/REPORT.md` §3（kdn16/8/4/2 矩阵）
-- 8/12 验证报告（adx 交叉形参照）：`/data/nvme0/lpc/POC/results/NEON_PREPACK_E2E_VALIDATION_20260812.md`
+- 8/12 验证报告（adx 交叉形参照）：`${EXPERIMENT_ROOT}/validation/NEON_PREPACK_E2E_VALIDATION_20260812.md`

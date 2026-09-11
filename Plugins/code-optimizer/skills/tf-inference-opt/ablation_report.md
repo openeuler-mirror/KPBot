@@ -1,5 +1,6 @@
 # 消融实验报告：tf-inference-opt skill 对 TF 推理优化实效的影响
 
+> 历史案例：模型名、分支和提交号仅用于区分实验对象，不是当前环境前提。`${EXPERIMENT_ROOT}` 为用户提供的历史产物根目录，`${TF_SOURCE_DIR}`、`${SERVING_BUILD_DIR}`、`${TRANSCRIPT_DIR}` 分别为源码、构建与会话记录目录；未随 skill 打包的日志不可视为已核验或可访问的证据。
 > **日期**：2026-09-03 ~ 09-04
 > **实验**：两个独立优化 agent 在**完全相同的早期版本 TF 树**上做真实性能优化（改代码 → 构建 server → 压测 → A/B 出数），一个有 `tf-inference-opt` skill、一个没有
 > **数据核验**：双侧报告的每个中位数均从原始 perf_analyzer 日志独立重提取并逐位复现；双侧头条数字各做了一轮现场复测（同节点 B/O 对照），方向与量级吻合
@@ -64,7 +65,7 @@
 
 ### 2.4 当前人工优化版本的性能（2026-09-04 补测，含口径修正）
 
-**被测对象**：现役人工优化构建（`/data/nvme0/lpc/POC/serving/bazel-bin/.../tensorflow_model_server`，2026-08-29 构建）。**身份勘误（2026-09-04）**：经日志取证（该二进制的 server 日志只有 runtime 打包行 `kdnn_adapter.h:198`、零 load-time 行），它实际构建自 `POC/tensorflow`（7 月基座 `330e03ce5` + 未提交的 **runtime prepack**——即后来落库为 `a965af115..e40873201` 的那条线，首推理时打包缓存）；**并非** JD_ver `dev_r2.20.0_for_jd` 的 load-time prepack 线（该线的 loader 集成从未进入任何 serving 构建）。历史验证报告 `NEON_PREPACK_E2E_VALIDATION_20260812.md` 亦为 runtime prepack 版本。
+**被测对象**：现役人工优化构建（`${SERVING_BUILD_DIR}/tensorflow_model_server`，2026-08-29 构建）。**身份勘误（2026-09-04）**：经日志取证（该二进制的 server 日志只有 runtime 打包行 `kdnn_adapter.h:198`、零 load-time 行），它实际构建自 `${TF_SOURCE_DIR}`（7 月基座 `330e03ce5` + 未提交的 **runtime prepack**——即后来落库为 `a965af115..e40873201` 的那条线，首推理时打包缓存）；**并非** loadtime-fork `loadtime-prepack-branch` 的 load-time prepack 线（该线的 loader 集成从未进入任何 serving 构建）。历史验证报告 `NEON_PREPACK_E2E_VALIDATION_20260812.md` 亦为 runtime prepack 版本。
 
 #### 2.4.1 两种测量口径（重要）
 
@@ -159,7 +160,7 @@
   5. **修复（probe + serving 双级验证）**：注意**当前仓现有二进制设 `KDNN_FORCE_NEON=1` 无效**——`14621ff79` 已删除其全部读者（grep 确认 src/ 零命中）。需先打一行补丁：把 NEON f32 内核 `EstimateTime` 中的 `Is920BPlatform()` 改回 `getenv("KDNN_FORCE_NEON")`（或改为 `Is920BPlatform() || HasNEON()` 按 HWCAP 检测）。**Serving 级 A/B（同一二进制，唯一变量 env）**：补丁 + `KDNN_FORCE_NEON=1` + prepack 全开 → **4/4 模型正确**（adx 5.9e-08 / presort 2.1e-07 / hmv 0 / cvr 0）；不设 env → adx 2.5e-01 / presort 4.2e-01 仍错。其它方案：(b) 修该 generator 的 BA4b Supports/并发安全；(c) `GetDesiredWeiLayout(enablePrepack)` 加「确认选中 NEON f32 才打包」门槛。
 - hmv 的 -23%（旧人工二进制同模型为 +7%）表明新 KDNN 的 NEON BA4b JIT 消费在本机也比旧版慢。
 
-**B. JD_ver load-time prepack 线移植到最新代码**（手工移植 347 行 + 适配新 API，构建成功、load-time 打包命中）：
+**B. loadtime-fork load-time prepack 线移植到最新代码**（手工移植 347 行 + 适配新 API，构建成功、load-time 打包命中）：
 
 - **正确性：3/4 模型数值错误**（hmv 相对误差 1.2e8、presort 0.50、adx 0.15；仅 cvr_slave 通过）——比 A 更广的失效面（hmv 在 A 中正确），说明 load-time 线另有独立缺陷；该线的 loader 集成从未经过任何 serving E2E 验证（见身份勘误）。
 - 性能（数字不可信，仅记录）：hmv -22.7%、adx -80.5%、presort -8.4%、cvr -0.1%。
@@ -381,7 +382,7 @@ skill 多花的 token 换来了：更早的最终配置收敛、4/4 模型一次
 4. **模型覆盖面**：4 个 mock 模型 = Dense/MatMul + 稀疏 embedding 链拓扑；MMoE gate、attention 交互、prepack 类权重缓存优化未被 exercising（无对应 shape/结构），skill 的部分章节未被测试。
 5. **hmv 正确性验证强度受限**：mock 模型输出按构造恒 0（双侧均诚实披露）——数值对比对该模型只能证 shape/传播正确。
 6. **noskill 的最终数字包含其「报告初版后追加」的 ANNC 补测**（+40 分钟）——按最宽口径给 noskill 计分（收其最终版数字），对 skill 结论是保守的。
-7. **防作弊审计（2026-09-08 事后执行，针对「noskill 为何这么强」的质疑）**：对两个 agent 的完整 transcript（`~/.claude/.../subagents/agent-*.jsonl`，336/435 次工具调用全量扫描）核查边界遵守——**noskill agent 零违规**：仅有的 POC 路径访问是 bazel 共享缓存（`--repository_cache/--disk_cache`，任务书构建模板明文给出），从未触碰 POC 参考实现、JD_ver、对方工作区或 skill 副本；skill agent 的对应命中仅为读取自己工作区内的 skill 副本（实验处理本身）。代码 diff 复核：noskill 树相对 pristine 恰好只有其报告声称的 2 个文件（gflags.cc + graph_opt.cc），无引入二进制、模型文件为共享只读资产。数字链：round-4 对比的全部数字由主 agent 从原始 perf_analyzer 日志直接解析（非采信 agent 自报），全部轮次请求 1.5 万+、延迟分布正常、无失败。结论：**noskill 的强度是真实的**——基线树内本就含有全部获胜资产（ANNC 重写器、KDNN SVE 内核，均为默认关闭状态），任务是"发现+启用+调优"，强 agent 靠自己的 profiling 纪律同样能做到；noskill 的优势来自自写 fold 重写器的高质量与逐模型实测（skill 反而在 presort 上过度泛化了 adx 负结果）。
+7. **防作弊审计（2026-09-08 事后执行，针对「noskill 为何这么强」的质疑）**：对两个 agent 的完整 transcript（`${TRANSCRIPT_DIR}/agent-*.jsonl`，336/435 次工具调用全量扫描）核查边界遵守——**noskill agent 零违规**：仅有的 POC 路径访问是 bazel 共享缓存（`--repository_cache/--disk_cache`，任务书构建模板明文给出），从未触碰 POC 参考实现、loadtime-fork、对方工作区或 skill 副本；skill agent 的对应命中仅为读取自己工作区内的 skill 副本（实验处理本身）。代码 diff 复核：noskill 树相对 pristine 恰好只有其报告声称的 2 个文件（gflags.cc + graph_opt.cc），无引入二进制、模型文件为共享只读资产。数字链：round-4 对比的全部数字由主 agent 从原始 perf_analyzer 日志直接解析（非采信 agent 自报），全部轮次请求 1.5 万+、延迟分布正常、无失败。结论：**noskill 的强度是真实的**——基线树内本就含有全部获胜资产（ANNC 重写器、KDNN SVE 内核，均为默认关闭状态），任务是"发现+启用+调优"，强 agent 靠自己的 profiling 纪律同样能做到；noskill 的优势来自自写 fold 重写器的高质量与逐模型实测（skill 反而在 presort 上过度泛化了 adx 负结果）。
 
 ---
 
@@ -405,7 +406,7 @@ skill 的改进方向（据本实验）：在 kernel_integration.md 的负结果
 
 ## 附：产物索引
 
-- 本报告：`/data/nvme0/lpc/tf_opt_ablation/REPORT.md`（副本：`doc/optimization_history/tf-inference-opt/ablation_report.md`）
+- 本报告：`${EXPERIMENT_ROOT}/ablation/REPORT.md`（副本：`ablation_report.md`）
 - skill 侧报告：`results/skill/REPORT.md`（344 行）+ 522 个原始数据文件 + `agent_stats.json`
 - noskill 侧报告：`results/noskill/REPORT.md` + 371 个原始数据文件 + `agent_stats.json`
 - 双侧代码改动：`ws-{skill,noskill}/tf`（对照 `pristine/tf`；diff 统计见 §3.4）
@@ -419,4 +420,4 @@ skill 的改进方向（据本实验）：在 kernel_integration.md 的负结果
 
 ## 9. 第二轮消融（2026-09-08，skill v2 + 全并发梯度口径）
 
-完整报告见 `REPORT_ROUND2.md`（副本：`doc/optimization_history/tf-inference-opt/ablation_report_round2.md`）。要点：① 三方终态各赢一块——人工最优赢 cvr/hmv 高并发（prepack），skill2 赢 presort 全档（线程修正+SVE+cap4，+26~31% vs 人工、3~4.7× vs noskill2），noskill2 赢 adx 高并发（自适应并发门控 +14%）；② skill v2 的清单化改进（线程对齐、冻结图折叠三坑）被验证有效且各值一个数量级差距，但本轮两项最大创新（自适应路由、hmv ANNC 判断）不在 skill 覆盖内；③ KDNN NEON prepack 在 presort shape 上劣于 SVE JIT（−26%），prepack 适用面需按 shape 重标定；④ presort 生产配置 1/1 线程应重审（16/16 = 4.5×）。
+完整报告见 `REPORT_ROUND2.md`（副本：`ablation_report_round2.md`）。要点：① 三方终态各赢一块——人工最优赢 cvr/hmv 高并发（prepack），skill2 赢 presort 全档（线程修正+SVE+cap4，+26~31% vs 人工、3~4.7× vs noskill2），noskill2 赢 adx 高并发（自适应并发门控 +14%）；② skill v2 的清单化改进（线程对齐、冻结图折叠三坑）被验证有效且各值一个数量级差距，但本轮两项最大创新（自适应路由、hmv ANNC 判断）不在 skill 覆盖内；③ KDNN NEON prepack 在 presort shape 上劣于 SVE JIT（−26%），prepack 适用面需按 shape 重标定；④ presort 生产配置 1/1 线程应重审（16/16 = 4.5×）。

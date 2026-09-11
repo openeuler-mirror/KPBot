@@ -1,5 +1,6 @@
 # 第二轮消融实验报告：skill v2 + 全并发梯度口径下的 skill/no-skill/人工三方对比
 
+> 历史案例：模型名、分支和提交号仅用于区分实验对象，不是当前环境前提。`${EXPERIMENT_ROOT}` 为用户提供的历史产物根目录，`${TF_SOURCE_DIR}`、`${SERVING_BUILD_DIR}`、`${TRANSCRIPT_DIR}` 分别为源码、构建与会话记录目录；未随 skill 打包的日志不可视为已核验或可访问的证据。
 > **日期**：2026-09-08
 > **实验**：第一轮消融结论的四点改进（skill v2：并发域框架、惰性命中取证、冻结图折叠三坑、交付配置矩阵）落地后重做消融：两个新 agent 在相同的 0e99f1bf4 基线树上、以**全并发梯度（c1~c32）为验收口径**做优化，一个带 skill v2（净化副本）、一个不带；完成后与人工最优版本做同会话三方终态对比
 > **与第一轮的差异**：① skill 升级到 v2（8 处改进，其中 4 处为本轮新增）；② 验收口径从单点并发 4 扩到全并发梯度；③ 任务书新增按模型线程配置表与惰性命中取证提示；④ 人工版对照换为 round-3/4 修正后的逐模型最优配置
@@ -152,5 +153,5 @@ round-5 中 noskill2 hmv（SVE+ANNC）与 skill2 hmv（SVE only）互有胜负�
 - 双 agent 报告：`results2/{skill2,noskill2}/REPORT.md`（含全部原始数据索引）
 - 工作区 diff：`ws2-{skill,noskill}/tf` vs `pristine/tf`（§2 改动清单已抽查核验真实）
 - 三方对比数据：`bench_round5_threeway/{results,logs,summary.json}`；脚本 `manual_version_bench/run_round5_threeway.sh`
-- skill v2（本轮改进后）：`doc/optimization_history/tf-inference-opt/`（master 版）；agent 用净化副本在 ws2-skill/tf/OPTIMIZATION_METHODOLOGY/
+- skill v2（本轮改进后）：``（master 版）；agent 用净化副本在 ws2-skill/tf/OPTIMIZATION_METHODOLOGY/
 - 任务书：`brief2-{skill2,noskill2}.md`（除 skill 段外逐字相同）

@@ -11,12 +11,16 @@
 #       [--intra 16] [--warmup 10] [--iter 100] [--label name]
 #
 # Example:
-#   ./run_ab_benchmark.sh build/alipay_benchmark/alipay_dense_benchmark \
-#       onnxruntime/test/alipay/models/model4.onnx 32 3 /tmp/ab \
+#   ./run_ab_benchmark.sh "$BENCH" \
+#       "$MODEL_PATH" 32 3 "$RESULTS_DIR" \
 #       --env-a 'ORT_KDNN_FUSE_ATTENTION=0' --env-b 'ORT_KDNN_FUSE_ATTENTION=1' \
 #       --numa-node 1 --label fusion
 set -euo pipefail
 
+if [ "$#" -lt 5 ]; then
+  echo "usage: $0 BENCH MODEL BATCH ROUNDS OUTDIR [options]" >&2
+  exit 2
+fi
 BENCH=$1; MODEL=$2; BATCH=$3; ROUNDS=$4; OUTDIR=$5; shift 5
 ENV_A=""; ENV_B=""; NUMA_NODE=""; INTRA=16; WARMUP=10; ITER=100; LABEL="ab"
 while [ $# -gt 0 ]; do
@@ -32,29 +36,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+[[ "$BATCH" =~ ^[1-9][0-9]*$ && "$ROUNDS" =~ ^[1-9][0-9]*$ ]] || { echo "batch/rounds must be positive integers" >&2; exit 2; }
+(( ROUNDS >= 3 )) || { echo "at least 3 paired rounds required" >&2; exit 2; }
+[[ "$LABEL" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "invalid label" >&2; exit 2; }
 mkdir -p "$OUTDIR"
-# repo root detection: works for <repo>/docs/mha_opt_skill/skill (main repo)
-# and <ws>/skill next to <ws>/repo (agent workspace) layouts.
-SELF_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO=""
-for cand in "$SELF_DIR/../../../.." "$SELF_DIR/../../repo" "$PWD"; do
-  if [ -d "$cand/kdnn/RelWithDebInfo" ] || [ -d "$cand/onnxruntime/core/kdnn" ]; then
-    REPO=$(cd "$cand" && pwd); break
-  fi
+# Caller supplies library paths; preserve the existing loader configuration.
+# Do not infer an ORT checkout from the installed skill's location.
+for existing in "$OUTDIR/${LABEL}_"*_r*.log; do
+  [ ! -e "$existing" ] || { echo "logs already exist for label $LABEL; use a fresh label/directory" >&2; exit 2; }
 done
-if [ -z "$REPO" ]; then
-  REPO=${REPO_ROOT:-$PWD}
-  echo "warning: repo root not auto-detected; set REPO_ROOT=<repo> (using $REPO)" >&2
-fi
-LD="${REPO}/kdnn/RelWithDebInfo:${REPO}/onnxruntime/core/kdnn/out/lib"
 
 run_one() {  # run_one <config> <round>
   local cfg=$1 r=$2 envs=$3
   local log="$OUTDIR/${LABEL}_${cfg}_r${r}.log"
-  local numactl=""
-  [ -n "$NUMA_NODE" ] && numactl="numactl -N $NUMA_NODE --membind=$NUMA_NODE"
-  # shellcheck disable=SC2086
-  env LD_LIBRARY_PATH="$LD" $envs $numactl "$BENCH" \
+  local -a binding=() assignments=()
+  [ -z "$NUMA_NODE" ] || binding=(numactl -N "$NUMA_NODE" "--membind=$NUMA_NODE")
+  # Space-separated KEY=VALUE entries; values containing whitespace are unsupported.
+  read -r -a assignments <<< "$envs"
+  for assignment in "${assignments[@]}"; do
+    [[ "$assignment" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] || { echo "invalid env assignment" >&2; exit 2; }
+  done
+  env "${assignments[@]}" "${binding[@]}" "$BENCH" \
     --model-path "$MODEL" --batch-size "$BATCH" \
     --inter-op-threads 1 --intra-op-threads "$INTRA" \
     --warmup-iter "$WARMUP" --num-iter "$ITER" \
@@ -67,12 +69,14 @@ echo "ENV_A: $ENV_A"
 echo "ENV_B: $ENV_B"
 # alternate A,B per round
 for r in $(seq 1 "$ROUNDS"); do
-  echo "round $r: A then B"
-  run_one A "$r" "$ENV_A" >/dev/null
-  run_one B "$r" "$ENV_B" >/dev/null
+  if (( r % 2 )); then
+    run_one A "$r" "$ENV_A"
+    run_one B "$r" "$ENV_B"
+  else
+    run_one B "$r" "$ENV_B"
+    run_one A "$r" "$ENV_A"
+  fi
 done
-# reverse order on even rounds is handled by swapping on odd/even r:
-# (keep simple alternation; reverse-order rounds recommended when ROUNDS>=4)
 echo "logs in $OUTDIR"
 echo "=== aggregate ==="
 python3 "$(dirname "$0")/aggregate_results.py" "$OUTDIR" --label "$LABEL"

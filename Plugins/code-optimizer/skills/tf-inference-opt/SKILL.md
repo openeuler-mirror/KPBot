@@ -1,6 +1,6 @@
 ---
 name: tf-inference-opt
-description: Optimize TensorFlow CPU inference and serving through profiling, graph rewrites, operator-library integration, thread scheduling, serialization, and build tuning. Use for TF latency/throughput diagnosis, fusion, prepacking, or benchmark validation, especially C++ Session-based serving and recommendation models. Covers framework integration rather than GEMM microkernel implementation.
+description: Optimize TensorFlow CPU inference and serving through profiling, graph rewrites, operator-library integration, thread scheduling, serialization, and build tuning. Use for TF latency/throughput diagnosis, fusion, prepacking, or benchmark validation, especially C++ Session-based serving and recommendation models. Encourages new fusion patterns, workload specialization, and cross-layer optimization; use kernel-specific guidance when needed.
 ---
 
 # TF 推理性能优化（五层方法论）
@@ -11,7 +11,19 @@ description: Optimize TensorFlow CPU inference and serving through profiling, gr
 
 本 skill 管 **TF 框架层**：图怎么执行（融合/折叠）、算子怎么路由（库接入/回退）、线程怎么调度（池治理）、请求怎么编解码（序列化）、二进制怎么编译（构建）、以及怎么证明变快了（基准）。
 
-**不管微内核内部**：GEMM 的 tile/pack/汇编级调优、NEON/SVE 内核编写，交给专门的内核 skill（如 `arm-fp-gemm`、`cpu-gemm-optimization`、`arm-perf-optimization`，若环境里有）。本 skill 把内核当作"可调用的黑盒高性能实现"，聚焦如何把它正确地嵌进 TF。
+以框架集成为主，但不把现有算子库当作能力上限。热点需要时可编写专用融合 kernel、修改布局或联合调优图与内核；GEMM tile/pack/汇编细节可按需参考 `arm-fp-gemm`、`cpu-gemm-optimization` 等可用 skill。没有专门 skill 也不妨碍实现可验证的小原型。
+
+## 按任务选择深度
+
+五层模型和参考清单用于生成假设，不是候选全集或必跑流程。CPU 是本 skill 的默认范围，推荐模型和 C++ Serving 是经验来源；CNN、序列模型、离线批处理、TF2 函数执行也可按实际接口使用。GPU/训练问题需要对应方法，不强套本 skill。
+
+诊断请求给出证据与下一步；单点修复只验证受影响路径；端到端优化再选择必要的服务指标。用户只要求局部 kernel 或离线推理时，不强制搭建 RPC、扫容量或交付多模型矩阵。沿用已有构建、工具和授权范围；优化方向可跨层，但不因 skill 列出某方向就扩大任务。
+
+## 环境与可迁移性
+
+先从当前工作区和用户已有配置确认源码、构建、模型、输入集与结果目录，记录为 `TF_SOURCE_DIR`、`SERVING_BUILD_DIR`、`MODEL_PATH`、`INPUT_DATA_PATH`、`RESULTS_DIR`。路径由使用者设置并在命令中加双引号；不推断用户名、远端主机或固定磁盘布局。历史报告中的提交号、模型代号与外部日志仅作案例索引，不能替代当前环境的测量。
+
+若已由 `tf-inference-optimizer` 编排任务，本 skill 只提供对应层的方法，不重复启动另一套工作流；该编排 skill 不存在时也可独立使用。
 
 ## 1. 五层优化模型
 
@@ -28,7 +40,7 @@ description: Optimize TensorFlow CPU inference and serving through profiling, gr
 
 **投入产出规律**（经验之谈，用于排优先级而非替代测量）：
 
-- **L3 配置类**最便宜：只改启动参数/环境变量就能见效，永远先检查线程配置是否已经错了（超订/欠配是常态）。
+- **L3 配置类**最便宜：只改启动参数/环境变量就能见效，可快速检查线程配置是否存在问题（超订/欠配是常态）。
 - **L1 图层**杠杆最大：改一处全模型受益，且不依赖特定硬件；但需要模型里真的存在可匹配的子图模式（embedding 链、attention 结构是富矿）。
 - **L2 算子层**收益最实：热点大算子换实现直接数倍；但每条路由都要维护回退，是长期负担。
 - **L4/L5** 常被遗忘：序列化在特征类请求里能占两成以上 CPU；构建 flags 决定了前面所有 SIMD 努力是否生效。
@@ -37,7 +49,7 @@ description: Optimize TensorFlow CPU inference and serving through profiling, gr
 
 ### Step 0：建立基线，定位瓶颈层
 
-**没有分层数据之前不要猜瓶颈。** 具体动作：
+先收集足以区分候选的数据；允许用结构分析提出假设并做小原型，不要求穷尽所有层才能动手。具体动作按任务选用：
 
 1. 固定并记录二进制/模型身份、CPU 配额与 cpuset、线程配置、batch、请求并发、目标 QPS 和输入分布；明确目标是固定负载下的延迟还是满足 SLO 的容量。详见 benchmarking.md §3–4。
 2. **分段计时**：把一次请求拆成 接收 → 排队/等待 batch → 反序列化 → 预处理 → `session->Run` → 后处理 → 序列化返回，各段耗时打点。这一步直接告诉你瓶颈在 RPC 层还是计算层。
@@ -59,7 +71,19 @@ description: Optimize TensorFlow CPU inference and serving through profiling, gr
 
 ### Step 2：实施
 
-去对应 reference 读模式清单，按模式落地。先用单变量实验筛选候选项；对有关联的候选项做小规模交互消融（如融合×后端、prepack×库线程数），最后按模型/batch/并发确定组合。单变量用于归因，不能替代组合验证。
+将 reference 中的模式作为种子，结合本轮图、热点、内存流量与调用次数产生新候选；不局限于开已有开关、换库或复刻历史融合。先用单变量实验筛选候选项；对有关联的候选项做小规模交互消融（如融合×后端、prepack×库线程数），最后按模型/batch/并发确定组合。单变量用于归因，不能替代组合验证。
+
+### 主动寻找新机会：沿数据流跨层设计
+
+五层分类用于组织证据，允许一个候选同时改变图、kernel、布局和调度。以下方向按实际热点取舍，也可提出清单外的新方案：
+
+- **扩大融合边界**：沿热点前后追踪，探索 embedding 查表到归约/拼接、投影到 attention/输出投影、归一化/激活/残差等整段计算；设计多输出融合保留共享结果，比较 kernel 调度、中间张量与向量化收益。
+- **消除整类工作**：寻找跨分支重复计算、重复特征解析、重复索引转换和同源权重访问。评估公共子表达式复用、分支批量化、生产者直写最终布局和跨算子内存复用，先确认资源更新及别名关系。
+- **部分求值与特化**：利用固定权重、常见 shape、稳定特征结构生成专用路径；动态维度可用守卫特化、shape 分桶与通用回退。比较加载期计算、JIT 与稳态开销，避免把一次性成本藏到 warmup 中。
+- **联合优化执行方式**：探索小算子内联、任务合并、图/库线程协作、batch 形成策略，以及按 shape/并发选择融合和后端。验证组合收益，留意融合后图并行度下降、工作集变大或失去优质 GEMM 路径。
+- **突破既有库接口**：现有 adapter 无法表达最佳路径时，可以写专用 kernel、融合 epilogue、重构 pack 缓存或生产者/消费者接口。稀疏结构专用算法、低精度或近似计算也可作为候选，后两者须符合任务已有精度契约。
+
+按预计可消除的成本、实现代价和验证难度选择值得试的候选，先做最小可证伪实验。若收益依赖跨层协同，可先实现整体原型再做可分离消融，不强求每个子改动单独获益。历史负结果只限制已测条件；注明本轮条件变化即可重新探索。最终报告补充新发现的模式、未做候选及淘汰依据。
 
 ### Step 3：确认实际命中
 
@@ -80,13 +104,13 @@ description: Optimize TensorFlow CPU inference and serving through profiling, gr
 5. **权重不可变前提显式化。** 明确缓存有效期内权重不可变；在线更新须通过版本化、失效机制及在飞请求的所有权隔离保证一致性，否则禁用该优化。不可变不等于地址稳定，模型重载还需验证旧缓存释放与新旧版本隔离。
 6. **整体并行预算。** 分别调优请求并发、RPC worker、inter-op、intra-op 和库线程上限，不要求它们等于配额。记录实际生效值、共享池关系、CPU quota/cpuset/亲和性与节流指标，再按负载扫描配置。
 7. **剖析不干扰服务。** profiling 采样要限流（全局最大导出次数、每 N 请求采一次、跳过 warmup）；重活（JSON/trace 转换）离线做，不在服务进程里做。
-8. **小算子设阈值。** 把算子路由到重量级实现前先判规模（元素数、维数下限）。小输入走原生实现反而更快（库的准备工作摊不平）；这也是防"优化后小 shape 变慢"投诉的第一道闸。
+8. **路由阈值由测量决定。** 比较准备成本与计算收益；小输入可走原生或轻量专用路径。无需为天然轻量的实现强设大小阈值，避免用历史门槛屏蔽新机会。
 9. **变更同步测试。** 算子改名、拆变体、改签名后，测试与 op 注册必须同步更新。反例：算子拆成四个变体后，测试还在构建旧算子名——测试套件形同虚设。
 10. **死代码及时清理。** 不再用的优化路径、只有定义没有使用点的开关、调试日志，确认后删掉。它们不是"备用"，是下一次重构时的地雷。
 
-## 4. 交付形态：逐模型 × 并发域配置矩阵
+## 4. 交付形态：实现与适用范围
 
-没有单一配置在所有模型 × 所有并发档最优（实测：低并发图融合赢、高并发 prepack 赢、单线程模型路由决策一题定输赢）。最终交付不是"一套最优配置"，而是：
+交付与任务规模匹配：单一热点可交付一个新算子或配置及其证据，多模型/多负载再汇总配置矩阵。历史实验中不同并发下最优组合会改变，应覆盖实际服务范围：
 
 - **配置矩阵**：行 = 模型（必要时 × batch 档），列 = 低/高并发域（以实测交叉点分界），格 = 该组合下的图层/内核路由/线程三维配置 + 证据链接；
 - **路由决策表**：每个模型用哪个 GEMM 后端（含"不用库"这一合法选项），附单变量实测依据——路由错误（如大 K GEMM 进库）可以吞掉全部其他优化收益；

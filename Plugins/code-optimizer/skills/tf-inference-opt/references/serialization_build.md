@@ -44,18 +44,18 @@
 | 项 | 做法 | 说明 |
 |---|---|---|
 | **指令集目标** | `-march` 对准目标微架构（如 ARM `armv8.5-a+fp+simd+bf16+sve`；x86 按目标机 `avx2`/`avx512`；拿不准用 `-march=native` 仅限同质集群） | 决定 L2/L4 的 SIMD 段是否激活；算子库与框架主代码可以不同目标（库更激进） |
-| **优化级别** | `-O3` 显式写在构建脚本里（别依赖默认） | 显式化后可审计 |
+| **优化级别** | 记录实际优化级别；有依据时比较 O2/O3、LTO 或 PGO | 显式化后可审计 |
 | **平台裁剪** | 构建系统 select：目标平台编入定制代码，其余标记 incompatible | 非目标平台零成本 |
 | **C++ 标准** | 与框架一致显式固定（如 `-std=c++17`） | 避免 host/target 不一致 |
 | **系统库替换** | 能用系统库的（ssl/压缩）用 `TF_SYSTEM_LIBS`/`use_system_libs` 切换 | 镜像内版本可控 |
 | **离线构建** | `--distdir`（依赖离线包）+ `--output_user_root`（编译缓存） | 内网/受控环境必需；发布依赖包清单进文档 |
-| **ulimit** | 构建/运行容器 `--ulimit nofile=1048576` | 构建工具的 eventfd 会撞默认 1024 |
+| **ulimit** | 出现文件描述符不足时按实测需求调整 nofile | 构建工具的 eventfd 会撞默认 1024 |
 | **多架构** | Dockerfile 按 `TARGETARCH` 分派 flags（x86 `-march=native` / ARM `-march=armv8.5-a`） | 一份 Dockerfile 双平台 |
-| **工具链** | 全程 GCC（openEuler gcc-toolset 固定版本） | 可预测；clang 切换是独立工程 |
+| **工具链** | 沿用兼容工具链；GCC/Clang 可作为独立候选比较 | 记录版本与 ABI/依赖兼容性，区分编译器与代码收益 |
 
 **容器化推理服务的规格化**（让基准可复现的前提）：
 - 分别固定 cpuset 与 CFS quota/period，记录有效 CPU 集合和时间预算；二者含义不同，具体预算按压测目标设置（见 runtime §2）。
-- host network（压测去网络虚拟化干扰）、按需 privileged。
+- 保持与目标部署一致的网络和容器权限；仅为独立实验比较网络模式，不默认启用 host network 或 privileged。
 - 镜像里固化：OS + 工具链 + 构建系统版本 + CA 信任（公司证书要同时进系统 truststore、构建工具 JVM truststore、Python certifi——漏一处就构建失败）。
 
 **验证构建生效**：改完 flags 用符号/反汇编抽查（`objdump`/`nm` 看 SIMD 符号是否存在）；这只证明目标代码存在；还须通过实际调用栈或路由计数证明请求执行到了该路径。

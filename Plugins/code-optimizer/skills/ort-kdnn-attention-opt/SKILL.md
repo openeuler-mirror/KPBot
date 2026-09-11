@@ -1,126 +1,49 @@
 ---
 name: ort-kdnn-attention-opt
-description: ONNX Runtime + KDNN(ARM AArch64/NEON/SVE)上的 attention/MHA 端到端优化技能。覆盖:ONNX 图中 attention 子图的模式识别与瓶颈定位、融合算子设计(pack/no-pack 布局、联合 GEMV、SVE kernel)、ORT 图优化 pass 与自定义算子接入、KDNN primitive 复用/cache 设计、正确性验证(A/B 对比、边界用例、并发、cache 碰撞)与消融基准协议。凡是在本代码库优化 transformer/attention/softmax+MatMul 推理性能、分析 model4 类模型瓶颈、实现/评估 attention 融合收益、或排查融合算子正确性问题时,即使没有明确说出 "attention" 或 "MHA",都应使用本 skill。
+description: Optimize ONNX Runtime CPU attention and surrounding subgraphs through bottleneck analysis, aggressive fusion, custom kernels, layout and scheduling changes, and benchmark validation. Includes optional KDNN/AArch64 integration examples; useful with other CPU backends as well.
 ---
 
-# ORT + KDNN Attention/MHA 端到端优化
+# ORT CPU Attention 与周边子图优化
 
-本技能把一条已验证的优化路径沉淀成可复现的流程:从"模型里有 attention、跑得慢"开始,到"融合算子 +
-专用 kernel + 可复核的性能报告"结束。核心方法论:**先让正确的基线跑起来,再做每一步都能被 A/B 证伪的增量**。
+从实际计算和数据流寻找优化机会，产出可验证的实现与收益证据。KDNN/AArch64 是详细集成案例，不是使用前提；可使用 MLAS、其他 CPU 库或自包含 kernel。保留现有 skill 名称以兼容已有调用。
 
-## 0. 适用与不适用
+## 范围与使用方式
 
-适用:
-- ONNX 模型含 `Q·Kᵀ → scale → mask → Softmax → ·V` 结构(自注意力/target-attention,transformer 类);
-- 运行环境是 ONNX Runtime CPU EP,且链接了 KDNN 库(ARM AArch64,NEON/SVE);
-- 目标是降低端到端推理时延,需要量化每一步优化的真实收益。
+适用于 attention、投影、布局转换和相邻算子链的 CPU 推理优化，包括 decode、prefill、不同 mask、dtype 与动态 shape。历史 Sq=1 路径只是起点。GPU/训练需采用相应后端的方法；若 CPU 热点落在 attention 之外，跟随证据处理实际瓶颈，不强行改写成 attention 问题。
 
-不适用/先想清楚:
-- **prefill/训练场景(Sq 远大于 1)**:本技能的 kernel 设计以 `Sq=1`(decode/单 query)为主战场;Sq>1 时
-  分块 flash-attention 思路才有意义,单 query 场景做 flash 是负收益(attention 矩阵只有一行,没有可省的
-  中间矩阵)。
-- **attention 计算占比 < 3% 的模型**:端到端收益上限太低,先去做占比大的部分(用 profile 确认,不要猜)。
-- 需要跨请求复用 K/V 的"KV cache"功能:这是调度层功能,不是 kernel 优化,另行立项。
+用户只要诊断、方案或单点修复时，完成相应部分即可；不自动扩展为全模型优化、重建后端或完整压测项目。端到端任务可按下面流程迭代，不要求每次加载全部参考或执行固定阶段。
 
-## 1. 总工作流(七阶段)
+先从当前环境确认模型/opset、执行提供程序、版本、CPU 能力与可用构建和测量方法。详细参考中的 `kdnn_*` 文件、`ORT_KDNN_*` 开关及 benchmark flags 是定制分支示例；用当前源码和工具帮助定位等价入口。源码、构建、模型和结果路径沿用用户配置，不推断个人目录或机器编号。
 
-按顺序执行。每个阶段有明确的产出物和"不通过就停下来"的判据,防止在错误方向上加速。
+## 工作方法
 
-### Phase 0 侦察(recon)
-产出:模型结构清单 + attention 占比数据。
-1. 用 `scripts/scan_attention.py` 扫描模型,列出 attention 子图数量、每个的 (B, Sq, Sk, H, d) 形状、
-   mask 形态。读 `references/pattern-recognition.md` 确认哪些子图可融合、哪些必须拒绝。
-2. 跑一次带 profile 的端到端基线(harness 自带 `--enable-profiling`,或 ORT profiling),确认 attention
-   链(含外围 Transpose/Reshape)的真实耗时占比。**占比决定一切后续决策**——单算子 55% 的提升折算到
-   端到端通常只剩 1~2%,先知道天花板在哪。
+1. **建立足够的证据**：复现目标负载，区分冷启动与稳态，结合图、profile、调用栈和内存成本判断瓶颈。沿生产者/消费者统计候选边界的搬运、分配、dispatch、pack 与计算；不要只按 attention 本体占比提前排除。读 [模式识别](references/pattern-recognition.md)。扫描脚本仅给候选，未发现模式不代表没有机会。
+2. **生成与比较候选**：从当前数据推导方案，参考下面探索方向。记录预计消除的成本、前提和最小验证实验。旧实现不支持的形态可通过新 schema/kernel/布局扩展；历史失败需要核对条件，不作为禁用列表。
+3. **实现最小原型**：可从简单 kernel 起步，也可直接实现依赖联合布局或流水的整体方案。复用现有后端或编写专用算子都可；不用为了符合案例先完成不需要的 cache、adapter 或中间版本。读 [kernel 设计](references/kernel-design.md)；接入 KDNN 时再读 [集成示例](references/integration.md)。
+4. **验证并迭代**：确认实际路径命中，按改动选择数值、图重写、回退、内存及并发测试。探索性能可先记录并标明验证缺口；可交付收益结论须有对应正确性证据。读 [验证](references/validation.md)。单变量用于归因；存在依赖时先验证组合，再消融可分离部分。
+5. **报告任务所需结论**：固定条件、多轮配对或随机化顺序，报告指标定义、波动与适用范围。服务收益用服务测量支持，微基准结论限于被测算子；无需为局部问题强制搭建服务。读 [测量](references/benchmarking.md)。证据不足时明确保留结论，有效或无效的实验都可反馈下一轮候选。
 
-### Phase 1 基线(baseline)
-产出:可复现的基线数字。
-1. 按 `references/benchmarking.md` 的构建序列编译(先 KDNN 后 ORT;离线环境用
-   `FETCHCONTENT_SOURCE_DIR_*` 复用依赖源码,见该文档 §1)。
-2. 固定测量协议(NUMA/物理核绑定、sequential、intra/inter 线程、warmup/iter、交替 ≥3 轮、CV≤5%),
-   记录基线 mean/median/p95/CV。**没有可信基线,后面所有对比都是自欺。**
+## 主动探索方向（开放的候选种子）
 
-### Phase 2 设计(design)
-产出:一页设计决策记录(写进最终报告)。
-1. 读 `references/kernel-design.md` 的决策树:融合边界(投影后 Q/K/V 还是含投影)、布局(pack vs
-   no-pack)、kernel 路径(逐 head GEMV vs 联合多 head)、复用策略(primitive cache)。
-2. 关键原则:**布局决定带宽,带宽决定 decode 场景的性能**。projection 输出是 `[B, S, H·d]` 交错布局;
-   Sq=1 时 QK/PV 都是 GEMV,任何把 K/V 复制到 head-major 的 pack 都是纯开销。
-3. 所有新开关必须默认关闭、由环境变量门控,保证一条命令回到基线行为。
+- **整块融合**：Q/K/V 投影、bias、拆头、attention、并头，进一步探索输出投影、residual 和归一化。比较联合投影、融合 epilogue 与跨阶段流水；已有独立融合不排除继续跨边界复用。
+- **数据布局与专用 kernel**：生产者直写消费者布局、NEON/SVE 或目标 CPU 的专用实现、多 head/query 联合计算、整批 adapter、pack 复用、分块/在线 softmax。按工作集和访存成本选方案，不按 Sq 单一条件决定。
+- **扩展支持范围**：单头、多 query、per-head/causal mask、动态 shape、其他 dtype；共享结果可用多输出融合或保留支路处理。旧 matcher 的拒绝条件不等于新算子的永久限制。
+- **计算复用与调度**：消除重复投影/转换，比较 session 复用、有界缓存与无状态实现，联合设计 batch/head/query 任务粒度。任务涉及增量推理时可探索 K/V 复用，明确序列身份、失效和内存预算。
 
-### Phase 3 实现(implement)
-产出:代码 + 注册点。按 `references/integration.md` 的 checklist 接入(自定义 op schema、kernel 注册、
-图优化 pass、测试)。数值语义(softmax 稳定性、mask 边界、scale)以 `references/kernel-design.md` §6 为准,
-那里有逐条语义表——错一条就是静默算错。
+候选可以超出以上清单，也可以最终选择较小融合或不融合。更大的边界可能降低图并行度、扩大工作集或失去成熟 GEMM 路径；用原型比较这些代价。低精度或近似数学须符合任务已有精度契约，不静默放宽误差。
 
-### Phase 4 验证(validate)
-产出:全部通过的验证证据。按 `references/validation.md` 的清单执行:单元参考对比、边界用例(全 -inf
-mask、+inf ties、NaN、奇数形状、batch 广播)、端到端 A/B(优化开 vs 关,atol/rtol 1e-4)、同 shape 异
-scale 的 cache 碰撞回归、并发/重复 Run。**任何性能数字在正确性闭环之前都不许出现在报告里。**
+## 必须保留的工程语义
 
-### Phase 5 消融(ablate)
-产出:消融矩阵。只切换一个变量(algorithm/gemv 模式/cache/batch),其余全部固定,交替 ≥3 轮。协议见
-`references/benchmarking.md`。用 `scripts/run_ab_benchmark.sh` 和 `scripts/aggregate_results.py` 保证
-口径一致。
+- **原图契约**：保留运算顺序要求、scale、mask、广播、布局、外部消费者和图输出。无 scale 运算的倍率为 1；全 -inf、+inf、NaN 按目标原图参考验证，不能直接套用案例自定义语义。尚未实现的组合保留原图。
+- **生命周期与并发**：缓存 key 覆盖实际语义和源数据身份，并保护在飞引用；workspace 匹配算法、大小、对齐和调用生命周期。依赖 SVE VL 的路径须保证当前线程配置兼容。内存改动使用适用的 sanitizer 或等价诊断，无法执行时标明验证缺口。
+- **可复现对照**：保留参考路径或参考构建，不强制每项一个 env 开关。env 是进程级状态，不能通过并发修改它隔离 session。明确自定义算子模型的目标运行时兼容性及回退方式。
 
-### Phase 6 报告(report)
-按 `references/benchmarking.md` §5 的模板写:配置、数字、CV、结论边界(哪些结论只在本机本 shape 成立)。
+## 按需参考与工具
 
-## 2. 黄金法则(违反任何一条,结果不可信)
-
-1. **正确性优先于性能**。每个优化增量都要有"开 vs 关输出一致(atol/rtol 1e-4)"的证据,再谈时延。
-   写参考实现时注意:双精度累加、逐 (batch, head, row) 独立计算、mask 的 batch 维广播要显式处理——
-   参考实现自己的 bug 会浪费一整天排查(实测发生过:参考实现按 batch 索引共享 mask 越界,表现为
-   "batch 0 对、batch 1 错"的假阳性)。
-2. **fail, don't guess**。图匹配器遇到不认识的 mask/scale/布局组合必须拒绝融合(保持原图),绝不
-   "差不多就融合"。静默算错比不优化糟糕得多。
-3. **A/B 隔离**。对比两组配置时,除被测变量外一切固定——包括其他优化开关。测量要交替进行
-   (A,B,A,B...),不要先跑完 A 再跑 B(热身状态、频率漂移会系统性偏置)。
-4. **CV>5% 的轮次作废**。单轮数字没有意义;median-of-medians + 报告 CV。CPU 频率、NUMA、SMT、
-   后台负载都会毁掉测量。
-5. **构造开销 × batch 次**。ORT 把 batch 维拆成 B 个 B1 task 分别执行;任何"每次调用都构造"的对象
-   (GEMM 描述符、pack 后的权重、查找方案)都会被放大 B 倍。要么消除构造,要么 cache(见
-   `references/kernel-design.md` §5 cache key 完备性清单——漏一个字段就是静默算错)。
-6. **不外推单算子比例**。单算子 +55% 端到端可能只有 +2%(attention 占比 ~11% 时)。报告必须两端
-   数字都有。
-7. **改内存/workspace 相关代码后至少跑一次 ASan**(KDNN 与测试程序同一 sanitizer 配置),受限容器用
-   `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1`。
-
-## 3. 关键决策速查
-
-| 问题 | 判据 | 推荐 |
-|---|---|---|
-| Sq==1? | 模型形状 | 是 → GEMV 路径 + no-pack;否 → 考虑分块/flash 思路 |
-| K/V 布局 | projection 输出 `[B,S,H·d]` 交错 | Sq=1 用 stride view 直读,不 pack |
-| mask 形态 | `[B or 1, 1, 1, Sk]` 加性 | 其他形态(per-head、非加性)拒绝融合 |
-| head 数/维度 | H、d 与 D≤32 个 SVE 向量 | 超限自动回退通用逐 head GEMV,数值语义不变 |
-| 复用 | 每次构造有可测开销 | 两级 cache(全局 LRU + 线程热 entry),key 含全部语义参数 |
-| 线程 | 外层已由 ORT 线程池并行 | worker 内单线程,禁止嵌套并行 |
-| workspace | 尺寸随算法/线程数剧变 | 每次构造后重查 size,thread_local grow-only |
-
-## 4. 已知陷阱(全部来自真实踩坑)
-
-- 参考实现的 mask batch 广播默认值 bug(见法则 1);
-- cache key 漏 scale/算法/SVE VL → 同 shape 不同参数静默复用错误 primitive;
-- workspace 尺寸依赖算法(classic 与 no-pack 相差 3~4 个数量级),切算法不重查 → 越界写;
-- SVE VL 是**每线程**属性,构造与 Run 必须同线程同 VL;
-- 全 -inf mask 行的输出是全 0(不是 NaN),+inf 并列时概率均分,NaN 传播——三条语义两套实现都要一致;
-- ORT format(.ort)模型会把融合算子烧进文件:非对应 build 加载即失败,且没有回退路径。保存 .ort 前
-  想清楚目标环境。
-
-## 5. 参考资料索引
-
-按需加载,不必全读:
-
-| 文件 | 什么时候读 |
-|---|---|
-| `references/pattern-recognition.md` | Phase 0:识别/拒绝 attention 子图,形状与占比分析 |
-| `references/kernel-design.md` | Phase 2/3:布局、kernel、cache、数值语义的核心设计知识 |
-| `references/integration.md` | Phase 3:ORT 侧注册 checklist、环境变量门控模式、构建 |
-| `references/validation.md` | Phase 4:验证清单与测试写法 |
-| `references/benchmarking.md` | Phase 1/5/6:构建序列、测量协议、消融设计、报告模板 |
-| `references/history-lessons.md` | 想知道"为什么不用 flash / 整批 adapter / dispatch counter"时 |
-| `scripts/scan_attention.py` | Phase 0:模型扫描 |
-| `scripts/run_ab_benchmark.sh` | Phase 1/5:协议化 A/B 测量 |
-| `scripts/aggregate_results.py` | Phase 5/6:多轮结果聚合与 CV 判定 |
+- [模式识别](references/pattern-recognition.md)：tf2onnx 示例与可扩展匹配边界。
+- [kernel 设计](references/kernel-design.md)：布局、调度、cache、workspace 和案例算子契约。
+- [KDNN 集成](references/integration.md)：仅在相应后端接入时使用。
+- [验证](references/validation.md)、[测量](references/benchmarking.md)：按目标选择测试与指标。
+- [历史实验](references/history-lessons.md)：需要理解某条旧路径的失败条件时再读，不作为预期收益或否决依据。
+- `scripts/scan_attention.py`：顶层标准模式的启发式扫描，不能证明可安全融合。
+- `scripts/run_ab_benchmark.sh`、`scripts/aggregate_results.py`：适配特定 harness 的可选 A/B 工具；固定 sequential、至少三轮及默认跨轮 CV 门槛属于工具协议，其他负载可使用更合适的测量工具。

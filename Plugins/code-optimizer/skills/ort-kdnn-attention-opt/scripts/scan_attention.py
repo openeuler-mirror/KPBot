@@ -6,7 +6,7 @@ Mul/Div (scale) and Add (mask), and reports shape info where inferable.
 Requires: python3 + onnx package (pip install onnx).
 
 Usage:
-    python3 scan_attention.py --model model4.onnx [--batch 32]
+    python3 scan_attention.py --model model.onnx [--batch 32]
 """
 import argparse
 import sys
@@ -19,21 +19,51 @@ except ImportError:
 
 
 def tensor_shape(graph, name):
-    for vi in list(graph.input) + [v for n in graph.node for v in n.output if v]:
-        pass  # placeholder, real lookup below
-    for vi in graph.value_info:
-        if vi.name == name:
-            return [d.dim_value if d.HasField("dim_value") else d.dim_param or "?" for d in vi.type.tensor_type.shape.dim]
-    for out in graph.output:
-        if out.name == name:
-            return [d.dim_value if d.HasField("dim_value") else d.dim_param or "?" for d in out.type.tensor_type.shape.dim]
+    for vi in list(graph.input) + list(graph.value_info) + list(graph.output):
+        if vi.name == name and vi.type.tensor_type.HasField("shape"):
+            return [d.dim_value if d.HasField("dim_value") else d.dim_param or "?"
+                    for d in vi.type.tensor_type.shape.dim]
+    for initializer in graph.initializer:
+        if initializer.name == name:
+            return list(initializer.dims)
+    return None
+
+
+def trace_scores(name, producer, scalar_constants, remaining=2):
+    """Return (QK node, mask tensor) for an unambiguous standard score chain.
+
+    Accept one additive mask and scalar Mul/Div scaling in either order.
+    A reverse Div is not scaling. Ambiguous Add branches remain unclassified.
+    This recognizes candidates, not the complete fusion contract.
+    """
+    node = producer.get(name)
+    if node is None:
+        return None
+    if node.op_type == "MatMul":
+        return node, None
+    if remaining == 0 or len(node.input) != 2:
+        return None
+    lhs, rhs = node.input
+    if node.op_type in ("Mul", "Div"):
+        if rhs in scalar_constants and lhs not in scalar_constants:
+            return trace_scores(lhs, producer, scalar_constants, remaining - 1)
+        if node.op_type == "Mul" and lhs in scalar_constants and rhs not in scalar_constants:
+            return trace_scores(rhs, producer, scalar_constants, remaining - 1)
+        return None
+    if node.op_type == "Add":
+        matches = []
+        for scores, mask in ((lhs, rhs), (rhs, lhs)):
+            traced = trace_scores(scores, producer, scalar_constants, remaining - 1)
+            if traced is not None and traced[1] is None:
+                matches.append((traced[0], mask))
+        return matches[0] if len(matches) == 1 else None
     return None
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--batch", type=int, default=None, help="替换 shape 推断中的动态 batch")
+    ap.add_argument("--batch", type=int, default=None, help="仅在报告中替换首维动态 batch，不改写模型或重新推断")
     args = ap.parse_args()
 
     model = onnx.load(args.model)
@@ -46,6 +76,8 @@ def main():
         for o in node.output:
             producer[o] = node
     initializers = {i.name for i in graph.initializer}
+    scalar_constants = {i.name for i in graph.initializer
+                        if all(d == 1 for d in i.dims)}
     consumers = {}
     for node in graph.node:
         for i in node.input:
@@ -75,33 +107,13 @@ def main():
         av = cons[0]
         if av.input[0] != node.output[0]:
             continue  # probs must be slot 0
-        # walk back through Add(mask) and Mul/Div(scale) to the QK MatMul
-        cur = node.input[0]
-        mask_shape = None
-        for _ in range(2):
-            p = producer.get(cur)
-            if p is None:
-                break
-            if p.op_type == "Add":
-                other = p.input[1] if p.input[0] == cur else p.input[0]
-                mask_shape = shape_of(other)
-                cur = p.input[0] if p.input[0] != cur else p.input[1]
-            elif p.op_type in ("Mul", "Div"):
-                # scale side must be a constant initializer; qk side must be MatMul
-                a, b = p.input
-                if a in initializers:
-                    cur = b
-                elif b in initializers:
-                    cur = a
-                else:
-                    cur = None
-                    break
-            else:
-                break
-        qk = producer.get(cur) if cur else None
-        if qk is None or qk.op_type != "MatMul":
+        traced = trace_scores(node.input[0], producer, scalar_constants)
+        if traced is None:
             continue
-        shared = len(consumers.get(cur, [])) != 1
+        qk, mask = traced
+        mask_shape = shape_of(mask) if mask is not None else None
+        shared = (len(consumers.get(qk.output[0], [])) != 1 or
+                  any(out.name == qk.output[0] for out in graph.output))
         blocks.append({
             "softmax": node.name or node.output[0],
             "axis": axis,
@@ -122,7 +134,7 @@ def main():
         print(f"    out shape: {b['out_shape']}")
         print(f"    mask shape: {b['mask_shape']}")
         if b["scores_shared"]:
-            print("    !! scores 有其他消费者(共享输出,不可融合)")
+            print("    !! scores 被共享或作为图输出；融合需保留该结果")
         q, k = b["qk_shapes"]
         if q and len(q) == 4:
             # [B, H, Sq, d] (拆头后、进 QK 前)

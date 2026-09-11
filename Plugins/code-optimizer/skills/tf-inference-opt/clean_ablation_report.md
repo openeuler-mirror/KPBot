@@ -1,7 +1,8 @@
 # 干净基线消融实验报告：无现成答案的 TF 树上，skill 的价值还剩多少
 
+> 历史案例：模型名、分支和提交号仅用于区分实验对象，不是当前环境前提。`${EXPERIMENT_ROOT}` 为用户提供的历史产物根目录，`${TF_SOURCE_DIR}`、`${SERVING_BUILD_DIR}`、`${TRANSCRIPT_DIR}` 分别为源码、构建与会话记录目录；未随 skill 打包的日志不可视为已核验或可访问的证据。
 > **日期**：2026-09-08
-> **背景**：第一轮消融（`/data/nvme0/lpc/POC/results/tf_opt_ablation/REPORT.md`）被质疑效度——基线树（0e99f1bf4）内躺着 ANNC/KDNN 全套默认关闭的设施，agent 的收益主要来自"翻开关"而非真优化；任务书也含隐含引导。本轮按修正后的设计重做：**vanilla 上游 TF + KDNN 外部库 + 纯测量方法提示词**。
+> **背景**：第一轮消融（`${EXPERIMENT_ROOT}/ablation/REPORT.md`）被质疑效度——基线树（0e99f1bf4）内躺着 ANNC/KDNN 全套默认关闭的设施，agent 的收益主要来自"翻开关"而非真优化；任务书也含隐含引导。本轮按修正后的设计重做：**vanilla 上游 TF + KDNN 外部库 + 纯测量方法提示词**。
 
 ---
 
@@ -52,7 +53,7 @@ p99（并发 4）：skill 在 adx 最优（2036µs）；noskill 在 cvr/hmv/pres
 
 ## 4. 防作弊审计（事后全量 transcript 扫描）
 
-- **skill 侧**：796 处 `JD_ver/tensorflow_jd_version` 引用经逐条甄别，**全部是会话 cwd 元数据字段**（agent 继承主会话目录），工具调用中零命中；对方工作区仅在 `ls` 实验根目录时见到名字。**零违规**。
+- **skill 侧**：796 处 `loadtime-fork/tensorflow_jd_version` 引用经逐条甄别，**全部是会话 cwd 元数据字段**（agent 继承主会话目录），工具调用中零命中；对方工作区仅在 `ls` 实验根目录时见到名字。**零违规**。
 - **noskill 侧**：全部工具调用扫描（含 Read/Grep/Glob/Bash 路径参数），排除合法的共享 bazel 缓存路径后**零违规**；曾发现第三方实验占用其端口并正确地未触碰。
 - **代码改动真实性**：双侧 diff 与各自报告声称一致（skill 1 文件；nosckill KDNN 集成 + O3），无引入外部产物。
 - **数字真实性**：双侧终态 A/B 数字由主 agent 从原始 perf_analyzer 日志独立复提，逐位吻合（noskill hmv 报告 +0.9% vs 复提 −2.3%，n=3 噪声内，均判"持平"）。
@@ -96,7 +97,7 @@ p99（并发 4）：skill 在 adx 最优（2036µs）；noskill 在 cvr/hmv/pres
 
 ## 附：产物索引
 
-- 本报告：`/data/nvme0/lpc/tf_ablation_clean/REPORT.md`（副本：`doc/optimization_history/tf-inference-opt/clean_ablation_report.md`）
+- 本报告：`${EXPERIMENT_ROOT}/clean/REPORT.md`（副本：`clean_ablation_report.md`）
 - 双侧报告：`results/{skill,noskill}/REPORT.md`；原始数据：`results/*/perf/`、`logs/`、`scripts/`
 - 头对头：`h2h/{results,logs,summary.json}`、`run_h2h_clean.sh`；首轮（32 核误配）数据保留于同目录（时间戳早于重跑）
 - 基线与工作区：`baseline-bin/`、`pristine/tf`、`ws-{skill,noskill}/tf`、`serving-{baseline,skill,noskill}`
