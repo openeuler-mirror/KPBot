@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "code-optimizer",
-      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理、VSAG HGraph RaBitQ 并发查询批处理和 BRGEMM MatMul/Gemm 框架集成优化，覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
+      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel）、VSAG HGraph RaBitQ 并发查询批处理优化和 PyTorch embedding lookup 流水线的并行 unique 自定义算子优化（__gnu_parallel::sort + OpenMP、TORCH_LIBRARY），覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
       "author": {
         "name": "Kunpeng Acceleration Team"
       },
