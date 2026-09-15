@@ -1,0 +1,14 @@
+{
+  "skill_name": "kptools-ascend-smi",
+  "queries": [
+    {"id": "SQ-01", "query": "检查一下 NPU 的健康状态和 HBM 使用率", "should_trigger": true},
+    {"id": "SQ-02", "query": "昇腾芯片现在利用率多少，温度功耗正常吗", "should_trigger": true},
+    {"id": "SQ-03", "query": "看一下 8 张 910B 卡的拓扑和亲和性，准备绑核", "should_trigger": true},
+    {"id": "SQ-04", "query": "用 npu-smi 查设备信息", "should_trigger": true},
+    {"id": "SQ-05", "query": "容器里 torch_npu 报错，查下 /dev/davinci 权限和 CANN 版本", "should_trigger": true},
+    {"id": "SQ-06", "query": "查一下 NPU 间 RoCE 网口 IP 和错包统计", "should_trigger": false, "route_to": "kptools-ascend-hccn"},
+    {"id": "SQ-07", "query": "做个 RoCE 带宽时延测试", "should_trigger": false, "route_to": "kptools-ascend-hccn"},
+    {"id": "SQ-08", "query": "采集 topdown 微架构指标和热点函数", "should_trigger": false, "route_to": "kptools-devkit"},
+    {"id": "SQ-09", "query": "看看 CPU 频率和 NUMA 访存", "should_trigger": false, "route_to": "kptools-devkit"}
+  ]
+}
