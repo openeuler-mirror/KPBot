@@ -117,13 +117,13 @@ export HCCL_EXEC_TIMEOUT=0          # 0=不超时，避免长 allreduce 误杀
 
 ### torch_npu ABI 要求
 
-torch_npu 强制要求 `-D_GLIBCXX_USE_CXX11_ABI=0`（与 CUDA 早期生态类似）。第三方 C++ 扩展若用 `ABI=1` 编译，运行时会因 `std::string` ABI 不兼容而 symbol 找不到或段错误。
+vLLM-Ascend、PyTorch、torch_npu 三者 ABI 必须保持一致，统一 `-D_GLIBCXX_USE_CXX11_ABI=1`（NEW/cxx11）。任一组件 ABI 不一致，运行时会因 `std::string` ABI 不兼容而 symbol 找不到或段错误。
 
 ```bash
 # CMake
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
 # pip install 自定义 op
-CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" pip install -e .
+CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=1" pip install -e .
 ```
 
 ## vLLM KV Cache 大页
