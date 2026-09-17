@@ -477,6 +477,7 @@ FOR each item in detected_libraries:
 以下内容已沉淀到 references，按需加载：
 
 - **Ascend NPU 推理 Host 侧 Malloc 优化**（背景/瓶颈/tcmalloc vs jemalloc 对比/LD_PRELOAD 注入/实战收益表/验证流程）→ `references/ascend-playbook.md` "Ascend NPU 推理 Host 侧 Malloc 优化" 章节
+- **A+K 训练场景 Host 侧 Malloc 优化**（hostbound 训练判定特征/训练 vs 推理收益量级对照/perf 符号级生效验证信号/torchrun 多进程加载验证）→ `references/ascend-playbook.md` "A+K 训练场景 Host 侧 Malloc 优化" 章节
 - **tcmalloc 运行时依赖陷阱**（libarcher TSAN 死锁/诊断方法/正确配置/rollback 要求）→ `references/ascend-playbook.md` "tcmalloc 运行时依赖陷阱" 章节
 - **vLLM Caching Allocator 交互**（两层 allocator 架构/PYTORCH_NPU_ALLOC_CONF 调优/协同收益）→ `references/ascend-playbook.md` "vLLM Caching Allocator 交互" 章节
 - **内存分配器选型决策树**（场景→分配器决策路径/依据映射/跨场景经验）→ `references/allocator-decision-guide.md`

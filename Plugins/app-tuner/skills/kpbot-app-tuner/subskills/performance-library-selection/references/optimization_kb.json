@@ -24,7 +24,7 @@
           "TCMALLOC_AGGRESSIVE_DECOMMIT": "内存紧张场景设为 1，更积极归还内存给 OS",
           "HEAPPROFILE": "设为 /tmp/heap.prof 开启 heap profile 供 pprof 分析"
         },
-        "ascend_notes": "参考《Ascend Extension for PyTorch 开发文档》高性能内存库替换章节；CANN runtime 内部锁竞争可能掩盖 malloc 热点，需提取 CANN/torch_npu DSO 内容器操作热点做二次归因"
+        "ascend_notes": "参考《Ascend Extension for PyTorch 开发文档》高性能内存库替换章节；CANN runtime 内部锁竞争可能掩盖 malloc 热点，需提取 CANN/torch_npu DSO 内容器操作热点做二次归因；A+K 训练 hostbound 历史收益参照 +30% 量级（稳态 TPS，openEuler aarch64，详见 ascend-playbook.md 的 A+K 训练场景 Host 侧 Malloc 优化章节），仅作优先级参照，不可跨场景外推"
       }
     },
     "hash_functions": {
@@ -192,9 +192,9 @@
     },
     "ascend_runtime": {
       "tcmalloc_for_cann": {
-        "best_scenarios": "Ascend NPU 训练/推理场景（PyTorch + CANN + torch_npu），perf 热点 DSO 排名中 libpthread-2.31.so 占比高（锁竞争），CANN runtime（libruntime_v100.so）/ torch_npu / HCCL 通信库内部存在大量短生命周期小对象分配与 std 容器频繁 realloc",
+        "best_scenarios": "Ascend NPU 训练/推理场景（PyTorch + CANN + torch_npu），perf 热点 DSO 排名中 libpthread-2.31.so 占比高（锁竞争），CANN runtime（libruntime_v100.so）/ torch_npu / HCCL 通信库内部存在大量短生命周期小对象分配与 std 容器频繁 realloc；训练 hostbound 信号：Computing/Stage 偏低、Free/Stage 偏高、大量算子 device_total=0（纯 host 开销），host 侧分配压力来自 DataLoader 多进程、autograd host 调度、optimizer state 频繁小对象分配",
         "strengths": "参考《Ascend Extension for PyTorch 开发文档》高性能内存库替换章节。CANN runtime 内部的 std::_Rb_tree<std::mutex>::erase / std::vector::_M_realloc_insert / std::_Hashtable::_M_insert_unique_node 等容器操作隐含大量 malloc/free 调用，这些热点被归入 CANN DSO 而非 libc malloc。tcmalloc 的 per-thread cache 能减少多线程锁竞争，改善系统响应速度和服务质量。官方文档明确推荐 LD_PRELOAD 方式接入",
-        "verification_steps": "同 allocators.tcmalloc（安装/路径/LD_PRELOAD/验证加载），额外约束：必须保留已有 LD_PRELOAD（如 libgomp.so.1）追加而非覆盖；性能对比：perf report 对比接入前后 libpthread-2.31.so 锁竞争占比和 libruntime_v100.so 容器操作热点占比变化",
+        "verification_steps": "同 allocators.tcmalloc（安装/路径/LD_PRELOAD/验证加载），额外约束：必须保留已有 LD_PRELOAD（如 libgomp.so.1）追加而非覆盖；性能对比：perf report 对比接入前后 libpthread-2.31.so 锁竞争占比和 libruntime_v100.so 容器操作热点占比变化；训练场景（torchrun 多进程）须对每个训练进程用 /proc/<pid>/maps 验证加载；生效验证信号（step 20+ 稳态 perf 对比）：glibc malloc 符号与 __lll_lock_wait_private 0 命中、pthread_mutex_lock 下降、libc.so.6 DSO 占比显著下降、libtcmalloc.so 新出现",
         "prerequisite_check": "现场检查步骤（门控规则遵循 SKILL.md 安全与架构红线 #3，此处仅列出具体检查项）：1) 通过 lsof/maps 确认 libruntime_v100.so / libtorch_npu.so / libhccl.so / libascendcl 已加载；2) perf record 采样后从 perf report 提取 pthread 锁竞争占比（口径：pthread_mutex_lock + pthread_mutex_unlock 含 _usercnt 后缀 + pthread_rwlock_unlock + pthread_rwlock_rdlock + pthread_rwlock_wrlock，不含 sem_ 信号量）；3) 若锁竞争占比 > 5%，进一步提取 CANN/torch_npu DSO 内 std::vector::_M_realloc_insert / std::_Rb_tree::erase / std::_Hashtable 等容器操作热点做二次归因；4) 注意 libc malloc 热点可能低于 2%（CANN DSO 内容器操作隐含的 malloc/free 不计入 libc malloc 热点），故 libc malloc 占比低不构成否决条件",
         "limitations": "tcmalloc 只优化 host 侧 malloc；NPU Caching Allocator（c10_npu::NPUCachingAllocator）管理 NPU 显存，若瓶颈在 NPU 显存分配则 tcmalloc 无效；[vdso] 高占比属系统调用开销，tcmalloc 无法优化（具体占比以本轮现场 perf 为准）"
       }
