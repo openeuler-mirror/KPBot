@@ -1,0 +1,63 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 apply-vectorization 优化点积
+#
+# 拉取与测试方法（人类可读）：
+#   # 构建（本机容器无法解析 openeuler 源，需 --network host）
+#   docker build --network host -f skills/apply-vectorization/cases/agent-optimize-dotproduct/Dockerfile \
+#       -t kpbot/code-optimizer-agent-dotproduct:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。with-skill 在容器内接入 apply-vectorization，prompt 显式要求调用；
+# without-skill 不接入任何 skill，prompt 只描述任务不提 skill，其余（模型/任务/判定）
+# 完全一致，用于量化 skill 的净增益。当前迭代 opencode 二进制 + auth.json 运行时挂载。
+
+name: agent-optimize-dotproduct
+skill: apply-vectorization
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/code-optimizer-agent-dotproduct:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount           # ~/.local/share/opencode/auth.json
+
+ab:
+  conditions: [with, without]      # 同一任务两条件对照
+  skill_enabled:
+    with: true                     # 运行时把 /staging/skill 接入 .opencode/skills/
+    without: false                 # 不接入任何 skill，仅靠模型自身
+  metric: speedup                  # 核心对比指标
+  uplift: speedup_with / speedup_without
+
+build:
+  context: ../../../..                         # 指向 Plugins/code-optimizer/
+  dockerfile: skills/apply-vectorization/cases/agent-optimize-dotproduct/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机（NEON 可用）
+  - opencode 二进制（运行时挂载，当前迭代）
+  - opencode auth.json（运行时挂载）
+  - 容器可访问 deepseek API（必要时 --network host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+  N: 1000000
+  ITERS: 200
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: optimized_correct
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: speedup
+    op: gte
+    expect: 1.0
