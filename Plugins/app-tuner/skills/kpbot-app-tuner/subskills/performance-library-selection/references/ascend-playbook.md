@@ -119,6 +119,57 @@ grep tcmalloc /proc/$(pgrep -f vllm)/maps
 4. 中位数对比：替换后 ≥3 次基准取中位数，计算增量
 5. 回退：`unset LD_PRELOAD` 后重跑确认回归基线
 
+## A+K 训练场景 Host 侧 Malloc 优化
+
+> 本章沉淀 A+K（Ascend NPU + 鲲鹏 CPU，openEuler 22.03/24.03，aarch64）训练场景 host 侧分配器替换的实证经验。权威门控见 SKILL.md"安全与架构红线 #3"：必须有本轮 `current_run_id` 的现场 perf 采集成功才能输出推荐结论。安装 / LD_PRELOAD 接入 / 回退的通用 SOP 见 `library-playbook.md`，本章不重复。
+
+### 适用场景：hostbound 训练负载判定
+
+训练 profiling 出现以下特征时，瓶颈在 host 侧，host 侧内存分配锁竞争可能是隐藏瓶颈：
+
+- **Computing/Stage 偏低、Free/Stage 偏高**（step 耗时被 host 侧空隙主导）
+- **大量算子 device_total=0**（纯 host 开销）
+- host 侧分配压力来源：Python 解释器频繁创建/销毁临时对象（tensor metadata、autograd graph 节点）、DataLoader 多进程数据加载频繁 malloc/free、optimizer state 更新频繁小对象分配、CANN runtime 内部 std 容器（vector/Rb_tree/Hashtable）元素分配走 host malloc
+
+glibc 默认的 ptmalloc2 在多线程下使用 arena 锁，高并发小对象分配场景下锁竞争成为瓶颈；tcmalloc 的 per-thread cache 消除大部分锁争用。
+
+> hostbound 结论必须用同卡稳态 TPS 证实，不能仅凭单步 profiling 下结论。
+
+### 收益量级对照：训练 vs 推理（仅作参照）
+
+| 场景 | tcmalloc 历史实测收益 | 说明 |
+|------|----------------------|------|
+| A+K hostbound 训练（openEuler aarch64） | 稳态 TPS **+30% 量级** | 训练负载 host 侧分配压力更大（DataLoader + autograd host 调度 + optimizer state） |
+| Ascend910 vLLM 推理（Qwen3-8B） | Prefill -2.66%，Decode -0.06% | 见上方"历史实测收益基线" |
+
+> 训练场景收益通常显著高于推理场景，但收益量级不可跨场景外推。实际收益取决于 host 侧分配压力占比，须现场同卡 A/B 实测。
+
+### perf 热点验证特征（tcmalloc 已生效的符号级信号）
+
+替换后同卡同配置、稳态阶段（step 20+）各采样一次，`perf report --no-children -g none` 对比 top 符号。以下可复现的变化模式可作为"tcmalloc 已生效"的验证信号：
+
+| 信号 | baseline | 替换后 | 判读 |
+|------|----------|--------|------|
+| glibc `malloc` 符号（libc.so.6） | 多线程（`pt_autograd_0`、`python3`）各占显著比例 | **0 命中** | 所有 malloc 调用被 tcmalloc 的 `operator new[]` / `ThreadCache` 路径接管 |
+| `__lll_lock_wait_private` | 跨多个线程出现 | **0 命中** | **核心信号**：per-thread cache 消除 glibc malloc 内部私有锁等待 |
+| `pthread_mutex_lock` | 显著占比 | 下降 | glibc arena 锁竞争减少；tcmalloc 中心缓存锁开销远低 |
+| `libc.so.6` DSO 总占比 | top 热点 DSO | 显著下降 | glibc 内存管理开销降为次要，释放的 CPU 时间回到 Python 解释器 / torch 计算 |
+| `libtcmalloc.so` | 无 | 新出现 | tcmalloc 自身开销（`ThreadCache::ReleaseToCentralCache`、`CentralFreeList::ReleaseToSpans`、`operator new[]`）占少量比例，远低于原 glibc malloc |
+
+```bash
+# 稳态阶段（step 20+）采样
+perf record -F 99 -g --call-graph dwarf -p <pid> -- sleep 20
+perf report --no-children -g none
+```
+
+### 训练多进程加载验证
+
+训练场景有多个进程（torchrun + worker），需对**每个训练进程**用 `grep tcmalloc /proc/<pid>/maps` 验证 `libtcmalloc.so` 已加载（不能用 ldd——ldd 不继承目标进程的 LD_PRELOAD）。
+
+### 与编译优化的正交性
+
+分配器替换是独立于编译优化的优化维度：编译优化改善 host CPU 计算效率，分配器替换改善 host 内存分配锁竞争。两者正交、可叠加，但叠加收益须独立实测（单变量原则，见 `library-playbook.md`"轮次边界"）。
+
 ## tcmalloc 运行时依赖陷阱
 
 > 实战踩坑经验，来自 Ascend910 + vLLM 优化案例。本章为诊断指引，不输出 `candidate_actions`。
