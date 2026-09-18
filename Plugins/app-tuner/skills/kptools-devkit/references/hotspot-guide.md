@@ -84,7 +84,7 @@ devkit tuner hotspot [-h] [-c {n | n,m | n-m}] [-r {user,kernel,all}] [-d <sec>]
 | 内核 | 支持 | 支持 | 支持 | 不适用 |
 | Python | 支持（采样 `.so`） | 支持 | 支持 | 不适用 |
 | Go | 支持 | 支持 | 支持 | 不适用 |
-| Java | 不支持（需 `devkit-java-perf` 独立插件） | | | |
+| Java | native 帧仅（Java 方法名需 java-perf 插件，见 [java-perf-guide.md](java-perf-guide.md)） | | | |
 
 ## 结果解读
 

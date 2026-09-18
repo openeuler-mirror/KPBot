@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-proc-collector",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "进程 1234 的线程分布不均，帮我确认哪些线程挤在哪些核上。",
+      "expected_output": "运行 collect.sh --threads 和 check_balance.sh，给出 balance_status、hot_cpu_list、thread_distribution 数值，并指出热点线程 tid；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "检查这个容器化进程的资源限制是否影响性能。",
+      "expected_output": "运行 collect.sh --cgroup，报告 cgroup 版本（v1/v2）、cpuset、cpu quota 折算的有效核数、memory.max，并与实际负载对比判断是否触及边界；不编造。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "分析该进程的动态库依赖里有没有第三方库参与热点。",
+      "expected_output": "运行 collect.sh --maps（或 parse_maps.sh），输出 DSO 分类列表（main_binary/libc/third_party）及映射大小，指出第三方 .so 清单；不编造。",
+      "files": []
+    }
+  ]
+}

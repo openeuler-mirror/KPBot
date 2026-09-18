@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-network-collector",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "服务器网络慢，帮我确认是不是丢包或重传问题。",
+      "expected_output": "运行 collect.sh --drop 和 --retrans，报告 rx/tx_drop_delta、重传率（按 RetransSegs/OutSegs 计算），按 guide 阈值（零容忍 / >1%）给出判定；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "检查这个服务进程的 socket 是否有堆积。",
+      "expected_output": "运行 collect.sh --sock -p PID，报告 socket_count、total_recvq/total_sendq，按 128KB 阈值判定堆积；不编造。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "评估网卡多队列和中断分布是否均衡。",
+      "expected_output": "运行 collect.sh --nic/--rss/--irq/--irqdelta/--numa，报告队列数、rps/xps 掩码、IRQ 亲和性、活跃 IRQ delta 与 max/min ratio、网卡 NUMA，按 guide 阈值（ratio>3x 热点 / >50 塌缩、effective_affinity NUMA 对齐）给出判定；不编造。",
+      "files": []
+    }
+  ]
+}

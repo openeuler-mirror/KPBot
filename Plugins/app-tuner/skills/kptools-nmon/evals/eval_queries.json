@@ -1,0 +1,15 @@
+{
+  "skill_name": "kptools-nmon",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "NQ-01", "prompt": "采集系统 CPU 利用率", "should_trigger": true },
+    { "id": "NQ-02", "prompt": "采集 30 秒系统性能数据", "should_trigger": true },
+    { "id": "NQ-03", "prompt": "看看内存和磁盘 IO 情况", "should_trigger": true },
+    { "id": "NQ-04", "prompt": "用 nmon 采集系统资源", "should_trigger": true },
+    { "id": "NQ-05", "prompt": "服务器网络吞吐采集", "should_trigger": true },
+    { "id": "NQ-06", "prompt": "采集 topdown 微架构指标", "should_trigger": false, "note": "routes to kptools-devkit" },
+    { "id": "NQ-07", "prompt": "采集这个 Java 进程的火焰图", "should_trigger": false, "note": "routes to kptools-devkit java-perf" },
+    { "id": "NQ-08", "prompt": "看看线程在哪些核上运行", "should_trigger": false, "note": "routes to kptools-proc-collector" }
+  ]
+}

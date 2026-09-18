@@ -23,6 +23,12 @@ packages:
     description: Tuner plugin (turbostat/top-down/hotspot/miss/numafast/memory/roofline/hpc-perf)
     sha256: "871c1cc9cae852a126cf2c390edd54be51e90398f2e27d62f85ad7bfd585732f"
 
+  - name: devkit-java-perf
+    required: false
+    component: java-perf
+    description: "Java profiling plugin (hotspot with flamegraph: CPU/ALLOC/CYCLES/LOCK)"
+    sha256: "0100e1a55690808a03954f24c16c8ef6610e728c83e2b050f884fc79c5bd2c6e"
+
 tuner_tasks:
   - name: turbostat
     function: core/uncore frequency collection
@@ -64,3 +70,13 @@ tuner_tasks:
     produces_tar: true
     tar_flag: "--package"
     no_vm: true
+
+java_perf_tasks:
+  - name: hotspot
+    function: java hotspot analysis with flamegraph
+    events: [CPU, ALLOC, CYCLES, LOCK]
+    attach_mode: true
+    workload_mode: false
+    output_format: html
+    produces_tar: false
+    requires_same_uid: true
