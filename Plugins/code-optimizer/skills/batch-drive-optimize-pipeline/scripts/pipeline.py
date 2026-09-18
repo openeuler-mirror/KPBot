@@ -57,6 +57,7 @@ class BatchPipeline:
                 self.context.claude_bin,
                 legacy_driver=self.legacy_driver,
                 progress_callback=progress_callback,
+                worker_type=self.context.run_cfg.get("worker_type"),
             )
         )
 

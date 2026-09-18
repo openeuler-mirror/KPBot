@@ -20,4 +20,7 @@ def merge_cli_run_config(manifest: dict[str, Any], args: Namespace) -> dict[str,
         run_cfg["resume_prompt_max_tokens"] = args.resume_prompt_max_tokens
     if args.transcript_tail_lines:
         run_cfg["transcript_tail_lines"] = args.transcript_tail_lines
+    worker = getattr(args, "worker", None)
+    if worker:
+        run_cfg["worker_type"] = worker
     return run_cfg

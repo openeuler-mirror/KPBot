@@ -251,6 +251,7 @@ class BatchDriveFrameworkTests(unittest.TestCase):
                 claude_bin: str,
                 legacy_driver: bool = False,
                 progress_callback=None,
+                worker_type: str | None = None,
             ) -> dict[str, object]:
                 self.assertEqual(target_out, out)
                 self.assertEqual(run_cfg["max_parallel"], 1)
