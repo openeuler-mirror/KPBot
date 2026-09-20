@@ -65,3 +65,40 @@ python3 scripts/experiment_record.py --record INPUT --run-dir RUN
 ```
 
 `INPUT` 是 JSON 文件，其中引用的证据已经位于 `RUN` 内。成功时标准输出仅打印保存后的 `record.json` 路径。JSON、字段、路径、目录或写入错误会输出到标准错误并返回非零状态；若实验目录已经创建，错误会同时标明该目录保留的是不完整记录。
+
+## 反馈校验与独立当前上下文
+
+编排器在 `RUN/current_context.json` 独立维护下述对象；实验 Agent 只能核对它，不能用记录内容生成或覆盖它：
+
+```json
+{
+  "run_id": "r1",
+  "point_id": "p1",
+  "parent_state": "<包含未提交修改的当前源码摘要>",
+  "execution_context": {
+    "target": "<目标身份>",
+    "build": "<构建参数/身份>",
+    "workload": "<输入、数据集、并发条件>"
+  }
+}
+```
+
+这四个顶层字段必须与记录逐项相等；execution_context 对象整体相等。缺少上下文或任一条件不匹配时 `target_checked` 为 false，不能进入 DecideOptimization。实际条件或父源码发生变化时，编排器必须先更新当前上下文。此文件不是从待校验记录导出的自证材料。
+
+反馈阶段新增条件（Task 1 基础校验仍允许无这些字段的设计）：
+
+- 执行过的记录增加 `experiment.exit_code`，必须为整数而非 bool。非零退出码优先将执行状态转为 failed，即使传入 completed/supported，也只路由到 blocked_execution。失败尝试同样需要保存原始错误日志。复用历史结果时填写被复用命令的原始退出码，未知时不能声明 completed。
+- 可核验 observation 增加 `provenance` 对象，含 `parent_state`、`execution_context: {target, build, workload}` 和 `scope`；前两者必须与当前记录匹配，scope 必须等于证据项 scope。source 为 target 或 historical，kind 为 observation 才可计入 `evidence_checked`。
+- historical 还必须有非空 `reuse_explanation`，逐项说明源码、目标、构建、输入和范围为何匹配。原始 run_id/experiment_id 等身份可作为额外来源字段保留，不要求历史 run_id 等于当前运行。不能核实历史条件时不要填写匹配元数据。fixture 和 estimate 永远不计入目标 observation。至少一条有效 observation 才设置 evidence_checked。
+
+完整反馈 JSON 必须包含 `run_id`、`point_id`、`experiment_id`、`hypothesis_id`（均与记录相等）、`execution_status`（completed/failed/awaiting_target_evidence）、`hypothesis_verdict`（supported/refuted/inconclusive/invalid）、布尔 `evidence_checked`、布尔 `target_checked`、非空 `explanation`、非空 `record_path`。record_path 使用 RUN 内相对路径或绝对路径，必须解析到 --record 指定的同一文件。执行过的尝试必须位于 `RUN/experiments/<experiment_id>/record.json` 且 evidence 非空；awaiting_target_evidence 可引用 RUN 内草稿，无须退出码。
+
+```bash
+python3 scripts/experiment_feedback.py --record RECORD --feedback FEEDBACK --run-dir RUN --remaining N
+```
+
+CLI 先调用 Task 1 的 validate_record，再校验身份、最终记录位置、退出码、独立上下文和 observation provenance；输入 checked 标志仅作类型检查，其值完全重算。成功输出一个 JSON 对象：原反馈字段、重算的 execution_status/evidence_checked/target_checked、next_stage 和 reason。缺少上下文不会放行，返回 blocked_evidence（failed/awaiting 状态优先）；文件/JSON/必填字段/非法枚举/预算/记录路径错误返回非零退出码并在 stderr 说明原因。
+
+`choose_next(feedback: dict, remaining: int) -> str` 仅验证路由子集（status、verdict、两个布尔标志及非负整数预算），供已完成校验的调用方使用，不独立核验证据。路由顺序为 awaiting_target_evidence、failed → blocked_execution、任一 checked 为 false 或 invalid → blocked_evidence、supported → DecideOptimization、剩余额度为零 → stop_budget、refuted → AnalyzeHotspot、inconclusive → DesignExperiment。supported 即使剩余额度为零也可以进入决策。
+
+这些检查验证引用与声明的来源条件，不验证文件内容是否真实，也不自动证明因果关系或抵抗恶意伪造元数据。Agent 必须阅读原始结果，引用证据并对照预先声明判据给出解释；完整项目验收仍是后续阶段职责。
