@@ -89,16 +89,10 @@ TaskUpdate({ taskId: test_task_id, status: "in_progress" })
 
 条件：编译成功。使用 prepareProject.verification_commands.correctness 的全部命令，基线没有测试结果不能成为省略完整正确性验证的理由。
 
-1. 运行**完整测试套件**（不可仅运行当前函数相关用例——单点修改可能影响其他模块）：
-   - cmake + ctest：`cd <repo.path>/build && ctest --output-on-failure`
-   - make + googletest：`cd <repo.path> && ./test_runner`
-   - 若 test_method 为全量测试命令，直接使用：`<test_method>`
-2. 记录结果：
-   - `passed: true/false`
-   - `details: "<n>/<total> cases passed"` 或错误摘要
-3. 测试失败时 → 进入步骤 2a（功能调试流程）
-
-如果 `test_framework == none`，跳过此步骤，记录 `functional_test: {}`、correctness_verdict=not_run 和原因。
+1. 优先逐条执行 prepareProject.verification_commands.correctness 中的**全部**用户/项目命令，即使 test_framework=none 也必须执行自定义测试/校验脚本；不能用框架探测结果覆盖已配置命令。
+2. 仅当列表为空时，查找项目已有完整测试入口（例如 cmake/ctest、make/test_runner，或已明确为全量正确性测试的 test_method），记录实际适用命令后执行。不可只运行当前函数用例。
+3. 每条命令保存原始日志、exit_code、测试完整性及数值约束结果；全部适用检查通过才能 functional_test.passed=true / correctness_verdict=passed。失败记录 details 并进入步骤 2a；结果缺失/无法确定完整性为 inconclusive。
+4. 只有既无配置命令、也找不到适用的项目完整正确性命令时才跳过，记录 functional_test={}、correctness_verdict=not_run 及原因。无完整正确性证据不能 system_acceptance=passed 或 status=verified，最终仍 unverified。
 
 ### 步骤 2a：功能测试快速修复（仅 1 轮）
 
@@ -128,60 +122,34 @@ TaskUpdate({ taskId: perf_task_id, status: "in_progress" })
 
 #### 3.0 执行模式选择
 
-根据基线测试耗时判断使用**同步模式**还是**后台+轮询模式**：
+从 prepareProject.verification_commands.performance 取得完整命令列表，按原顺序串行执行；每条命令保留参数、工作负载、目标环境与独立 raw 结果路径。同步与后台仅是执行方式差异，都必须消费同一完整列表，不能用单一 test_method 替代。列表为空且没有可确认的既定系统 benchmark 时记录 system_acceptance=not_run、status=unverified。
 
+```text
+for perf_command in prepareProject.verification_commands.performance:
+    baseline_duration = 与此命令/工作负载对应的基线耗时（未知为 0）
+    baseline_duration <= 600 → 同步（步骤 3.1）
+    baseline_duration > 600 → 后台并轮询（步骤 3.2）
+    保存本条 command/exit_code/raw_results/完整性检查
+全部命令完成后 → 步骤 3.3 汇总完整系统验收
 ```
-# 从 prepareProject.baseline.metrics 获取基线耗时
-baseline_duration = max(baseline.metrics 中各 case 的耗时, 默认 0)
-# Bash 工具超时限制
-bash_timeout_limit = 600  # 秒
-
-if baseline_duration == 0 or baseline_duration <= bash_timeout_limit:
-    使用同步模式（步骤 3.1）
-else:
-    使用后台+轮询模式（步骤 3.2）
-```
-
-**判断逻辑**：当单次完整测试耗时超过 Bash 工具的超时限制（600s）时，后台模式允许测试完整运行而不会被截断。
 
 #### 3.1 同步模式（短测试）
 
-1. 运行 prepareProject.verification_commands.performance 中全部约定性能测试（与基线相同的 benchmark 命令、参数和工作负载）
-2. 记录优化后的性能指标
-3. 确认命令成功退出及原始结果完整，计算加速比，跳转到步骤 3.3 判断结果
+对列表中的当前 perf_command：执行其 command 原文，等待退出并记录整数 exit_code；核对本条所需的全部原始结果与对应基线。仅 exit_code=0 且结果完整才计算该条指标。错误或不完整结果标为未决并保留日志，不能把其他成功命令当作整个列表通过。然后处理列表下一条，全部处理完才进入系统判定。
 
 #### 3.2 后台+轮询模式（长测试）
 
-当基线耗时 > 600s 时使用此模式：
+对列表中的当前 perf_command（基线耗时 > 600 秒）：
 
-1. **启动后台测试**：
-   ```bash
-   # run_in_background: true
-   <test_method>
+1. **启动本条后台命令**，使用其 command 原文，不替换为 test_method：
+   ```text
+   run_in_background: true
+   perf_command.command
    ```
-   捕获返回的 `task_id`。
-
-2. **轮询结果目录**（ann-benchmarks 等框架在运行过程中写入 HDF5 结果文件）：
-   ```
-   poll_interval = 60  # 秒
-   max_wait = min(baseline_duration × 1.5, 3600)  # 上限 1 小时
-   elapsed = 0
-
-   while elapsed < max_wait:
-       sleep(poll_interval)
-       elapsed += poll_interval
-       检查结果目录是否有新文件产生
-       检查后台任务是否已完成（TaskOutput with block=false）
-       if 任务已完成:
-           break
-   ```
-
-3. **结果检查**：
-   - 确认当前后台进程退出码为 0 且本次结果完整 → 进入步骤 3.3；仅出现新文件不能证明测试完成
-   - 若超时仍无结果 → 记录 `performance: {}, reason: "background test timeout"`
-   - 若后台任务异常退出 → 记录错误信息，`performance: {}`
-
-4. **禁止行为**：在后台模式下**严禁自行创建替代测试脚本**，必须使用 `test_method`。
+   捕获本条 task_id/进程身份与独立结果目录，连同 command 和 workload 一起记录。
+2. **轮询本条任务**：每 60 秒通过 TaskOutput with block=false 查询是否退出，并核对本条独立结果目录。max_wait=min(本条 baseline_duration × 1.5, 3600)；仅出现新文件不能证明任务成功或完成。
+3. **逐条结果检查**：确认对应后台进程退出且 exit_code=0、该命令的全部本次结果完整后，记录指标并处理列表下一条。超时、非零退出或结果缺失时保存该条 command/退出或超时状态/raw 日志，相关 verdict=inconclusive；若还有进程未结束，先停止并确认退出或将后续命令标为未运行，不能并发污染后续对比。
+4. **列表完成判定**：所有配置命令均执行成功、结果完整、指标可比且达到约定验收线才能 system_acceptance=passed。任一命令失败/未运行/结果缺失均不能用其余成功项判定系统通过；保存未完成清单。严禁创建替代测试脚本或在后台分支退回单一 test_method。
 
 #### 3.3 结果判断
 
@@ -437,7 +405,7 @@ TaskUpdate({ taskId: output_task_id, status: "in_progress" })
 - git 操作失败时报告错误，保留文件变更让用户手动处理
 - commit 前必须再次确认 staged diff 不包含临时产物、二进制、大文件、测试数据或误删测试源码；否则取消 commit 并输出 hygiene failure。
 - **源码修改优先使用 Edit 工具**：快速修复时先 Read 读取出错位置的精确文本，再用 Edit 替换。仅当 Edit 无法胜任时，才使用 `sed`/`awk` 辅助
-- 无测试框架时跳过功能测试，仅做编译+性能
+- test_framework=none 仍执行配置的 correctness 命令；仅无任何适用完整正确性命令时记 not_run，不能完成系统验收
 
 ## 修复路由说明
 
