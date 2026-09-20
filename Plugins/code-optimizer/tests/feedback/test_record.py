@@ -97,6 +97,21 @@ class RecordTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "hypothesis.refute_if"):
                 validate_record(record, root)
 
+    def test_design_requires_controlled_build_and_workload(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            cases = (
+                (("experiment", "controlled"), "experiment.controlled"),
+                (("execution_context", "build"), "execution_context.build"),
+                (("execution_context", "workload"), "execution_context.workload"),
+            )
+            for keys, expected in cases:
+                with self.subTest(field=".".join(keys)):
+                    record = sample(root)
+                    del record[keys[0]][keys[1]]
+                    with self.assertRaisesRegex(ValueError, expected.replace(".", r"\.")):
+                        validate_record(record, root)
+
     def test_unknown_schema_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

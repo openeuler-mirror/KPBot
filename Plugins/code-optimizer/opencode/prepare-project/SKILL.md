@@ -17,6 +17,12 @@ description: 验证项目状态、定位优化目标函数、建立性能基线�
 |------|------|------|
 | project_path | 是 | 项目根目录绝对路径 |
 | target | 否 | 目标模块名或函数名，不提供则全项目扫描 |
+| target_machine | 否 | 任务要求的目标机器身份；未提供时只记录当前可观察机器，不把开发机假定为验收目标 |
+| verification_commands | 否 | 用户指定的构建、正确性和性能验证命令 |
+| numeric_constraints | 否 | 用户指定的正确性容差、性能目标、资源上限等数值约束 |
+| diagnostic_budget | 否 | 诊断实验预算；默认 `{max_experiments: 3, command_timeout_seconds: 600}` |
+
+从任务目标和已有上下文提取这些可选参数。只有任务目标明确给出覆盖值时才改变默认诊断预算；不要为了补齐流程而要求用户提供所有可选信息。
 
 ## 执行步骤
 
@@ -254,6 +260,12 @@ todowrite({ todos: [{ content: "建立基线", status: "pending", priority: "hig
    - 如果没有，对目标函数所在可执行文件用 `time` / `perf stat` 获取粗略指标
    - 无法获取时记录 `metrics: null`
 
+4. **验收条件与命令**：
+   - 优先保留用户明确指定的构建、正确性和性能命令，不自行改写其语义
+   - 从项目配置识别到的命令可作为候选，但必须标明来源；未确认可执行时不要声称已验证
+   - 提取正确性容差、性能目标、数据规模、并发度和资源上限等数值约束；未提供的字段保留为空数组
+   - 记录任务要求的目标机器身份。无法确认目标机器时，后续只做静态分析，不在当前开发机用替代性能结果宣告成功
+
 ### 步骤 6：架构分析
 
 todowrite({ todos: [{ content: "建立基线", status: "completed", priority: "high" }] })
@@ -343,6 +355,23 @@ todowrite({ todos: [{ content: "架构分析", status: "completed", priority: "h
       "<func1>_avg_ns": 125000
     }
   },
+  "target_machine": {
+    "identity": "<任务要求的机器、型号或 unknown>",
+    "available": true,
+    "source": "task_requirement|observed|unknown"
+  },
+  "verification_commands": {
+    "build": [{ "command": "<argv or shell command>", "source": "user|project" }],
+    "correctness": [{ "command": "<argv or shell command>", "source": "user|project" }],
+    "performance": [{ "command": "<argv or shell command>", "source": "user|project" }]
+  },
+  "numeric_constraints": [
+    { "name": "<constraint name>", "operator": "<=|>=|==", "value": 0.001, "unit": "<unit>", "source": "user|project" }
+  ],
+  "diagnostic_budget": {
+    "max_experiments": 3,
+    "command_timeout_seconds": 600
+  },
   "architecture_file": "<project_path>/optimization_reports/architecture/ARCHITECTURE.md",
   "microarch_file": "<pipeline_root>/skills/kunpeng_microarch/kunpeng920-microarchitecture.md 或 null>",
   "instruction_perf_file": "<pipeline_root>/skills/kunpeng_microarch/scripts/tsv110_full.json 或 null>",
@@ -369,3 +398,5 @@ todowrite({ todos: [{ content: "架构分析", status: "completed", priority: "h
 - 编译参数提取失败不影响 `status`，`compilation` 中对应字段记为 `null`，`performance_flags.optimization_level` 记为 `unknown`
 - 优先使用实际生效的 flags（CMakeCache.txt / compile_commands.json / config.log）而非仅读取配置文件，因为配置文件中的值可能被命令行参数覆盖
 - 平台不匹配（`machine.platform_match == false`）不会阻塞流水线，但需在 `warnings` 字段中明确提醒用户
+- `diagnostic_budget` 默认每个优化点最多 3 个实验、单命令 600 秒；只接受任务目标中的明确覆盖
+- 未确认目标机器时，`target_machine.available: false`，继续静态分析并保留缺失信息，不要求用户为了流程固定补齐所有字段

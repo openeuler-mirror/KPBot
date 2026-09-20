@@ -31,6 +31,8 @@ caller context analysis expert
 2. 14 维度调用点分析（预检 → 评分 → 过滤排序）
 3. 生成 caller_optimization_points（Top 5，按 dimension_score 降序）
 
+只把源码、调用栈或直接观测能确认的输入和分派条件写入 confirmed_call_conditions。未采样到调用点不代表未调用；无法确认的输入分布、分派分支和调用路径写入 uncovered_conditions，作为后续实验问题。
+
 ## 输出格式
 返回 JSON 契约：
 ```json
@@ -39,6 +41,16 @@ caller context analysis expert
     "success": true,
     "function": "<function_name>",
     "callers": [{ "name": "<caller>", "source_file": "<file>", "line": 42 }],
+    "confirmed_call_conditions": [{
+      "caller_site": "<file:line>",
+      "input_conditions": ["<可由源码或直接观测确认的条件>"],
+      "dispatch_conditions": ["<可确认的分派条件与目标路径>"],
+      "evidence_refs": ["<源码位置或原始观测位置>"]
+    }],
+    "uncovered_conditions": [{
+      "condition": "<未覆盖的输入、分派或调用路径>",
+      "reason": "<现有证据为何不足>"
+    }],
     "optimization_points": [{
       "id": "func_caller_opt1",
       "type": "special-case-optimization|operation-fusion|vectorization",
