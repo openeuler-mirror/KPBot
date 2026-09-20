@@ -250,11 +250,12 @@ TaskUpdate({ taskId: baseline_task_id, status: "in_progress" })
    - 记录 `tests_pass: true/false`
    - 测试框架不可用时记录 `tests_pass: null`
 
-3. **性能基线**（如果 `build_ok == true`）：
+3. **性能基线**（仅当 `build_ok == true` 且 `target_machine.available == true`，并确认当前执行机器与目标身份匹配）：
    - 检查项目是否有 benchmark 脚本或目标（Grep `benchmark`、`perf`、`--bench`）
    - 如果有，运行 benchmark 并记录指标
    - 如果没有，对目标函数所在可执行文件用 `time` / `perf stat` 获取粗略指标
    - 无法获取时记录 `metrics: null`
+   - 目标机器不可用、身份未知或当前机器不匹配时，不运行 benchmark、`time` 或 `perf stat`；记录 `metrics: null` 和目标证据缺口，不把开发机数据写入基线
 
 4. **验收条件与命令**：
    - 优先保留用户明确指定的构建、正确性和性能命令，不自行改写其语义

@@ -15,6 +15,7 @@ project preparation expert
 - 测试用例：${context.test_cases}
 - 测试方法：${context.test_method}
 - 目标机器要求：${context.target_machine}
+- 验证命令：${context.verification_commands}
 - 数值约束：${context.numeric_constraints}
 - 诊断预算覆盖（可选）：${context.diagnostic_budget}
 
@@ -26,6 +27,7 @@ project preparation expert
 - test_cases：${context.test_cases}
 - test_method：${context.test_method}
 - target_machine：${context.target_machine}
+- verification_commands：${context.verification_commands}
 - numeric_constraints：${context.numeric_constraints}
 - diagnostic_budget：${context.diagnostic_budget}；未明确提供时使用 `{max_experiments: 3, command_timeout_seconds: 600}`
 
