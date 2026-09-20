@@ -165,12 +165,30 @@ class RecordTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, f"evidence\\[0\\]\\.{field}"):
                         validate_record(record, root)
 
-    def test_empty_evidence_design_is_valid(self):
+    def test_empty_evidence_design_is_valid_but_not_persistable(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             record = sample(root)
             record["evidence"] = []
             validate_record(record, root)
+            with self.assertRaisesRegex(ValueError, "final experiment record requires evidence"):
+                write_record(record, root)
+            self.assertFalse((root / "experiments").exists())
+
+    def test_post_creation_failure_retains_and_reports_incomplete_directory(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            record = sample(root)
+            record["non_json_fixture"] = object()
+            folder = root / "experiments" / "e1"
+
+            with self.assertRaises(ValueError) as raised:
+                write_record(record, root)
+
+            self.assertIn("incomplete experiment record retained at", str(raised.exception))
+            self.assertIn(str(folder), str(raised.exception))
+            self.assertTrue(folder.is_dir())
+            self.assertFalse((folder / "record.json").exists())
 
     def test_different_experiments_can_share_a_parent_state(self):
         with tempfile.TemporaryDirectory() as d:

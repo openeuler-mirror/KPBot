@@ -129,6 +129,9 @@ def write_record(record: dict, run_dir: Path) -> Path:
     """Write one immutable final-attempt record under *run_dir*."""
     run_dir = Path(run_dir)
     validate_record(record, run_dir)
+    if not record["evidence"]:
+        raise ValueError("final experiment record requires evidence")
+
     folder = run_dir / "experiments" / record["experiment_id"]
     folder.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -137,10 +140,15 @@ def write_record(record: dict, run_dir: Path) -> Path:
         raise ValueError("experiment already exists") from exc
 
     path = folder / "record.json"
-    path.write_text(
-        json.dumps(record, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    try:
+        path.write_text(
+            json.dumps(record, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"incomplete experiment record retained at {folder}: {exc}"
+        ) from exc
     return path
 
 

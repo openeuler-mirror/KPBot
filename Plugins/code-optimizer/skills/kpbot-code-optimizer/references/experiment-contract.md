@@ -4,13 +4,13 @@
 
 ## 生命周期与保存位置
 
-执行前设计可以使用相同结构且令 `evidence` 为空，但必须保存在编排器管理的独立草稿位置。`experiment_record.py` 的 `write_record` 和 CLI 只写最终的实验尝试：
+执行前设计可以使用相同结构且令 `evidence` 为空，`validate_record` 会接受这种设计，但它必须保存在编排器管理的独立草稿位置。`experiment_record.py` 的 `write_record` 和 CLI 会拒绝空证据，只写最终的实验尝试：
 
 ```text
 RUN/experiments/<experiment_id>/record.json
 ```
 
-每个 `experiment_id` 只能写一次。目录已经存在时拒绝覆盖，包括前次写入中断而留下的不完整目录；不完整记录不能用于恢复候选或采纳优化。两个实验可以引用相同的 `parent_state`，但必须使用不同的 `experiment_id`。
+每个 `experiment_id` 只能写一次。目录已经存在时拒绝覆盖，包括前次写入中断而留下的不完整目录。最终尝试即使失败，也应引用其错误日志等原始证据；等待目标环境时仍保留为草稿或编排状态。创建实验目录后的序列化或写入失败会明确报告“不完整记录”及保留的目录路径；不完整记录不能用于恢复候选或采纳优化。两个实验可以引用相同的 `parent_state`，但必须使用不同的 `experiment_id`。
 
 记录中的 `experiment.command` 只是数据；记录工具不会执行它。
 
@@ -37,7 +37,7 @@ RUN/experiments/<experiment_id>/record.json
 | `experiment.controlled` | string array | 非空；保持不变的条件 |
 | `experiment.changed` | string | 本实验唯一改变或观察的因素 |
 | `experiment.timeout_seconds` | integer | 正整数，布尔值无效 |
-| `evidence` | array | 可以为空；非空时使用下述证据项结构 |
+| `evidence` | array | 设计校验时可以为空；`write_record` 和 CLI 保存最终尝试时必须非空；非空时使用下述证据项结构 |
 
 每个证据项必须包含：
 
@@ -64,4 +64,4 @@ RUN/experiments/<experiment_id>/record.json
 python3 scripts/experiment_record.py --record INPUT --run-dir RUN
 ```
 
-`INPUT` 是 JSON 文件，其中引用的证据已经位于 `RUN` 内。成功时标准输出仅打印保存后的 `record.json` 路径。JSON、字段、路径、目录或写入错误会输出到标准错误并返回非零状态。
+`INPUT` 是 JSON 文件，其中引用的证据已经位于 `RUN` 内。成功时标准输出仅打印保存后的 `record.json` 路径。JSON、字段、路径、目录或写入错误会输出到标准错误并返回非零状态；若实验目录已经创建，错误会同时标明该目录保留的是不完整记录。
