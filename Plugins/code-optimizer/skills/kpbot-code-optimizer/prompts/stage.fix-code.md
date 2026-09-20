@@ -28,6 +28,11 @@ ${context.prepareProject.repo}
 ${context.decideOptimization}
 ```
 
+- 持久预算/修复次数：${context.diagnosticAttempts}
+- 原始父状态与候选证据：${context.designExperiment}
+
+仅明确编译/功能失败可修复；性能问题返回 ValidateExperiment，不改代码。保留隔离候选和 parent_state；不得清理整个 working tree 或 stash，恢复无法核验则 blocked_parent_state。
+
 ## 执行
 使用 Skill tool，skill 名称为 `fix-code`
 输入：verifyOptimization 错误输出 + applyOptimization 变更 + baseline 数据 + repo 信息

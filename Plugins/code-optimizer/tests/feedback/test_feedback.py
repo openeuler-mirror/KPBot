@@ -187,5 +187,77 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(output['next_stage'], 'blocked_evidence')
 
 
+class VerificationRouteTests(unittest.TestCase):
+    def test_candidate_routes(self):
+        from experiment_feedback import route_verification
+        for result, expected in [
+            ({'compilation': {'ok': False}}, 'FixCode'),
+            ({'functional_test': {'passed': False}}, 'FixCode'),
+            ({'correctness_verdict': 'failed'}, 'FixCode'),
+            ({'status': 'regression'}, 'ValidateExperiment'),
+            ({'local_performance_verdict': 'passed', 'system_acceptance': 'not_run'}, 'ValidateExperiment'),
+            ({'correctness_verdict': 'passed', 'system_acceptance': 'passed'}, 'Deliver'),
+            ({'status': 'unverified'}, 'ValidateExperiment'),
+            ({'status': 'regression', 'correctness_verdict': 'passed',
+              'local_performance_verdict': 'passed', 'system_acceptance': 'failed',
+              'performance': {'regression': True}}, 'ValidateExperiment'),
+            ({'status': 'verified', 'compilation': {'ok': True},
+              'functional_test': {'passed': True}, 'correctness_verdict': 'passed',
+              'local_performance_verdict': 'not_run', 'system_acceptance': 'passed'}, 'Deliver'),
+        ]:
+            with self.subTest(result=result):
+                self.assertEqual(route_verification(result), expected)
+
+    def test_diagnostic_sequence(self):
+        for verdict, remaining, stage in [('inconclusive', 2, 'DesignExperiment'),
+                                          ('refuted', 1, 'AnalyzeHotspot'),
+                                          ('supported', 0, 'DecideOptimization')]:
+            self.assertEqual(choose_next(dict(execution_status='completed',
+                hypothesis_verdict=verdict, evidence_checked=True, target_checked=True), remaining), stage)
+
+    def test_rejects_conflicting_or_malformed_verification(self):
+        from experiment_feedback import route_verification
+        cases = [[], {'correctness_verdict': 'yes'}, {'system_acceptance': True},
+                 {'local_performance_verdict': None}, {'compilation': []},
+                 {'compilation': {'ok': 1}}, {'functional_test': {'passed': 'false'}},
+                 {'performance': {'regression': 0}}, {'status': 'marginal'},
+                 {'status': 'verified'}, {'status': 'failed', 'correctness_verdict': 'passed', 'system_acceptance': 'passed'},
+                 {'status': 'unverified', 'correctness_verdict': 'passed', 'system_acceptance': 'passed'},
+                 {'status': 'regression', 'system_acceptance': 'passed'},
+                 {'status': 'failed', 'system_acceptance': 'passed'},
+                 {'status': 'unverified', 'compilation': {'ok': False}},
+                 {'status': 'regression', 'performance': {'regression': False}},
+                 {'correctness_verdict': 'passed', 'compilation': {'ok': False}},
+                 {'system_acceptance': 'passed', 'functional_test': {'passed': False}},
+                 {'system_acceptance': 'passed', 'correctness_verdict': 'inconclusive'},
+                 {'system_acceptance': 'passed', 'local_performance_verdict': 'failed'},
+                 {'system_acceptance': 'passed', 'performance': {'regression': True}}]
+        for result in cases:
+            with self.subTest(result=result), self.assertRaises(ValueError):
+                route_verification(result)
+
+    def test_cli_modes(self):
+        import contextlib
+        import io
+        from experiment_feedback import main
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'verify.json'
+            path.write_text(json.dumps({'correctness_verdict': 'passed', 'system_acceptance': 'passed'}))
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(['--verify-result', str(path)]), 0)
+            self.assertEqual(json.loads(output.getvalue())['next_stage'], 'Deliver')
+            for args in [[], ['--record', str(path)],
+                         ['--verify-result', str(path), '--record', str(path)],
+                         ['--verify-result', str(path), '--remaining', '0'],
+                         ['--verify-result', str(path), '--feedback', str(path)],
+                         ['--verify-result', str(path), '--run-dir', tmp]]:
+                with self.subTest(args=args), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    main(args)
+            path.write_text(json.dumps({'status': 'failed', 'correctness_verdict': 'passed', 'system_acceptance': 'passed'}))
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(['--verify-result', str(path)]), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

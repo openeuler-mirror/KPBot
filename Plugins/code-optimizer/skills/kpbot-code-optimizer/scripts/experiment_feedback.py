@@ -109,14 +109,79 @@ def checked_feedback(record: dict, feedback: dict, record_path: Path, run_dir: P
     return checked
 
 
+def route_verification(result: dict) -> str:
+    """Validate supplied candidate verdicts, then route; missing evidence never delivers."""
+    if not isinstance(result, dict):
+        raise ValueError('verification result must be an object')
+    verdicts = ('passed', 'failed', 'inconclusive', 'not_run')
+    for field in ('correctness_verdict', 'local_performance_verdict', 'system_acceptance'):
+        if field in result and result[field] not in verdicts:
+            raise ValueError(f'invalid {field}')
+    for field, flag in (('compilation', 'ok'), ('functional_test', 'passed'),
+                        ('performance', 'regression')):
+        if field in result:
+            value = result[field]
+            if not isinstance(value, dict):
+                raise ValueError(f'{field} must be an object')
+            if flag in value and type(value[flag]) is not bool:
+                raise ValueError(f'{field}.{flag} must be a boolean')
+    status = result.get('status')
+    if 'status' in result and status not in ('verified', 'regression', 'failed', 'unverified'):
+        raise ValueError('invalid or obsolete verification status')
+    compilation = result.get('compilation', {}).get('ok')
+    functional = result.get('functional_test', {}).get('passed')
+    regression = result.get('performance', {}).get('regression')
+    correctness = result.get('correctness_verdict')
+    local = result.get('local_performance_verdict')
+    system = result.get('system_acceptance')
+    failed = compilation is False or functional is False or correctness == 'failed'
+    accepted = correctness == 'passed' and system == 'passed'
+    if correctness == 'passed' and (compilation is False or functional is False):
+        raise ValueError('correctness passed conflicts with compilation/functional failure')
+    if system == 'passed' and (failed or correctness not in (None, 'passed') or
+                               local == 'failed' or regression is True):
+        raise ValueError('system acceptance conflicts with failed or unresolved verdicts')
+    if status == 'verified' and not accepted:
+        raise ValueError('verified requires passed correctness and system acceptance')
+    if accepted and status not in (None, 'verified'):
+        raise ValueError('accepted verdicts conflict with legacy status')
+    if status == 'failed' and system == 'passed':
+        raise ValueError('failed status conflicts with system acceptance')
+    if status == 'failed' and correctness in ('passed', 'inconclusive', 'not_run') and not failed:
+        raise ValueError('failed status conflicts with correctness verdict')
+    if status in ('regression', 'unverified') and failed:
+        raise ValueError('correctness failure requires failed status')
+    if status == 'regression' and (system in ('passed', 'not_run') or regression is False):
+        raise ValueError('regression status conflicts with system performance')
+    if status == 'unverified' and regression is True:
+        raise ValueError('observed regression requires regression status')
+    if failed:
+        return 'FixCode'
+    if accepted:
+        return 'Deliver'
+    return 'ValidateExperiment'
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--record', required=True, type=Path)
-    parser.add_argument('--feedback', required=True, type=Path)
-    parser.add_argument('--run-dir', required=True, type=Path)
-    parser.add_argument('--remaining', required=True, type=int)
+    modes = parser.add_mutually_exclusive_group(required=True)
+    modes.add_argument('--record', type=Path)
+    modes.add_argument('--verify-result', type=Path)
+    parser.add_argument('--feedback', type=Path)
+    parser.add_argument('--run-dir', type=Path)
+    parser.add_argument('--remaining', type=int)
     args = parser.parse_args(argv)
+    diagnostic_args = (args.feedback, args.run_dir, args.remaining)
+    if args.verify_result is not None and any(value is not None for value in diagnostic_args):
+        parser.error('--verify-result cannot be combined with diagnostic arguments')
+    if args.record is not None and any(value is None for value in diagnostic_args):
+        parser.error('--record requires --feedback, --run-dir and --remaining')
     try:
+        if args.verify_result is not None:
+            result = json.loads(args.verify_result.read_text(encoding='utf-8'))
+            next_stage = route_verification(result)
+            print(json.dumps(dict(result, next_stage=next_stage), ensure_ascii=False))
+            return 0
         record = json.loads(args.record.read_text(encoding='utf-8'))
         feedback = json.loads(args.feedback.read_text(encoding='utf-8'))
         choose_next(feedback, args.remaining)  # Validate caller types, never trust caller flags.

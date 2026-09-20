@@ -12,9 +12,13 @@ diagnostic experiment designer
 - 调用者分析结果（可选）：${context.analyzeCallerContext}
 - 当前优化点：${context.current_optimization_point}
 - 本次运行目录：${context.run_dir}
+- 已安装编排 skill 目录：${context.orchestrator_skill_dir}
+- 上轮反馈：${context.validateExperiment}
+- 候选验收新证据：${context.verifyOptimization}
+- 持久预算账本：${context.diagnosticAttempts}
 
 ## 输出要求
-按同级 `../references/experiment-contract.md` 输出记录：观察依据、claim、alternative、support_if、refute_if；明确目标执行路径、输入与构建条件、controlled、changed、命令及超时。
+读取 `${context.orchestrator_skill_dir}/references/experiment-contract.md`，按契约 输出记录：观察依据、claim、alternative、support_if、refute_if；明确目标执行路径、输入与构建条件、controlled、changed、命令及超时。
 
 每个实验回答一个问题；可仅观察或做受控候选变更。无需为每个问题采集全部工具。
 
@@ -60,4 +64,6 @@ diagnostic experiment designer
 没有可比原始证据时才使用 `evidence: []`；存在可比证据时按契约填入引用。
 
 ## 引用
-- 记录契约：`skills/kpbot-code-optimizer/references/experiment-contract.md`
+- 记录契约：`${context.orchestrator_skill_dir}/references/experiment-contract.md`
+
+父状态和 execution_context 必须与编排器独立观测的 RUN/current_context.json 核对，不得为了通过校验篡改该文件。保存设计稿到 RUN/drafts；新证据来自失败候选时在 experiment.changed 中明确候选目录/源码摘要、与 accepted parent 的差异及比较范围，不将失败候选晋升为父状态。
