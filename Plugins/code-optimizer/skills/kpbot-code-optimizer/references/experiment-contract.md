@@ -91,7 +91,7 @@ python3 scripts/experiment_record.py --record INPUT --run-dir RUN
 - 可核验 observation 增加 `provenance` 对象，含 `parent_state`、`execution_context: {target, build, workload}` 和 `scope`；前两者必须与当前记录匹配，scope 必须等于证据项 scope。source 为 target 或 historical，kind 为 observation 才可计入 `evidence_checked`。
 - historical 还必须有非空 `reuse_explanation`，逐项说明源码、目标、构建、输入和范围为何匹配。原始 run_id/experiment_id 等身份可作为额外来源字段保留，不要求历史 run_id 等于当前运行。不能核实历史条件时不要填写匹配元数据。fixture 和 estimate 永远不计入目标 observation。至少一条有效 observation 才设置 evidence_checked。
 
-完整反馈 JSON 必须包含 `run_id`、`point_id`、`experiment_id`、`hypothesis_id`（均与记录相等）、`execution_status`（completed/failed/awaiting_target_evidence）、`hypothesis_verdict`（supported/refuted/inconclusive/invalid）、布尔 `evidence_checked`、布尔 `target_checked`、非空 `explanation`、非空 `record_path`。record_path 使用 RUN 内相对路径或绝对路径，必须解析到 --record 指定的同一文件。执行过的尝试必须位于 `RUN/experiments/<experiment_id>/record.json` 且 evidence 非空；awaiting_target_evidence 可引用 RUN 内草稿，无须退出码。
+完整反馈 JSON 必须包含 `run_id`、`point_id`、`experiment_id`、`hypothesis_id`（均与记录相等）、`execution_status`（completed/failed/awaiting_target_evidence）、`hypothesis_verdict`（supported/refuted/inconclusive/invalid）、布尔 `evidence_checked`、布尔 `target_checked`、非空 `explanation`、非空 `record_path`。record_path 使用 RUN 内相对路径或绝对路径，必须解析到 --record 指定的同一文件。执行过的尝试必须位于 `RUN/experiments/<experiment_id>/record.json` 且 evidence 非空；awaiting_target_evidence 只可引用 RUN 内且 experiments 目录之外的独立草稿，必须为 inconclusive、evidence 为空且 experiment 中不存在 exit_code；即使当前上下文匹配，两个 checked 标志也始终为 false。不能将最终尝试重新标为等待目标。
 
 ```bash
 python3 scripts/experiment_feedback.py --record RECORD --feedback FEEDBACK --run-dir RUN --remaining N

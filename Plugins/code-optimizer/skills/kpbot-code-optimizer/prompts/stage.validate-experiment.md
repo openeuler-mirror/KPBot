@@ -34,7 +34,7 @@
 }
 ```
 
-等待目标使用 `execution_status: awaiting_target_evidence`、`hypothesis_verdict: inconclusive` 和实际草稿路径。最终记录不得再次修改。
+等待目标使用 `execution_status: awaiting_target_evidence`、`hypothesis_verdict: inconclusive` 和 experiments 目录之外的实际草稿路径；草稿必须 evidence 为空且不存在 experiment.exit_code，两个 checked 标志保持 false。最终记录不得再次修改或改标为等待目标。
 
 ```bash
 python3 scripts/experiment_feedback.py --record RECORD --feedback FEEDBACK --run-dir RUN --remaining N

@@ -47,6 +47,9 @@ class FeedbackTests(unittest.TestCase):
                 choose_next(f, 2)
         with self.assertRaises(ValueError):
             choose_next({}, 2)
+        for verdict in ('supported', 'refuted', 'invalid'):
+            with self.assertRaises(ValueError):
+                choose_next(feedback(verdict, 'awaiting_target_evidence'), 2)
 
     def cli(self, mutate=None, remaining=2):
         with tempfile.TemporaryDirectory() as d:
@@ -127,26 +130,51 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(output['next_stage'], 'blocked_execution')
 
-    def test_awaiting_draft(self):
+    def awaiting_cli(self, mutation=None, finalized=False):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             record = sample(root)
             record['evidence'] = []
-            path = root / 'draft.json'
-            path.write_text(json.dumps(record))
+            path = root / ('experiments/e1/record.json' if finalized else 'draft.json')
+            path.parent.mkdir(parents=True, exist_ok=True)
             f = feedback('inconclusive', 'awaiting_target_evidence')
             f.update({k: record[k] for k in ('run_id', 'point_id', 'experiment_id', 'hypothesis_id')})
-            f.update(explanation='Target is unavailable.', record_path='draft.json')
+            f.update(explanation='Target is unavailable.', record_path=str(path.relative_to(root)))
+            if mutation:
+                mutation(record, f)
+            path.write_text(json.dumps(record))
+            context = {k: record[k] for k in ('run_id', 'point_id', 'parent_state', 'execution_context')}
+            (root / 'current_context.json').write_text(json.dumps(context))
             fp = root / 'feedback.json'
             fp.write_text(json.dumps(f))
             result = subprocess.run([sys.executable, str(SCRIPT), '--record', str(path),
                                      '--feedback', str(fp), '--run-dir', str(root), '--remaining', '2'],
                                     capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            output = json.loads(result.stdout)
-            self.assertEqual(output['next_stage'], 'awaiting_target_evidence')
-            self.assertFalse(output['target_checked'])
-            self.assertFalse(output['evidence_checked'])
+            return result
+
+    def test_awaiting_draft(self):
+        result = self.awaiting_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['next_stage'], 'awaiting_target_evidence')
+        self.assertFalse(output['target_checked'])
+        self.assertFalse(output['evidence_checked'])
+
+    def test_awaiting_rejects_executed_or_conclusive_records(self):
+        cases = [
+            ('finalized location', None, True),
+            ('supported', lambda r, f: f.update(hypothesis_verdict='supported'), False),
+            ('exit code', lambda r, f: r['experiment'].update(exit_code=0), False),
+            ('evidence', lambda r, f: r.update(evidence=[dict(
+                path='raw.txt', scope='request', kind='observation', source='fixture')]), False),
+        ]
+        for name, mutation, finalized in cases:
+            with self.subTest(case=name):
+                result = self.awaiting_cli(mutation, finalized)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+        result, _ = self.cli(lambda r, c, f: f.update(
+            execution_status='awaiting_target_evidence', hypothesis_verdict='inconclusive'))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
 
     def test_historical_reuse(self):
         def historical(r, c, f):

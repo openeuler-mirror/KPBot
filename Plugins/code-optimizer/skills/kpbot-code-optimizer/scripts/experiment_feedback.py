@@ -26,6 +26,8 @@ def choose_next(feedback: dict, remaining: int) -> str:
         if type(feedback.get(field)) is not bool:
             raise ValueError(f'{field} must be a boolean')
     if feedback['execution_status'] == 'awaiting_target_evidence':
+        if feedback['hypothesis_verdict'] != 'inconclusive':
+            raise ValueError('awaiting_target_evidence requires inconclusive verdict')
         return 'awaiting_target_evidence'
     if feedback['execution_status'] == 'failed':
         return 'blocked_execution'
@@ -60,7 +62,15 @@ def checked_feedback(record: dict, feedback: dict, record_path: Path, run_dir: P
         if feedback.get(field) != record[field]:
             raise ValueError(f'feedback {field} differs from record')
     status = feedback['execution_status']
-    if status != 'awaiting_target_evidence':
+    if status == 'awaiting_target_evidence':
+        if feedback['hypothesis_verdict'] != 'inconclusive':
+            raise ValueError('awaiting_target_evidence requires inconclusive verdict')
+        if (root / 'experiments').resolve() in actual.parents:
+            raise ValueError('awaiting_target_evidence requires a separate draft location')
+        if 'exit_code' in record['experiment'] or record['evidence']:
+            raise ValueError('awaiting_target_evidence requires an unexecuted draft without evidence')
+        return dict(feedback, evidence_checked=False, target_checked=False)
+    else:
         expected = root / 'experiments' / record['experiment_id'] / 'record.json'
         if actual != expected.resolve() or not record['evidence']:
             raise ValueError('executed attempt requires a finalized record with evidence')
