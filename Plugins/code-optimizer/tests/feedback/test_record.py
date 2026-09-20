@@ -9,16 +9,11 @@ import sys
 import tempfile
 import unittest
 
+import experiment_record
 from experiment_record import validate_record, write_record
 
 
-SCRIPT = (
-    Path(__file__).parents[2]
-    / "skills"
-    / "kpbot-code-optimizer"
-    / "scripts"
-    / "experiment_record.py"
-)
+SCRIPT = Path(experiment_record.__file__).resolve()
 
 
 def sample(root: Path, *, experiment_id: str = "e1") -> dict:

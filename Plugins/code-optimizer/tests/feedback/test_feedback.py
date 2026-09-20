@@ -7,11 +7,12 @@ import sys
 import tempfile
 import unittest
 
+import experiment_feedback
 from experiment_feedback import choose_next
 from experiment_record import write_record
 from test_record import sample
 
-SCRIPT = Path(__file__).parents[2] / 'skills/kpbot-code-optimizer/scripts/experiment_feedback.py'
+SCRIPT = Path(experiment_feedback.__file__).resolve()
 
 
 def feedback(verdict='supported', status='completed'):
