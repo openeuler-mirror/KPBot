@@ -133,6 +133,9 @@ def write_record(record: dict, run_dir: Path) -> Path:
         raise ValueError("final experiment record requires evidence")
 
     folder = run_dir / "experiments" / record["experiment_id"]
+    # Validate existing symlinks before mkdir can create anything outside RUN.
+    if run_dir.resolve() not in folder.resolve().parents:
+        raise ValueError(f"invalid experiment output path: {folder}")
     folder.parent.mkdir(parents=True, exist_ok=True)
     try:
         folder.mkdir()

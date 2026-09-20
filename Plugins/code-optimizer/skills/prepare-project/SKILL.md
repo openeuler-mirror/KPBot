@@ -44,9 +44,12 @@ TaskUpdate({ taskId: validate_task_id, status: "in_progress" })
 用 Bash 工具执行以下检查，逐项记录结果：
 
 1. **路径检查**：`test -d <project_path>` 确认目录存在
-2. **VCS 检查**：`test -d <project_path>/.git` 确认是 Git 仓库
-3. **Git 状态**：`git -C <project_path> status --porcelain` 检查是否有未提交变更
-   - 如果有未提交变更，向用户报告并停止，提示先 commit 或 stash
+2. **VCS 检查**：`git -C <project_path> rev-parse --is-inside-work-tree` 确认是 Git 仓库（兼容 `.git` 为文件的 worktree）
+3. **Git 与实际源码状态**：未提交变更可以作为父状态继续准备；在构建、生成报告或任何源码修改前完成以下记录，输出到 `repo.source_state`：
+   - 读取 `git -C <project_path> rev-parse HEAD` 和 `git -C <project_path> status --porcelain=v1 -z --untracked-files=all`，保留原始状态。分别保存 `git diff --cached --binary --full-index` 的 staged patch、`git diff --binary --full-index` 的 unstaged patch，以及 `git ls-files --others --exclude-standard -z` 的 untracked 清单与相关文件内容；这些命令均在项目目录执行，不改变索引或工作区。
+   - 确认参与构建/测试的源码、头文件、构建配置与输入清单，保存路径、文件类型/模式和内容摘要及可还原快照；相关 untracked 文件必须包含，参与构建的 ignored 输入也要显式纳入。`digest` 标识 HEAD、相关 index 状态和实际工作区内容，不能只记 HEAD。新写的运行报告、日志及非输入构建产物不纳入源码摘要，避免把报告写入误判为父源码变化。
+   - 快照保存在源码清单之外的独立目录，确认后续能从该快照建立独立候选目录；构建或测试若会改变父源码/用户文件，先在独立副本执行并记录实际路径。保持原工作区和索引中的用户内容，不自动 commit、stash、checkout 或清理文件。
+   - 只有无法可靠识别实际源码、保存完整快照或证明隔离安全时才因源码状态返回 `status: "blocked"`，记录具体原因。已识别且能安全隔离的 dirty 父状态可以为 `ready`；将快照引用交给协调者，在候选创建前重新核对并据此建立 `parent_state`。
 4. **构建系统**：检查以下文件是否存在（按优先级）：
    - `CMakeLists.txt` → cmake
    - `Makefile` 或 `makefile` → make
@@ -286,6 +289,17 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
   "repo": {
     "path": "<project_path>",
     "vcs": "git|none",
+    "source_state": {
+      "head": "<Git HEAD>",
+      "dirty": true,
+      "manifest": "<相关源码/构建输入清单与内容摘要路径>",
+      "digest": "<HEAD、相关 index 与工作区内容摘要>",
+      "snapshot_path": "<可还原父源码快照的独立目录>",
+      "staged_patch": "<staged binary patch 路径，无变更时 null>",
+      "unstaged_patch": "<unstaged binary patch 路径，无变更时 null>",
+      "untracked_manifest": "<相关 untracked 文件与内容摘要清单路径，无变更时 null>",
+      "isolation_safe": true
+    },
     "build_system": "cmake|make|meson|bazel|autotools|unknown",
     "compiler": "<compiler version or null>",
     "test_framework": "googletest|catch2|unity|none",
@@ -381,7 +395,7 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
 
 `status` 取值：
 - `ready`：项目验证通过，可以进入分析阶段
-- `blocked`：存在阻塞问题（路径无效、无 Git、有未提交变更等），需用户处理
+- `blocked`：存在阻塞问题（路径无效、无 Git、实际源码状态无法识别或隔离不安全等），需用户处理
 - `partial`：部分检查失败但可继续（如构建失败但能定位目标）
 
 ## 规则
@@ -389,7 +403,7 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
 - 构建失败时不停止——记录 `build_ok: false` 但继续定位目标
 - 测试框架不可用时跳过测试运行，记录 `tests_pass: null`
 - 基线性能获取不到时记录 `metrics: null`
-- Git 工作区有未提交变更时 `status: "blocked"`，提示用户先 commit 或 stash
+- Git staged、unstaged 或 untracked 变更本身不阻塞；保留用户内容并记录 `repo.source_state`，仅无法识别或安全隔离父源码状态时阻塞
 - 目标函数不存在时 `status: "blocked"`，提示用户确认函数名
 - 机器信息收集失败不影响 `status`（仍为 `ready` 或 `blocked`），仅记录 `machine.arch` 为 `unknown`
 - 编译参数提取失败不影响 `status`，`compilation` 中对应字段记为 `null`，`performance_flags.optimization_level` 记为 `unknown`

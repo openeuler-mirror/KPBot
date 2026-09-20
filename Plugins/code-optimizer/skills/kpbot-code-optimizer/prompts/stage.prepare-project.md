@@ -38,6 +38,17 @@ project preparation expert
   "repo": {
     "path": "<project_path>",
     "vcs": "git|none",
+    "source_state": {
+      "head": "<Git HEAD>",
+      "dirty": true,
+      "manifest": "<相关源码/构建输入清单与内容摘要路径>",
+      "digest": "<HEAD、相关 index 与工作区内容摘要>",
+      "snapshot_path": "<可还原父源码快照的独立目录>",
+      "staged_patch": "<staged binary patch 路径，无变更时 null>",
+      "unstaged_patch": "<unstaged binary patch 路径，无变更时 null>",
+      "untracked_manifest": "<相关 untracked 文件与内容摘要清单路径，无变更时 null>",
+      "isolation_safe": true
+    },
     "build_system": "cmake|make|meson|bazel|autotools|unknown",
     "compiler": "<compiler version or null>",
     "test_framework": "googletest|catch2|unity|none",

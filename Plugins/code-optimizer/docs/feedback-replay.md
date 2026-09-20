@@ -4,7 +4,7 @@
 
 | 层次 | 当前状态 | 能说明什么 |
 | --- | --- | --- |
-| 本机逻辑与安装 | passed：28 个顶层测试，两个安装目录各重跑 27 个记录/反馈测试；原安装回归 8 项通过 | 记录契约、路由和安装产物可用 |
+| 本机逻辑与安装 | passed：30 个顶层测试，两个安装目录各重跑 28 个记录/反馈测试；原安装回归 8 项通过 | 记录契约、路由和安装产物可用 |
 | 用户真实历史回放 | pending：尚未提供逐轮原始案例 | 完成后仅说明诊断能随证据修正，不证明新性能收益 |
 | 鲲鹏目标实测 | pending：尚未提供目标机器及真实局部实验 | 必须另行完成正确性、局部实验和项目最终验收 |
 
@@ -20,7 +20,7 @@ cd Plugins/code-optimizer
 PYTHONPATH=skills/kpbot-code-optimizer/scripts python3 -m unittest discover -s tests/feedback -v
 ```
 
-`test_platform.py` 为 Claude Code 和 OpenCode 分别创建临时项目，执行 `bash install.sh project claude TMP` / `bash install.sh project opencode TMP`，检查新增 prompts、contract 和 scripts。子进程只将安装后的 scripts 加入 `PYTHONPATH`，验证两个模块的 `__file__` 和测试 CLI 的 `SCRIPT` 一致，再显式运行 `test_record`、`test_feedback`，不递归运行平台测试。输出保留实际导入路径；临时目录退出时删除。运行时不依赖本篇 docs 被安装，契约位于已安装技能的 `references/experiment-contract.md`。
+`test_platform.py` 为 Claude Code 和 OpenCode 分别创建临时项目，执行 `bash install.sh project claude TMP` / `bash install.sh project opencode TMP`，检查新增 prompts、contract 和 scripts。子进程只将安装后的 scripts 加入 `PYTHONPATH`，验证两个模块的 `__file__` 和测试 CLI 的 `SCRIPT` 一致，再显式运行 `test_record`、`test_feedback`，不递归运行平台测试。路径和非空测试集检查使用显式失败，并以 `PYTHONOPTIMIZE=1` 回归 origin、CLI 与空测试集的拒绝行为。输出保留实际导入路径；临时目录退出时删除。运行时不依赖本篇 docs 被安装，契约位于已安装技能的 `references/experiment-contract.md`。
 
 ## 人工逐轮历史回放
 

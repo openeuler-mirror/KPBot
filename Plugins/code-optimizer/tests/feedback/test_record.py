@@ -84,6 +84,26 @@ class RecordTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "invalid evidence path"):
                 validate_record(record, root)
 
+    def test_symlink_output_escape_is_rejected_before_mutation(self):
+        for link_path in ("experiments", "experiments/e1"):
+            for existing_target in (True, False):
+                with self.subTest(link=link_path, existing_target=existing_target), \
+                        tempfile.TemporaryDirectory() as d, \
+                        tempfile.TemporaryDirectory() as outside:
+                    root = Path(d)
+                    record = sample(root)
+                    destination = Path(outside) / "output"
+                    if existing_target:
+                        destination.mkdir()
+                    link = root / link_path
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    link.symlink_to(destination, target_is_directory=True)
+                    before = sorted(Path(outside).rglob("*"))
+                    with self.assertRaisesRegex(ValueError, "invalid experiment output path"):
+                        write_record(record, root)
+                    self.assertEqual(sorted(Path(outside).rglob("*")), before)
+                    self.assertTrue(link.is_symlink())
+
     def test_hypothesis_requires_refutation(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
