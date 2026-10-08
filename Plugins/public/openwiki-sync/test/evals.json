@@ -1,0 +1,40 @@
+{
+  "skill_name": "openwiki-sync",
+  "evals": [
+    {
+      "id": 1,
+      "name": "initial-setup",
+      "prompt": "帮我给这个项目生成一份 openwiki 文档，然后传到一个独立的 wiki 仓里。wiki 仓我已经建好了，是个空仓：./env/wiki-remote.git（相对于当前目录的兄弟路径，即 <工作目录>/../wiki-remote.git）。之后每次我提交代码，wiki 也要跟着自动更新。",
+      "expected_output": "调用 openwiki --init 生成 wiki；通过 sync 脚本建立关联（.openwiki-link.json + 全局注册表）；.gitignore 排除 openwiki/ 与 .openwiki-sync/；wiki 仓获得首个 commit；.openwiki-link.json 被提交到代码仓；向用户说明后续联动机制",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "unlinked-wiki-exists",
+      "prompt": "我本地已经有 openwiki 了（openwiki/ 目录里都生成好了），但还没挂到远程 wiki 仓。帮我把这个空仓 <工作目录>/../wiki-remote.git 关联上并推上去，注意别把已有的 wiki 内容覆盖了。",
+      "expected_output": "不重新执行 openwiki --init（保护已有 wiki）；建立关联；推送已有 wiki 内容到 wiki 仓生成首个 commit；落地关联文件",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "fresh-machine-restore",
+      "prompt": "我换了台新电脑，重新 clone 了这个项目。这个项目之前配过 openwiki 同步（代码仓里有 .openwiki-link.json），帮我把 wiki 恢复到本地。",
+      "expected_output": "识别 linked_wiki_missing_local 场景；从 wiki 仓还原 openwiki/ 到本地；不重新 init；不产生多余 commit；恢复后 status 为 linked_ready",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "commit-sync",
+      "prompt": "我刚加了个 auth 鉴权模块（auth.py，已经 git add 了还没 commit），帮我提交一下，commit message 用中文写清楚做了什么。",
+      "expected_output": "提交 auth.py 到代码仓；随后执行 wiki 联动：restore → openwiki --update → push；wiki 仓生成新 commit 且 message 引用代码 commit hash；向用户报告两边 commit 的对应关系",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "wiki-query",
+      "prompt": "这个项目的整体架构是什么样的？先看看 wiki 里是怎么写的，再结合代码确认一下。",
+      "expected_output": "优先读取 openwiki/quickstart.md、index.md 与 pages/architecture.md 等 wiki 页面获取先验；结合源码（app.py/parser.py/store.py）验证；给出准确架构描述并说明来源",
+      "files": []
+    }
+  ]
+}

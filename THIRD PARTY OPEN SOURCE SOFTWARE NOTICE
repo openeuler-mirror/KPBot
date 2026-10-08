@@ -1,0 +1,40 @@
+              THIRD PARTY OPEN SOURCE SOFTWARE NOTICE
+
+
+Please note we provide an open source software notice for the third party
+open source software along with this software and/or this software component
+contributed by openEuler (in the following just "this SOFTWARE"). The open
+source software licenses are granted by the respective right holders.
+
+Warranty Disclaimer
+
+
+THE OPEN SOURCE SOFTWARE IN THIS SOFTWARE IS DISTRIBUTED IN THE HOPE THAT IT
+WILL BE USEFUL, BUT WITHOUT ANY WARRANTY, WITHOUT EVEN THE IMPLIED WARRANTY OF
+MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE. SEE THE APPLICABLE LICENSES
+FOR MORE DETAILS.
+
+Copyright Notice and License Texts
+
+
+Software: KPBot
+Copyright notice: Copyright (c) 2026 Huawei Technologies Co., Ltd. All rights reserved.
+License: Mulan PSL v2
+
+KPBot is licensed under the Mulan PSL v2. You can use this software according
+to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan
+PSL v2 at:
+
+     http://license.coscl.org.cn/MulanPSL2
+
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+See the Mulan PSL v2 for more details.
+
+Third Party Open Source Software
+
+The external tools and services referenced by KPBot skills (such as openwiki,
+profiling tools and platform CLIs) are invoked at runtime and are not bundled
+in this repository. Their copyrights and licenses belong to their respective
+owners.
