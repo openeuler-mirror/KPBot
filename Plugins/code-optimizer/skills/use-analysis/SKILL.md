@@ -1,6 +1,6 @@
 ---
 name: use-analysis
-description: 基于 USE 分析法（Brendan Gregg）的 Linux 性能瓶颈排查器。对 CPU/内存/磁盘IO/网络四大资源逐项检查使用率(U)/饱和度(S)/错误率(E)，输出结构化瓶颈报告与根因建议。支持当前主机现场扫描（脚本一键采集 vmstat/mpstat/iostat/ss/free/dmesg 等并按阈值标记瓶颈）与粘贴分析（用户贴命令输出由 Claude 解读）两种模式。当用户遇到服务器卡顿、接口超时、程序响应变慢想做性能排查，想知道是 CPU/内存/磁盘IO/网络哪个资源出问题，想知道瓶颈是使用率打满、饱和度排队还是错误故障，提到 USE 方法 / USE 分析 / 性能瓶颈 / 性能排查 / 卡顿 / 超时 / 负载高 / CPU 飙高 / 内存不足 / OOM / swap 频繁 / 磁盘 IO 打满 / %util / await / 丢包 / 重传 / TIME_WAIT / 运行队列 / 上下文切换 / Linux 性能排查 时，务必使用本 Skill。本 Skill 做系统资源级 USE 全覆盖排查，与 llvm-mca-analysis（指令级静态仿真）、perf/SPE（动态采样）互补：USE 定位是哪类资源瓶颈，MCA/perf 定位具体代码/指令瓶颈。
+description: 基于 USE 分析法（Brendan Gregg）的 Linux 性能瓶颈排查器。对 CPU/内存/磁盘IO/网络四大资源逐项检查使用率(U)/饱和度(S)/错误率(E)，输出结构化瓶颈报告与根因建议。支持当前主机现场扫描（脚本一键采集 vmstat/mpstat/iostat/ss/free/dmesg 等并按阈值标记瓶颈）与粘贴分析（用户贴命令输出由 Claude 解读）两种模式。当用户遇到服务器卡顿、接口超时、程序响应变慢想做性能排查，想知道是 CPU/内存/磁盘IO/网络哪个资源出问题，想知道瓶颈是使用率打满、饱和度排队还是错误故障，提到 USE 方法 / USE 分析 / 性能瓶颈 / 性能排查 / 卡顿 / 超时 / 负载高 / CPU 飙高 / 内存不足 / OOM / swap 频繁 / 磁盘 IO 打满 / %util / await / 丢包 / 重传 / TIME_WAIT / 运行队列 / 上下文切换 / Linux 性能排查 时，务必使用本 Skill。本 Skill 做系统资源级 USE 全覆盖排查，与 llvm-mca-analysis（指令级静态仿真）、perf/SPE（动态采样）互补：USE 定位是哪类资源瓶颈，MCA/perf 定位具体代码/指令瓶颈。语言无关：本 Skill 排查的是操作系统资源层，与被测程序的源语言（C/C++ 或 Rust）无关，可直接用于分析 Rust 服务/daemon 的性能瓶颈。
 ---
 
 # USE 性能瓶颈分析法
