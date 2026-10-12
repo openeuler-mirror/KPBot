@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer-workflow
-description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-optimizer 功能等价，但优化核心循环委托给 Workflow 工具执行，提供确定性编排、结构化输出验证和并行执行能力。当用户想要优化 C/C++ 项目性能时触发。
+description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-optimizer 功能等价，但优化核心循环委托给 Workflow 工具执行，提供确定性编排、结构化输出验证和并行执行能力；也是场景专项优化（TF 推理、ORT attention、llama.cpp、搜推 DAG、VSAG、BRGEMM、哈希表、embedding 去重）的统一路由入口。当用户想要优化 C/C++ 项目性能时触发。
 ---
 
 # 鲲鹏性能优化流水线（Workflow 版）
@@ -11,10 +11,63 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 
 若 Workflow 不可用，自动回退到 Agent subagent 模式（与 `kpbot-code-optimizer` 行为一致）。
 
+## 场景路由（统一入口，流水线启动后、Phase 0 前执行）
+
+本流水线是性能优化统一入口。除默认的 C/C++ 性能库开发主流水线外，还有多个场景专项优化 workflow。启动后必须先完成场景路由，再进入后续阶段（Phase 0 模式选择/环境预检等）。
+
+### 路由表
+
+| # | 场景 | 路由目标 skill | 输入关键词（不区分大小写） | 工作区源码指纹 |
+|---|------|----------------|---------------------------|----------------|
+| 1 | TF 推理优化 | `tf-inference-optimizer`（未安装时回退 `tf-inference-opt`） | tensorflow、tf 推理、tf serving、tf kernel、图优化、推理调优 | `tensorflow/` / `tensorflow_core/` 源码树；bazel 构建含 tf；`tf_session`、`tensorflow/cc` 引用 |
+| 2 | ORT attention 优化 | `ort-kdnn-attention-opt` | onnxruntime、ort、attention、kdnn、子图融合 | `onnxruntime/` 源码树；`onnxruntime_providers_*`；Attention 融合 kernel 源文件 |
+| 3 | llama.cpp Embedding 优化 | `kunpeng-llama-cpp-tuning` | llama.cpp、ggml、llm、embedding 推理 | `ggml*.c/.h`、`llama.h`；CMakeLists 含 GGML/LLAMA |
+| 4 | 搜推 DAG 全栈优化 | `sra-dag-tuning` | 搜推、搜索推荐、召回、排序、特征工程、dag | feature/recall/rank 模块、DAG 调度器、sparse 特征处理 |
+| 5 | VSAG 向量检索优化 | `vsag-rabitq-optimization` | vsag、rabitq、hgraph、ann、向量检索 | `vsag/` 源码树；RaBitQ/HGraph 符号；`vsag::` 命名空间 |
+| 6 | BRGEMM/GEMM 优化 | `brgemm-optimization` | brgemm、gemm、matmul、onednn、packb、prepack | oneDNN/`dnnl`；BRGEMM kernel；PackB/PrePack/blocked layout 代码 |
+| 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
+| 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
+| 9 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+
+### 路由流程
+
+**Step 1 输入识别**：在 `$ARGUMENTS` 和对话上下文中匹配路由表「输入关键词」，命中场景加入候选集，记录命中词作为证据。
+
+**Step 2 源码探测**（仅当 Step 1 无候选或多场景歧义时执行）：对当前工作目录做轻量指纹探测——只看顶层与一级子目录的构建清单/README/源码头，不做深度递归：
+
+```bash
+ls; ls -d */ 2>/dev/null
+grep -i -l -E '<场景指纹关键词>' CMakeLists.txt Makefile README* */CMakeLists.txt 2>/dev/null
+grep -i -r -l -m1 -E '<场景指纹关键词>' --include='*.{h,hpp,c,cc,cpp,py}' -maxdepth 2 . 2>/dev/null | head -20
+```
+
+命中的场景加入候选集，记录命中文件路径作为证据。
+
+**Step 3 候选确认**：候选集非空 → 调用 AskUserQuestion 单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
+- 用户选择某候选场景 → 执行接管协议
+- 用户选择「都不对，查看全部场景」或候选集为空 → 进入 Step 4
+
+**Step 4 分页菜单（换一批兜底）**：每批展示 ≤ 4 个场景选项 + 固定项「性能库开发（默认主流水线）」+「换一批」：
+- 批次顺序：候选集优先，其余场景按路由表序号轮转；协调者记录已展示场景
+- 用户选「换一批」→ 展示下一批未展示场景；全部场景展示完后，「换一批」替换为「手动输入场景」
+- 用户选「手动输入场景」→ 按输入内容重新执行 Step 1 匹配；仍无命中 → 提示未识别，默认进入性能库开发主流水线
+
+### 接管协议
+
+```
+1. 平台检查：tf-inference-optimizer 及 tf-* 系列 workflow 仅 OpenCode 可用；
+   在 Claude Code 下命中 TF 场景时，提示"该 workflow 目前仅在 OpenCode 下可用"并回到路由
+2. 调用 Skill({ skill: "<路由目标>", args: "$ARGUMENTS" })
+3. 当前 orchestrator 终止，后续流程完全由目标 workflow 编排
+```
+
+用户选择「性能库开发（默认主流水线）」→ 继续本流水线（Phase 0 模式选择 → GatherContext → ...）。
+
 ## 架构
 
 ```
 kpbot-code-optimizer-workflow (Orchestrator)           ← 主 Agent
+  ├── 场景路由: 输入识别/源码探测/分页菜单 → 场景 workflow 接管或继续主流水线
   ├── Pre-flight: Sandbox & Permissions Setup
   ├── Phase 0: Mode Selection
   ├── Phase 1: 创建任务列表
