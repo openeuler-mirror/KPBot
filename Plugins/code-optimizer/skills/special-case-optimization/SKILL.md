@@ -1,6 +1,6 @@
 ---
 name: special-case-optimization
-description: 为通用热点函数生成特殊情况快路径、局部特化和局部等价改写，包括边界快路径、固定约束专用路径、形式替换、硬件契约路径和数值域候选。适用于 apply-optimization 调用。
+description: 为通用热点函数生成特殊情况快路径、局部特化和局部等价改写，包括边界快路径、固定约束专用路径、形式替换、硬件契约路径和数值域候选。适用于 apply-optimization 调用。语言无关：C/C++ 与 Rust 源码均适用，输出与原源码同语言的改写。
 ---
 
 # 特殊情况与局部特化优化
@@ -42,6 +42,34 @@ description: 为通用热点函数生成特殊情况快路径、局部特化和�
 4. 默认保留原逻辑作为 fallback。只有 `rewrite_kind == "local_equivalence_rewrite"`、`equivalence_scope == "full_domain"`、局部机械等价完全明确且无数值/安全/别名风险时，才允许无 fallback 替换，并必须写明 `fallback_preserved=false` 的理由。
 5. 遇到以下情况返回 `success=false`：需要改公开接口、跨文件分派、全局状态、复杂别名证明、昂贵 predicate、硬件特性无证据、或无法保留必要 fallback。
 6. 生成 `optimized_code`，并在 `guard_condition`、`fallback_preserved`、`equivalence_basis`、`validation_focus` 中解释保护条件和验证重点。
+
+**Rust 变体**：`optimized_code` 一律输出**与原源码同语言（含 Rust）**的改写。C 示例里的概念在 Rust 的对应写法：
+- 尺寸/长度用 `slice.len()`、`Vec::len()`、`arr.len()`（`usize`），guard 如 `s.len() == 0`、`len < 8`、`len.is_multiple_of(4)`（Rust 1.87+ `is_multiple_of`）。
+- **没有 NULL 指针**。C 的 `rx == NULL && tx != NULL` → Rust 用 `Option<&mut T>` / `enum` / `flags`：guard 如 `opt.is_none()`、`flags.contains(SKIP_OUT)`。不要臆造指针判空。
+- early return 正常使用 `return` / 表达式提前返回；但**不要**引入依赖秘密数据的提前返回（constant-time 约束与 C 相同）。
+- 缓存/状态推进：Rust 常用 `&mut` 局部缓冲或 `NonZeroUsize`/`Option` 表达"缺省输出"；复用输入 buffer 作输出要走借用检查（确认无别名）。
+- 硬件契约路径在 Rust 用 `is_aarch64_feature_detected!("sve")` / `#[target_feature(enable="sve")]` / `#[cfg(target_feature = "sve")]`，代替 C 的 `__builtin_cpu_supports`/宏；无特性 fallback 必须保留。
+- 固定块展开/尾块在 Rust 用 `chunks_exact`/`chunks_exact_mut`（天然分离 full block 与 tail），避免手写指针算术——这也让 guard 更 cheap。对齐切分也可用 1.73+ 已稳定的 `next_multiple_of`/`div_ceil` 表达。
+
+## Rust 示例
+
+```rust
+// 优化前：通用 slice 处理，每次都走通用迭代
+fn process(data: &[f32]) -> f32 {
+    // 通用路径 ...迭代所有元素
+}
+
+// 优化后：boundary_fast_path + chunks_exact 分离整块与尾块
+fn process(data: &[f32]) -> f32 {
+    if data.is_empty() {          // empty_input guard，避免 setup
+        return 0.0;
+    }
+    // constraint_specialization：长度不是 4 的倍数走通用尾块路径
+    let len = data.len();
+    let (head, tail) = data.split_at(len - len % 4);
+    // head 走 4 元素 SIMD/fast 路径，tail 走标量 fallback ...
+}
+```
 
 ## 集中能力族
 
@@ -94,8 +122,8 @@ description: 为通用热点函数生成特殊情况快路径、局部特化和�
 | 对齐路径 | `alignment_fast_path` | `constraint_specialization` | `is_aligned_pointer(p)`、`((uintptr_t)p & 15) == 0` | 使用 aligned load/store 或更宽访存，保留 unaligned fallback | 不用不可靠的 `assume_aligned` 制造 UB |
 | 连续/可 squashed layout | `layout_fast_path` | `constraint_specialization` | `stride == element_size`、低维 stride 连续、无 padding | 把多维 window 视作 1D tight loop | fallback 覆盖跨步、padding、broadcast |
 | direct vs indirect 指针 | `layout_fast_path` | `constraint_specialization` | `!is_indirect`、直接 stride 可用 | 走直接指针递增，跳过指针表读取 | 间接输入/输出必须保留 fallback |
-| 可选输出别名 | `optional_output_alias` | `constraint_specialization` | `rx == NULL && tx != NULL` 或 `out1 == NULL` | 将缺省输出路由到已有输出，或跳过未请求输出 | 只有 API 明确允许 optional output 才能做 |
-| 原地计算资格 | `in_place_fast_path` | `constraint_specialization` | 单一消费者、无 accessor、shape/quant info 相同、`stride == 1`、无 padding | 复用输入 buffer 作为输出，避免临时分配和 copy | 需要证明外部不可见中间状态 |
+| 可选输出别名 | `optional_output_alias` | `constraint_specialization` | C `rx == NULL && tx != NULL`；Rust `opt.is_none()` / `flags.contains(...)` | 将缺省输出路由到已有输出，或跳过未请求输出 | 只有 API 明确允许 optional output 才能做；Rust 用 `Option`/enum，不用指针判空 |
+| 原地计算资格 | `in_place_fast_path` | `constraint_specialization` | 单一消费者、无 accessor、shape/quant info 相同、`stride == 1`、无 padding | 复用输入 buffer 作为输出，避免临时分配和 copy | 需要证明外部不可见中间状态；Rust 需通过借用检查确认无别名 |
 | broadcast/scalar 操作数 | `broadcast_scalar` | `constraint_specialization` | `dim == 1`、`broadcast_shape` 有效、标量参数 | 标量 load once/splat，避免按元素重复索引 | broadcast 不兼容时不能默默 fallback 为错误结果 |
 | 局部形式替换 | `local_equivalence_rewrite` | `local_equivalence_rewrite` | 固定 mask/shift、固定表大小、等价表达式输入不变 | 在函数内替换为更少指令、更少访存或更直接的表达式 | 必须证明溢出、别名、舍入和副作用不变 |
 | 硬件契约路径 | `hardware_contract_path` | `hardware_contract_path` | ISA feature、编译属性、dispatch 证据明确 | 在受保护分支中使用更合适的指令/访存/函数属性 | 无 feature 路径必须保留 |
@@ -164,3 +192,5 @@ description: 为通用热点函数生成特殊情况快路径、局部特化和�
 - `hardware_contract_path` 必须有明确架构/编译器/dispatch 证据；否则返回 `success=false`。
 - 对安全/密码学/认证比较等 constant-time 代码，不允许引入依赖秘密数据的提前返回或分支。
 - 数值域快路径只在 IEEE、异常、舍入、符号零和测试容差均明确时应用；否则只报告候选。
+- `optimized_code` 与原源码同语言（C/C++ 或 Rust），不跨语言改写；Rust 代码必须通过 rustc 借用/常量检查。
+- Rust 下不要引入 `unsafe` 指针别名假设，除非原代码已是 `unsafe` 且你能证明 alias 契约；无必要不改写为 `unsafe`。

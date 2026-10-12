@@ -1,0 +1,59 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 special-case-optimization
+# 为词频统计加密集数组快路径（guard 来自 public 参数 vocab_size）
+#
+# 构建：
+#   docker build --network host -f skills/special-case-optimization/cases/agent-optimize-token-freq/Dockerfile \
+#       -t kpbot/code-optimizer-agent-token-freq:1.0-openeuler24.03 .
+#   ./run_ab.sh --save results-ab
+
+name: agent-optimize-token-freq
+skill: special-case-optimization
+tier: agent
+
+image: kpbot/code-optimizer-agent-token-freq:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: speedup
+  uplift: speedup_with / speedup_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/special-case-optimization/cases/agent-optimize-token-freq/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机（NEON 可用）
+  - opencode 二进制（运行时只读挂载，路径白名单校验）
+  - OPENCODE_AUTH_JSON（auth.json 整文件 base64 经环境变量注入）
+  - 容器可访问 deepseek API（模型 API 由运行环境代为调用，agent 无网络权限）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+  N: 4000000
+  ITERS: 20
+  VOCAB: 1024
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: optimized_correct
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: speedup
+    op: gte
+    expect: 1.0

@@ -2,10 +2,13 @@
 name: arm-instructions-query
 description: >
   查询 ARM NEON/SVE/SME 指令集详细信息及 ACLE（Arm C Language Extensions）内联函数。
-  当用户进行 ARM C 语言 intrinsic 编程时触发，包括：使用 svadd、vaddq、__dmb 等 intrinsic；
-  查指令详情、确认某架构有没有某指令、NEON/SVE/SME 指令对比、指令功能分析；
-  查询 intrinsic 原型、类型系统、特性检测宏、头文件依赖；
+  当用户进行 ARM C 语言 intrinsic 编程或 Rust `std::arch::aarch64` 向量化编程时触发，
+  包括：使用 svadd、vaddq、__dmb 等 intrinsic；使用 Rust 的 vld1q_f32、vaddq_f32、
+  svcntw 等 std::arch::aarch64 内联函数；查指令详情、确认某架构有没有某指令、
+  NEON/SVE/SME 指令对比、指令功能分析；查询 intrinsic 原型、类型系统、特性检测宏、头文件依赖；
   NEON↔SVE 转换、SME 流模式、内存预取、对齐规则等 ARM 向量化编程问题。
+  Rust 侧：ACLE intrinsic 名与 std::arch::aarch64 的 Rust 内联函数同名（已稳定子集），
+  结果里同时给出对应的 Rust 写法与 target_feature 要求。
 ---
 
 # ARM 指令集与 ACLE Intrinsic 查询
@@ -48,6 +51,26 @@ SME 指令额外包含编码(encodings)、符号(symbols)、解码逻辑(decode)
 每条 intrinsic 包含：名称、族(family)、类别(category)、原型(prototype)、展开原型(expanded_prototypes)、
 映射指令(mapped_instructions)、指令详情(instruction_details)、参数映射(argument_mappings)、
 结果映射(result_mappings)、特性宏(feature_macros)、架构支持(architectures)、头文件(header)。
+
+## Rust 对应关系（新增）
+
+本 skill 的数据资产是 **ACLE 内联函数**（C 名称），但在 Rust 中绝大多数 NEON intrinsic 由 `std::arch::aarch64` **原样同名复用**，查询结果可直接套用。关键对应：
+
+| ACLE（C） | Rust（`std::arch::aarch64`） | 差异点 |
+|-----------|------------------------------|--------|
+| `vaddq_f32(a, b)` | `vaddq_f32(a, b)` | 同名，参数为 `float32x4_t`；Rust 里是 `#[inline] unsafe fn` |
+| `vld1q_f32(p)` | `vld1q_f32(p)` | Rust 需 `*const f32` 指针，通常先 `addr_of!`/`as_ptr()` |
+| `vst1q_f32(p, v)` | `vst1q_f32(p, v)` | 需 `*mut f32` |
+| `svadd_f32_x(...)` | SVE intrinsics | `std::arch` 里 SVE **全部 nightly-only**（`#![feature(stdarch_aarch64_sve)]`）；稳定的是 NEON 子集 |
+| `__dmb(...)` | `std::arch::aarch64::__dmb(...)` | 同名，**nightly-only**（`#![feature(stdarch_arm_barrier)]`）；stable 等价物为 `core::arch::asm!("dmb ish")`。参数写法是 `dmb::SY`（Rust 侧枚举）而非 C 的 `_DMB_SY` |
+
+给 Rust 用户查 intrinsic 时，`acle_query.py info <name>` 返回的**原型/参数/返回值/映射指令/特性宏**原样可用，只需在输出里额外标注：
+- **稳定与否**：NEON（`arm_neon`）绝大多数 `std::arch::aarch64` 已稳定；SVE/SME intrinsic 在 `std::arch` **全部 nightly-only**（`#![feature(stdarch_aarch64_sve)]`，无 stable 例外），stable 侧建议用内联 `asm!` 或 FFI 调 C 库（crates.io 目前无可用的 SVE 专用 crate）。
+- **`target_feature` 要求**：NEON intrinsic 在 aarch64 上默认可用（baseline 特性，无需 `#[target_feature]` 与运行时检测，`unsafe` 块中直接调用）；SVE 对应 `"sve"`。特性检测宏见参考资料 `ch05-feature-detection-macros.md`，并映射到 Rust 的 `is_aarch64_feature_detected!`。
+- **头文件**：C 的 `#include <arm_neon.h>` / `<arm_sve.h>` → Rust 是 `use std::arch::aarch64::*;`（`#[cfg(target_arch = "aarch64")]`）。
+- **类型**：C 的 `float32x4_t` → Rust `float32x4_t`（同名结构），无需额外映射。
+
+**Rust 查询工作流**：用户给个 Rust intrinsic 名（如 `vaddq_f32`）时，直接用 `acle_query.py info vaddq_f32 --family neon` 查到 ACLE 原型，再按上述规则补 Rust 包装（`unsafe`、`target_feature`、`std::arch` 路径）。若查不到（Rust 特有或未对齐 ACLE 名），退回 `query.py search` 查底层指令语义，再给出 `std::arch::aarch64` 里最接近的可用项。
 
 ## 查询工具
 
@@ -151,7 +174,7 @@ cd <skill_root> && python3 scripts/acle_query.py <command> [options]
    - 核心计算逻辑（加法/乘法/绝对值等）
    - 谓词处理（predicated 指令的 `ActivePredicateElement`）
    - 输出写入方式（merging vs zeroing）
-3. **综合输出** — 用简洁的中文解释指令功能，必要时给出等价 C 代码示意
+3. **综合输出** — 用简洁的中文解释指令功能，必要时给出等价 C 代码示意。若用户是 Rust 场景，额外给出 `std::arch::aarch64` 等价写法（见上方"Rust 对应关系"）
 
 ### ACLE Intrinsic 分析（`acle_query.py` 结果）
 
@@ -191,7 +214,8 @@ cd <skill_root> && python3 scripts/acle_query.py <command> [options]
     │   └─ "找一下跟 ZZZ 相关的"   → query.py grep ZZZ       → 整理并解释
     │
     ├── ACLE Intrinsic 查询 ────────────────────────────────────────────────────
-    │   ├─ "svadd 怎么用？"        → acle_query.py info svadd → 原型+映射指令+参数映射
+    │   ├─ "svadd 怎么用？"        → acle_query.py info svadd → 原型+映射指令+参数映射（Rust 用户再补 unstable/target_feature 说明）
+    │   ├─ "Rust 里 vaddq_f32 怎么用？" → acle_query.py info vaddq_f32 --family neon → 按 Rust 对应关系给 std::arch::aarch64 写法
     │   ├─ "哪些 intrinsic 用 TBL？"→ acle_query.py insn TBL  → 反向映射查找
     │   ├─ "SVE 算术类 intrinsic？" → acle_query.py list --family=sve --cat=arith
     │   ├─ "ACLE 有哪些类型？"     → acle_query.py types     → 类型系统概览
