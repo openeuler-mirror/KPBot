@@ -16,6 +16,35 @@ code-optimizer 提供 50 个专业技能（skills），覆盖从热点分析到�
 - **质量保障**: 对抗性审查、优化验证、修复代码
 - **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
 
+## 诊断反馈流程
+
+通用优化编排新增 **DesignExperiment（假设与实验设计）** 和 **ValidateExperiment（执行实验与反馈）** 两个模板阶段，沿用现有编排和叶子技能。
+
+```mermaid
+flowchart LR
+    A[热点分析] --> D[DesignExperiment]
+    D --> V[ValidateExperiment]
+    V -->|证据不足| D
+    V -->|假设被反驳| A
+    V -->|证据支持| O[优化决策]
+    O --> R[对抗审查与修改]
+    R --> T[完整验证]
+    T -->|实现错误| F[FixCode]
+    F --> T
+    T -->|性能未达标| V
+    T -->|正确性与系统验收通过| E[交付]
+```
+
+Agent 在目标环境执行实验并保存原始证据；局部性能结果与最终项目验收分开判断。目标不可用时返回 `awaiting_target_evidence`。
+
+| 验收层次 | 当前状态 |
+| --- | --- |
+| 本机逻辑与安装测试 | 已通过：30 个顶层测试、两平台各 28 个安装产物测试、8 项既有安装检查 |
+| 用户真实历史回放 | pending：尚未提供案例；逻辑 fixture 不算历史回放结果 |
+| 鲲鹏实测结果 | pending：尚未提供目标机器及真实实验，尚未完成整体验收 |
+
+复现命令、逐轮揭示证据的方法及真实目标验收清单见 [反馈回放指引](docs/feedback-replay.md)。
+
 ## 安装
 
 ### OpenCode

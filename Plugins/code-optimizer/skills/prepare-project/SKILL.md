@@ -17,6 +17,12 @@ description: 验证项目状态、定位优化目标函数、建立性能基线�
 |------|------|------|
 | project_path | 是 | 项目根目录绝对路径 |
 | target | 否 | 目标模块名或函数名，不提供则全项目扫描 |
+| target_machine | 否 | 任务要求的目标机器身份；未提供时只记录当前可观察机器，不把开发机假定为验收目标 |
+| verification_commands | 否 | 用户指定的构建、正确性和性能验证命令 |
+| numeric_constraints | 否 | 用户指定的正确性容差、性能目标、资源上限等数值约束 |
+| diagnostic_budget | 否 | 诊断实验预算；默认 `{max_experiments: 3, command_timeout_seconds: 600}` |
+
+从任务目标和已有上下文提取这些可选参数。只有任务目标明确给出覆盖值时才改变默认诊断预算；不要为了补齐流程而要求用户提供所有可选信息。
 
 ## 执行步骤
 
@@ -38,9 +44,12 @@ TaskUpdate({ taskId: validate_task_id, status: "in_progress" })
 用 Bash 工具执行以下检查，逐项记录结果：
 
 1. **路径检查**：`test -d <project_path>` 确认目录存在
-2. **VCS 检查**：`test -d <project_path>/.git` 确认是 Git 仓库
-3. **Git 状态**：`git -C <project_path> status --porcelain` 检查是否有未提交变更
-   - 如果有未提交变更，向用户报告并停止，提示先 commit 或 stash
+2. **VCS 检查**：`git -C <project_path> rev-parse --is-inside-work-tree` 确认是 Git 仓库（兼容 `.git` 为文件的 worktree）
+3. **Git 与实际源码状态**：未提交变更可以作为父状态继续准备；在构建、生成报告或任何源码修改前完成以下记录，输出到 `repo.source_state`：
+   - 读取 `git -C <project_path> rev-parse HEAD` 和 `git -C <project_path> status --porcelain=v1 -z --untracked-files=all`，保留原始状态。分别保存 `git diff --cached --binary --full-index` 的 staged patch、`git diff --binary --full-index` 的 unstaged patch，以及 `git ls-files --others --exclude-standard -z` 的 untracked 清单与相关文件内容；这些命令均在项目目录执行，不改变索引或工作区。
+   - 确认参与构建/测试的源码、头文件、构建配置与输入清单，保存路径、文件类型/模式和内容摘要及可还原快照；相关 untracked 文件必须包含，参与构建的 ignored 输入也要显式纳入。`digest` 标识 HEAD、相关 index 状态和实际工作区内容，不能只记 HEAD。新写的运行报告、日志及非输入构建产物不纳入源码摘要，避免把报告写入误判为父源码变化。
+   - 快照保存在源码清单之外的独立目录，确认后续能从该快照建立独立候选目录；构建或测试若会改变父源码/用户文件，先在独立副本执行并记录实际路径。保持原工作区和索引中的用户内容，不自动 commit、stash、checkout 或清理文件。
+   - 只有无法可靠识别实际源码、保存完整快照或证明隔离安全时才因源码状态返回 `status: "blocked"`，记录具体原因。已识别且能安全隔离的 dirty 父状态可以为 `ready`；将快照引用交给协调者，在候选创建前重新核对并据此建立 `parent_state`。
 4. **构建系统**：检查以下文件是否存在（按优先级）：
    - `CMakeLists.txt` → cmake
    - `Makefile` 或 `makefile` → make
@@ -244,11 +253,18 @@ TaskUpdate({ taskId: baseline_task_id, status: "in_progress" })
    - 记录 `tests_pass: true/false`
    - 测试框架不可用时记录 `tests_pass: null`
 
-3. **性能基线**（如果 `build_ok == true`）：
+3. **性能基线**（仅当 `build_ok == true` 且 `target_machine.available == true`，并确认当前执行机器与目标身份匹配）：
    - 检查项目是否有 benchmark 脚本或目标（Grep `benchmark`、`perf`、`--bench`）
    - 如果有，运行 benchmark 并记录指标
    - 如果没有，对目标函数所在可执行文件用 `time` / `perf stat` 获取粗略指标
    - 无法获取时记录 `metrics: null`
+   - 目标机器不可用、身份未知或当前机器不匹配时，不运行 benchmark、`time` 或 `perf stat`；记录 `metrics: null` 和目标证据缺口，不把开发机数据写入基线
+
+4. **验收条件与命令**：
+   - 优先保留用户明确指定的构建、正确性和性能命令，不自行改写其语义
+   - 从项目配置识别到的命令可作为候选，但必须标明来源；未确认可执行时不要声称已验证
+   - 提取正确性容差、性能目标、数据规模、并发度和资源上限等数值约束；未提供的字段保留为空数组
+   - 记录任务要求的目标机器身份。无法确认目标机器时，后续只做静态分析，不在当前开发机用替代性能结果宣告成功
 
 ### 步骤 6：架构分析
 
@@ -273,6 +289,17 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
   "repo": {
     "path": "<project_path>",
     "vcs": "git|none",
+    "source_state": {
+      "head": "<Git HEAD>",
+      "dirty": true,
+      "manifest": "<相关源码/构建输入清单与内容摘要路径>",
+      "digest": "<HEAD、相关 index 与工作区内容摘要>",
+      "snapshot_path": "<可还原父源码快照的独立目录>",
+      "staged_patch": "<staged binary patch 路径，无变更时 null>",
+      "unstaged_patch": "<unstaged binary patch 路径，无变更时 null>",
+      "untracked_manifest": "<相关 untracked 文件与内容摘要清单路径，无变更时 null>",
+      "isolation_safe": true
+    },
     "build_system": "cmake|make|meson|bazel|autotools|unknown",
     "compiler": "<compiler version or null>",
     "test_framework": "googletest|catch2|unity|none",
@@ -339,6 +366,23 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
       "<func1>_avg_ns": 125000
     }
   },
+  "target_machine": {
+    "identity": "<任务要求的机器、型号或 unknown>",
+    "available": true,
+    "source": "task_requirement|observed|unknown"
+  },
+  "verification_commands": {
+    "build": [{ "command": "<argv or shell command>", "source": "user|project" }],
+    "correctness": [{ "command": "<argv or shell command>", "source": "user|project" }],
+    "performance": [{ "command": "<argv or shell command>", "source": "user|project" }]
+  },
+  "numeric_constraints": [
+    { "name": "<constraint name>", "operator": "<=|>=|==", "value": 0.001, "unit": "<unit>", "source": "user|project" }
+  ],
+  "diagnostic_budget": {
+    "max_experiments": 3,
+    "command_timeout_seconds": 600
+  },
   "architecture_file": "<project_path>/optimization_reports/architecture/ARCHITECTURE.md",
   "microarch_file": "<pipeline_root>/skills/kunpeng_microarch/kunpeng920-microarchitecture.md 或 null>",
   "instruction_perf_file": "<pipeline_root>/skills/kunpeng_microarch/scripts/tsv110_full.json 或 null>",
@@ -351,7 +395,7 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
 
 `status` 取值：
 - `ready`：项目验证通过，可以进入分析阶段
-- `blocked`：存在阻塞问题（路径无效、无 Git、有未提交变更等），需用户处理
+- `blocked`：存在阻塞问题（路径无效、无 Git、实际源码状态无法识别或隔离不安全等），需用户处理
 - `partial`：部分检查失败但可继续（如构建失败但能定位目标）
 
 ## 规则
@@ -359,9 +403,11 @@ TaskUpdate({ taskId: arch_task_id, status: "completed" })
 - 构建失败时不停止——记录 `build_ok: false` 但继续定位目标
 - 测试框架不可用时跳过测试运行，记录 `tests_pass: null`
 - 基线性能获取不到时记录 `metrics: null`
-- Git 工作区有未提交变更时 `status: "blocked"`，提示用户先 commit 或 stash
+- Git staged、unstaged 或 untracked 变更本身不阻塞；保留用户内容并记录 `repo.source_state`，仅无法识别或安全隔离父源码状态时阻塞
 - 目标函数不存在时 `status: "blocked"`，提示用户确认函数名
 - 机器信息收集失败不影响 `status`（仍为 `ready` 或 `blocked`），仅记录 `machine.arch` 为 `unknown`
 - 编译参数提取失败不影响 `status`，`compilation` 中对应字段记为 `null`，`performance_flags.optimization_level` 记为 `unknown`
 - 优先使用实际生效的 flags（CMakeCache.txt / compile_commands.json / config.log）而非仅读取配置文件，因为配置文件中的值可能被命令行参数覆盖
 - 平台不匹配（`machine.platform_match == false`）不会阻塞流水线，但需在 `warnings` 字段中明确提醒用户
+- `diagnostic_budget` 默认每个优化点最多 3 个实验、单命令 600 秒；只接受任务目标中的明确覆盖
+- 未确认目标机器时，`target_machine.available: false`，继续静态分析并保留缺失信息，不要求用户为了流程固定补齐所有字段

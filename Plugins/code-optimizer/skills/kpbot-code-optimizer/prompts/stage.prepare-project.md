@@ -14,6 +14,10 @@ project preparation expert
 - 函数名：${context.function_name}
 - 测试用例：${context.test_cases}
 - 测试方法：${context.test_method}
+- 目标机器要求：${context.target_machine}
+- 验证命令：${context.verification_commands}
+- 数值约束：${context.numeric_constraints}
+- 诊断预算覆盖（可选）：${context.diagnostic_budget}
 
 ## 执行
 使用 Skill tool，skill 名称为 `prepare-project`
@@ -22,6 +26,10 @@ project preparation expert
 - target：${context.function_name}
 - test_cases：${context.test_cases}
 - test_method：${context.test_method}
+- target_machine：${context.target_machine}
+- verification_commands：${context.verification_commands}
+- numeric_constraints：${context.numeric_constraints}
+- diagnostic_budget：${context.diagnostic_budget}；未明确提供时使用 `{max_experiments: 3, command_timeout_seconds: 600}`
 
 ## 输出格式
 返回 JSON 契约：
@@ -30,6 +38,17 @@ project preparation expert
   "repo": {
     "path": "<project_path>",
     "vcs": "git|none",
+    "source_state": {
+      "head": "<Git HEAD>",
+      "dirty": true,
+      "manifest": "<相关源码/构建输入清单与内容摘要路径>",
+      "digest": "<HEAD、相关 index 与工作区内容摘要>",
+      "snapshot_path": "<可还原父源码快照的独立目录>",
+      "staged_patch": "<staged binary patch 路径，无变更时 null>",
+      "unstaged_patch": "<unstaged binary patch 路径，无变更时 null>",
+      "untracked_manifest": "<相关 untracked 文件与内容摘要清单路径，无变更时 null>",
+      "isolation_safe": true
+    },
     "build_system": "cmake|make|meson|bazel|autotools|unknown",
     "compiler": "<compiler version or null>",
     "test_framework": "googletest|catch2|unity|none",
@@ -81,6 +100,23 @@ project preparation expert
     "build_ok": true,
     "tests_pass": true,
     "metrics": {}
+  },
+  "target_machine": {
+    "identity": "<任务要求的机器、型号或 unknown>",
+    "available": true,
+    "source": "task_requirement|observed|unknown"
+  },
+  "verification_commands": {
+    "build": [{ "command": "<command>", "source": "user|project" }],
+    "correctness": [{ "command": "<command>", "source": "user|project" }],
+    "performance": [{ "command": "<command>", "source": "user|project" }]
+  },
+  "numeric_constraints": [
+    { "name": "<constraint>", "operator": "<=|>=|==", "value": 0.001, "unit": "<unit>", "source": "user|project" }
+  ],
+  "diagnostic_budget": {
+    "max_experiments": 3,
+    "command_timeout_seconds": 600
   },
   "warnings": [],
   "status": "ready" | "blocked" | "partial"

@@ -17,6 +17,10 @@ description: 代码语法和功能修复专家。当 verify-optimization 报告�
 - `prepare-project` 输出中的 `baseline` 和 `repo` 数据（构建系统、编译器）
 - `decide-optimization` 的输出（函数名、策略、arch）
 
+## 入口与候选保护
+
+仅处理明确编译/功能正确性错误（含 correctness_verdict=failed），纯性能退化或未运行系统验收返回 `status: "failed", next_stage: "ValidateExperiment"` 并说明无实现错误，不修改代码。保留 candidate_path、candidate_patch、parent_state；只在该候选目录修复，不能清理整个 working tree 或 stash 用户改动。总修复额度由协调者 checkpoint 传入，重分发不重置 5 轮上限；修复完成仍须独立 VerifyOptimization 完整验收。
+
 ## 错误分类
 
 根据 verify-optimization 输出判断错误类型：
@@ -55,7 +59,6 @@ TaskUpdate({ taskId: gather_task_id, status: "in_progress" })
 1. 读取 verify-optimization 输出中的错误信息：
    - 编译错误：`compilation.error` 中的完整编译输出
    - 功能测试错误：`functional_test.details` 中的失败详情
-   - 性能退化诊断：`regression_diagnosis`（含 effectiveness_check 和 perf stat 对比）
    - verify-optimization 已尝试的修复：`debug_process.fixes_applied` 列表（避免重复尝试）
 2. 读取 `apply-optimization` 输出中的 `modified_files` 和 `error_message`
 3. 读取 `prepare-project` 输出中的 `repo.path`、`repo.build_system`、`repo.test_framework`
@@ -225,7 +228,7 @@ TaskUpdate({ taskId: output_task_id, status: "in_progress" })
 - **避免重复**：读取 verify-optimization 的 `debug_process.fixes_applied`，跳过已尝试且无效的修复方向
 - **最大 5 轮迭代**：每轮必须产生实质性修复（修改至少一行代码）
 - **编译优先**：先确保编译通过，再处理功能测试失败
-- **不做 git 操作**：fix-code 只修复代码，不执行 commit 或 stash，由后续的 verify-optimization 处理 git 操作
+- **不做 git 操作**：fix-code 只修复代码，不执行 commit 或 stash，仅由协调者在完整验收与 CLI Deliver 后处理精确提交
 - **不做性能测试**：fix-code 只关注正确性（编译+功能），性能验证由后续的 verify-optimization 处理
 - **连续停滞检测**：如果连续 2 轮修复同一位置且错误类型相同，提前终止，避免无意义的循环
 - **源码修改优先使用 Edit 工具**：先 Read 读取源文件获取精确的 `old_string`，再用 Edit 替换。仅当 Edit 无法胜任时（如正则匹配、批量格式调整等），才使用 `sed`/`awk` 辅助

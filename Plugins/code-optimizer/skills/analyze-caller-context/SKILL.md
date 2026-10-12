@@ -67,6 +67,13 @@ grep -rn "<function_name>(" <project_path>/ --include="*.c" --include="*.cpp" --
 
 Read 读取 `source_file` 中 `lines[0]-lines[1]` 的函数签名和参数列表，与调用点分析对照。
 
+**0d. 区分已确认条件与未覆盖条件**：
+
+- 只有源码中的显式 guard/常量、可核验调用栈或直接运行观测，才能写入 `confirmed_call_conditions`
+- 对每个已确认条件记录调用点、实际输入条件、分派条件、目标路径和证据引用；不知道的值不得用常见输入猜测补齐
+- 采样中未出现调用点只表示当前采样未观察到，不能证明该调用点从未执行
+- 未覆盖的输入范围、分派分支、间接调用目标和错误路径写入 `uncovered_conditions`，供 DesignExperiment 设计区分实验
+
 ### 步骤 1：多维调用点分析
 
 TaskUpdate({ taskId: gather_task_id, status: "completed" })
@@ -373,6 +380,17 @@ TaskUpdate({ taskId: analyze_task_id, status: "completed" })
     "callers": [
       { "name": "<caller_name>", "source_file": "<file>", "line": 42, "frequency": "high|medium|low" }
     ],
+    "confirmed_call_conditions": [
+      {
+        "caller_site": "<file:line>",
+        "input_conditions": ["<源码或直接观测可确认的输入条件>"],
+        "dispatch_conditions": ["<guard、分派值和实际目标路径>"],
+        "evidence_refs": ["<源码位置或原始观测位置>"]
+      }
+    ],
+    "uncovered_conditions": [
+      { "condition": "<未覆盖的输入、分派或调用路径>", "reason": "<现有证据为何不足>" }
+    ],
     "optimization_points": [
       {
         "id": "func_caller_opt1",
@@ -414,3 +432,4 @@ TaskUpdate({ taskId: analyze_task_id, status: "completed" })
 - **不输出裸 caller-context**：本阶段发现的点必须映射到 `special-case-optimization`、`operation-fusion`、`vectorization` 或现有可路由 strategy；无法映射则跳过并说明原因
 - **多个调用者的优化点分别生成**：不同调用者的同一维度问题生成独立 optimization_point
 - **14 维度先预检再评分**：预检未通过的维度不参加评分，直接入 skipped_dimensions。评分 < 0.4 的也不生成优化点。最多输出 5 个优化点，避免下游负担
+- `confirmed_call_conditions` 只记录实际可确认的输入和分派条件；未知或未采样条件写入 `uncovered_conditions`，采样缺失不得解释为“未调用”

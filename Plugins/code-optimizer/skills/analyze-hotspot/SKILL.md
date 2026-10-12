@@ -21,6 +21,9 @@ description: 对单个函数进行动静态分析，发现多个优化机会，�
     "entry_functions": ["<sub_task.function>"]
   },
   "baseline": { "build_ok": true, "tests_pass": true, "metrics": { "..." } },
+  "target_machine": { "identity": "<目标机器或型号>", "available": true, "source": "task_requirement|observed|unknown" },
+  "verification_commands": { "build": [], "correctness": [], "performance": [] },
+  "numeric_constraints": [],
   "sub_task": {
     "id": 1,
     "function": "<function_name>",
@@ -50,6 +53,7 @@ description: 对单个函数进行动静态分析，发现多个优化机会，�
 - `target`：聚焦到**当前子任务的单个函数和文件**
 - `sub_task`：decompose-tasks 输出的子任务（含跨 case 权重、CPU 占比等 profiling 数据）
 - `baseline`：prepare-project 的基线数据
+- `target_machine`、`verification_commands`、`numeric_constraints`：prepare-project 保留的目标环境和验收条件；目标机器不可用时只做静态分析
 - `test_method`：测试命令，用于 perf 动态分析
 - `architecture_file`：ARCHITECTURE.md 绝对路径（仓库架构分析输出），Read 此文件可获取数据结构布局、现有优化位置、架构特征等客观事实，辅助热路径判断和优化点发现
 - `performance_profile`：测试用例性能画像（来自 analyze-testcase），含 scale/concurrency/bottleneck_type/cache_scenario，辅助确定优化策略方向
@@ -95,13 +99,15 @@ TaskUpdate({ taskId: dynamic_task_id, status: "in_progress" })
 
 首选硬件 PMU 事件（`cycles,instructions,L1-dcache-*,LLC-*,branch-*`）；PMU 不可用时降级为软件事件（`cpu-clock,task-clock,context-switches`），IPC 和 cache miss rate 标记 `null`。
 
+perf stat 默认给出整条命令或进程范围的计数器。只有测试路径隔离了目标函数，或有可核验的直接归因时，才把计数器写成当前函数的观察；否则记录真实 `scope`，并把“当前函数导致该计数”放入 `possible_causes`，列入待验证项。
+
 #### 1b. 热点指令分析（perf annotate）
 
 `perf record -e cpu-clock -- <test_method>` + `perf annotate --stdio <function>`，从 Top-N 热点指令判断瓶颈类型（访存瓶颈 ldr/str 占比高 vs 计算瓶颈 fmul/fadd 占比高），记录对应源码行号。
 
 #### 1b2. 理论周期估算（instruction-level cycle modeling）
 
-基于 perf annotate 提取的热点循环体指令序列，结合指令性能数据估算理论下限：
+基于 perf annotate 提取的热点循环体指令序列，结合指令性能数据估算理论下限。理论周期始终是 `estimate`，不能写成实测：
 
 1. **提取热点循环体**：从 perf annotate 中定位 CPU 占比最高的循环（通常标注循环标签），提取循环体内完整指令序列
 2. **查询指令延迟/吞吐**：对每条指令，用微架构对应脚本查询：
@@ -113,11 +119,12 @@ TaskUpdate({ taskId: dynamic_task_id, status: "in_progress" })
    - `throughput_bound = max(每个端口组的 uop 总数 / 端口容量)` — 端口压力
    - `theoretical_min_cycles = max(latency_bound, throughput_bound)`
 4. **计算优化空间**：
-   - `headroom = actual_cycles / theoretical_min_cycles`（来自 perf stat 的 cycles 与循环迭代数）
+   - 只有 `actual_cycles` 与迭代数在相同运行条件下可直接归因到该循环时，才计算 `headroom = actual_cycles / theoretical_min_cycles`
+   - 命令级计数器无法归因到当前函数时，`actual_cycles_per_iter` 和 `headroom` 记为 `null`，将归因需求写入 `missing_evidence`
    - `bottleneck_kind`：latency_bound > throughput_bound → `"latency"`（延迟瓶颈，需减少依赖链长度）；否则 → `"throughput"`（吞吐瓶颈，需增加 ILP 或交错调度）
-5. **写入 evidence.dynamic**：
+5. **写入 possible_causes**：
    ```
-   "IPC=0.72, headroom=3.1x（实际估算 ~142c/iter vs 理论 ~46c/iter），瓶颈=NEON FP 端口吞吐饱和"
+   "estimate: 理论下限约 46c/iter；相同条件下可归因的循环观测约 142c/iter，待用区分实验验证 V 端口压力是否为主因"
    ```
 
 **降级**：perf annotate 不可用或指令查询失败 → 跳过此步骤，标记 `theoretical_cycles_used: false`。
@@ -174,7 +181,7 @@ TaskUpdate({ taskId: dynamic_task_id, status: "in_progress" })
 
 #### 1c. 缓存/分支 Miss 精确归因（ARM SPE）
 
-使用 `skills/arm-spe-analysis/scripts/spe-collect.sh` 采集（`-f load,store,branch -t 30`），`spe-parse.sh` 按 L1d miss/分支 miss 排序解析，`spe-hotspot.sh` 定位 LLC miss 热点指令。提取 Top cache miss 来源（含行号）和 Top branch miss 来源。SPE 不可用时标记 `perf_spe_used: false`。
+使用 `skills/arm-spe-analysis/scripts/spe-collect.sh` 采集（`-f load,store,branch -t 30`），`spe-parse.sh` 按 L1d miss/分支 miss 排序解析，`spe-hotspot.sh` 定位 LLC miss 热点指令。提取 Top cache miss 来源（含行号）和 Top branch miss 来源。SPE 不可用时标记 `perf_spe_used: false`。采样中没有出现某调用或指令只表示当前采样未观察到；不得据此证明它未执行，应写入 `missing_evidence` 供后续实验验证。
 
 #### 1d. 降级处理
 
@@ -884,6 +891,15 @@ TaskUpdate({ taskId: points_task_id, status: "completed" })
   "function": "<function_name>",
   "source_file": "<source_file_path>",
   "lines": [start_line, end_line],
+  "observations": [
+    { "id": "obs1", "kind": "observation", "scope": "<command|process|function|loop>", "source": "<perf|source|compiler|historical>", "statement": "<直接观察到的事实>", "evidence_ref": "<原始输出位置或源码位置>" }
+  ],
+  "possible_causes": [
+    { "id": "cause1", "claim": "<可解释观察的原因>", "based_on": ["obs1"], "status": "hypothesis" }
+  ],
+  "missing_evidence": [
+    { "question": "<尚不能回答的问题>", "reason": "<现有证据为何不足>", "suggested_observation": "<可区分解释的最小观察>" }
+  ],
   "dynamic_analysis": {
     "status": "ok|partial|unavailable",
     "perf_stat": { "pmu_available": true, "ipc": 0.72, "branch_mispredict_rate_pct": 12.3, "l1d_cache_miss_rate_pct": 8.5, "llc_cache_miss_rate_pct": 2.1, "cpu_clock_ms": 450 },
@@ -891,6 +907,7 @@ TaskUpdate({ taskId: points_task_id, status: "completed" })
     "perf_annotate_top5": [{ "instruction": "...", "cpu_pct": 28.3, "source_line": 45 }],
     "theoretical_cycles_used": true,
     "theoretical_cycles": {
+      "evidence_kind": "estimate",
       "hotspot_loop": "<循环标签或行号>",
       "microarch": "TSV110|0xd03|null",
       "actual_cycles_per_iter": 142,
@@ -1096,7 +1113,10 @@ TaskUpdate({ taskId: points_task_id, status: "completed" })
 
 - **本阶段输入是单个函数**（从 `sub_task` 获取），不是全项目。静态分析只读该函数的源码
 - **动态分析三件套**：perf stat（微架构特征）→ perf annotate（热点指令）→ perf spe（miss 精确归因）
-- **每个优化点必须同时有静态和动态证据**：仅凭静态猜测的优化点 confidence 应大幅降低或跳过
+- 目标机器不可用或与任务要求不匹配时不采集替代性能数据，只完成静态分析，并在 `missing_evidence` 记录目标环境缺口
+- **每个优化点明确证据范围**：动态证据可用时同时给出静态和动态依据；仅有静态依据时 confidence 不超过 0.6，并把待验证项写入 `missing_evidence`
+- `observations` 只保存可直接确认的事实；原因解释写入 `possible_causes`，未覆盖条件写入 `missing_evidence`
+- 采样缺失不能证明代码未调用；命令级计数器不能在无归因证据时归属于当前函数；理论周期必须标为 `estimate`，不能写成实测
 - `perf spe` 在非 ARM 平台或旧内核不可用，标记 `perf_spe_used: false` 即可，不阻塞
 - 优化点列表按 priority 升序排列（priority=1 最先执行）
 - `skipped_points` 记录评估过但不满足条件的策略，供下游知晓已考虑过

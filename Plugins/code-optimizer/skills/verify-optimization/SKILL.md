@@ -1,11 +1,11 @@
 ---
 name: verify-optimization
-description: 验证优化结果的正确性和性能提升，提交 git。适用于 apply-optimization 完成后。
+description: 验证优化结果的正确性和性能提升，生成完整验收证据。适用于 apply-optimization 完成后。
 ---
 
 # 验证优化
 
-你是一位鲲鹏性能优化流水线的验证专家。你的任务是**全量充分验证**优化后的代码正确性、对比性能提升，并决定是否提交 git。
+你是一位鲲鹏性能优化流水线的验证专家。你的任务是**全量充分验证**优化后的代码正确性、对比性能提升，并输出是否满足最终验收的证据。
 
 **重要**：单点代码修改可能影响其他调用模块，验证必须覆盖**完整测试套件**，不可仅运行与当前函数相关的部分用例。apply-optimization 的轻量编译检查不能替代本阶段的全量验证。
 
@@ -17,6 +17,14 @@ description: 验证优化结果的正确性和性能提升，提交 git。适用
 - `apply-optimization` 的输出（优化代码变更、编译状态）
 - `prepare-project` 输出中的 `repo` 数据（构建系统、编译参数、测试框架）和 `baseline` 数据（构建状态、测试状态、性能基线）
 - `decide-optimization` 的输出（函数名、策略、arch、optimization_point_id）
+
+## 验收字段与证据门控
+
+输入必须保留 prepareProject 完整的 verification_commands（build/correctness/performance）、numeric_constraints、target_machine、baseline，以及 designExperiment / validateExperiment 的假设与记录引用。项目完整正确性、hidden checks、用户既定 benchmark 与工作负载是最终验收依据；局部诊断不能替代它们。构建、测试和性能命令优先使用用户/项目既定命令，保留原参数、输入、线程/绑核与数值容差，不另造替代测试。
+
+分开输出 `correctness_verdict`、`local_performance_verdict`、`system_acceptance`，枚举均为 passed / failed / inconclusive / not_run。passed 必须有实际目标与当前候选源码/构建/工作负载一致的原始证据；编译成功不等于正确性通过，未运行完整测试为 not_run，数据缺失或噪声/条件不比为 inconclusive。系统通过需完整正确性、所有约定 benchmark/硬阈值与专项要求均通过。目标不可用时 system_acceptance=not_run，说明 awaiting_target_evidence；不得在开发机替代性能验收。
+
+原始结果保存到 RUN/candidates/<candidate_id>/raw/，记录每条实际命令、整数 exit_code、源码/构建/目标/工作负载身份与 metric 的 direction（higher/lower）。保留旧 compilation、functional_test、performance、regression_diagnosis、debug_process、git、status 字段；未运行的 compilation/functional_test/performance 用空对象并说明原因，不伪造 passed/ok 或填 null。local_performance 单独记录局部指标和证据；旧 performance 表示完整系统工作负载结果。
 
 ## 执行步骤
 
@@ -71,7 +79,7 @@ TaskUpdate({ taskId: compile_task_id, status: "in_progress" })
    - 重新编译
    - 修复成功 → 回到步骤 2（功能测试）
 4. 若错误复杂（intrinsics 参数错误、类型不匹配、逻辑问题等）→ **不尝试修复**
-5. 快速修复失败或错误复杂 → 记录错误详情，跳到步骤 5（输出结果），`status: "failed"`
+5. 快速修复失败或错误复杂 → 记录错误详情，跳到步骤 6（输出结果），`status: "failed"`
 6. **不执行 git stash**：保留工作区变更供 fix-code 阶段继续修复
 
 ### 步骤 2：功能测试（全量）
@@ -79,18 +87,12 @@ TaskUpdate({ taskId: compile_task_id, status: "in_progress" })
 TaskUpdate({ taskId: compile_task_id, status: "completed" })
 TaskUpdate({ taskId: test_task_id, status: "in_progress" })
 
-条件：`prepare-project.baseline.tests_pass != null` 且编译成功
+条件：编译成功。使用 prepareProject.verification_commands.correctness 的全部命令，基线没有测试结果不能成为省略完整正确性验证的理由。
 
-1. 运行**完整测试套件**（不可仅运行当前函数相关用例——单点修改可能影响其他模块）：
-   - cmake + ctest：`cd <repo.path>/build && ctest --output-on-failure`
-   - make + googletest：`cd <repo.path> && ./test_runner`
-   - 若 test_method 为全量测试命令，直接使用：`<test_method>`
-2. 记录结果：
-   - `passed: true/false`
-   - `details: "<n>/<total> cases passed"` 或错误摘要
-3. 测试失败时 → 进入步骤 2a（功能调试流程）
-
-如果 `test_framework == none`，跳过此步骤，记录 `functional_test: null`。
+1. 优先逐条执行 prepareProject.verification_commands.correctness 中的**全部**用户/项目命令，即使 test_framework=none 也必须执行自定义测试/校验脚本；不能用框架探测结果覆盖已配置命令。
+2. 仅当列表为空时，查找项目已有完整测试入口（例如 cmake/ctest、make/test_runner，或已明确为全量正确性测试的 test_method），记录实际适用命令后执行。不可只运行当前函数用例。
+3. 每条命令保存原始日志、exit_code、测试完整性及数值约束结果；全部适用检查通过才能 functional_test.passed=true / correctness_verdict=passed。失败记录 details 并进入步骤 2a；结果缺失/无法确定完整性为 inconclusive。
+4. 只有既无配置命令、也找不到适用的项目完整正确性命令时才跳过，记录 functional_test={}、correctness_verdict=not_run 及原因。无完整正确性证据不能 system_acceptance=passed 或 status=verified，最终仍 unverified。
 
 ### 步骤 2a：功能测试快速修复（仅 1 轮）
 
@@ -108,7 +110,7 @@ TaskUpdate({ taskId: test_task_id, status: "in_progress" })
 4. 若问题复杂（SIMD 指令使用错误、数据类型不匹配、逻辑推理困难等）→ **不尝试修复**
 5. 快速修复失败或问题复杂 → 收集错误详情用于下游 fix-code：
    - `functional_test.details` 中记录失败的测试用例和错误信息
-   - 跳到步骤 5（输出结果），`status: "failed"`
+   - 跳到步骤 6（输出结果），`status: "failed"`
 6. **不执行 git stash**：保留工作区变更供 fix-code 阶段继续修复
 
 ### 步骤 3：性能对比
@@ -120,75 +122,45 @@ TaskUpdate({ taskId: perf_task_id, status: "in_progress" })
 
 #### 3.0 执行模式选择
 
-根据基线测试耗时判断使用**同步模式**还是**后台+轮询模式**：
+从 prepareProject.verification_commands.performance 取得完整命令列表，按原顺序串行执行；每条命令保留参数、工作负载、目标环境与独立 raw 结果路径。同步与后台仅是执行方式差异，都必须消费同一完整列表，不能用单一 test_method 替代。列表为空且没有可确认的既定系统 benchmark 时记录 system_acceptance=not_run、status=unverified。
 
+```text
+for perf_command in prepareProject.verification_commands.performance:
+    baseline_duration = 与此命令/工作负载对应的基线耗时（未知为 0）
+    baseline_duration <= 600 → 同步（步骤 3.1）
+    baseline_duration > 600 → 后台并轮询（步骤 3.2）
+    保存本条 command/exit_code/raw_results/完整性检查
+全部命令完成后 → 步骤 3.3 汇总完整系统验收
 ```
-# 从 prepareProject.baseline.metrics 获取基线耗时
-baseline_duration = max(baseline.metrics 中各 case 的耗时, 默认 0)
-# Bash 工具超时限制
-bash_timeout_limit = 600  # 秒
-
-if baseline_duration == 0 or baseline_duration <= bash_timeout_limit:
-    使用同步模式（步骤 3.1）
-else:
-    使用后台+轮询模式（步骤 3.2）
-```
-
-**判断逻辑**：当单次完整测试耗时超过 Bash 工具的超时限制（600s）时，后台模式允许测试完整运行而不会被截断。
 
 #### 3.1 同步模式（短测试）
 
-1. 运行与基线相同的性能测试（相同的 benchmark 脚本或命令）
-2. 记录优化后的性能指标
-3. 计算加速比，跳转到步骤 3.3 判断结果
+对列表中的当前 perf_command：执行其 command 原文，等待退出并记录整数 exit_code；核对本条所需的全部原始结果与对应基线。仅 exit_code=0 且结果完整才计算该条指标。错误或不完整结果标为未决并保留日志，不能把其他成功命令当作整个列表通过。然后处理列表下一条，全部处理完才进入系统判定。
 
 #### 3.2 后台+轮询模式（长测试）
 
-当基线耗时 > 600s 时使用此模式：
+对列表中的当前 perf_command（基线耗时 > 600 秒）：
 
-1. **启动后台测试**：
-   ```bash
-   # run_in_background: true
-   <test_method>
+1. **启动本条后台命令**，使用其 command 原文，不替换为 test_method：
+   ```text
+   run_in_background: true
+   perf_command.command
    ```
-   捕获返回的 `task_id`。
-
-2. **轮询结果目录**（ann-benchmarks 等框架在运行过程中写入 HDF5 结果文件）：
-   ```
-   poll_interval = 60  # 秒
-   max_wait = min(baseline_duration × 1.5, 3600)  # 上限 1 小时
-   elapsed = 0
-
-   while elapsed < max_wait:
-       sleep(poll_interval)
-       elapsed += poll_interval
-       检查结果目录是否有新文件产生
-       检查后台任务是否已完成（TaskOutput with block=false）
-       if 任务已完成:
-           break
-   ```
-
-3. **结果检查**：
-   - 若结果目录有新文件 → 测试完成，进入步骤 3.3
-   - 若超时仍无结果 → 记录 `performance: null, reason: "background test timeout"`
-   - 若后台任务异常退出 → 记录错误信息，`performance: null`
-
-4. **禁止行为**：在后台模式下**严禁自行创建替代测试脚本**，必须使用 `test_method`。
+   捕获本条 task_id/进程身份与独立结果目录，连同 command 和 workload 一起记录。
+2. **轮询本条任务**：每 60 秒通过 TaskOutput with block=false 查询是否退出，并核对本条独立结果目录。max_wait=min(本条 baseline_duration × 1.5, 3600)；仅出现新文件不能证明任务成功或完成。
+3. **逐条结果检查**：确认对应后台进程退出且 exit_code=0、该命令的全部本次结果完整后，记录指标并处理列表下一条。超时、非零退出或结果缺失时保存该条 command/退出或超时状态/raw 日志，相关 verdict=inconclusive；若还有进程未结束，先停止并确认退出或将后续命令标为未运行，不能并发污染后续对比。
+4. **列表完成判定**：所有配置命令均执行成功、结果完整、指标可比且达到约定验收线才能 system_acceptance=passed。任一命令失败/未运行/结果缺失均不能用其余成功项判定系统通过；保存未完成清单。严禁创建替代测试脚本或在后台分支退回单一 test_method。
 
 #### 3.3 结果判断
 
-从结果文件中提取性能指标（QPS、延迟等），计算加速比：
+从完整原始结果中按预声明指标提取 baseline_metric 和 optimized_metric，显式保存 direction：
 
+```text
+higher（吞吐/QPS 越高越好）：speedup = optimized_metric / baseline_metric
+lower（时间/延迟越低越好）：speedup = baseline_metric / optimized_metric
 ```
-speedup = optimized_metric / baseline_metric
-```
 
-判断结果：
-- `speedup >= 1.1` → 无回归
-- `1.0 <= speedup < 1.1` → marginal（无显著提升）
-- `speedup < 1.0` → regression（性能退化，**不直接放弃，参见步骤 5 深度定位**）
-
-如果无法运行性能测试或无法提取结果，记录 `performance: null` 及原因。
+两值必须是有限正数；零、NaN/Inf、缺失指标、未知 direction、不同输入/构建或未完成命令均给 speedup=null、相应 verdict=inconclusive。保留重复次数和噪声范围，不能凭单次波动宣称可靠退化。局部与系统指标分别计算，不拿最佳 case 当总体收益。以用户 numeric_constraints / 约定验收线判断，未给性能提升线时默认完整系统 speedup >= 1.1 才 passed；可靠 speedup < 1 为 regression，其余不足为 unverified。新诊断动作应回 ValidateExperiment 设计、扣预算后执行。
 
 #### 3a0. asm/throughput 类优化的常规验收补强
 
@@ -197,12 +169,12 @@ speedup = optimized_metric / baseline_metric
 1. **反汇编确认**：对优化后的二进制或对象文件运行 `objdump -d` / `llvm-objdump -d`，无法使用时降级为平台可用的等价反汇编工具。检查 `expected_instruction_delta`：
    - `ldp_post_index_expected=true` → 目标函数热循环中必须出现预期 `ldp ..., [ptr], #imm` 或等价 post-index pair-load；AArch64 反汇编必须匹配 `], #imm` 形式（例如 `[x4], #16`），源码 inline asm 必须匹配 `[%[ptr]], #imm`。`[x4, #16]`、`[%[ptr], #16]` 或 `[%x[ptr], #16]` 是 unsigned-offset load，不推进 base pointer，必须记录 `post_index_addressing_verified=false` 且 `instruction_delta_verified=false`。
    - `indexed_ldr_reduced=true` → indexed `ldr` 数量应下降，或报告中说明编译器已生成等价更优序列。
-   - `schedule_policy=preserve_interchain_round_robin` → 对 carried-dependency 指令序列做局部检查：展开后不应把同一状态/目标寄存器的两次依赖操作连续排布；若出现，记录 `schedule_verified=false`，并把它作为 marginal/退化的重要原因。
-   - 若预期指令没有出现，`performance.instruction_delta_verified=false`，性能即使 marginal 也不得报告为 verified。
+   - `schedule_policy=preserve_interchain_round_robin` → 对 carried-dependency 指令序列做局部检查：展开后不应把同一状态/目标寄存器的两次依赖操作连续排布；若出现，记录 `schedule_verified=false`，并把它作为 收益不足/退化的重要原因。
+   - 若预期指令没有出现，`performance.instruction_delta_verified=false`，局部性能即使提升 也不得报告为 verified。
 2. **尺寸矩阵性能验证**：若目标函数有可参数化输入规模，必须用同一 benchmark 命令、同一编译参数、同一线程/绑核策略跑小/中/大输入矩阵，多轮取 median。每个 size 记录 baseline、optimized、speedup 和 correctness。
 3. **性能数据完整性检查**：`size_matrix` 必须由机器可解析的 raw result 生成（例如 raw TSV/JSON/CSV），并保留 raw 文件路径或内嵌 raw 摘要；禁止只把观察到的数字手写/硬编码进 comparison 脚本或最终 JSON。若存在 `baseline_*`、`optimized_*`、`comparison_*` 多个性能产物，必须交叉校验同一 size 的 median、CRC 和 speedup 是否一致；不一致时设置 `performance.diagnostics.data_integrity.verified=false`，`status` 不得为 `verified`。
 4. **局部回退记录**：若部分 size 退化，但代表性大尺寸或总体矩阵达到用户/任务设定阈值，可标记 `per_size_regressions` 并继续；若 correctness 不一致，直接失败。
-5. **硬阈值覆盖**：若 `validation_matrix_hint` 或用户目标给出硬通过线（如 `>=5%`），按该阈值判断；未给出时沿用本阶段默认 verified/marginal/regression 规则。
+5. **硬阈值覆盖**：若 `validation_matrix_hint` 或用户目标给出硬通过线（如 `>=5%`），按该阈值判断；未给出时沿用本阶段完整系统验收规则（verified/unverified/regression）。
 
 #### 3a1. special-case 局部特化验收补强
 
@@ -218,7 +190,7 @@ speedup = optimized_metric / baseline_metric
 
 #### 3a. 可选：SPE 微架构前后对比
 
-如果 `arm-spe-analysis` Skill 可用且优化前已采集过 SPE 数据，可运行微架构对比：
+如果已有同条件 SPE 前后数据可读取并比较。以下额外采集命令仅作为下一次 DesignExperiment/ValidateExperiment 的候选，必须经诊断预算预留后执行，Verify 不自行启动：
 
 ```bash
 SPE_SCRIPTS="skills/arm-spe-analysis/scripts"
@@ -242,7 +214,7 @@ SPE 对比结果记录到 `performance.spe_compare` 字段，仅供参考，不�
 
 ### 步骤 3b：可选寄存器压力诊断
 
-当满足任一条件时，调用 `register-pressure-analysis`，把结果作为性能诊断证据写入输出 JSON：
+当满足任一条件时，读取已有 `register-pressure-analysis` 结果写入 JSON；缺少数据时将以下命令作为下一次诊断实验建议，Verify 不启动额外无预算命令：
 
 - `decide-optimization.input.diagnostics.register_pressure_analysis_required == true`
 - `strategy` 为 `vectorization` 且 `vectorization_result` 含 `microkernel_shape`、`register_budget` 或 `spill_risk`
@@ -269,7 +241,7 @@ python3 skills/register-pressure-analysis/scripts/analyze_assembly_spill.py \
 
 - `pressure_level in ["none", "low"]`：作为通过证据，不改变 status。
 - `pressure_level == "medium"`：记录 warning，结合性能结果判断。
-- `pressure_level in ["high", "severe"]`：若性能 marginal 或 regression，应在 `performance.diagnostics` 中明确指出可能由 spill/reload 导致；不单独覆盖功能/编译 status。
+- `pressure_level in ["high", "severe"]`：若性能不足或 regression，应在 `performance.diagnostics` 中明确指出可能由 spill/reload 导致；不单独覆盖功能/编译 status。
 - 无法生成汇编或函数标签找不到时，记录 `register_pressure_result.success=false`，不阻塞功能测试。
 
 ### 步骤 4：Git 提交
@@ -277,120 +249,22 @@ python3 skills/register-pressure-analysis/scripts/analyze_assembly_spill.py \
 TaskUpdate({ taskId: perf_task_id, status: "completed" })
 TaskUpdate({ taskId: git_task_id, status: "in_progress" })
 
-根据验证结果决定 git 操作：
+本阶段仅准备结果，不执行 commit 或 stash。输出 git.committed=false、hash=null；协调者在 `--verify-result` 返回 Deliver 后才可晋升/精确提交。
 
-| 条件 | 操作 | status |
-|------|------|--------|
-| 编译快速修复后通过 + 测试通过 | git commit | verified/marginal/regression |
-| 功能快速修复后通过 | git commit | verified/marginal/regression |
-| 编译失败（无法快速修复）| **不 stash**，记录错误详情，等待 fix-code | failed |
-| 功能测试失败（无法快速修复）| **不 stash**，记录错误详情，等待 fix-code | failed |
-| 性能退化（speedup < 1.0）| **不 stash**，记录性能对比数据，交由 fix-code 深度定位 | regression |
-| 性能 marginal（1.0-1.1x）| git commit | marginal |
-| 验证通过（speedup >= 1.1x）| git commit | verified |
-| 无法判断（无测试无性能数据）| git commit | unverified |
+| 条件 | 路由 | 提交 |
+|------|------|------|
+| 编译/完整功能失败 | FixCode | 不提交，保留隔离候选与错误日志 |
+| 系统性能退化或未满足验收 | ValidateExperiment | 不提交，保留候选、父状态和反馈 |
+| 局部 passed、系统未运行/未决 | ValidateExperiment | 不提交，等待实际目标证据 |
+| 完整正确性与系统验收均 passed | Deliver（由协调者 CLI 校验） | 仅校验后由协调者提交 |
 
-**git commit 命令：**
+提交准备保留 patch hygiene：只枚举本候选 modified_files 及持久构建入口，精确区分用户原有 diff，不包含原始证据、日志、二进制、临时输入、工具配置、优化报告或误删的测试文件。删除来源不明/差异重叠则 blocked_parent_state，不自动恢复用户文件或改动 index。原始证据留在 RUN，不能通配删除或清空整个工作区。compiler-flag-tuning 只改 shell CFLAGS/临时 Makefile 不算可交付优化。
 
-提交前必须执行 patch hygiene：
+### 步骤 5：性能反馈
 
-1. 清理或移出临时产物：`perf*`、`*.data`、`*.gz`、`*.log`、`*.o`、临时 benchmark 可执行文件、临时测试输入。需要保留的证据只能放入 `optimization_reports/artifacts/`，不得进入 git commit。
-2. 运行 `git status --porcelain`，把变更分为：允许提交的源码/header/汇编/构建配置、优化报告、临时产物、可疑删除。
-3. 只允许提交 `applyOptimization.modified_files` 中的文件，以及明确属于持久构建入口的配置文件（如 `configure`、`CMakeLists.txt`、`Makefile.in`、`meson.build`、`BUILD.bazel`）。
-4. 禁止提交二进制、perf 数据、压缩测试数据、大文件、`.claude/**`、`.batch_optimize_answer_bank.md`、`CLAUDE.md` 和 `optimization_reports/**`。
-5. 若发现 `test/` 或 `tests/` 下源文件被删除，除非该删除明确来自用户需求，否则恢复该文件并把状态降为 `failed` 或 `unverified`。
-6. `compiler-flag-tuning` 必须修改持久构建入口。只改临时 `Makefile`、只产生 `build.log`、或只改变当前 shell CFLAGS 时，不得 commit 为 verified；应输出 `status: "unverified"` 或 `failed` 并说明不可合入。
+性能未达预期时将原始结果、局部/系统 verdict、候选摘要、parent_state 和诊断线索填入 regression_diagnosis，返回 ValidateExperiment。这里仅解释已有验收证据，不启动额外无预算 perf 采集/变更修复。后续实验须按预先判据和预算执行。
 
-```bash
-cd <repo.path>
-git add -- <applyOptimization.modified_files...> <明确允许的构建配置文件...>
-git commit -m "[<strategy>] <function_name> - <简短描述>"
-```
-
-commit 消息中的 `<strategy>` 取值：
-- vectorization → `[vectorization]`
-- autovec-source-transform → `[autovec-source-transform]`
-- throughput-enhancement → `[throughput-enhancement]`
-- prefetch-optimization → `[prefetch-optimization]`
-- branch-elimination → `[branch-elimination]`
-- memory-access-optimization → `[memory-access-optimization]`
-- compiler-flag-tuning → `[compiler-flag-tuning]`
-- asm-optimization → `[asm-optimization]`
-- bulk-memory-opt → `[bulk-memory-opt]`
-- variant-selection → `[variant-selection]`
-- special-case-optimization → `[special-case-optimization]`
-- operation-fusion → `[operation-fusion]`
-- precision-transform → `[precision-transform]`
-- math-rewrite → 无 commit（自动 skip，不提交代码变更）
-
-**git stash 命令（验证失败时）：**
-
-```bash
-cd <repo.path>
-git stash push -m "revert: <function_name> optimization failed verification"
-```
-
-### 步骤 5：性能回退深度定位
-
-TaskUpdate({ taskId: git_task_id, status: "completed" })
-TaskUpdate({ taskId: regress_task_id, status: "in_progress" })
-
-当 `speedup < 1.0`（regression）时，**不立即 stash**，而是先验证优化是否真正生效，再采集诊断数据供下游 fix-code 深度定位：
-
-#### 5a. 前置检查：优化是否真正生效（必须在微架构分析之前执行）
-
-性能无提升的最常见原因不是优化思路错了，而是优化代码根本没被执行。按以下顺序逐项检查：
-
-1. **编译检查**：确认修改的源文件是否被重新编译
-   ```bash
-   ls -la <modified_source>.o  # 检查 .o 时间戳是否晚于源文件修改时间
-   stat <modified_source>      # 确认源文件修改时间
-   ```
-   若 .o 文件未更新 → 构建系统增量编译跳过了修改文件 → fix-code 应修复 CMakeLists.txt/Makefile 依赖或强制 clean rebuild
-
-2. **符号检查**：确认优化后的函数在二进制中
-   ```bash
-   nm <binary> | grep <function_name>   # T = text section（正常）, U = undefined（链接失败）
-   objdump -t <binary> | grep <function_name>
-   ```
-   若符号不存在或标记为 'U' → 函数未被链接进二进制 → fix-code 应修复链接
-
-3. **指令检查**：确认新指令存在
-   ```bash
-   objdump -d <binary> | grep -A20 "<function_name>:"
-   ```
-   检查是否包含预期的新指令（NEON `vld1q`/`vmlaq`、SVE `whilelt`/`ld1w`、预取 `prfm` 等）：
-   - 若新指令不存在 → 编译器可能因别名分析/依赖关系未正确向量化 → fix-code 检查 restrict 限定和编译选项
-   - 若新指令存在但被条件分支包裹 → 运行时可能永远不会执行 → fix-code 检查分支条件
-
-4. **执行检查**：确认优化后的函数被实际调用
-   ```bash
-   perf record -e cpu-clock -- <test_method> 2>&1
-   perf report --stdio --sort=sym | head -30
-   ```
-   检查优化后的函数是否出现在 perf report 的 Top-N 中：
-   - 若函数不出现在采样中 → 函数未被调用或调用路径不通 → fix-code 检查调用链
-   - 若函数出现但占比很低 → 可能只执行了 cold path → fix-code 检查测试用例覆盖
-
-**关键判断**：若以上任一检查失败，退化原因标记为 `optimization_not_effective`（优化未生效），fix-code 应聚焦**让优化生效**（修复构建/链接/调用链），而非调整优化策略本身。
-
-#### 5b. 微架构对比分析（仅当 5a 确认优化已生效时执行）
-
-1. 采集优化前后 perf stat 对比：
-   ```bash
-   # 优化前 baseline（从 prepareProject.baseline 或 analyzeHotspot 获取）
-   # 优化后重新采集
-   perf stat -e cycles,instructions,L1-dcache-load-misses,LLC-load-misses,branch-load-misses -- <test_method>
-   ```
-2. 记录关键指标前后对比到 `regression_diagnosis` 字段：
-   - IPC 变化（↑/↓）
-   - Cache miss 率变化
-   - Branch mispred 率变化
-3. 尝试快速判断退化原因（启发式）：
-   - IPC 下降 + cache miss 上升 → 数据布局变更导致缓存效率降低
-   - IPC 上升但总 cycles 反增 → 指令数膨胀（展开过多/I-cache 溢出）
-   - branch miss 率上升 → 分支消除反而引入不可预测分支
-   - IPC 和 cache 均无恶化 → 可能是编译器优化被抑制（如 restrict 缺失）
+区分观察和可能原因：符号/反汇编可提示构建与路径问题，但采样未出现不能证明函数未执行，计数器相关性不能确证因果。已明确的编译/功能错误才进 FixCode；性能假设由诊断循环检验。失败候选保持隔离，下一候选开始前由协调者核实 accepted parent_state。
 
 ### 步骤 6：输出结果
 
@@ -419,7 +293,14 @@ TaskUpdate({ taskId: output_task_id, status: "in_progress" })
     "passed": true,
     "details": "12/12 cases passed"
   },
+  "correctness_verdict": "passed",
+  "local_performance_verdict": "not_run",
+  "system_acceptance": "passed",
+  "evidence_refs": ["candidates/<candidate_id>/raw/results.json"],
+  "commands": [{"command": "<用户约定命令>", "exit_code": 0}],
+  "local_performance": {},
   "performance": {
+    "direction": "higher",
     "execution_mode": "sync|background",
     "background_task_id": null,
     "baseline_metric": 7910,
@@ -491,55 +372,41 @@ TaskUpdate({ taskId: output_task_id, status: "in_progress" })
     "likely_cause": null
   },
   "git": {
-    "committed": true,
-    "hash": "<commit_hash>",
+    "committed": false,
+    "hash": null,
     "message": "[vectorization] matmul - NEON/SVE 向量化"
   },
   "status": "verified"
 }
 ```
 
-`status` 取值：
-- `verified`：功能测试通过 + 性能提升 >= 1.1x
-- `marginal`：功能测试通过 + 性能 1.0-1.1x
-- `regression`：功能测试通过但性能退化
-- `failed`：编译失败或功能测试失败
-- `unverified`：无法运行测试和性能对比
+`status` 从完整验收映射，按下列优先级：
+- `failed`：编译或功能/数值正确性失败，correctness_verdict=failed。
+- `regression`：正确性未失败且可比系统性能可靠退化，system_acceptance=failed；performance.regression=true。
+- `verified`：correctness_verdict=passed 且 system_acceptance=passed，所有适用的专项检查通过。仅此状态可进入 Deliver。
+- `unverified`：其余情况（无完整测试、系统未运行、缺失证据、收益未达阈值或不确定）。不再生成旧 marginal；微小提升是否通过按用户验收线确定，未通过即 unverified。
+
+旧 status、布尔字段与三项 verdict 必须一致；缺失验收的新字段不能用旧 verified/marginal 直接交付。协调者执行 `experiment_feedback.py --verify-result` 校验并取得路由，本阶段不能先提交再补校验。
 
 ## 规则
 
 - **全量验证原则**：单点代码修改可能影响其他调用模块，功能测试必须运行完整测试套件，不可仅运行部分用例
-- **与 apply-optimization 的分工**：apply 做轻量编译检查（fail fast），verify 做全量验证（编译 + 全量测试 + 性能对比 + git）
+- **与 apply-optimization 的分工**：apply 做轻量编译检查（fail fast），verify 做全量验证（编译 + 全量测试 + 性能对比 + 待交付证据）
 - **special-case-optimization 验证**：必须覆盖 fast path/局部改写命中、fallback 命中、边界尾部和 predicate 不命中路径，并记录 targeted + aggregate benchmark、局部退化、硬件契约证据和 patch fairness；若测试无法覆盖目标路径，或缺少 `equivalence_basis` / `validation_focus` 回填，或 benchmark/test harness 被非目标性修改，`status` 最高为 `unverified`
 - **operation-fusion 验证**：必须确认中间结果无外部可见语义，功能测试需覆盖融合前 producer/consumer 的组合路径；若存在浮点结合律变化，还需误差容差检查
 - **precision-transform 验证**：必须运行误差统计，至少记录绝对误差、相对误差、极值输入和 fallback 路径；缺少 `precision_contract` 时视为验证失败
 - **autovec-source-transform 验证**：复用现有编译、完整测试、hidden checks、性能对比和反汇编检查；必须有 compiler feedback 或反汇编证据证明目标 loop 被向量化或明显改善。不做 IR equivalence、Alive2、长轮次 fuzz 或 optional deep mode
 - **math-rewrite 验证**：v1 只接受候选报告和 correctness checklist，不应出现代码变更或 git commit
-- **核心原则**：验证失败时优先尝试 1 轮快速修复，复杂问题路由到 fix-code 阶段处理
+- **核心原则**：明确编译/功能错误可尝试 1 轮快速修复，复杂实现错误交 FixCode；性能结果回 ValidateExperiment
 - 编译失败：快速修复（1 轮，仅简单错误），复杂错误 → status "failed"，交由 fix-code 处理
 - 功能测试失败：快速修复（1 轮，仅简单问题），复杂问题 → status "failed"，交由 fix-code 处理
-- **不执行 git stash**：当 status 为 "failed" 或 "regression" 时，保留工作区变更（未提交的修改），供 fix-code 继续修复
-- **性能退化（regression）不直接放弃**：采集 perf stat 对比数据（步骤 5），将诊断信息传递到 fix-code 深度定位，而非直接 stash 丢弃
 - `debug_process` 记录快速修复过程，`fixes_applied` 列出修复描述
 - git commit 消息格式：`[vectorization|autovec-source-transform|throughput-enhancement|prefetch-optimization|branch-elimination|memory-access-optimization|compiler-flag-tuning|asm-optimization|bulk-memory-opt|variant-selection|special-case-optimization|operation-fusion|precision-transform] function_name - 简短描述`
-- 性能 1.0x-1.1x 时 commit 但 `status: "marginal"`
-- 仅当 fix-code 多轮深度定位后仍无法扭转 regression 时，才由 fix-code 执行 git stash
 - git 操作失败时报告错误，保留文件变更让用户手动处理
 - commit 前必须再次确认 staged diff 不包含临时产物、二进制、大文件、测试数据或误删测试源码；否则取消 commit 并输出 hygiene failure。
 - **源码修改优先使用 Edit 工具**：快速修复时先 Read 读取出错位置的精确文本，再用 Edit 替换。仅当 Edit 无法胜任时，才使用 `sed`/`awk` 辅助
-- 无测试框架时跳过功能测试，仅做编译+性能
-- 无法获取性能数据时，编译通过即 commit，`status: "unverified"`
+- test_framework=none 仍执行配置的 correctness 命令；仅无任何适用完整正确性命令时记 not_run，不能完成系统验收
 
 ## 修复路由说明
 
-当 verify-optimization 输出 `status: "failed"` 时：
-- 编译错误或功能测试错误会通过 `compilation.error` 和 `functional_test.details` 传递给下游 fix-code 阶段
-- verify-optimization **不执行 git stash**（保留工作区变更供 fix-code 修复）
-- fix-code 修复成功后会重新分发 verify-optimization subagent 进行独立验证
-
-当 verify-optimization 输出 `status: "regression"` 时：
-- 性能退化数据通过 `regression_diagnosis` 传递给下游 fix-code 阶段
-- verify-optimization **不执行 git stash**（保留工作区变更供 fix-code 深度定位）
-- fix-code 分析诊断数据、定位退化根因、逐轮修复（最多 5 轮）
-- fix-code 修复成功后重新分发 verify-optimization subagent 进行独立验证
-- 仅当 fix-code 多轮修复仍无法扭转退化时，才执行 git stash
+编译或完整功能失败 → FixCode；修复完成后由 fresh VerifyOptimization subagent 重新执行完整验收。性能退化、收益不足、无系统证据 → ValidateExperiment，保留候选 patch/目录、parent_state 和原始证据；不在 FixCode 自动迭代性能策略，不执行全树 stash。只有 CLI 验证一致的 correctness/system 双 passed 才 Deliver。
