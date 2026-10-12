@@ -253,7 +253,7 @@ step "[0/4] Checking items to be installed..."
 # Collect skills from all plugins supported by the target tool (including nested packages)
 SKILL_COUNT=0
 SKILLS_TO_INSTALL=""
-for plugin_dir in "$PLUGINS_DIR"/*/; do
+for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
     [ -d "$plugin_dir" ] || continue
     # Skip plugins that do not declare support for the target tool
     if ! plugin_supports_tool "$plugin_dir"; then
@@ -358,7 +358,7 @@ for name in $CLEAN_LIST; do
 done
 
 # 基底：拷贝目标工具支持的 plugins 的 skills（claude 格式）
-for plugin_dir in "$PLUGINS_DIR"/*/; do
+for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
     [ -d "$plugin_dir" ] || continue
     if ! plugin_supports_tool "$plugin_dir"; then
         continue
@@ -371,7 +371,7 @@ skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$TOOL" = "opencode" ]; then
     # 应用每个插件的 opencode/ 覆盖层（差异文件覆盖 claude 版本）
-    for plugin_dir in "$PLUGINS_DIR"/*/; do
+    for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
         [ -d "$plugin_dir" ] || continue
         if ! plugin_supports_tool "$plugin_dir"; then
             continue
@@ -382,7 +382,7 @@ if [ "$TOOL" = "opencode" ]; then
     done
     ok "OpenCode overlays applied"
     # 应用各插件声明的排除列表（拷贝与覆盖层完成后统一删除，防止被重新带回来）
-    for plugin_dir in "$PLUGINS_DIR"/*/; do
+    for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
         [ -d "$plugin_dir" ] || continue
         if ! plugin_supports_tool "$plugin_dir"; then
             continue

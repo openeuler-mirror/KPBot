@@ -1,0 +1,28 @@
+{
+  "name": "openwiki-sync",
+  "version": "1.0.0",
+  "description": "OpenWiki 代码仓文档自动生成与同步 — 为代码仓生成 OpenWiki 并托管到独立 wiki 仓，记录代码仓与 wiki 仓的关联关系；代码 commit 后自动增量更新 wiki 仓并生成对应 commit，覆盖初次生成、关联恢复、增量更新、wiki 查询全场景，支持 GitCode/Gitee/GitHub/通用 git 平台",
+  "author": {
+    "name": "Kunpeng Acceleration Team"
+  },
+  "homepage": "https://atomgit.com/openeuler/KPBot/tree/master/Plugins/public/openwiki-sync",
+  "license": "MulanPSL-2.0",
+  "keywords": [
+    "openwiki",
+    "wiki",
+    "documentation",
+    "docs",
+    "knowledge",
+    "agent-docs",
+    "sync",
+    "mirror",
+    "gitcode",
+    "gitee",
+    "github",
+    "automation"
+  ],
+  "platforms": [
+    "claude",
+    "opencode"
+  ]
+}

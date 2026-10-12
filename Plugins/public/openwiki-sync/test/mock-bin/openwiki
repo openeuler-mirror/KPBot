@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# openwiki CLI mock — 仅用于 openwiki-sync skill 的 eval 测试。
+# 行为契约（与真实 CLI 对齐的部分）：
+#   openwiki --init [-p]   在当前 git 仓根生成 openwiki/（页面 + claims + 元数据）
+#   openwiki --update [-p] 增量更新：gitHead 变化则改写页面并刷新 .last-update.json，否则 no-op
+#   openwiki --update      在无 openwiki/ 时报错退出 1
+# 每次调用记录到 $REPO/.openwiki-sync/mock-openwiki.log 与 ~/.openwiki-mock/calls.log
+
+set -u
+GLOBAL_LOG="$HOME/.openwiki-mock"
+mkdir -p "$GLOBAL_LOG"
+STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "$STAMP cwd=$PWD args=$*" >> "$GLOBAL_LOG/calls.log"
+
+REPO="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO" ]; then
+  mkdir -p "$REPO/.openwiki-sync"
+  echo "$STAMP args=$*" >> "$REPO/.openwiki-sync/mock-openwiki.log"
+fi
+
+log_repo() { [ -n "$REPO" ] && echo "$STAMP $1" >> "$REPO/.openwiki-sync/mock-openwiki.log" || true; }
+
+short_desc() {
+  # 从 README 第一段提取项目简介，失败则用目录名
+  if [ -f "$1/README.md" ]; then
+    head -20 "$1/README.md" | grep -v '^#' | grep -v '^$' | head -1
+  else
+    echo "$(basename "$1") 项目"
+  fi
+}
+
+cmd_init() {
+  if [ ! -d "$REPO" ]; then echo "openwiki: not a git repository" >&2; exit 1; fi
+  OW="$REPO/openwiki"
+  mkdir -p "$OW/pages" "$OW/.claims"
+  DESC="$(short_desc "$REPO")"
+  REPO_NAME="$(basename "$REPO")"
+  HEAD_HASH="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo none)"
+  SHORT="${HEAD_HASH:0:8}"
+  SRC_DIRS="$(ls "$REPO" | grep -v -E '^(openwiki|\.|README|tests)' | tr '\n' ' ')"
+
+  cat > "$OW/index.md" <<EOF
+# ${REPO_NAME} OpenWiki Index
+
+${DESC}
+
+- [快速上手](quickstart.md)
+- [架构总览](pages/architecture.md)
+- [模块说明](pages/modules.md)
+EOF
+
+  cat > "$OW/quickstart.md" <<EOF
+# 快速上手：${REPO_NAME}
+
+${DESC}
+
+入口：\`app.py\` 的 \`main()\`。测试：\`python -m pytest tests/\`。
+详细架构见 [架构总览](pages/architecture.md)。
+EOF
+
+  cat > "$OW/pages/architecture.md" <<EOF
+# 架构总览
+
+${REPO_NAME} 采用三层结构：
+
+1. **接入层**：\`app.py\` 提供 HTTP 入口与路由分发
+2. **业务层**：\`parser.py\`（配置解析）与 \`store.py\`（内存存储）
+3. **测试**：\`tests/\` 端到端用例
+
+源码目录：${SRC_DIRS}
+EOF
+
+  cat > "$OW/pages/modules.md" <<EOF
+# 模块说明
+
+## app.py
+HTTP 入口，main() 启动服务。
+
+## parser.py
+配置文件解析，load_config() 返回结构化配置。
+
+## store.py
+内存键值存储，Store 类支持 get/set/list。
+EOF
+
+  cat > "$OW/.claims/architecture.json" <<EOF
+{
+  "page": "pages/architecture.md",
+  "claims": [
+    {"id": "arch-1", "evidence": "repo://app.py", "text": "app.py 是 HTTP 入口"},
+    {"id": "arch-2", "evidence": "repo://parser.py", "text": "parser.py 负责配置解析"},
+    {"id": "arch-3", "evidence": "repo://store.py", "text": "store.py 提供内存存储"}
+  ]
+}
+EOF
+
+  cat > "$OW/.page-manifest.json" <<EOF
+{"pages": ["index.md", "quickstart.md", "pages/architecture.md", "pages/modules.md"]}
+EOF
+
+  cat > "$OW/.last-update.json" <<EOF
+{"updatedAt": "$STAMP", "command": "init", "gitHead": "$HEAD_HASH", "model": "mock", "status": "complete"}
+EOF
+
+  log_repo "init done head=$SHORT"
+  echo "OpenWiki (mock): initialized wiki for ${REPO_NAME} @ ${SHORT} — ${OW}"
+}
+
+cmd_update() {
+  if [ ! -d "$REPO" ]; then echo "openwiki: not a git repository" >&2; exit 1; fi
+  OW="$REPO/openwiki"
+  if [ ! -f "$OW/.last-update.json" ]; then
+    echo "openwiki: no existing wiki found in this repository. Run 'openwiki --init' first." >&2
+    log_repo "update rejected: no wiki"
+    exit 1
+  fi
+  HEAD_HASH="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo none)"
+  BASE_HASH="$(python3 -c "import json;print(json.load(open('$OW/.last-update.json')).get('gitHead'))" 2>/dev/null || echo none)"
+  if [ "$HEAD_HASH" = "$BASE_HASH" ]; then
+    log_repo "update noop"
+    echo "OpenWiki (mock): update complete — no source changes, wiki left untouched."
+    exit 0
+  fi
+  SHORT="${HEAD_HASH:0:8}"
+  echo "" >> "$OW/pages/modules.md"
+  echo "## 增量更新 $STAMP" >> "$OW/pages/modules.md"
+  echo "反映代码提交 ${SHORT} 带来的变化。" >> "$OW/pages/modules.md"
+  cat > "$OW/.last-update.json" <<EOF
+{"updatedAt": "$STAMP", "command": "update", "gitHead": "$HEAD_HASH", "model": "mock", "status": "complete"}
+EOF
+  log_repo "update changed base=${BASE_HASH:0:8} head=$SHORT"
+  echo "OpenWiki (mock): update complete — wiki updated for ${SHORT}."
+}
+
+case "$*" in
+  *--init*)   cmd_init; exit 0 ;;
+  *--update*) cmd_update; exit 0 ;;
+  --help|-h|"")
+    echo "OpenWiki (mock) — usage: openwiki [--init|--update] [-p] [message]"; exit 0 ;;
+  *)
+    echo "OpenWiki (mock) vX — args: $* (handled as no-op)"; exit 0 ;;
+esac
