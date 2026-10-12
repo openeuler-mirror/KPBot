@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-network-collector",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "TQ-01", "prompt": "排查网络丢包", "should_trigger": true },
+    { "id": "TQ-02", "prompt": "采集网络带宽吞吐", "should_trigger": true },
+    { "id": "TQ-03", "prompt": "看看 TCP 重传率", "should_trigger": true },
+    { "id": "TQ-04", "prompt": "检查 socket 队列是否堆积", "should_trigger": true },
+    { "id": "TQ-05", "prompt": "查看网卡多队列 RSS RPS 配置", "should_trigger": true },
+    { "id": "TQ-06", "prompt": "中断绑核分布在哪些核", "should_trigger": true },
+    { "id": "TQ-07", "prompt": "网卡在哪个 NUMA 节点", "should_trigger": true },
+    { "id": "TQ-08", "prompt": "查看网卡 offload 和 ring buffer 配置", "should_trigger": true },
+    { "id": "TQ-09", "prompt": "采集系统 CPU 利用率", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "TQ-10", "prompt": "看看线程在哪些核上运行", "should_trigger": false, "note": "routes to kptools-proc-collector" },
+    { "id": "TQ-11", "prompt": "采集 topdown 微架构指标", "should_trigger": false, "note": "routes to kptools-devkit" },
+    { "id": "TQ-12", "prompt": "调大网卡队列数", "should_trigger": false, "note": "modification action, belongs to network-optimization subskill" }
+  ]
+}

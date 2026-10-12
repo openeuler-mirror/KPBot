@@ -6,14 +6,15 @@ description: >
   core 频率、uncore 频率、流水线瓶颈分析、NUMA 访存分析、NUMA 跨节点访问、
   内存亲和性分析、功耗监控、CPU 功耗、Socket 功耗、温度监控、热点函数、
   火焰图、调用栈、Cache Miss、TLB Miss、远端访问、长延迟 Load、内存带宽、
-  Cache 命中率、DDR 带宽、鲲鹏 DevKit、devkit 命令时触发。
+  Cache 命中率、DDR 带宽、Java 火焰图、Java 热点、Java 性能分析、JVM profiling、
+  Java 内存分配、Java 锁竞争、GC 分配分析、鲲鹏 DevKit、devkit 命令时触发。
 license: Proprietary
 compatibility: aarch64, requires devkit 26.1.RC1
 metadata:
   skill_type: tool_assisted
   category: profiling
   domain: performance_collection
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # kptools-devkit — 鲲鹏 DevKit 性能采集
@@ -21,8 +22,8 @@ metadata:
 ## 工作流程
 
 1. 检查 devkit 是否已部署：`bash scripts/discover_devkit.sh`
-2. 如未安装，执行部署：`bash scripts/deploy_devkit.sh`
-3. 采集数据：`bash scripts/run_devkit.sh tuner <task> -d <sec> [options]`
+2. 如未安装，执行部署：`bash scripts/deploy_devkit.sh`（Java 采集需附带可选包：`bash scripts/deploy_devkit.sh --with java-perf`）
+3. 采集数据：`bash scripts/run_devkit.sh tuner <task> -d <sec> [options]`（Java：`bash scripts/run_devkit.sh java-perf hotspot -p <PID> ...`）
 
 > 采集时必须传 `-d` 参数指定采集时长，否则命令会持续运行直到手动中断。
 >
@@ -121,7 +122,32 @@ bash scripts/run_devkit.sh tuner hotspot list
 - 调用栈日志和火焰图（`-g`）
 - TAR 报告包（`--package`）
 
-> 支持 C/C++ 源码关联（`-s` + `--dwarf`）。Java 需独立插件。
+> 支持 C/C++ 源码关联（`-s` + `--dwarf`）。Java 进程热点请使用 java-perf（见下文"Java 热点分析"小节）。
+
+### Java 热点分析（java-perf）
+
+> 需先部署可选包：`bash scripts/deploy_devkit.sh --with java-perf`（默认最小安装不含）。
+
+```bash
+# Java CPU 热点火焰图（attach 运行中的 JVM，免重启），输出到统一证据目录
+mkdir -p ./devkit-evidence/$(date +%Y%m%d-%H%M%S)
+bash scripts/run_devkit.sh java-perf hotspot -p <PID> -e CPU -d 20 -o $(pwd)/devkit-evidence/<ts>/flame.html
+
+# 内存分配热点（GC 压力定位）
+bash scripts/run_devkit.sh java-perf hotspot -p <PID> -e ALLOC -d 20 -o <abs_path>.html
+
+# PMU cycles 视角（需 perf 权限）
+bash scripts/run_devkit.sh java-perf hotspot -p <PID> -e CYCLES -d 20 -o <abs_path>.html
+
+# 锁竞争分析（需真实竞争窗口，低竞争会 No data collected）
+bash scripts/run_devkit.sh java-perf hotspot -p <PID> -e LOCK -d 30 -o <abs_path>.html
+```
+
+输出：自包含交互式 HTML 火焰图（Java 方法名 + 行号）。**必须显式 `-o` 指定绝对路径 `.html` 文件**——默认输出目录（安装目录 data/）在 root 安装 + 非 root 采集场景不可写，相对路径报错，无后缀静默失败。
+
+> `-e CACHE_MISSES` 鲲鹏平台不可用（实测 No data collected），LLC 归因请用 tuner miss。
+>
+> **火焰图路由**：采集前先判语言——`/proc/PID/cmdline` 含 python → py-spy；exe 为 java 或 `jcmd -l` 含该 PID → java-perf；其余 → tuner hotspot。无语言前缀请求不得直接假设语言。
 
 ### 内存带宽与命中率（memory）
 
@@ -262,6 +288,16 @@ topdown profile 级别：
 | `--package` | 生成 TAR 报告包 | 关闭 |
 | `-l {0-3}` | 日志级别 | 1 |
 
+### java-perf hotspot
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-p <PID>` | 目标 Java 进程（attach 模式，免重启） | - |
+| `-e <event>` | `CPU` \| `ALLOC` \| `CYCLES` \| `LOCK`（CACHE_MISSES 鲲鹏不可用，不承诺） | CPU |
+| `-d <sec>` | 采集时长（秒），范围 1-300 | 20 |
+| `-i <milli>` | 采样间隔（毫秒），范围 1-1000。**注意方向与 tuner `-f` 相反：↓ 更密** | 10 |
+| `-o <path>` | 输出文件（**绝对路径 + .html 后缀**，run_devkit.sh 前置校验） | 安装目录 data/（不可写风险） |
+
 ## 约束
 
 - 架构：仅 aarch64
@@ -269,15 +305,22 @@ topdown profile 级别：
 - numafast 和 miss 需 ARM SPE 硬件支持，不支持虚拟机和容器环境
 - 普通用户：需 `perf_event_paranoid=-1` 和 `kptr_restrict=0`
 - `--bmc` 为交互式参数，需手动输入 BMC 凭据，不适用于自动化场景
+- java-perf：需 `deploy_devkit.sh --with java-perf` 部署可选包；采集用户须与目标 JVM 同 uid；JDK 8 由 wrapper 自动适配（注入 tools.jar）；同一时刻仅允许一个 java-perf 采集任务
 
 ## 错误处理
 
 - `discover_devkit.sh` 显示 NOT_INSTALLED → 执行 `deploy_devkit.sh` 安装
 - `discover_devkit.sh` 显示 TASK_UNAVAILABLE → devkit 已安装但子任务不可用，检查 devkit-tuner 插件
+- `discover_devkit.sh` 显示 `java-perf: OPTIONAL_ABSENT` → 可选插件未装，执行 `deploy_devkit.sh --with java-perf`（不影响 tuner 功能）
+- `discover_devkit.sh` 显示 `java-perf: JAVA_PERF_PERM` → root 安装 + 非 root 运行，用 `--install-dir ~/.local/share/devkit` 重装到用户目录
+- `run_devkit.sh java-perf` 报 `-o must be an absolute path` / `must end with .html` / `target directory ... not writable`（退出码 2）→ 按提示修正 `-o` 参数
 - 采集返回 `LIBPERF` 或 `PmuOpen failed` → PMU 事件不可用，检查 `perf_event_paranoid` 和 `kptr_restrict`
 - 采集返回 `SPE function needs to be enabled` → ARM SPE 不可用，numafast 和 miss 无法使用
 - memory 返回退出码 0 但输出含 `print failed` 或 `N/A` → PMU 限制导致数据不完整
 - 采集返回非零退出码且输出含 `error:` → 环境限制或参数错误，查看输出中的错误信息
+- java-perf 采集返回 `You do not have permission to perform this operation` → 采集用户与目标 JVM uid 不同，切换同 uid 用户执行
+- java-perf 采集返回 `Another task is running` → 已有 java-perf 任务进行中，等待完成或结束后重试
+- java-perf 输出 `No data collected` → 采样窗口内无匹配事件（如 LOCK 低竞争），延长 `-d` 或确认负载触发目标事件
 
 ## 参考资料
 
@@ -287,3 +330,4 @@ topdown profile 级别：
 - [hotspot 热点函数分析指南](references/hotspot-guide.md)
 - [memory 内存带宽与命中率指南](references/memory-guide.md)
 - [miss Cache Miss 分析指南](references/miss-guide.md)
+- [java-perf Java 热点分析指南](references/java-perf-guide.md)

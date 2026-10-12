@@ -11,7 +11,7 @@ BINARY_SUBPATH=$(grep '^[[:space:]]*binary_subpath:' "$CONFIG_FILE" | head -1 | 
 CANDIDATE_PATHS=(
     "${DEVKIT_BIN:-}"
     "/opt/devkit/${BINARY_SUBPATH}"
-    "$HOME/.local/share/devkit/${BINARY_SUBPATH}"
+    "${HOME:-}/.local/share/devkit/${BINARY_SUBPATH}"
 )
 
 PRINT_PATH=false
@@ -112,6 +112,42 @@ if [ "$status" = "READY" ]; then
             echo "  ${task}: TASK_UNAVAILABLE"
         fi
     done
+fi
+
+# 只在 devkit-java-perf 包块内提取 component（全文件取第一个会在新增其他
+# 可选包时静默错位，导致 JAVA_PERF_ROOT 指向错误目录）
+JAVA_PERF_COMPONENT=$(awk '
+    /^  - name:[[:space:]]*devkit-java-perf[[:space:]]*$/ {inblock=1; next}
+    inblock && /^  - name:/ {inblock=0}
+    inblock && /^[[:space:]]*component:/ {print $2; exit}
+' "$CONFIG_FILE" 2>/dev/null || true)
+JAVA_PERF_COMPONENT=${JAVA_PERF_COMPONENT:-java-perf}
+JAVA_PERF_ROOT="${DEVKIT_ROOT}/usr/local/devkit/${JAVA_PERF_COMPONENT}"
+
+if [ "$status" = "READY" ]; then
+    java_perf_ready=false
+    if [ -x "$JAVA_PERF_ROOT/bin/java-perf" ]; then
+        java_perf_ready=true
+    else
+        jp_output=$("$DEVKIT_BIN" java-perf help 2>&1 | tr -d '\0' || true)
+        # 主 CLI 对未知子命令的报错常含 "usage"，会误判 READY——先排除未安装类输出
+        if echo "$jp_output" | grep -qiE "unknown command|command not found|not installed|no such (command|plugin|subcommand)|unrecognized"; then
+            java_perf_ready=false
+        elif echo "$jp_output" | grep -qi "hotspot\|usage\|NAME"; then
+            java_perf_ready=true
+        fi
+    fi
+
+    if [ "$java_perf_ready" = true ]; then
+        echo "  java-perf: READY"
+        if [ -w "$JAVA_PERF_ROOT/log" ] || { [ ! -d "$JAVA_PERF_ROOT/log" ] && [ -w "$JAVA_PERF_ROOT" ]; }; then
+            :
+        else
+            echo "  java-perf: JAVA_PERF_PERM - no write permission on ${JAVA_PERF_ROOT}/log (root install + non-root run; reinstall to user dir via deploy_devkit.sh --install-dir ~/.local/share/devkit)"
+        fi
+    else
+        echo "  java-perf: OPTIONAL_ABSENT (run deploy_devkit.sh --with java-perf)"
+    fi
 fi
 
 if [ -n "$issues" ]; then
