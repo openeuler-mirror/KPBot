@@ -1,0 +1,35 @@
+{
+  "skill_name": "kptools-ascend-hccn",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "多机训练时 allreduce 通信很慢，帮我检查一下各 NPU 芯片的 RoCE 网络状态和错包情况。",
+      "expected_output": "调用 collect.sh stat 和 link（遍历芯片），检查 roce_rx_err_pkt_num 等错包计数与 link 状态，给出网络质量判断和后续排查建议",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "查一下这台 910B 机器上 8 个 NPU 芯片的 RoCE 网卡 IP 和网口带宽速率。",
+      "expected_output": "调用 collect.sh ip 遍历芯片输出 IP/掩码，调用 collect.sh bandwidth 采集实时收发速率并汇总",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "训练任务偶发卡顿几分钟然后恢复，怀疑网络闪断，怎么用 hccn_tool 排查？",
+      "expected_output": "调用 collect.sh link 检查当前网口状态，说明结合 link 历史状态与 net_health 排查闪断，提示配置变更引发的 iBMC 闪断告警属正常现象",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "两台机器之间 RoCE 带宽时延做个基准测试，现在集群空闲。",
+      "expected_output": "说明需两端配合：一端 collect.sh test -m ib_read_bw -i <chip> --force 起服务端，另一端带对端 IP 起客户端；测试前后用 stat 对比错包计数，异常用 test-reset 恢复",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "容器里执行 hccn_tool 提示 command not found，宿主机上明明有。",
+      "expected_output": "解释容器内需挂载宿主机 /usr/bin/hccn_tool（驱动安装指南容器章节），或用 --tool 指定挂载路径",
+      "files": []
+    }
+  ]
+}
