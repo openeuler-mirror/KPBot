@@ -1,0 +1,12 @@
+{"Timestamp":"2026-01-01T00:00:00.400Z","Action":"Create","CalleeAction":"CreatePodSandbox","InstanceId":"sb-001","CostTime":38,"LogContent":"CreatePodSandbox"}
+{"Timestamp":"2026-01-01T00:00:01.400Z","Action":"Create","CalleeAction":"CreatePodSandbox","InstanceId":"sb-002","CostTime":48,"LogContent":"CreatePodSandbox"}
+{"Timestamp":"2026-01-01T00:00:00.410Z","Action":"Create","CalleeAction":"LaunchVmm","InstanceId":"sb-001","CostTime":5,"LogContent":"LaunchVmm"}
+{"Timestamp":"2026-01-01T00:00:01.410Z","Action":"Create","CalleeAction":"LaunchVmm","InstanceId":"sb-002","CostTime":6,"LogContent":"LaunchVmm"}
+{"Timestamp":"2026-01-01T00:00:00.420Z","Action":"Create","CalleeAction":"RestoreVm","InstanceId":"sb-001","CostTime":10,"LogContent":"RestoreVm"}
+{"Timestamp":"2026-01-01T00:00:01.420Z","Action":"Create","CalleeAction":"RestoreVm","InstanceId":"sb-002","CostTime":12,"LogContent":"RestoreVm"}
+{"Timestamp":"2026-01-01T00:00:00.430Z","Action":"Create","CalleeAction":"ResetVm","InstanceId":"sb-001","CostTime":4,"LogContent":"ResetVm"}
+{"Timestamp":"2026-01-01T00:00:01.430Z","Action":"Create","CalleeAction":"ResetVm","InstanceId":"sb-002","CostTime":5,"LogContent":"ResetVm"}
+{"Timestamp":"2026-01-01T00:00:00.440Z","Action":"Create","CalleeAction":"CreateSandbox","InstanceId":"sb-001","CostTime":3,"LogContent":"CreateSandbox"}
+{"Timestamp":"2026-01-01T00:00:01.440Z","Action":"Create","CalleeAction":"CreateSandbox","InstanceId":"sb-002","CostTime":4,"LogContent":"CreateSandbox"}
+{"Timestamp":"2026-01-01T00:00:00.450Z","Action":"Create","CalleeAction":"CreateContainer","InstanceId":"sb-001","CostTime":30,"LogContent":"CreateContainer"}
+{"Timestamp":"2026-01-01T00:00:01.450Z","Action":"Create","CalleeAction":"CreateContainer","InstanceId":"sb-002","CostTime":50,"LogContent":"CreateContainer"}
