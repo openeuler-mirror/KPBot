@@ -1,0 +1,24 @@
+{
+  "name": "memory",
+  "version": "1.0.0",
+  "description": "跨会话优化经验记忆 — 通过 backend 命名空间调用 OpenViking 后端（一次性客户端，uv 管理的独立 Python 环境），提供 initialize/status/remember/recall/close：完整审核经验与显式提供的任务过程原样可逆保存，同用户跨项目检索并返回完整原文。记录当前为 private。历史经验仅作参考：不自动采集、不自动发布、不替代本次验证，也不声称自动证明因果",
+  "author": {
+    "name": "Kunpeng Acceleration Team"
+  },
+  "homepage": "https://atomgit.com/openeuler/KPBot/tree/master/Plugins/memory",
+  "license": "MulanPSL-2.0",
+  "keywords": [
+    "memory",
+    "cross-session",
+    "experience",
+    "openviking",
+    "kunpeng",
+    "arm",
+    "aarch64",
+    "optimization"
+  ],
+  "platforms": [
+    "claude",
+    "opencode"
+  ]
+}

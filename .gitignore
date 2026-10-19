@@ -18,3 +18,12 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# Local OpenViking service, models and private credentials
+/.runtime/
+/.openviking-development-baseline.json
+*.gguf
+*.part
+
+# PPT tooling (venv + scratch previews), scripts kept in .ppt-tooling/*.py
+/.ppt-tooling/
