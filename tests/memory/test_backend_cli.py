@@ -94,7 +94,7 @@ class BackendCliTests(unittest.TestCase):
         self.config_path = self.root / "trusted backend.json"
         self.write_config(trusted())
         self.backend = CliBackend()
-        self.factory = lambda: self.backend
+        self.factory = lambda *args, **kwargs: self.backend
 
     def write_config(self, value, mode=0o600):
         self.config_path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
@@ -397,7 +397,7 @@ class BackendCliTests(unittest.TestCase):
     def test_fresh_facade_and_backend_are_created_for_each_invocation(self):
         instances = []
 
-        def factory():
+        def factory(*args, **kwargs):
             backend = CliBackend()
             instances.append(backend)
             return backend

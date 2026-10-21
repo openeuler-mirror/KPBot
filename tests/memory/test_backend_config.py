@@ -29,7 +29,7 @@ def config() -> dict:
     return {
         "backend": "openviking", "user_id": "local-user", "current_project": "project-a",
         "allowed_projects": ["project-a", "project-b"],
-        "options": {"data_dir": "/explicit/local/data", "model": {"name": "用户模型"}},
+        "options": {"api_key": "config-value", "account_id": "account-1", "user_id": "provider-user"},
     }
 
 
@@ -38,7 +38,7 @@ class ConfigValidationTests(unittest.TestCase):
         original = config()
         result = validate_config(original)
         self.assertEqual(result, original)
-        result["options"]["model"]["name"] = "changed"
+        result["options"]["api_key"] = "changed"
         result["allowed_projects"].append("project-c")
         self.assertEqual(original, config())
 
@@ -85,10 +85,51 @@ class ConfigValidationTests(unittest.TestCase):
                 validate_config(candidate)
             self.assertEqual(caught.exception.code, "UNSUPPORTED")
 
+    def test_option_keys_are_validated_per_backend(self):
+        for backend, invalid in (
+            ("openviking", ("data_dir", "service_id", "agent_id", "chunk_chars", "endpointt")),
+            ("tencentdb", ("account_id", "user_id", "processing_mode", "path")),
+        ):
+            for name in invalid:
+                candidate = config()
+                candidate["backend"] = backend
+                candidate["options"] = {name: "value"}
+                with self.subTest(backend=backend, name=name), self.assertRaises(BackendConfigError) as caught:
+                    validate_config(candidate)
+                self.assertEqual(caught.exception.code, "INVALID_ARGUMENT")
+
+    def test_option_value_types_are_validated_per_backend(self):
+        for name, values in (
+            ("api_key", (None, "", "  ", 1, [])),
+            ("max_input_bytes", (None, "big", 1.5, True, 0, -1)),
+        ):
+            for value in values:
+                for backend in ("openviking", "tencentdb"):
+                    candidate = config()
+                    candidate["backend"] = backend
+                    candidate["options"] = {name: value}
+                    with self.subTest(backend=backend, name=name, value=value), self.assertRaises(BackendConfigError) as caught:
+                        validate_config(candidate)
+                    self.assertEqual(caught.exception.code, "INVALID_ARGUMENT")
+        for value in (None, "", 1, "vectors", "semantic"):
+            candidate = config()
+            candidate["options"] = {"processing_mode": value}
+            with self.subTest(value=value), self.assertRaises(BackendConfigError) as caught:
+                validate_config(candidate)
+            self.assertEqual(caught.exception.code, "INVALID_ARGUMENT")
+
+    def test_complete_tencentdb_options_are_accepted(self):
+        candidate = config()
+        candidate["backend"] = "tencentdb"
+        candidate["options"] = {"endpoint": "https://memory.example.com:8420", "api_key": "token",
+                                "service_id": "service-1", "agent_id": "kpbot", "owner_id": "local-user",
+                                "max_input_bytes": 2097152, "chunk_chars": 8000}
+        self.assertEqual(validate_config(candidate), candidate)
+
     def test_non_json_and_nonfinite_options_rejected_without_echo(self):
         for value in (float("nan"), float("inf"), object(), {1: "secret"}, (1, 2), "\ud800"):
             candidate = config()
-            candidate["options"]["credential"] = value
+            candidate["options"]["endpoint"] = value
             with self.subTest(value=type(value)), self.assertRaises(BackendConfigError) as caught:
                 validate_config(candidate)
             self.assertNotIn("secret", str(caught.exception))

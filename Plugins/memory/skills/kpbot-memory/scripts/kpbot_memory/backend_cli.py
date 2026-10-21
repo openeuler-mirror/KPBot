@@ -1,4 +1,4 @@
-"""One-shot OpenViking backend CLI, separate from the call/serve/demo commands.
+"""One-shot memory backend CLI (OpenViking or TencentDB), separate from the call/serve/demo commands.
 
 Every invocation creates a fresh client, initializes it from explicit trusted
 configuration, executes one operation, and closes the client in finally. There
@@ -54,9 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="kpbot memory backend",
         description=(
-            "One-shot OpenViking client: initialize, perform one operation, then close. "
-            "CLI invocations have no cross-process state; initialize/status are fresh "
-            "readiness probes, close releases only this invocation's client, not the service."
+            "One-shot memory backend client (OpenViking or TencentDB): initialize, "
+            "perform one operation, then close. CLI invocations have no cross-process "
+            "state; initialize/status are fresh readiness probes, close releases only "
+            "this invocation's client, not the service."
         ),
     )
     parser.add_argument("operation", choices=OPERATIONS)
@@ -142,14 +143,17 @@ def _payload(args: argparse.Namespace, limit: int) -> dict | None:
     return result
 
 
-def create_backend() -> Any:
+def create_backend(backend: str = "openviking") -> Any:
     """Import only for this namespace; httpx itself remains initialize-time lazy."""
+    if backend == "tencentdb":
+        from .southbound import SouthboundMemory
+        return SouthboundMemory()
     from .backends.openviking_http import OpenVikingBackend
     return OpenVikingBackend()
 
 
 async def _execute(config: dict, operation: str, payload: dict | None, timeout: float) -> dict | None:
-    memory = NorthboundMemory(create_backend())
+    memory = NorthboundMemory(create_backend(config["backend"]))
     deadline = asyncio.get_running_loop().time() + timeout
     result: dict | None = None
     try:
@@ -216,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     except BackendConfigError as exc:
         result = _error(exc.code, exc.message)
     except ImportError:
-        result = _error("UNAVAILABLE", "OpenViking client adapter is unavailable")
+        result = _error("UNAVAILABLE", "memory backend adapter is unavailable")
     except KeyboardInterrupt:
         result = _error("BACKEND_ERROR", "backend command was interrupted")
     except Exception:
