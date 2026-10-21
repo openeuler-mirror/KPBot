@@ -19,6 +19,21 @@ MAX_CONFIG_BYTES = 1024 * 1024
 CONFIG_FIELDS = frozenset(
     {"backend", "user_id", "current_project", "allowed_projects", "options"}
 )
+BACKEND_OPTIONS = {
+    "openviking": frozenset(
+        {"endpoint", "api_key", "account_id", "user_id", "owner_id",
+         "processing_mode", "max_input_bytes"}
+    ),
+    "tencentdb": frozenset(
+        {"endpoint", "api_key", "service_id", "agent_id", "owner_id",
+         "max_input_bytes", "chunk_chars"}
+    ),
+}
+_OPTION_STRINGS = frozenset(
+    {"endpoint", "api_key", "account_id", "user_id", "service_id", "agent_id", "owner_id"}
+)
+_OPTION_INTEGERS = frozenset({"max_input_bytes", "chunk_chars"})
+_OPENVIKING_MODES = frozenset({"vectors_only", "semantic_and_vectors"})
 
 __all__ = ["BackendConfigError", "load_config", "validate_config"]
 
@@ -84,6 +99,22 @@ def clone_json(value: Any) -> Any:
         raise BackendConfigError("value must be finite, valid Unicode JSON") from None
 
 
+def _validate_options(backend: str, options: dict) -> None:
+    """Check the per-backend option structure only; adapters revalidate semantics."""
+    unknown = set(options) - BACKEND_OPTIONS[backend]
+    if unknown:
+        raise BackendConfigError(f"unknown {backend} backend option: {min(unknown)}")
+    for name in _OPTION_STRINGS & options.keys():
+        if not nonempty_string(options[name]):
+            raise BackendConfigError(f"backend option {name} must be a non-empty string")
+    for name in _OPTION_INTEGERS & options.keys():
+        if type(options[name]) is not int or options[name] <= 0:
+            raise BackendConfigError(f"backend option {name} must be a positive integer")
+    if "processing_mode" in options and options["processing_mode"] not in _OPENVIKING_MODES:
+        raise BackendConfigError(
+            "backend option processing_mode must be vectors_only or semantic_and_vectors")
+
+
 def validate_config(config: dict) -> dict:
     """Validate a trusted in-process configuration and return a private copy.
 
@@ -95,8 +126,8 @@ def validate_config(config: dict) -> dict:
         raise BackendConfigError("backend configuration must be an object")
     if set(config) != CONFIG_FIELDS:
         raise BackendConfigError("backend configuration requires exactly the five documented fields")
-    if config["backend"] != "openviking":
-        raise BackendConfigError("only the openviking backend is supported", "UNSUPPORTED")
+    if config["backend"] not in BACKEND_OPTIONS:
+        raise BackendConfigError("only the openviking and tencentdb backends are supported", "UNSUPPORTED")
     for field in ("user_id", "current_project"):
         if not nonempty_string(config[field]):
             raise BackendConfigError(f"configuration {field} must be a non-empty string")
@@ -113,6 +144,7 @@ def validate_config(config: dict) -> dict:
         raise BackendConfigError("current_project must belong to allowed_projects", "ACCESS_DENIED")
     if not isinstance(config["options"], dict):
         raise BackendConfigError("backend options must be an object")
+    _validate_options(config["backend"], config["options"])
     return clone_json(config)
 
 

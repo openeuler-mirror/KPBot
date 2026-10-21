@@ -1,7 +1,7 @@
 """KPBot memory command line.
 
-The plugin's memory entry is the one-shot OpenViking backend client;
-``kpbot memory backend ...`` dispatches to it.
+The plugin's memory entry is the one-shot memory backend client
+(OpenViking or TencentDB); ``kpbot memory backend ...`` dispatches to it.
 """
 from __future__ import annotations
 

@@ -21,7 +21,7 @@ from kpbot_memory.northbound import NorthboundMemory  # noqa: E402
 
 def config():
     return {"backend": "openviking", "user_id": "local-user", "current_project": "p1",
-            "allowed_projects": ["p1", "p2"], "options": {"path": "explicit", "nested": {"key": "value"}}}
+            "allowed_projects": ["p1", "p2"], "options": {"api_key": "explicit", "account_id": "account-1"}}
 
 
 def failure(code="UNAVAILABLE", source_id=None):
@@ -137,7 +137,7 @@ class NorthboundTests(unittest.IsolatedAsyncioTestCase):
         await self.memory.initialize(original)
         original["user_id"] = "intruder"
         original["allowed_projects"].append("p3")
-        original["options"]["nested"]["key"] = "changed"
+        original["options"]["api_key"] = "changed"
         result = await self.memory.remember({**record(), "owner_id": "intruder"})
         self.assertError(result, "ACCESS_DENIED")
         result = await self.memory.recall({"query": "q", "project_ids": ["p3"]})
@@ -165,10 +165,13 @@ class NorthboundTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue((await self.memory.remember(record()))["ok"])
 
     async def test_backend_owner_must_match_trusted_user_not_provider_identity(self):
-        for owner in ("other-user", None, ""):
+        candidate = config()
+        candidate["options"]["owner_id"] = "other-user"
+        self.assertError(await self.memory.initialize(candidate), "ACCESS_DENIED")
+        for owner in (None, ""):
             candidate = config()
             candidate["options"]["owner_id"] = owner
-            self.assertError(await self.memory.initialize(candidate), "ACCESS_DENIED")
+            self.assertError(await self.memory.initialize(candidate), "INVALID_ARGUMENT")
         self.assertEqual(self.backend.calls, [])
         candidate = config()
         candidate["options"].update(owner_id="local-user", user_id="provider-user")
