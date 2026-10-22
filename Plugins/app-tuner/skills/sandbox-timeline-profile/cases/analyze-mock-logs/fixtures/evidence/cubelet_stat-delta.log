@@ -1,0 +1,10 @@
+{"Timestamp":"2026-01-01T00:00:00.000Z","Action":"Create","Callee":"cubebox-service","InstanceId":"sb-001","CostTime":100,"LogContent":"cubebox service create"}
+{"Timestamp":"2026-01-01T00:00:01.000Z","Action":"Create","Callee":"cubebox-service","InstanceId":"sb-002","CostTime":120,"LogContent":"cubebox service create"}
+{"Timestamp":"2026-01-01T00:00:00.100Z","Action":"Create","Callee":"cubebox","InstanceId":"sb-001","CostTime":60,"LogContent":"cubebox workflow"}
+{"Timestamp":"2026-01-01T00:00:01.100Z","Action":"Create","Callee":"cubebox","InstanceId":"sb-002","CostTime":80,"LogContent":"cubebox workflow"}
+{"Timestamp":"2026-01-01T00:00:00.200Z","Action":"Create","Callee":"sandbox-start","InstanceId":"sb-001","CostTime":40,"LogContent":"sandbox start"}
+{"Timestamp":"2026-01-01T00:00:01.200Z","Action":"Create","Callee":"sandbox-start","InstanceId":"sb-002","CostTime":50,"LogContent":"sandbox start"}
+{"Timestamp":"2026-01-01T00:00:00.300Z","Action":"Create","Callee":"sandbox-create","InstanceId":"sb-001","CostTime":35,"LogContent":"sandbox create"}
+{"Timestamp":"2026-01-01T00:00:01.300Z","Action":"Create","Callee":"sandbox-create","InstanceId":"sb-002","CostTime":45,"LogContent":"sandbox create"}
+{"Timestamp":"2026-01-01T00:00:00.900Z","Action":"Create","Callee":"sandbox-probe","InstanceId":"sb-001","CostTime":10,"LogContent":"probe"}
+{"Timestamp":"2026-01-01T00:00:01.900Z","Action":"Create","Callee":"sandbox-probe","InstanceId":"sb-002","CostTime":14,"LogContent":"probe"}
