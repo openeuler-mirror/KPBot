@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-bios-collector",
+  "evals": [
+    {
+      "id": "BC-E01",
+      "query": "采集 BIOS 配置作为优化基线",
+      "expected": "--all（无凭据时 redfish SKIP，OS 推断模式正常）"
+    },
+    {
+      "id": "BC-E02",
+      "query": "确认 BIOS 是否处于高性能模式",
+      "expected": "--redfish + redfish_attrs 归一化 power_profile；无 BMC 时输出 unavailable 并说明需 BMC"
+    },
+    {
+      "id": "BC-E03",
+      "query": "SMT/C-State/Turbo 状态检查",
+      "expected": "--smt/--cstate/--turbo，输出标注 source=os_inferred"
+    },
+    {
+      "id": "BC-E04",
+      "query": "内存是否运行在标称频率",
+      "expected": "--ddr（dmidecode -t memory Speed 段）"
+    },
+    {
+      "id": "BC-E05",
+      "query": "获取 BIOS 证据供 bios-optimization 分析",
+      "expected": "--all 输出 + redfish_attrs.sh 归一化 JSON，采集与分析分离"
+    }
+  ]
+}

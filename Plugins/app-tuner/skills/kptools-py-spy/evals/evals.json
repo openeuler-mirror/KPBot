@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-py-spy",
+  "evals": [
+    {
+      "id": "PS-E01",
+      "query": "采集这个 Python 进程的火焰图",
+      "expected": "触发 kptools-py-spy，先语言路由判定，再执行 record"
+    },
+    {
+      "id": "PS-E02",
+      "query": "分析 torchrun 训练进程的 Python 热点",
+      "expected": "record + -s 子进程采样"
+    },
+    {
+      "id": "PS-E03",
+      "query": "这个 Python 服务是不是 GIL 竞争严重",
+      "expected": "record -g -t，输出解读含 GIL 分析"
+    },
+    {
+      "id": "PS-E04",
+      "query": "Python 服务线程很多但 CPU 很低，看看在等什么",
+      "expected": "record -i（off-CPU 近似）或 dump 对比"
+    },
+    {
+      "id": "PS-E05",
+      "query": "这个 Python 程序卡住了，看看卡在哪",
+      "expected": "--dump 线程栈快照"
+    }
+  ]
+}
