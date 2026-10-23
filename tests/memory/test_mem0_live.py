@@ -1,8 +1,12 @@
 """Live mem0 backend integration tests (real service, opt-in).
 
 Set KPBOT_MEM0_LIVE_CONFIG to a 0600 trusted configuration whose options
-point at the self-hosted mem0 REST service. Normal unittest discovery
-skips these tests and does not contact any service.
+point at the self-hosted mem0 REST service. Use only a private
+development/test configuration: tests persist synthetic records (marked by
+a per-run run_id in task_id and content) in the configured projects and
+never delete anything, so no production configuration should be used.
+Normal unittest discovery skips these tests and does not contact any
+service.
 
 Run: KPBOT_MEM0_LIVE_CONFIG=/tmp/opencode/kpbot-mem0-live.json \
   PYTHONDONTWRITEBYTECODE=1 <venv>/bin/python -m unittest tests.memory.test_mem0_live -v
@@ -11,8 +15,6 @@ Run: KPBOT_MEM0_LIVE_CONFIG=/tmp/opencode/kpbot-mem0-live.json \
 import json
 import os
 import unittest
-import urllib.parse
-import urllib.request
 import uuid
 from pathlib import Path
 import sys
@@ -29,11 +31,6 @@ STORE_TIMEOUT = 300.0
 READ_TIMEOUT = 120.0
 
 
-def _namespace(layer, kind, owner_id, project_id):
-    return json.dumps(["kpbot-mem0", layer, kind, owner_id, project_id],
-                      ensure_ascii=False, separators=(",", ":"))
-
-
 @unittest.skipUnless(os.environ.get("KPBOT_MEM0_LIVE_CONFIG"), "live mem0 configuration required")
 class Mem0LiveTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
@@ -48,19 +45,7 @@ class Mem0LiveTests(unittest.IsolatedAsyncioTestCase):
         self.run_id = uuid.uuid4().hex[:12]
 
     async def asyncTearDown(self):
-        # 清理本轮命名空间（原生 DELETE，仅测试数据）
-        owner = self.config["user_id"]
-        projects = self.config["allowed_projects"] + [self.config["current_project"]]
-        for project in dict.fromkeys(projects):
-            for layer, kind in (("raw", "experience"), ("raw", "task_process"), ("derived", "task_process")):
-                ns = _namespace(layer, kind, owner, project)
-                req = urllib.request.Request(
-                    f"{self.config['options']['endpoint']}/memories?user_id=" + urllib.parse.quote(ns),
-                    method="DELETE")
-                try:
-                    urllib.request.urlopen(req, timeout=60).read()
-                except Exception:
-                    pass
+        # 合成记录按 run_id 标记后保留，不做任何删除（对齐 openviking live 测试约定）
         await self.memory.close()
 
     async def test_status_ready(self):
