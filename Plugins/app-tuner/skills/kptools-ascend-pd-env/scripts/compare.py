@@ -9,6 +9,7 @@
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -88,7 +89,13 @@ def run(args):
         print('输出目录不是空的：%s' % out, file=sys.stderr)
         print('请换一个 --out，或先把它清空。', file=sys.stderr)
         return 1
+    # 报告里带着进程的完整环境变量和启动参数，目录和文件都只给本人可读
+    os.umask(0o077)
     out.mkdir(parents=True, exist_ok=True)
+    try:
+        out.chmod(0o700)
+    except OSError:
+        pass
 
     problems = []
     failed = []

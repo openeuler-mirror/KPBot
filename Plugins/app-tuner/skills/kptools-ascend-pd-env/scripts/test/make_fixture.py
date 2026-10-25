@@ -6,25 +6,47 @@
 
 造出来的包是最小但完整的形态：collection_meta.json + 每个容器一个
 inventory.json / docker_inspect_safe.json。
+
+第一个容器是基准，后面的容器带一组固定的差异，用来验证对比端认不认得出来：
+
+  * CANN 版本           8.1.RC1 -> 8.2.RC1        （同时带出「版本文件: …」一项）
+  * torch-npu 包版本    2.5.1.post1 -> 2.5.1.post3
+  * 容器内存限制        1 GiB -> 2 GiB
+  * HCCL_EXEC_TIMEOUT   只有后面的容器有，用来造出「仅 X 有」
+
+名字以 `-alt` 结尾的容器一律按带差异处理，这样单独一个容器的采集包也能当
+作「另一台机器」来比。名字以 `-nopkg` 结尾的容器不带包列表，用来造出
+「包列表未采到」的情形。
 """
 import json
 import pathlib
 import sys
 
+BASE_CANN = 'Version=8.1.RC1\n'
+VARIANT_CANN = 'Version=8.2.RC1\n'
+TOOLKIT_VERSION_FILE = '/usr/local/Ascend/ascend-toolkit/latest/version.info'
+BASE_MEMORY = 1073741824
+VARIANT_MEMORY = 2147483648
 
-def inventory(container):
+
+def inventory(variant=False, with_packages=True):
     interp = {'executable': '/usr/bin/python3', 'version': '3.11.2 (main) [GCC]',
               'prefix': '/usr', 'base_prefix': '/usr', 'path': ['/usr/lib/python3.11'],
               'sitepackages': ['/usr/lib/python3/dist-packages']}
+    env = {'HCCL_BUFFSIZE': '200', 'ASCEND_RT_VISIBLE_DEVICES': '0'}
+    if variant:
+        env['HCCL_EXEC_TIMEOUT'] = '1800'
+    packages = [{'name': 'vllm', 'version': '0.9.1'},
+                {'name': 'torch', 'version': '2.5.1'},
+                {'name': 'torch_npu',
+                 'version': '2.5.1.post3' if variant else '2.5.1.post1'}]
     profile = {
         'pid': 7, 'exe': '/usr/bin/python3', 'python_executable_used': '/usr/bin/python3',
         'chosen_by': 'process_argv', 'environment_source': 'runtime_process',
         'interpreter': interp, 'collection_ok': True,
-        'pip_list': [{'name': 'vllm', 'version': '0.9.1'},
-                     {'name': 'torch', 'version': '2.5.1'},
-                     {'name': 'torch_npu', 'version': '2.5.1.post1'}],
+        'pip_list': packages if with_packages else [],
         'pip_freeze': None,
-        'environment_relevant': {'HCCL_BUFFSIZE': '200', 'ASCEND_RT_VISIBLE_DEVICES': '0'},
+        'environment_relevant': env,
         'module_locations': {'vllm': {'origin': '/opt/vllm/__init__.py', 'locations': []}},
     }
     return {
@@ -34,7 +56,8 @@ def inventory(container):
         'glibc': ['glibc', '2.38'], 'cpu_count': 192,
         'npu_smi': {'returncode': 0, 'stdout': ''},
         'lscpu': {'returncode': 0, 'stdout': 'Architecture:  aarch64\nCPU(s):  192\n'},
-        'cann_driver_version_files': {},
+        'cann_driver_version_files': {
+            TOOLKIT_VERSION_FILE: VARIANT_CANN if variant else BASE_CANN},
         'git': {},
         'processes': [{'pid': 7, 'comm': 'VLLM::EngineCore', 'exe': '/usr/bin/python3',
                        'cwd': '/workspace',
@@ -43,6 +66,18 @@ def inventory(container):
                        'env': {'HCCL_BUFFSIZE': '200'}}],
         'profiles': [profile],
         'selection': {'explicit_python': None, 'explicit_env_names': []},
+    }
+
+
+def docker_inspect(variant=False):
+    return {
+        'image_ref': 'ascend/vllm:latest', 'image_id': 'sha256:aaa',
+        'state': {'Status': 'running', 'Running': True},
+        'limits': {'NetworkMode': 'host', 'IpcMode': 'host', 'ShmSize': 68719476736,
+                   'CpusetCpus': '0-95', 'Runtime': 'runc',
+                   'Memory': VARIANT_MEMORY if variant else BASE_MEMORY},
+        'config_env_relevant': {'VLLM_USE_V1': '1'},
+        'mounts': [], 'devices': [],
     }
 
 
@@ -60,19 +95,15 @@ def main():
         'targets': containers,
         'folders': dict((c, c) for c in containers), 'interrupted': False,
     }, ensure_ascii=False), encoding='utf-8')
-    for container in containers:
+    for index, container in enumerate(containers):
+        variant = index > 0 or container.endswith('-alt')
         folder = root / container
         folder.mkdir(parents=True, exist_ok=True)
         (folder / 'inventory.json').write_text(
-            json.dumps(inventory(container), ensure_ascii=False), encoding='utf-8')
-        (folder / 'docker_inspect_safe.json').write_text(json.dumps({
-            'image_ref': 'ascend/vllm:latest', 'image_id': 'sha256:aaa',
-            'state': {'Status': 'running', 'Running': True},
-            'limits': {'NetworkMode': 'host', 'IpcMode': 'host', 'ShmSize': 68719476736,
-                       'CpusetCpus': '0-95', 'Runtime': 'runc'},
-            'config_env_relevant': {'VLLM_USE_V1': '1'},
-            'mounts': [], 'devices': [],
-        }, ensure_ascii=False), encoding='utf-8')
+            json.dumps(inventory(variant, not container.endswith('-nopkg')),
+                       ensure_ascii=False), encoding='utf-8')
+        (folder / 'docker_inspect_safe.json').write_text(
+            json.dumps(docker_inspect(variant), ensure_ascii=False), encoding='utf-8')
     print(root)
     return 0
 

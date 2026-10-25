@@ -43,6 +43,25 @@ assert_file() {
     if [ -f "$1" ]; then pass "$2"; else fail "$2 — 文件不存在: $1"; fi
 }
 
+# 从 对比结果.json 里取第一组对比的一个字段
+result_field() { # $1=对比目录 $2=字段名
+    python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8'))['comparisons'][0][sys.argv[2]])" \
+        "$1/对比/对比结果.json" "$2" 2>/dev/null
+}
+
+# 第一组对比里状态为「仅X有」的差异条数
+result_only_one_side() { # $1=对比目录
+    python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); print(sum(1 for r in d['comparisons'][0]['differences'] if r['status'].startswith('仅')))" \
+        "$1/对比/对比结果.json" 2>/dev/null
+}
+
+assert_equal() { # $1=实际 $2=期望 $3=说明
+    if [ "$1" = "$2" ]; then pass "$3（$2）"; else fail "$3 — 期望 $2，实际 $1"; fi
+}
+
+# 文件或目录的八进制权限，macOS 和 Linux 的 stat 参数不同，统一用 python 读
+mode_of() { python3 -c "import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])" "$1" 2>/dev/null; }
+
 group() { echo -e "\n\033[34m===== 测试组: $1 =====\033[0m"; }
 
 # =============================================================================
@@ -131,7 +150,10 @@ python3 "$TEST_DIR/make_fixture.py" "$FX/single" c-only >/dev/null 2>&1
 assert_success $? "PF-000: 造出单容器采集包"
 python3 "$TEST_DIR/make_fixture.py" "$FX/pair" vllm-p,vllm-d >/dev/null 2>&1
 assert_success $? "PF-000: 造出双容器采集包"
-python3 "$TEST_DIR/make_fixture.py" "$FX/other" vllm-d2 >/dev/null 2>&1
+python3 "$TEST_DIR/make_fixture.py" "$FX/other" vllm-d2-alt >/dev/null 2>&1
+assert_success $? "PF-000: 造出带差异的采集包"
+python3 "$TEST_DIR/make_fixture.py" "$FX/nopkg" ok-side,blind-side-nopkg >/dev/null 2>&1
+assert_success $? "PF-000: 造出一侧包列表未采到的采集包"
 mkdir -p "$FX/broken" && echo "这不是采集包" > "$FX/broken/readme.txt"
 ( cd "$FX" && tar czf single.tar.gz single ) 2>/dev/null
 
@@ -147,6 +169,9 @@ if [ ! -e "$WORK/o1/采集" ] && [ ! -e "$WORK/o1/采集.tar.gz" ]; then
 else
     fail "PF-001: 没采本机容器却生成了 采集/ 或 采集.tar.gz"
 fi
+assert_equal "$(result_field "$WORK/o1" diff_count)" 5 "PF-001: 认出预置的差异项数"
+assert_equal "$(result_field "$WORK/o1" perf_diff_count)" 4 "PF-001: 认出性能相关差异项数"
+assert_equal "$(result_only_one_side "$WORK/o1")" 1 "PF-001: 单边存在的项判成「仅X有」"
 
 echo "  PF-002: 单个单容器包 → 不够两个环境"
 OUT=$(bash "$SCRIPTS/collect.sh" "$FX/single" --out "$WORK/o2" 2>&1); CODE=$?
@@ -157,6 +182,9 @@ echo "  PF-003: 单个双容器包 → 包内两个容器互比"
 OUT=$(bash "$SCRIPTS/collect.sh" "$FX/pair" --out "$WORK/o3" 2>&1); CODE=$?
 assert_exit $CODE 0 "PF-003: 一个包里两个容器也能比"
 assert_contains "$OUT" "环境 2 个" "PF-003: 识别出 2 个环境"
+assert_equal "$(result_field "$WORK/o3" diff_count)" 5 "PF-003: 认出预置的差异项数"
+assert_equal "$(result_field "$WORK/o3" perf_diff_count)" 4 "PF-003: 认出性能相关差异项数"
+assert_equal "$(result_only_one_side "$WORK/o3")" 1 "PF-003: 单边存在的项判成「仅X有」"
 
 echo "  PF-004: .tar.gz 形式的采集包"
 OUT=$(bash "$SCRIPTS/collect.sh" "$FX/single.tar.gz" "$FX/other" --out "$WORK/o4" 2>&1); CODE=$?
@@ -203,6 +231,21 @@ for key in ('left', 'right', 'diff_count', 'perf_diff_count', 'differences'):
     assert key in c, key
 PY
 assert_success $? "PF-009: 对比结果.json 字段齐全"
+
+echo "  PF-011: 一侧的包列表没采到时，结论里说明包差异不可信"
+OUT=$(bash "$SCRIPTS/collect.sh" "$FX/nopkg" --out "$WORK/o11" 2>&1); CODE=$?
+assert_exit $CODE 0 "PF-011: 一侧包列表缺失仍能出报告"
+assert_contains "$OUT" "包差异不可信" "PF-011: 结论行提醒包差异不可信"
+assert_contains "$(result_field "$WORK/o11" note)" "包差异不可信" \
+    "PF-011: 对比结果.json 的 note 里也有这句"
+
+echo "  PF-012: 只给采集包时输出目录和报告文件的权限"
+bash "$SCRIPTS/collect.sh" "$FX/single" "$FX/other" --out "$WORK/o12" >/dev/null 2>&1
+assert_equal "$(mode_of "$WORK/o12")" 700 "PF-012: 输出目录权限"
+assert_equal "$(mode_of "$WORK/o12/对比")" 700 "PF-012: 对比目录权限"
+for f in 环境对比报告.html 对比结果.json; do
+    assert_equal "$(mode_of "$WORK/o12/对比/$f")" 600 "PF-012: $f 权限"
+done
 
 # =============================================================================
 group "5. 退出码与对象判定"
