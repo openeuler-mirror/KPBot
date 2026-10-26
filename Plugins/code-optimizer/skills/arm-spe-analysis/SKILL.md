@@ -231,6 +231,13 @@ bash scripts/spe-compare.sh -m branch_mispred before.data after.data
 bash scripts/spe-compare.sh -f json before.data after.data
 ```
 
+### Rust 程序对比注意
+
+- Rust 函数符号是 mangled 形式（`_ZN4calc3dot17h<hash>E`）。`spe-compare.sh` 函数级对比按"剥离 `17h<hash>E` 后缀"规范化对齐两臂函数，避免两次编译 hash 变化导致同一函数对不上；单文件内的 `--by-function` 聚合不受影响（同一二进制内 hash 恒定）。
+- SPE 采样对象是 rustc 产物的二进制，PMU 层语言无关——l1_miss/llc_miss/branch_mispred 指标解读与 C/C++ 一致。
+- 对比前建议两臂统一 `-C codegen-units=1`，避免并行 codegen 单元切分差异干扰函数级聚合。
+- 想看可读符号名，先过 `rustfilt` 或 `llvm-cxxfilt` 再人工比对。
+
 ---
 
 ## 常见场景处理
@@ -312,4 +319,4 @@ bash scripts/spe-compare.sh before.data after.data
 | `scripts/spe-collect.sh` | SPE 环境检查 + 数据采集（支持 load/store/branch 过滤、采样间隔、时长、PID/CPU 配置） |
 | `scripts/spe-parse.sh` | 解析 SPE 采样记录，输出结构化信息（text/json，支持按 sample_count/l1_miss/llc_miss/br_miss 排序和 Top N） |
 | `scripts/spe-hotspot.sh` | 热点/瓶颈定位（l1_miss/llc_miss/branch_mispred 指标，百分比阈值过滤，函数聚合，SEVERE/MODERATE/MILD/OK 分级） |
-| `scripts/spe-compare.sh` | 优化前后对比（l1_miss/llc_miss/branch_mispred/all 指标 diff 报告，IMPROVED/REGRESSED/NO CHANGE 判定，text/json 格式） |
+| `scripts/spe-compare.sh` | 优化前后对比（l1_miss/llc_miss/branch_mispred/all 指标 diff 报告，IMPROVED/REGRESSED/NO CHANGE 判定，text/json 格式；函数级对齐支持 Rust mangled 符号去 hash 规范化） |

@@ -17,8 +17,9 @@ description: 基于 LLVM MCA 的 ARM64 静态性能瓶颈分析器。对汇编�
 {
   "uarch": "hip08",
   "input_mode": "asm|source|binary",
+  "source_language": "c_cpp|rust",
   "asm": "<汇编文本或 .s 文件路径>",
-  "source_file": "<C/C++ 源码路径>",
+  "source_file": "<C/C++ 或 Rust 源码路径>",
   "binary_file": "<二进制/目标文件路径>",
   "function": "<函数名，source/binary 模式必填>",
   "iterations": 100,
@@ -30,11 +31,41 @@ description: 基于 LLVM MCA 的 ARM64 静态性能瓶颈分析器。对汇编�
 - `uarch`：目标微架构代号。用户可能说 "hip08"、"0xd01"、"tsv110" 等，按下表归一化。
 - `input_mode`：
   - `asm`：用户直接给了汇编文本或 `.s` 文件——这是 MCA 的原生输入，最干净，**分析循环时优先用此模式**（把循环体抽出来）。
-  - `source`：给了 C/C++ 源码 + 函数名，脚本会用 `clang -S --target=aarch64-linux-gnu -mcpu=<model> -O2` 编译后提取函数体。
+  - `source`：给了 C/C++ 或 Rust 源码 + 函数名，脚本按 `source_language` 选择编译器后提取函数体（C/C++ 用 `clang -S --target=aarch64-linux-gnu -mcpu=<model> -O2`；Rust 见下方"Rust source 模式"）。
   - `binary`：给了二进制/目标文件 + 函数名，脚本用 `llvm-objdump -d` 反汇编后提取函数。
-- `function`：`source`/`binary` 模式必填。
+- `source_language`：`c_cpp`（默认）或 `rust`。`source` 模式生效，决定编译器分支。
+- `function`：`source`/`binary` 模式必填。Rust 场景见下方"函数名匹配（Rust mangled 符号）"。
 - `iterations`：MCA 仿真迭代次数，默认 100。瓶颈分析需要足够迭代才稳定；想更稳可调到 300。
-- `cflags`：`source` 模式透传给 clang 的额外参数（如 `-march=armv8.2-a+fp16`、`-I...`）。
+- `cflags`：`source` 模式透传给编译器的额外参数（如 `-march=armv8.2-a+fp16`、`-I...`）。
+
+### Rust source 模式
+
+`source_language=rust` 时脚本用 `rustc -O --target aarch64-unknown-linux-gnu -C target-cpu=<model> --emit asm` 编译后提取函数体（`<model>` 由 `uarch` 映射表得到，与 C/C++ 路径共用同一映射）。cargo 项目不必手动抽文件，可直接用 `cargo rustc --release -- --emit asm -C target-cpu=<model>` 让脚本读取编译产物。
+
+### 函数名匹配（Rust mangled 符号）
+
+Rust 默认 legacy mangling 产物形如 `_ZN4calc3sum17h<hash>E`，末尾 `17h<hash>E` 是编译器生成的 16 进制 hash 后缀——**同一段源码两次编译 hash 基本必变**。因此：
+
+- `source` 模式（编译与分析同趟进行）：脚本按"剥离 `17h<hash>E` 后缀后的前缀"匹配 `--function`，用户传 `calc::sum` 或 `_ZN4calc3sum` 均可命中 `_ZN4calc3sum17habcd0123...E`。
+- `binary` 模式（二进制来自另一趟编译）：同一剥离规则匹配，保证跨编译可对齐。
+- 想拿到可读符号名，建议用户在编译时加 `-C symbol-mangling-version=v0` 或分析前过一遍 `rustfilt`。
+
+### Rust 常见用法
+
+```bash
+# 1. 单文件 Rust 源码
+python3 <skill_dir>/scripts/mca_analyze.py --uarch hip09 \
+  --source kernel.rs --function dot_f32 --source-language rust
+
+# 2. cargo 项目（先产出汇编再喂给脚本）
+cargo rustc --release -- --emit asm -C target-cpu=hip09
+python3 <skill_dir>/scripts/mca_analyze.py --uarch hip09 \
+  --asm target/release/deps/<crate>.s --function dot_f32
+
+# 3. 已编译二进制/对象文件（rustc 或 cargo build 产物）
+python3 <skill_dir>/scripts/mca_analyze.py --uarch hip10 \
+  --binary target/release/app --function dot_f32
+```
 
 ## 微架构支持
 
@@ -71,7 +102,7 @@ description: 基于 LLVM MCA 的 ARM64 静态性能瓶颈分析器。对汇编�
 python3 <skill_dir>/scripts/mca_analyze.py \
   --uarch <hip08|hip09|hip10|hip11|hip12|0xd01|...> \
   --asm <file|-> \                              # 三选一
-  # 或 --source <file> --function <name>
+  # 或 --source <file> --function <name> [--source-language rust]
   # 或 --binary <file> --function <name>
   [--iterations 100] [--cflags -O3 -march=...] 
 ```

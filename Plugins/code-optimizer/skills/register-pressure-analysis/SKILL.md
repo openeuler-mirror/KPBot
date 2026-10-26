@@ -17,8 +17,9 @@ description: 编译到 AArch64 汇编后统计 stack spill/reload、FMA 密度�
 {
   "asm_file": "<generated.s|generated.S|compiler-output.s>",
   "function": "<optional_function_name>",
-  "source_kind": "c_intrinsics|inline_asm|assembly",
+  "source_kind": "c_intrinsics|rust_intrinsics|rust_asm|inline_asm|assembly",
   "context": {
+    "language": "c_cpp|rust",
     "strategy": "vectorization|throughput-enhancement|prefetch-optimization|asm-optimization",
     "target_arch": "neon|sve|sme",
     "microkernel_shape": "8x4"
@@ -30,7 +31,8 @@ description: 编译到 AArch64 汇编后统计 stack spill/reload、FMA 密度�
 
 - `asm_file`：必须是当前优化产物或编译器生成的 AArch64 汇编文件。
 - `function`：可选。提供后只分析该函数标签范围；缺失时分析整个文件。
-- `source_kind`：用于解释结果，不改变统计口径。
+- `source_kind`：用于解释结果，不改变统计口径。`rust_intrinsics` 表示 `std::arch::aarch64`/`core::arch::aarch64` intrinsic 代码编译出的汇编；`rust_asm` 表示 `asm!` 宏块编译出的汇编。
+- `context.language`：可选，标注产物源语言，供 `verify-optimization` 归档。
 - `context`：可选，供 `verify-optimization` 把诊断和优化点关联起来。
 
 ## 执行步骤
@@ -42,6 +44,14 @@ description: 编译到 AArch64 汇编后统计 stack spill/reload、FMA 密度�
 ```bash
 cc -O3 -S -march=armv8-a+simd -o /tmp/kernel.s <generated_source.c>
 ```
+
+如果上游给的是 Rust intrinsic 源码（`std::arch::aarch64` 路径）：
+
+```bash
+rustc -O --target aarch64-unknown-linux-gnu -C target-feature=+neon --emit asm -o /tmp/kernel.s kernel.rs
+```
+
+Rust 汇编中函数标签是 mangled 符号（`_ZN4calc3dot17h<hash>E`）——`--function` 支持传 `calc::dot` 这样的源码路径名或 `_ZN4calc3dot` mangled 前缀，脚本按剥离 `17h<hash>E` 后缀的规则匹配标签。
 
 SVE/SME 只做 compile-only 时使用上游已经验证过的目标 flags。不要在当前机器不支持 SVE/SME runtime 时强行运行 benchmark。
 
@@ -81,7 +91,8 @@ python3 scripts/analyze_assembly_spill.py --asm <generated.s> --function <name>
     "success": true,
     "asm_file": "<generated.s>",
     "function": "<function_name_or_null>",
-    "source_kind": "c_intrinsics|inline_asm|assembly",
+    "source_kind": "c_intrinsics|rust_intrinsics|rust_asm|inline_asm|assembly",
+    "language": "c_cpp|rust",
     "spill_store_count": 0,
     "spill_reload_count": 0,
     "stack_access_count": 0,
@@ -104,6 +115,6 @@ python3 scripts/analyze_assembly_spill.py --asm <generated.s> --function <name>
 ## 规则
 
 - 本 skill 只做诊断，不直接修改源码。
-- 适用 C/C++ intrinsics 编译出的汇编、C/C++ 内联 asm 编译出的汇编、standalone `.S/.s/.asm`。
+- 适用 C/C++ intrinsics 编译出的汇编、C/C++ 内联 asm 编译出的汇编、standalone `.S/.s/.asm`、**Rust `std::arch`/`core::arch` intrinsic 编译出的汇编（`rust_intrinsics`）与 Rust `asm!` 宏编译出的汇编（`rust_asm`）**。
 - 必须保留 evidence 中的行号和原始指令，供 `verify-optimization` 写入性能诊断记录。
 - `register-pressure-analysis` 不加入 `decide-optimization` 的源码改写 strategy 集合；它由 `verify-optimization` 在 SIMD、asm 或 micro-kernel 相关优化后作为诊断 skill 调用。
