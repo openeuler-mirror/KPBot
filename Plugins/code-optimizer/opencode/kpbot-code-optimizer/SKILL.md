@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer
-description: 鲲鹏性能优化流水线 - Subagent 编排器，也是场景专项优化的统一路由入口。当用户想要优化 C/C++ 项目性能、分析热点函数、应用向量化、运行完整性能优化流程，或提到 TF 推理优化、ONNX Runtime attention、llama.cpp、搜推 DAG、VSAG 向量检索、BRGEMM/GEMM、哈希表、embedding lookup 去重等场景优化需求时触发。
+description: 鲲鹏性能优化流水线 - Subagent 编排器，也是场景专项优化的统一路由入口。当用户想要优化 C/C++ 项目性能、分析热点函数、应用向量化、运行完整性能优化流程，或提到 TF 推理优化、ONNX Runtime attention、llama.cpp、搜推 DAG、VSAG 向量检索、BRGEMM/GEMM、哈希表、embedding lookup 去重、OpenZL 压缩内核等场景优化需求时触发。
 ---
 
 # 鲲鹏性能优化流水线
@@ -33,7 +33,8 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 6 | BRGEMM/GEMM 优化 | `brgemm-optimization` | brgemm、gemm、matmul、onednn、packb、prepack | oneDNN/`dnnl`；BRGEMM kernel；PackB/PrePack/blocked layout 代码 |
 | 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
-| 9 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 9 | OpenZL 压缩内核优化 | `openzl-compression-tuning` | openzl、压缩、huffman、fse、熵编码、熵解码、codec 内核、压缩内核 | `src/openzl/` 源码树；`ZS_Huf*` / `openzl` 符号；`unitBench` 目录；`addBits` / `lookBits` 位流函数 |
+| 10 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 ### 路由流程
 

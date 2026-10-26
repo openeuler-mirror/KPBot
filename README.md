@@ -96,8 +96,8 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝全部 47 个 skills（claude 格式）
-    - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并按各插件 `opencode.exclude` 跳过 2 个 claude-only skill（共 45 个）
+    - Claude Code：拷贝全部 48 个 skills（claude 格式）
+    - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并按各插件 `opencode.exclude` 跳过 2 个 claude-only skill（共 46 个）
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -170,7 +170,7 @@ bash tests/test_install_platform.sh
 
 ### 可用技能列表
 
-Claude Code 安装全部 **47 个** skill；OpenCode 安装 **45 个**（跳过 2 个 claude-only）。
+Claude Code 安装全部 **48 个** skill；OpenCode 安装 **46 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -199,6 +199,7 @@ Claude Code 安装全部 **47 个** skill；OpenCode 安装 **45 个**（跳过 
 - `special-case-optimization` — 特例快路径
 - `compiler-flag-tuning` — 编译选项调优
 - `hashmap-optimization` — 哈希表四阶段优化流程（链路识别→瓶颈建模→仿真测试→杠杆实施）
+- `openzl-compression-tuning` — OpenZL 压缩内核优化（熵解码根表/编码批次/无损逐字节门禁）
 
 **Pipeline/编排类**
 - `kpbot-code-optimizer` — 完整优化 Pipeline（Subagent 编排）
