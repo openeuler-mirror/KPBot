@@ -1,0 +1,58 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 llvm-mca-analysis 分析 Rust 编译产物
+#
+# 构建（本机容器无法解析 openeuler 源，需 --network host）：
+#   docker build --network host -f skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/Dockerfile \
+#       -t kpbot/code-optimizer-agent-analyze-rust-asm-mca:1.0-openeuler24.03 .
+#   # A/B 对照
+#   ./run_ab.sh --save results-ab
+
+name: agent-analyze-rust-asm-mca
+skill: llvm-mca-analysis
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/code-optimizer-agent-analyze-rust-asm-mca:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection           # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON 环境变量注入
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: analysis_correctness   # 分析类判据：产物 JSON 字段正确性（source_language=rust+bottleneck 非空）
+  uplift: with 臂 skills_invoked 含 llvm-mca-analysis 且分析字段正确；without 臂无 skill 引导大概率字段缺失
+
+build:
+  context: ../../../..
+  dockerfile: skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机（分析目标平台）
+  - LLVM 工具链（llvm-mca/clang，dnf 源安装；tsv110=上游模型必支持）
+  - rustc（dnf 源，1.75+）
+  - opencode 二进制（运行时只读挂载，路径白名单校验）
+  - OPENCODE_AUTH_JSON（auth.json 整文件 base64 经环境变量注入）
+  - 容器可访问 deepseek API
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+  N: 8192
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: source_language_rust
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: bottleneck_present
+    expect: true

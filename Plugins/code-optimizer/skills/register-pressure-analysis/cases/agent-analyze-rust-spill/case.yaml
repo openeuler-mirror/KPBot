@@ -1,0 +1,62 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 register-pressure-analysis 分析 Rust NEON 汇编
+#
+# 构建（本机容器无法解析 openeuler 源，需 --network host）：
+#   docker build --network host -f skills/register-pressure-analysis/cases/agent-analyze-rust-spill/Dockerfile \
+#       -t kpbot/code-optimizer-agent-analyze-rust-spill:1.0-openeuler24.03 .
+#   # A/B 对照
+#   ./run_ab.sh --save results-ab
+
+name: agent-analyze-rust-spill
+skill: register-pressure-analysis
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/code-optimizer-agent-analyze-rust-spill:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection           # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON 环境变量注入
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: analysis_correctness   # 分析类判据：产物 JSON 字段正确性（language=rust+source_kind=rust_intrinsics+pressure_level 合法）
+  uplift: with 臂 skills_invoked 含 register-pressure-analysis 且分析字段正确；without 臂无 skill 引导大概率字段缺失
+
+build:
+  context: ../../../..
+  dockerfile: skills/register-pressure-analysis/cases/agent-analyze-rust-spill/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机（分析目标平台）
+  - rustc（dnf 源，1.75+；NEON intrinsic 编译）
+  - python3（spill 分析脚本是纯 python 文本统计，无 LLVM 依赖）
+  - opencode 二进制（运行时只读挂载，路径白名单校验）
+  - OPENCODE_AUTH_JSON（auth.json 整文件 base64 经环境变量注入）
+  - 容器可访问 deepseek API
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+  N: 8192
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: language_rust
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: source_kind_rust_intrinsics
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: pressure_level_valid
+    expect: true
