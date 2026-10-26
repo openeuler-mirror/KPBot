@@ -53,6 +53,33 @@ PERF_PATTERNS = [
 ]
 
 
+# 整类取值都来自同一个采集项的类别：这个采集项失败时，该类别在本环境里
+# 既不能判相同也不能判「单边存在」。只列由单个采集项完整提供数据的类别。
+# 一个类别可以有多个来源，取并集：进程环境变量要靠 processes 找到进程，
+# 再靠 python_profiles 读出它的环境变量，两项任一失败都采不到。
+CATEGORY_SOURCE_ITEMS = {
+    'processes': (CATEGORY_ARGS, CATEGORY_ENV),
+    'python_profiles': (CATEGORY_ENV,),
+}
+
+
+def unreliable_categories(payload, packages_ok):
+    """本环境里因采集失败而无法比较的类别。
+
+    跳过（skip）表示这项在当前环境不适用，不是失败，不计入。
+    """
+    status = payload.get('collection_status') or {}
+    broken = set(status.get('failed') or {})
+    broken.update(status.get('never_started') or [])
+    out = set()
+    for item, categories in CATEGORY_SOURCE_ITEMS.items():
+        if item in broken:
+            out.update(categories)
+    if not packages_ok:
+        out.update((CATEGORY_CORE, CATEGORY_OTHER))
+    return out
+
+
 def is_perf_relevant(category, name):
     if category in (CATEGORY_CORE, CATEGORY_ARGS):
         return True
@@ -325,6 +352,7 @@ def build_entry(label, bundle, container):
         'profile_ok': bool(profile.get('collection_ok')),
         'packages_ok': packages_ok,
         'profile_source': profile.get('environment_source') or MISSING,
+        'unreliable_categories': unreliable_categories(payload, packages_ok),
         'items': {},
     }
     if error:

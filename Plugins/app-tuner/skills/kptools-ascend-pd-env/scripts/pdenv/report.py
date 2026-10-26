@@ -85,10 +85,15 @@ def markdown_report(entries, matrix, comparisons, problems):
     for a, b, rows_ab, summary in comparisons:
         lines.append('## %s ↔ %s' % (a['id'], b['id']))
         lines.append('')
-        lines.append('共 %d 项，差异 %d 项，其中性能相关 %d 项。'
+        lines.append('共 %d 项，差异 %d 项，其中性能相关 %d 项%s。'
                      % (summary['total_items'], summary['diff_count'],
-                        summary['perf_diff_count']))
-        if summary['note']:
+                        summary['perf_diff_count'],
+                        '，无法比较 %d 项' % summary['not_comparable_count']
+                        if summary['not_comparable_count'] else ''))
+        if not summary['comparable']:
+            lines.append('')
+            lines.append('> 该组合无法比较：' + summary['note'])
+        elif summary['note']:
             lines.append('')
             lines.append('> 注意：' + summary['note'])
         lines.append('')
@@ -108,7 +113,8 @@ def markdown_report(entries, matrix, comparisons, problems):
                 [[r['category'], r['name'], r['left'], r['right'], r['status']] for r in shown]) + ['']
     missing = sum(1 for r in matrix if r['status'] == diff.BOTH_MISSING)
     lines += ['---', '',
-              '说明：`未采集`/`未报告`/`未设置` 表示没有采到对应信息，不等于没有安装或没有设置。'
+              '说明：`未采集`/`未报告`/`未设置` 表示没有采到对应信息，不等于没有安装或没有设置；'
+              '`无法比较` 表示某个环境的这一项采集失败，不计入差异。'
               '全表共 %d 项，其中 %d 项所有环境都没有数据。'
               % (len(matrix), missing)]
     return '\n'.join(lines) + '\n'
@@ -296,7 +302,7 @@ def html_report(entries, matrix, comparisons, problems, generated_at):
         'all',
         '全部采集项' if single else '完整总表',
         '这次采到的全部项目。' if single
-        else '所有环境的全部可比较项目，包含相同项与缺失项。',
+        else '所有环境的全部采集项目，包含相同项、缺失项与无法比较项。',
         ['类别', '项目'] + ids + ([] if single else ['比较结果']),
         matrix, matrix_row, single=single))
 
@@ -308,9 +314,12 @@ def html_report(entries, matrix, comparisons, problems, generated_at):
                        _esc(r['category']), _esc(r['name']),
                        _value_cell(r['left']), _value_cell(r['right']),
                        _status_class(r['status']), _esc(r['status'])))
-        subtitle = '逐项比较；差异 %d 项，其中性能相关 %d 项。%s' % (
+        subtitle = '逐项比较；差异 %d 项，其中性能相关 %d 项%s。%s' % (
             summary['diff_count'], summary['perf_diff_count'],
-            ('注意：' + summary['note']) if summary['note'] else '')
+            '，无法比较 %d 项' % summary['not_comparable_count']
+            if summary['not_comparable_count'] else '',
+            ('该组合无法比较：' + summary['note']) if not summary['comparable']
+            else ('注意：' + summary['note']) if summary['note'] else '')
         body.append(_table_section('cmp%d' % i, '%s ↔ %s' % (a['id'], b['id']), subtitle,
                                    ['类别', '项目', a['id'], b['id'], '比较结果'],
                                    rows_ab, pair_row))
@@ -318,7 +327,8 @@ def html_report(entries, matrix, comparisons, problems, generated_at):
     body.append('<p class="footer">左侧带竖线的行是性能相关项（核心包、启动参数，以及并行度、'
                 '线程数、显存与缓存相关的环境变量和系统参数）。<br>'
                 '“未采集 / 未报告 / 未设置”表示没有采到对应信息，不能据此认定没有安装或没有设置；'
-                '“仅 X 有”表示只有一方存在该项，这算作差异并会出现在“仅看差异”里。'
+                '“仅 X 有”表示只有一方存在该项，这算作差异并会出现在“仅看差异”里；'
+                '“无法比较”表示有一方这项采集失败，不计入差异。'
                 '<br>CSV 为 UTF-8 BOM，可直接用 Excel 打开。</p>')
     body.append('<script>' + SCRIPT + '</script></div></body></html>')
     return ''.join(body)

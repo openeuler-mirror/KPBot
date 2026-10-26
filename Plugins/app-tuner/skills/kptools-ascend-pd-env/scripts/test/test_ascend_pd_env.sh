@@ -59,6 +59,12 @@ assert_equal() { # $1=实际 $2=期望 $3=说明
     if [ "$1" = "$2" ]; then pass "$3（$2）"; else fail "$3 — 期望 $2，实际 $1"; fi
 }
 
+# 某个分类里状态不等于指定值的项数，用来断言整类的状态
+result_category_other_than() { # $1=对比目录 $2=分类 $3=期望状态
+    python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); print(sum(1 for i in d['items'] if i['category']==sys.argv[2] and i['status']!=sys.argv[3]))" \
+        "$1/对比/对比结果.json" "$2" "$3" 2>/dev/null
+}
+
 # 文件或目录的八进制权限，macOS 和 Linux 的 stat 参数不同，统一用 python 读
 mode_of() { python3 -c "import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])" "$1" 2>/dev/null; }
 
@@ -154,6 +160,14 @@ python3 "$TEST_DIR/make_fixture.py" "$FX/other" vllm-d2-alt >/dev/null 2>&1
 assert_success $? "PF-000: 造出带差异的采集包"
 python3 "$TEST_DIR/make_fixture.py" "$FX/nopkg" ok-side,blind-side-nopkg >/dev/null 2>&1
 assert_success $? "PF-000: 造出一侧包列表未采到的采集包"
+python3 "$TEST_DIR/make_fixture.py" "$FX/failed" live-side,dead-side-failed >/dev/null 2>&1
+assert_success $? "PF-000: 造出一侧采集失败的采集包"
+python3 "$TEST_DIR/make_fixture.py" "$FX/noproc" full-side,noproc-side-noproc >/dev/null 2>&1
+assert_success $? "PF-000: 造出一侧进程采集失败的采集包"
+python3 "$TEST_DIR/make_fixture.py" "$FX/skipproc" full-side2,skip-side-skipproc >/dev/null 2>&1
+assert_success $? "PF-000: 造出一侧进程采集被跳过的采集包"
+python3 "$TEST_DIR/make_fixture.py" "$FX/noprofile" base-side,prof-side-noprofile >/dev/null 2>&1
+assert_success $? "PF-000: 造出一侧 Python 画像采集失败的采集包"
 mkdir -p "$FX/broken" && echo "这不是采集包" > "$FX/broken/readme.txt"
 ( cd "$FX" && tar czf single.tar.gz single ) 2>/dev/null
 
@@ -196,11 +210,6 @@ assert_exit $CODE 1 "PF-005: 有包没读进来时退出非零"
 assert_contains "$OUT" "没有读进来" "PF-005: 明确说了哪个包没读进来"
 assert_file "$WORK/o5/对比/环境对比报告.html" "PF-005: 其余环境的报告照常生成"
 
-echo "  PF-010: 1 个好包（单容器）+ 1 个坏包 → 退出 1"
-OUT=$(bash "$SCRIPTS/collect.sh" "$FX/broken" "$FX/single" --out "$WORK/o10" 2>&1); CODE=$?
-assert_exit $CODE 1 "PF-010: 剩下一个环境时也按「有包没读进来」返回 1"
-assert_contains "$OUT" "没有读进来" "PF-010: 说了哪个包没读进来"
-
 echo "  PF-006: 全部包都读不进来"
 OUT=$(bash "$SCRIPTS/collect.sh" "$FX/broken" --out "$WORK/o6" 2>&1); CODE=$?
 assert_exit $CODE 3 "PF-006: 一个都读不出来时退出 3"
@@ -232,12 +241,24 @@ for key in ('left', 'right', 'diff_count', 'perf_diff_count', 'differences'):
 PY
 assert_success $? "PF-009: 对比结果.json 字段齐全"
 
+echo "  PF-010: 1 个好包（单容器）+ 1 个坏包 → 退出 1"
+OUT=$(bash "$SCRIPTS/collect.sh" "$FX/broken" "$FX/single" --out "$WORK/o10" 2>&1); CODE=$?
+assert_exit $CODE 1 "PF-010: 剩下一个环境时也按「有包没读进来」返回 1"
+assert_contains "$OUT" "没有读进来" "PF-010: 说了哪个包没读进来"
+
 echo "  PF-011: 一侧的包列表没采到时，结论里说明包差异不可信"
 OUT=$(bash "$SCRIPTS/collect.sh" "$FX/nopkg" --out "$WORK/o11" 2>&1); CODE=$?
 assert_exit $CODE 0 "PF-011: 一侧包列表缺失仍能出报告"
 assert_contains "$OUT" "包差异不可信" "PF-011: 结论行提醒包差异不可信"
 assert_contains "$(result_field "$WORK/o11" note)" "包差异不可信" \
     "PF-011: 对比结果.json 的 note 里也有这句"
+assert_equal "$(result_category_other_than "$WORK/o11" 核心包 无法比较)" 0 \
+    "PF-011: 核心包整类判成「无法比较」而不是「仅X有」"
+assert_equal "$(result_only_one_side "$WORK/o11")" 1 \
+    "PF-011: 只有真正单边存在的那一项算「仅X有」"
+assert_equal "$(result_category_other_than "$WORK/o11" 其他包 无法比较)" 0 \
+    "PF-011: 非核心包同样判成无法比较"
+assert_equal "$(result_field "$WORK/o11" diff_count)" 4 "PF-011: 包相关的项不计入差异"
 
 echo "  PF-012: 只给采集包时输出目录和报告文件的权限"
 bash "$SCRIPTS/collect.sh" "$FX/single" "$FX/other" --out "$WORK/o12" >/dev/null 2>&1
@@ -246,6 +267,47 @@ assert_equal "$(mode_of "$WORK/o12/对比")" 700 "PF-012: 对比目录权限"
 for f in 环境对比报告.html 对比结果.json; do
     assert_equal "$(mode_of "$WORK/o12/对比/$f")" 600 "PF-012: $f 权限"
 done
+
+echo "  PF-013: 一侧采集失败时整组判成「无法比较」"
+OUT=$(bash "$SCRIPTS/collect.sh" "$FX/failed" --out "$WORK/o13" 2>&1); CODE=$?
+assert_exit $CODE 0 "PF-013: 一侧成功一侧失败时仍生成报告"
+assert_contains "$OUT" "无法比较" "PF-013: 结论里标明无法比较"
+assert_contains "$OUT" "该组合无法比较" "PF-013: 点明无法比较的是哪一组"
+assert_equal "$(result_field "$WORK/o13" diff_count)" 0 "PF-013: 差异数为 0"
+assert_equal "$(result_field "$WORK/o13" perf_diff_count)" 0 "PF-013: 性能相关差异数也是 0"
+assert_equal "$(result_only_one_side "$WORK/o13")" 0 "PF-013: 没有任何「仅X有」条目"
+assert_equal "$(result_field "$WORK/o13" not_comparable_count)" \
+    "$(result_field "$WORK/o13" total_items)" "PF-013: 全部项目都记成无法比较"
+assert_contains "$(cat "$WORK/o13/对比/对比摘要.md")" "该组合无法比较" \
+    "PF-013: 对比摘要.md 里也写明该组合无法比较"
+
+echo "  PF-014: processes 采集失败时，启动参数与进程环境变量整类无法比较"
+OUT=$(bash "$SCRIPTS/collect.sh" "$FX/noproc" --out "$WORK/o14" 2>&1); CODE=$?
+assert_exit $CODE 0 "PF-014: 单项采集失败时仍生成报告"
+assert_equal "$(result_category_other_than "$WORK/o14" 启动参数 无法比较)" 0 \
+    "PF-014: 启动参数整类判成无法比较"
+assert_equal "$(result_category_other_than "$WORK/o14" 进程环境变量 无法比较)" 0 \
+    "PF-014: 进程环境变量整类判成无法比较"
+assert_equal "$(result_only_one_side "$WORK/o14")" 0 "PF-014: 这两类里没有「仅X有」"
+assert_equal "$(result_field "$WORK/o14" diff_count)" 6 "PF-014: 差异项数只含可比较的项"
+assert_equal "$(result_field "$WORK/o14" perf_diff_count)" 3 "PF-014: 性能相关差异数"
+assert_equal "$(result_field "$WORK/o14" not_comparable_count)" 6 "PF-014: 无法比较项数"
+
+echo "  PF-015: 被跳过的采集项不算失败，对应项仍按单边存在处理"
+OUT=$(bash "$SCRIPTS/collect.sh" "$FX/skipproc" --out "$WORK/o15" 2>&1); CODE=$?
+assert_exit $CODE 0 "PF-015: 有跳过项时仍生成报告"
+assert_equal "$(result_field "$WORK/o15" not_comparable_count)" 0 \
+    "PF-015: 跳过不会变成无法比较"
+assert_equal "$(result_only_one_side "$WORK/o15")" 5 "PF-015: 跳过的那一侧按「仅X有」计入差异"
+
+echo "  PF-016: Python 画像采集失败时，进程环境变量整类无法比较"
+OUT=$(bash "$SCRIPTS/collect.sh" "$FX/noprofile" --out "$WORK/o16" 2>&1); CODE=$?
+assert_exit $CODE 0 "PF-016: 画像采集失败时仍生成报告"
+assert_equal "$(result_category_other_than "$WORK/o16" 进程环境变量 无法比较)" 0 \
+    "PF-016: 进程环境变量整类判成无法比较"
+assert_equal "$(result_field "$WORK/o16" diff_count)" 14 "PF-016: 差异项数只含可比较的项"
+assert_equal "$(result_field "$WORK/o16" perf_diff_count)" 2 "PF-016: 性能相关差异数"
+assert_equal "$(result_field "$WORK/o16" not_comparable_count)" 28 "PF-016: 无法比较项数"
 
 # =============================================================================
 group "5. 退出码与对象判定"

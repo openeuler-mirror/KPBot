@@ -142,12 +142,21 @@ def run(args):
 
     if failed:
         print('下面的报告只包含读进来的那些。', file=sys.stderr)
+    comparable = sum(1 for row in matrix if row['status'] != diff.NOT_COMPARABLE)
     print('环境 %d 个，对比 %d 组，可比较项目 %d 项。'
-          % (len(entries), len(comparisons), len(matrix)))
+          % (len(entries), len(comparisons), comparable))
     for left, right, _, summary in comparisons:
-        print('  %s ↔ %s：差异 %d 项（性能相关 %d 项）%s'
-              % (left['id'], right['id'], summary['diff_count'], summary['perf_diff_count'],
-                 '  ⚠ ' + summary['note'] if summary['note'] else ''))
+        blocked = ('，无法比较 %d 项' % summary['not_comparable_count']
+                   if summary['not_comparable_count'] else '')
+        if not summary['comparable']:
+            tail = '  ⚠ 该组合无法比较：' + summary['note']
+        elif summary['note']:
+            tail = '  ⚠ ' + summary['note']
+        else:
+            tail = ''
+        print('  %s ↔ %s：差异 %d 项（性能相关 %d 项）%s%s'
+              % (left['id'], right['id'], summary['diff_count'],
+                 summary['perf_diff_count'], blocked, tail))
     rest = [problem for problem in problems if problem not in shown]
     if rest:
         print('采集问题 %d 条：' % len(rest))

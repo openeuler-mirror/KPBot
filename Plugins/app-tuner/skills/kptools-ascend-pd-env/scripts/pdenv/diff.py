@@ -3,6 +3,11 @@
 An item that only one side reports counts as a difference ("仅 X 有") rather
 than missing information, so single-sided settings such as VLLM_USE_V1 stay
 visible under the "仅看差异" filter.
+
+An item is "无法比较" instead when the data behind it was never collected on
+one of the sides, so neither equality nor a one-sided difference can be
+concluded: the whole collection failed, or the collection item that feeds that
+whole category failed. Those rows are excluded from the difference counts.
 """
 import itertools
 
@@ -14,6 +19,7 @@ ONLY = '仅%s有'
 BOTH_MISSING = '均缺失'
 ALL_SAME = '全部相同'
 HAS_DIFF = '存在差异'
+NOT_COMPARABLE = '无法比较'
 
 DIFF_STATES = (DIFFERENT, HAS_DIFF)
 
@@ -46,13 +52,22 @@ def _name_key(category, name):
 
 
 def value_of(entry, key):
+    """本环境这一项的取值，采不到时返回缺失标记或 FAILED。
+
+    pair_status 和 matrix_rows 都只经过这里，两处判据因此始终一致。
+    """
     if entry.get('error'):
         return fields.FAILED
-    return entry['items'].get(key, fields.NOT_SET)
+    value = entry['items'].get(key, fields.NOT_SET)
+    if fields.is_missing(value) and key[0] in (entry.get('unreliable_categories') or ()):
+        return fields.FAILED
+    return value
 
 
 def pair_status(left, right):
     """Status for one item across two environments."""
+    if fields.FAILED in (left, right):
+        return NOT_COMPARABLE
     lm, rm = fields.is_missing(left), fields.is_missing(right)
     if lm and rm:
         return BOTH_MISSING
@@ -88,7 +103,9 @@ def matrix_rows(entries, keys=None):
         category, name = key
         values = [value_of(e, key) for e in entries]
         present = [v for v in values if not fields.is_missing(v)]
-        if not present:
+        if fields.FAILED in values:
+            status = NOT_COMPARABLE
+        elif not present:
             status = BOTH_MISSING
         elif len(present) < len(values):
             status = HAS_DIFF
@@ -125,6 +142,7 @@ def summarize_pair(a, b, rows):
         'diff_count': sum(1 for r in rows if r['diff']),
         'perf_diff_count': len(perf),
         'diff_by_category': counts,
+        'not_comparable_count': sum(1 for r in rows if r['status'] == NOT_COMPARABLE),
         'comparable': not (a.get('error') or b.get('error')),
         'note': _pair_note(a, b),
     }
