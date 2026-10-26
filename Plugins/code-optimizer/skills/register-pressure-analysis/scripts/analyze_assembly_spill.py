@@ -68,6 +68,7 @@ class RegisterPressureResult:
     asm_file: str
     function: str | None
     source_kind: str
+    language: str
     spill_store_count: int
     spill_reload_count: int
     stack_access_count: int
@@ -118,12 +119,39 @@ def is_fma(line: str) -> bool:
     return mnemonic.startswith(FMA_MNEMONIC_PREFIXES)
 
 
+def rust_mangle_prefix(func: str) -> str | None:
+    """Return the legacy Rust mangled-symbol prefix for a source path name."""
+
+    if "::" not in func:
+        return func if func.startswith("_ZN") else None
+    segments = func.split("::")
+    if not all(segments):
+        return None
+    return "_ZN" + "".join(f"{len(segment)}{segment}" for segment in segments)
+
+
+def rust_label_matches(stripped_label: str, function: str) -> bool:
+    """Check a label against a Rust source path name (legacy mangled symbols)."""
+
+    label = stripped_label[:-1] if stripped_label.endswith(":") else stripped_label
+    candidates = {label, f"_{label}"}
+    if function in candidates or f"_{function}" in candidates:
+        return True
+    mangle_prefix = rust_mangle_prefix(function)
+    if mangle_prefix is None:
+        return False
+    pattern = rf"^{re.escape(mangle_prefix)}(17h[0-9a-f]+E)?$"
+    return any(re.fullmatch(pattern, candidate) for candidate in candidates)
+
+
 def label_matches(line: str, function: str) -> bool:
     """Check if a line defines the requested function label."""
 
     stripped = strip_comment(line)
     candidates = {function, f"_{function}"}
-    return any(re.fullmatch(rf"{re.escape(candidate)}:", stripped) for candidate in candidates)
+    if any(re.fullmatch(rf"{re.escape(candidate)}:", stripped) for candidate in candidates):
+        return True
+    return rust_label_matches(stripped, function)
 
 
 def looks_like_global_label(line: str) -> bool:
@@ -190,7 +218,11 @@ def recommendation_for_level(level: str) -> str:
 
 
 def analyze_assembly(
-    asm_path: Path, function: str | None, source_kind: str, max_evidence: int
+    asm_path: Path,
+    function: str | None,
+    source_kind: str,
+    max_evidence: int,
+    language: str = "c_cpp",
 ) -> RegisterPressureResult:
     """Analyze the requested assembly file."""
 
@@ -200,6 +232,7 @@ def analyze_assembly(
             asm_file=str(asm_path),
             function=function,
             source_kind=source_kind,
+            language=language,
             spill_store_count=0,
             spill_reload_count=0,
             stack_access_count=0,
@@ -219,6 +252,7 @@ def analyze_assembly(
             asm_file=str(asm_path),
             function=function,
             source_kind=source_kind,
+            language=language,
             spill_store_count=0,
             spill_reload_count=0,
             stack_access_count=0,
@@ -237,6 +271,7 @@ def analyze_assembly(
             asm_file=str(asm_path),
             function=function,
             source_kind=source_kind,
+            language=language,
             spill_store_count=0,
             spill_reload_count=0,
             stack_access_count=0,
@@ -277,6 +312,7 @@ def analyze_assembly(
         asm_file=str(asm_path),
         function=function,
         source_kind=source_kind,
+        language=language,
         spill_store_count=spill_store_count,
         spill_reload_count=spill_reload_count,
         stack_access_count=stack_access_count,
@@ -297,8 +333,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--function", help="Optional function label to isolate.")
     parser.add_argument(
         "--source-kind",
-        choices=("c_intrinsics", "inline_asm", "assembly"),
+        choices=("c_intrinsics", "rust_intrinsics", "rust_asm", "inline_asm", "assembly"),
         default="assembly",
+    )
+    parser.add_argument(
+        "--language",
+        choices=("c_cpp", "rust"),
+        default="c_cpp",
+        help="Source language of the analyzed artifact (for archiving context).",
     )
     parser.add_argument("--max-evidence", type=int, default=20)
     return parser.parse_args()
@@ -315,6 +357,7 @@ def main() -> int:
         args.function,
         args.source_kind,
         args.max_evidence,
+        args.language,
     )
     payload = {"register_pressure_result": asdict(result)}
     print(json.dumps(payload, ensure_ascii=False, indent=2))

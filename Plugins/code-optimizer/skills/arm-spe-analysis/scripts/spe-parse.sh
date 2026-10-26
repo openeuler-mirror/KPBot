@@ -16,6 +16,7 @@ FORMAT="text"
 SORT_FIELD="sample_count"
 TOP_N=20
 SUMMARY_ONLY=false
+BY_FUNCTION=false
 DATA_FILE=""
 
 usage() {
@@ -30,12 +31,14 @@ spe-parse.sh — ARM SPE 数据解析
   -s, --sort FIELD     排序字段: sample_count, l1_miss, llc_miss, br_miss（默认 sample_count）
   -n, --top N          仅输出 Top N 条记录（默认 20）
   --summary            仅输出汇总统计，不列出每条记录
+  --by-function        在 text 输出末尾追加按函数聚合段（--summary 与 -f json 不受影响）
   -h, --help           帮助
 
 示例:
   bash spe-parse.sh spe-20260425.data
   bash spe-parse.sh -f json -n 10 spe-20260425.data
   bash spe-parse.sh --summary spe-20260425.data
+  bash spe-parse.sh --by-function spe-20260425.data
 EOF
     exit 0
 }
@@ -175,6 +178,41 @@ sort_and_limit() {
     } || true
 }
 
+# 按函数（SYMBOL）归并指令聚合表，输出函数级聚合段
+# count 求和；miss% 按样本数加权（Σ(指令miss% × 指令count) / Σcount）
+aggregate_by_function() {
+    local parsed="$1"
+    echo "$parsed" | awk '
+    /^=== 按指令聚合/ { in_agg=1; next }
+    in_agg && /^ADDRESS/ { next }
+    in_agg && /^[0-9a-fx]/ {
+        # 格式: ADDRESS COUNT L1_MISS% LLC_MISS% BR_MISS% SYMBOL（符号可能含空格）
+        sym = $6
+        for (i = 7; i <= NF; i++) sym = sym "_" $i
+        cnt = $2 + 0
+        gsub(/%/, "", $3); gsub(/%/, "", $4); gsub(/%/, "", $5)
+
+        fn_count[sym] += cnt
+        fn_l1_wsum[sym] += ($3 + 0) * cnt
+        fn_llc_wsum[sym] += ($4 + 0) * cnt
+        fn_br_wsum[sym] += ($5 + 0) * cnt
+    }
+    END {
+        printf "=== 按函数聚合 ===\n"
+        printf "%-50s  %-6s  %10s  %10s  %10s\n", "FUNCTION", "COUNT", "L1_MISS%", "LLC_MISS%", "BR_MISS%"
+        n = asorti(fn_count, sorted_fns, "@val_num_desc")
+        for (i = 1; i <= n; i++) {
+            fn = sorted_fns[i]
+            cnt = fn_count[fn]
+            l1m  = (cnt > 0) ? fn_l1_wsum[fn]  / cnt : 0
+            llcm = (cnt > 0) ? fn_llc_wsum[fn] / cnt : 0
+            brm  = (cnt > 0) ? fn_br_wsum[fn]  / cnt : 0
+            printf "%-50s  %-6d  %9.1f%%  %9.1f%%  %9.1f%%\n", fn, cnt, l1m, llcm, brm
+        }
+    }
+    '
+}
+
 output_json() {
     local parsed="$1"
     echo "$parsed" | awk '
@@ -195,6 +233,7 @@ while [[ $# -gt 0 ]]; do
         -s|--sort)      SORT_FIELD="$2"; shift 2 ;;
         -n|--top)       TOP_N="$2"; shift 2 ;;
         --summary)      SUMMARY_ONLY=true; shift ;;
+        --by-function)  BY_FUNCTION=true; shift ;;
         -h|--help)      usage ;;
         -*)             echo "未知选项: $1"; usage ;;
         *)              DATA_FILE="$1"; shift ;;
@@ -224,5 +263,9 @@ else
         echo ""
         echo "=== Top $TOP_N (按 $SORT_FIELD 排序) ==="
         sort_and_limit "$PARSED" "$SORT_FIELD" "$TOP_N"
+        if [ "$BY_FUNCTION" = true ]; then
+            echo ""
+            aggregate_by_function "$PARSED"
+        fi
     fi
 fi

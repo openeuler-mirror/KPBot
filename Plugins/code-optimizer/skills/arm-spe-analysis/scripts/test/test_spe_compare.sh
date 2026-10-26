@@ -376,6 +376,235 @@ test_missing_parse_script() {
 }
 
 # =============================================================================
+# 测试组: 函数级对比与 Rust hash 对齐
+# =============================================================================
+
+# mock spe-parse.sh 支持 --by-function 全量输出，按数据文件名区分 before/after 两臂
+setup_mock_byfunction() {
+    rm -rf "$MOCK_DIR"
+    mkdir -p "$MOCK_DIR"
+
+    cat > "$MOCK_DIR/spe-parse.sh" <<'MOCKEOF'
+#!/bin/bash
+DATA=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --summary) SUMMARY=true; shift ;;
+        --by-function) BYFN=true; shift ;;
+        *) DATA="$1"; shift ;;
+    esac
+done
+
+if [[ "$DATA" == *after* ]]; then
+cat <<'EOF'
+=== SPE 采样汇总 ===
+总记录数:      48000
+
+--- Cache 分布 ---
+L1 miss:   2400 (5.0%)
+LLC miss:  480 (1.0%)
+Remote:    48 (0.1%)
+
+--- TLB 分布 ---
+TLB access: 16000 (33.3%)
+TLB miss:   480 (3.0% of TLB)
+
+--- 分支预测 ---
+Branch miss: 400 (100.0% of branches)
+
+=== 按指令聚合 ===
+ADDRESS             COUNT     L1_MISS%   LLC_MISS%    BR_MISS%  SYMBOL
+ffff80001000            2          10.0%        0.0%       0.0%  _ZN4calc3dot17hbbbb2222bbbb2222E
+ffff80002000            1          15.0%        0.0%       0.0%  plain_c_function
+ffff80003000            1          20.0%        0.0%       0.0%  only_after_fn
+
+=== 按函数聚合 ===
+FUNCTION                                            COUNT     L1_MISS%   LLC_MISS%    BR_MISS%
+_ZN4calc3dot17hbbbb2222bbbb2222E                       2          10.0%        0.0%       0.0%
+plain_c_function                                       1          15.0%        0.0%       0.0%
+only_after_fn                                          1          20.0%        0.0%       0.0%
+EOF
+else
+cat <<'EOF'
+=== SPE 采样汇总 ===
+总记录数:      50000
+
+--- Cache 分布 ---
+L1 miss:   5000 (10.0%)
+LLC miss:  1000 (2.0%)
+Remote:    100 (0.2%)
+
+--- TLB 分布 ---
+TLB access: 20000 (40.0%)
+TLB miss:   1000 (5.0% of TLB)
+
+--- 分支预测 ---
+Branch miss: 800 (100.0% of branches)
+
+=== 按指令聚合 ===
+ADDRESS             COUNT     L1_MISS%   LLC_MISS%    BR_MISS%  SYMBOL
+ffff80001000            2          20.0%        0.0%       0.0%  _ZN4calc3dot17haaaa1111aaaa1111E
+ffff80002000            1          10.0%        0.0%       0.0%  plain_c_function
+ffff80003000            1          20.0%        0.0%       0.0%  only_before_fn
+
+=== 按函数聚合 ===
+FUNCTION                                            COUNT     L1_MISS%   LLC_MISS%    BR_MISS%
+_ZN4calc3dot17haaaa1111aaaa1111E                       2          20.0%        0.0%       0.0%
+plain_c_function                                       1          10.0%        0.0%       0.0%
+only_before_fn                                         1          20.0%        0.0%       0.0%
+EOF
+fi
+MOCKEOF
+
+    chmod +x "$MOCK_DIR/spe-parse.sh"
+    ln -sf "$SCRIPT" "$MOCK_DIR/spe-compare.sh"
+    touch "$MOCK_DIR/before.data" "$MOCK_DIR/after.data"
+}
+
+test_byfunction_hash_alignment() {
+    blue "测试: --by-function Rust hash 规范化对齐"
+    setup_mock_byfunction
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    # 两 hash 版本对齐为一条规范名，证明 normalize 生效
+    assert_contains "$output" "_ZN4calc3dot " "去 hash 后的规范函数名应出现在对比表"
+    assert_not_contains "$output" "17haaaa1111aaaa1111E" "before 臂 hash 后缀应被剥离"
+    assert_not_contains "$output" "17hbbbb2222bbbb2222E" "after 臂 hash 后缀应被剥离"
+    assert_contains "$output" "=== 函数级对比 ===" "应显示函数级对比段"
+}
+
+test_byfunction_only_in_lists() {
+    blue "测试: --by-function 单侧函数清单"
+    setup_mock_byfunction
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "--- 仅优化前 ---" "应显示仅优化前段"
+    assert_contains "$output" "only_before_fn" "only_before_fn 应出现在单侧清单"
+    assert_contains "$output" "--- 仅优化后 ---" "应显示仅优化后段"
+    assert_contains "$output" "only_after_fn" "only_after_fn 应出现在单侧清单"
+}
+
+test_byfunction_verdicts() {
+    blue "测试: --by-function 判定（下降=IMPROVED，上升=REGRESSED）"
+    setup_mock_byfunction
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    local rust_line plain_line
+    rust_line=$(echo "$output" | grep "_ZN4calc3dot" | head -1)
+    plain_line=$(echo "$output" | grep "plain_c_function" | head -1)
+    assert_contains "$rust_line" "[IMPROVED]" "Rust 函数 miss 20.0→10.0 应判 IMPROVED"
+    assert_contains "$plain_line" "[REGRESSED]" "plain_c 函数 miss 10.0→15.0 应判 REGRESSED"
+}
+
+test_byfunction_legacy_compatibility() {
+    blue "测试: 不带 --by-function 输出与旧格式一致"
+    setup_mock_byfunction
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "=== 对比报告 ===" "应显示全局对比报告"
+    assert_not_contains "$output" "按函数聚合" "无 --by-function 不应出现函数表"
+    assert_not_contains "$output" "仅优化前" "无 --by-function 不应出现单侧清单"
+    assert_not_contains "$output" "FUNCTION  COUNT" "无 --by-function 不应出现函数表头"
+}
+
+test_byfunction_json() {
+    blue "测试: -f json --by-function 输出函数级 JSON"
+    setup_mock_byfunction
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" -f json --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "\"functions\"" "JSON 应包含 functions 键"
+    assert_contains "$output" "\"name\": \"_ZN4calc3dot\"" "JSON 函数名应为去 hash 规范名"
+    assert_contains "$output" "\"only_in_before\"" "JSON 应包含 only_in_before 键"
+    assert_contains "$output" "\"only_in_after\"" "JSON 应包含 only_in_after 键"
+    assert_contains "$output" "\"only_before_fn\"" "JSON only_in_before 应含单侧函数"
+    assert_contains "$output" "\"verdict\": \"improved\"" "JSON verdict 应为 improved"
+    # 全局字段保留
+    assert_contains "$output" "\"before\"" "JSON 应保留全局 before 段"
+    assert_contains "$output" "\"diff\"" "JSON 应保留全局 diff 段"
+}
+
+test_byfunction_json_without_flag() {
+    blue "测试: -f json 不带 --by-function 无 functions 字段"
+    setup_mock_byfunction
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" -f json "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "\"before\"" "JSON 应保留全局字段"
+    assert_not_contains "$output" "\"functions\"" "无 --by-function JSON 不应含 functions"
+    assert_not_contains "$output" "\"only_in_before\"" "无 --by-function JSON 不应含 only_in_before"
+}
+
+test_byfunction_fallback() {
+    blue "测试: 无交集时回退全局汇总对比"
+    local tmpdir="$TEST_RESULTS_DIR/compare_mock"
+    rm -rf "$tmpdir"
+    mkdir -p "$tmpdir"
+    cat > "$tmpdir/spe-parse.sh" <<'MOCKEOF'
+#!/bin/bash
+while [[ $# -gt 0 ]]; do shift; done
+cat <<'EOF'
+=== SPE 采样汇总 ===
+总记录数:      100
+
+--- Cache 分布 ---
+L1 miss:   10 (10.0%)
+LLC miss:   2 (2.0%)
+Remote:    1 (1.0%)
+
+--- TLB 分布 ---
+TLB access: 20 (20.0%)
+TLB miss:   1 (5.0% of TLB)
+
+--- 分支预测 ---
+Branch miss: 2 (100.0% of branches)
+EOF
+MOCKEOF
+    chmod +x "$tmpdir/spe-parse.sh"
+    ln -sf "$SCRIPT" "$tmpdir/spe-compare.sh"
+    touch "$tmpdir/before.data" "$tmpdir/after.data"
+
+    local output
+    output=$(bash "$tmpdir/spe-compare.sh" --by-function "$tmpdir/before.data" "$tmpdir/after.data" 2>&1) || true
+    assert_contains "$output" "未找到可对齐的函数级数据，回退全局汇总对比" "无函数表应提示回退"
+    assert_contains "$output" "=== 对比报告 ===" "回退后应输出全局对比报告"
+    assert_not_contains "$output" "=== 函数级对比 ===" "回退时不应输出函数级对比表"
+}
+
+test_byfunction_fallback_json_empty_functions() {
+    blue "测试: 无交集 json 模式 functions 为空数组"
+    local tmpdir="$TEST_RESULTS_DIR/compare_mock"
+    rm -rf "$tmpdir"
+    mkdir -p "$tmpdir"
+    cat > "$tmpdir/spe-parse.sh" <<'MOCKEOF'
+#!/bin/bash
+while [[ $# -gt 0 ]]; do shift; done
+cat <<'EOF'
+=== SPE 采样汇总 ===
+总记录数:      100
+
+--- Cache 分布 ---
+L1 miss:   10 (10.0%)
+LLC miss:   2 (2.0%)
+Remote:    1 (1.0%)
+
+--- TLB 分布 ---
+TLB access: 20 (20.0%)
+TLB miss:   1 (5.0% of TLB)
+
+--- 分支预测 ---
+Branch miss: 2 (100.0% of branches)
+EOF
+MOCKEOF
+    chmod +x "$tmpdir/spe-parse.sh"
+    ln -sf "$SCRIPT" "$tmpdir/spe-compare.sh"
+    touch "$tmpdir/before.data" "$tmpdir/after.data"
+
+    local output
+    output=$(bash "$tmpdir/spe-compare.sh" -f json --by-function "$tmpdir/before.data" "$tmpdir/after.data" 2>&1) || true
+    assert_contains "$output" "\"functions\": []" "无函数表 JSON functions 应为空数组"
+    assert_contains "$output" "\"before\"" "回退 JSON 仍保留全局字段"
+}
+
+# =============================================================================
 # 测试组: 真实 SPE 环境
 # =============================================================================
 
@@ -444,6 +673,18 @@ run_all_tests() {
     blue "===== 测试组: 错误处理 ====="
     echo ""
     test_missing_parse_script
+    echo ""
+
+    blue "===== 测试组: 函数级对比与 Rust hash 对齐 ====="
+    echo ""
+    test_byfunction_hash_alignment
+    test_byfunction_only_in_lists
+    test_byfunction_verdicts
+    test_byfunction_legacy_compatibility
+    test_byfunction_json
+    test_byfunction_json_without_flag
+    test_byfunction_fallback
+    test_byfunction_fallback_json_empty_functions
     echo ""
 
     blue "===== 测试组: 真实 SPE 环境 ====="
