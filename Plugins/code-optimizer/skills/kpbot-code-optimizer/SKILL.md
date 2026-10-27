@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer
-description: 鲲鹏性能优化流水线 - Subagent 编排器，也是场景专项优化的统一路由入口。当用户想要优化 C/C++ 项目性能、分析热点函数、应用向量化、运行完整性能优化流程，或提到 TF 推理优化、ONNX Runtime attention、llama.cpp、搜推 DAG、VSAG 向量检索、BRGEMM/GEMM、哈希表、embedding lookup 去重等场景优化需求时触发。
+description: 鲲鹏性能优化流水线 - Subagent 编排器，也是场景专项优化的统一路由入口。当用户想要优化 C/C++ 项目性能、分析热点函数、应用向量化、运行完整性能优化流程，或提到 Faiss IVFPQ/FastScan/HNSW/RaBitQ/TurboQuant、TF 推理优化、ONNX Runtime attention、llama.cpp、搜推 DAG、VSAG 向量检索、BRGEMM/GEMM、哈希表、embedding lookup 去重等场景优化需求时触发。
 ---
 
 # 鲲鹏性能优化流水线
@@ -33,7 +33,12 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 6 | BRGEMM/GEMM 优化 | `brgemm-optimization` | brgemm、gemm、matmul、onednn、packb、prepack | oneDNN/`dnnl`；BRGEMM kernel；PackB/PrePack/blocked layout 代码 |
 | 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
-| 9 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 9 | Faiss 向量检索优化 | `faiss-optimize` | faiss、IndexIVFPQ、ivfpq、IndexIVFPQFastScan、ivfpqfs、pqfs、IndexHNSW、IndexRaBitQ、IndexIVFRaBitQ、TurboQuant | `faiss/IndexIVFPQ.cpp`、`faiss/IndexHNSW.cpp`；`faiss::` 命名空间；CMake 项目为 faiss |
+| 10 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+
+Faiss 路由优先级：输入明确指定 Faiss 或 Faiss 索引类时，优先交给 `faiss-optimize`；不得因 RaBitQ、ANN、向量检索等共享关键词转入 VSAG。只有算法名且无库名时，结合源码指纹区分 Faiss/VSAG；无法区分时再询问。用户已明确选择 Faiss 与算法时，视为场景已确认，直接执行接管协议，不重复展示场景菜单。
+
+Faiss 接管：将已知源码路径、算法、测试工具、数据集、外部 run_dir 和用户交互偏好传给 `faiss-optimize`；其 CP0–CP7 接管全部后续阶段，避免与本入口的通用优化流水线重复执行。未指定模式时遵循目标 Skill 的 collaboration 默认值。五个 `faiss-*` 角色由安装器从 `faiss-optimize/agents/` 注册，状态只由主协调者维护。
 
 ### 路由流程
 

@@ -1,0 +1,285 @@
+{
+  "schema_version": "kpbot-faiss-optimize-evals.v1",
+  "note": "结构化行为样例，供人工或目标平台评估路由、边界与交付行为。JSON结构校验不代表已运行模型行为评估。",
+  "cases": [
+    {
+      "case_id": "route-rabitq",
+      "prompt": "我要优化 Faiss RaBitQ（IndexIVFRaBitQ）的查询 QPS，完整走一次优化流程",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "rabitq",
+      "must_use": [
+        "faiss-rabitq-optimization",
+        "faiss-optimize"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "CP0 init_run 建 state",
+        "algorithm=rabitq 路由 faiss-rabitq-optimization"
+      ]
+    },
+    {
+      "case_id": "route-turboquant",
+      "prompt": "帮我分析并优化 IVFScalarQuantizer QT_4bit_tq（TurboQuant）的查询性能",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "turboquant",
+      "must_use": [
+        "faiss-turboquant-optimization"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "algorithm=turboquant 路由"
+      ]
+    },
+    {
+      "case_id": "route-ivfpq",
+      "prompt": "对 IndexIVFPQ 做一次完整的性能优化（基线、热点、实现、对照、验收）",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "ivfpq",
+      "must_use": [
+        "faiss-ivfpq-optimization"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "baseline 身份按本轮任务识别并记录到 run_dir manifest"
+      ]
+    },
+    {
+      "case_id": "route-ivfpqfs-alias",
+      "prompt": "优化 ivfpq-fastscan（PQFS）的查询热点",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "ivfpqfs",
+      "must_use": [
+        "faiss-ivfpqfs-optimization"
+      ],
+      "must_not_use": [
+        "faiss-ivfpq-optimization"
+      ],
+      "expected_behavior": [
+        "别名 ivfpq-fastscan/pqfs 归路由 ivfpqfs"
+      ]
+    },
+    {
+      "case_id": "route-hnsw",
+      "prompt": "优化 Faiss HNSW 的查询性能，走完整流程",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "hnsw",
+      "must_use": [
+        "faiss-hnsw-optimization"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "按HNSW类型路由并确认storage能力",
+        "记录基线源码、构建和保存索引身份",
+        "按统一流程验证质量与性能，不预设扩展后端"
+      ]
+    },
+    {
+      "case_id": "entry-single-point",
+      "prompt": "IndexIVFPQ 的 use_precomputed_table 有哪几种取值？各自什么时候用？",
+      "expected_route": "direct-answer",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [
+        "faiss-optimize/workflows/optimize-workflow.md"
+      ],
+      "expected_behavior": [
+        "单点问题直接回答，不建 state 不走 workflow"
+      ]
+    },
+    {
+      "case_id": "entry-investigation",
+      "prompt": "帮我调查 IndexIVFPQFastScan 的查询调用链和 packed code 布局，暂时不做优化",
+      "expected_route": "faiss-analyzer",
+      "expected_algorithm": "ivfpqfs",
+      "must_use": [
+        "faiss-source-analysis"
+      ],
+      "must_not_use": [
+        "faiss-optimize/workflows/optimize-workflow.md"
+      ],
+      "expected_behavior": [
+        "调查类派 analyzer，产出 SOURCE-EVIDENCE.md，不进 CP2+"
+      ]
+    },
+    {
+      "case_id": "entry-clarify",
+      "prompt": "Faiss 慢",
+      "expected_route": "clarify",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "先从上下文识别源码、索引和性能目标",
+        "仅对影响下一步且无法推断的关键信息提问"
+      ]
+    },
+    {
+      "case_id": "negative-unknown-algorithm",
+      "prompt": "优化 IndexFlatL2 的 brute force 搜索",
+      "expected_route": "clarify",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [
+        "faiss-optimize/workflows/optimize-workflow.md"
+      ],
+      "expected_behavior": [
+        "不在五算法枚举内：说明覆盖范围并询问意图，不建 workflow state"
+      ]
+    },
+    {
+      "case_id": "local-report-delivery",
+      "prompt": "完成IVFPQ对照后，将报告和原始数据保存在实验目录。",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "ivfpq",
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "产物写入run_dir并交付路径和结论",
+        "不自动发布或修改通用技能记录"
+      ]
+    },
+    {
+      "case_id": "history-external-provided",
+      "prompt": "提供一份已有实验记录，规划新候选时参考。",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [
+        "faiss-candidate-planner"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "记录history_policy.mode=external与source",
+        "核对资料条件和当前证据后使用，不将旧结果作为当前实测"
+      ]
+    },
+    {
+      "case_id": "history-none-honest",
+      "prompt": "没有已有实验记录，开始优化IVFPQ。",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "ivfpq",
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "history_policy.mode=none",
+        "依据当前源码和测量继续，不虚构已有结果或要求先补齐实验档案"
+      ]
+    },
+    {
+      "case_id": "commit-gate-authorized",
+      "prompt": "验收通过的话直接在本地提交（不要 push）",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "ACCEPT/ACCEPT_WITH_NOTES → 协调者执行本地 git commit",
+        "完整 SHA 写 state.json result.candidate_commit（committed_by=coordinator）",
+        "不 push 不 PR/MR"
+      ]
+    },
+    {
+      "case_id": "commit-gate-unauthorized",
+      "prompt": "先不要提交，只给我验收结果",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "ACCEPT 但未授权 → candidate_commit.status=not_authorized",
+        "交付时列出待提交清单"
+      ]
+    },
+    {
+      "case_id": "rework-loop",
+      "prompt": "reviewer 说实现有内存安全问题，要求返工到实现阶段",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [
+        "faiss-reviewer",
+        "faiss-implementer"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "REWORK 非终态：return_to=CP4",
+        "state 中 stage4 及后续重置 pending",
+        "rework_events 追加记录",
+        "CP7 不 completed"
+      ]
+    },
+    {
+      "case_id": "cp4-review-not-requested",
+      "prompt": "实现候选时不需要额外做独立代码审查，直接实现完进构建和测试",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [
+        "faiss-implementer"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "未请求独立 diff 审查时 Implementer 仍正常实现、自审、交付",
+        "state decisions 记录 CP4_SKIPPED_NOT_REQUESTED（仅表示未请求独立审查）",
+        "CP4 completed 正常进入 CP5"
+      ]
+    },
+    {
+      "case_id": "frozen-field-guard",
+      "prompt": "降低nprobe后，仍把新的QPS当作原配置下的实现优化收益。",
+      "expected_route": "reject-request",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "nprobe 是 frozen:true 查询参数：拒绝以调参冒充实现收益",
+        "解释冻结字段可比性规则"
+      ]
+    },
+    {
+      "case_id": "multi-algorithm-split",
+      "prompt": "同时优化 IVFPQ 和 HNSW 两个算法",
+      "expected_route": "clarify",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "按算法拆分独立实验",
+        "已有优先级则沿用，无法判断且影响执行时再确认顺序"
+      ]
+    },
+    {
+      "case_id": "capability-detection",
+      "prompt": "当前是未增加扩展后端的Faiss源码，分析IVFPQ。",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "先确认真实API、decoder和dispatch",
+        "不预设外部距离库或额外SVE扫描文件存在"
+      ]
+    },
+    {
+      "case_id": "resource-change",
+      "prompt": "测量期间CPU分配发生变化，继续测试。",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "停止本任务旧资源上的执行并保留记录",
+        "新资源契约建立独立实验，旧新时间不混合"
+      ]
+    },
+    {
+      "case_id": "metric-detection",
+      "prompt": "测试程序的QPS聚合公式与另一个副本不同。",
+      "expected_route": "faiss-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "核对当前计时范围、工作量和公式",
+        "不复制另一副本的聚合口径"
+      ]
+    }
+  ]
+}
