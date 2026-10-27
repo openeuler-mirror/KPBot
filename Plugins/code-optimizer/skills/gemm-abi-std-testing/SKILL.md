@@ -1,4 +1,4 @@
-﻿---
+---
 name: gemm-abi-std-testing
 description: |
   标准符合性测试框架搭建方法论：官方标准条款驱动判定 + 双槽对照（slotA 参照库 / DUT 被测库）+ 确定性 seed 派生 + 多通道判定 + 变异测试度量套件完整性 + 多平台一键 CI 与基线 CSV 回归判定。已在 GEMM/FFT 两类数值计算模块完整实证。
@@ -241,7 +241,11 @@ bash layer1_netlib/run_drivers.sh || RC=1        # 层1 官方驱动自检
 $ENV ./verify --dtype all --tol norm --out ci_l2.csv > ci_l2.log 2>&1 || RC=1
 F=$(grep -c "DUT=FAIL" ci_l2.log || true)        # 按槽归责：只数 DUT 槽
 [ "$F" = "0" ] || { echo "LAYER2: $F DUT failures"; RC=1; }
-[ -x layer3_cxx/test_upper ] && ./layer3_cxx/test_upper || echo "SKIPPED: 上层标准二进制不在本机构建"
+if [ -x layer3_cxx/test_upper ]; then
+    ./layer3_cxx/test_upper || { echo "LAYER3: 上层标准测试 FAILED"; RC=1; }
+else
+    echo "SKIPPED: 上层标准二进制不在本机构建"
+fi
 echo "CONFORMANCE RC=$RC"; exit $RC
 ```
 
