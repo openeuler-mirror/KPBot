@@ -72,7 +72,7 @@ KPBot 提供两种安装方式：npm 包（推荐，正式版本）和 git clone
 
 ```bash
 # 全局安装 CLI
-npm install -g kpbot
+npm install -g @kunpengbot/kpbot
 
 # 安装 skills 到目标工具
 kpbot install global opencode      # 全局安装到 OpenCode
@@ -82,7 +82,7 @@ kpbot install project opencode /path/to/project  # 指定路径
 
 安装后验证：
 ```bash
-npm ls -g kpbot                    # 确认版本
+npm ls -g @kunpengbot/kpbot         # 确认版本
 opencode debug skill | grep optimize  # 确认 skills 注册（OpenCode）
 ```
 
