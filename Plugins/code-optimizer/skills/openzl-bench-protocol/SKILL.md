@@ -76,7 +76,19 @@ python3 scripts/prepare_kvdata.py qwen_test_kv.pt --n-true 113541120   # BF16（
 python3 scripts/prepare_kvdata.py qwen_test_kv_e4m3.pt --dtype e4m3    # FP8 E4M3
 ```
 
-产出：全量 `.bin` + 8MB 快速验证切片 + 统计（指数 top-k 覆盖率、边际熵、成对联合熵）。
+**安全前置**：`.pt` 是 pickle 格式，脚本固定以 `torch.load(..., weights_only=True)` 加载（仅反序列化纯张量，拒绝任意对象），并对 torch < 2.6 直接报错退出（旧版默认 `weights_only=False`，安全性随机器上的 torch 版本漂移）。即便如此，输入 `.pt` 仍只能来自本机可信产出或已校验哈希的来源，禁止对来路不明的下载文件直接执行本脚本。
+
+产出：全量 `.bin` + 8MB 快速验证切片（默认 `--slice-mb 8`）+ 统计（指数 top-k 覆盖率、边际熵、成对联合熵）。
+
+**文件名契约**（三脚本统一按此推导：全量 `<stem>.bin`、切片 `<stem>_<N>MB.bin`，stem = 输入 `.pt` 文件名去扩展名，N = `--slice-mb`）：
+
+| 输入 .pt | 格式 | 全量 | 8MB 切片（默认） | 128MB 切片（`--slice-mb 128`） |
+|----------|------|------|------------------|-------------------------------|
+| `qwen_test_kv.pt` | bf16 | `qwen_test_kv.bin` | `qwen_test_kv_8MB.bin` | `qwen_test_kv_128MB.bin` |
+| `qwen_test_kv_e4m3.pt` | e4m3 | `qwen_test_kv_e4m3.bin` | `qwen_test_kv_e4m3_8MB.bin` | `qwen_test_kv_e4m3_128MB.bin` |
+| `qwen_test_kv_e5m2.pt` | e5m2 | `qwen_test_kv_e5m2.bin` | `qwen_test_kv_e5m2_8MB.bin` | `qwen_test_kv_e5m2_128MB.bin` |
+
+`bench_kv.sh -s 8MB` 与 `td_loop.sh --slice <N>MB`（默认 8MB，与 `--slice-mb` 默认值对齐）按同一规则在 `KVDATA_DIR` 内定位文件；td_loop.sh 请求的切片缺失时回退全量并输出 WARN（非静默）。
 
 统计的意义：
 
@@ -122,7 +134,7 @@ bash <TMA脚本路径> -s 4 -e 4 -c "scripts/td_loop.sh --cpu 4 --duration 20 --
 | `scripts/bench_kv.sh` | KV 场景吞吐 + 压缩率表（bf16/e4m3/e5m2 × 熵模式 × 绑核），缺数据/场景自动跳过 |
 | `scripts/td_loop.sh` | topdown 采集热点负载（compress/decompress × 格式 × 单轮时长/多轮） |
 
-三脚本共享约定：`KVDATA_DIR`（默认 `$HOME/kvdata`）与 `UB`（unitBench 路径，默认 `./unitBench`）环境变量；数据文件名与 prepare_kvdata.py 产出对齐。
+三脚本共享约定：`KVDATA_DIR`（默认 `$HOME/kvdata`）与 `UB`（unitBench 路径，默认 `./unitBench`）环境变量；数据文件名遵循「数据准备」节的文件名契约表（`<stem>.bin` / `<stem>_<N>MB.bin`），bench_kv.sh 与 td_loop.sh 按同一规则推导，无需手工重命名。
 
 ## Anti-patterns
 

@@ -117,6 +117,57 @@ class NoPythonObjectMaterializationTest(unittest.TestCase):
         self.assertNotIn("Counter(", source)
 
 
+class LoadInputSecurityTest(unittest.TestCase):
+    """P2 regression guard: .pt deserialization must be pinned to the
+    restricted weights_only unpickler and refuse torch < 2.6 (whose default
+    weights_only=False allows pickle-based arbitrary code execution)."""
+
+    def setUp(self):
+        self.pk = load_module()
+        self.calls = []
+        self._saved_version = torch.__dict__.get("__version__")
+        self._saved_load = torch.__dict__.get("load")
+
+    def tearDown(self):
+        for name, value in (("__version__", self._saved_version),
+                            ("load", self._saved_load)):
+            if value is None:
+                torch.__dict__.pop(name, None)
+            else:
+                setattr(torch, name, value)
+
+    def fake_load(self, path, **kwargs):
+        self.calls.append((path, kwargs))
+        return FakeTensor("torch.bfloat16")
+
+    def test_torch_below_2_6_exits_without_loading(self):
+        torch.__version__ = "2.5.1"
+        torch.load = self.fake_load
+        with self.assertRaises(SystemExit) as ctx:
+            self.pk.load_input("kv.pt")
+        self.assertIn("2.6", str(ctx.exception))
+        self.assertEqual(self.calls, [], "must not torch.load on old versions")
+
+    def test_torch_2_6_loads_with_weights_only(self):
+        torch.__version__ = "2.6.0"
+        torch.load = self.fake_load
+        self.pk.load_input("kv.pt")
+        self.assertEqual(self.calls,
+                         [("kv.pt", {"map_location": "cpu", "weights_only": True})])
+
+    def test_version_with_local_suffix_parses(self):
+        torch.__version__ = "2.7.0+cu126"
+        torch.load = self.fake_load
+        self.pk.load_input("kv.pt")
+        self.assertEqual(len(self.calls), 1)
+
+    def test_source_has_no_unpinned_torch_load(self):
+        for line in SCRIPT.read_text(encoding="utf-8").splitlines():
+            if "torch.load(" in line:
+                self.assertIn("weights_only=True", line,
+                              f"unpinned torch.load: {line.strip()}")
+
+
 @unittest.skipUnless(HAS_NUMPY, "numpy not installed")
 class StatsNumericsTest(unittest.TestCase):
     """Validate distribution stats against a straightforward reference

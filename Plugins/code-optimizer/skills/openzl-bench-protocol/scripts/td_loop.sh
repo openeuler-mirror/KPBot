@@ -30,7 +30,7 @@ ROUNDS=0
 FORMAT="e5m2"
 MODE=0
 DATA=""
-SLICE="128MB"
+SLICE="8MB"   # 与 prepare_kvdata.py 默认 --slice-mb 8 对齐
 KVDATA_DIR="${KVDATA_DIR:-$HOME/kvdata}"
 UB="${UB:-./unitBench}"
 
@@ -59,35 +59,46 @@ case "$SCENARIO" in
 esac
 
 # ---- resolve scenario & data (与 bench_kv.sh 同款约定) ----
+# 文件名契约与 prepare_kvdata.py 产出一致（见 SKILL.md 数据准备节）：
+# 全量 <stem>.bin，切片 <stem>_<N>MB.bin，stem = 输入 .pt 文件名去扩展名
 case "$FORMAT" in
     bf16)
         case "$SCENARIO" in
             compress)   SCEN=kvBf16Encode ;;
             decompress) SCEN=kvBf16Decode ;;
         esac
-        declare -A FILES=( [full]=qwen_test_kv.bin [8MB]=qwen_kv_8MB.bin [128MB]=bf16_128MB.bin )
+        STEM=qwen_test_kv
         ;;
     e4m3)
         case "$SCENARIO" in
             compress)   SCEN=kvFp8Encode ;;
             decompress) SCEN=kvFp8Decode ;;
         esac
-        declare -A FILES=( [full]=qwen_test_kv_e4m3.bin [8MB]=qwen_kv_e4m3_8MB.bin [128MB]=e4m3_128MB.bin )
+        STEM=qwen_test_kv_e4m3
         ;;
     e5m2)
         case "$SCENARIO" in
             compress)   SCEN=kvE5M2Encode ;;
             decompress) SCEN=kvE5M2Decode ;;
         esac
-        declare -A FILES=( [full]=qwen_test_kv_e5m2.bin [8MB]=qwen_kv_e5m2_8MB.bin [128MB]=e5m2_128MB.bin )
+        STEM=qwen_test_kv_e5m2
         ;;
     *) echo "ERROR: invalid format '$FORMAT' (bf16|e4m3|e5m2)" >&2; exit 1 ;;
 esac
 
+if [ "$SLICE" != "full" ] && ! [[ "$SLICE" =~ ^[0-9]+MB$ ]]; then
+    echo "ERROR: invalid --slice '$SLICE' (full | <N>MB)" >&2; exit 1
+fi
+
 if [ -z "$DATA" ]; then
-    DATA="$KVDATA_DIR/${FILES[$SLICE]}"
-    if [ ! -f "$DATA" ]; then   # 指定切片缺失时回退全量
-        DATA="$KVDATA_DIR/${FILES[full]}"
+    if [ "$SLICE" = "full" ]; then
+        DATA="$KVDATA_DIR/$STEM.bin"
+    else
+        DATA="$KVDATA_DIR/${STEM}_${SLICE}.bin"
+        if [ ! -f "$DATA" ]; then   # 切片缺失回退全量：显式 WARN，避免误以为在测切片
+            echo "WARN: slice missing: $DATA; falling back to full $STEM.bin" >&2
+            DATA="$KVDATA_DIR/$STEM.bin"
+        fi
     fi
 fi
 [ -f "$DATA" ] || { echo "ERROR: data not found: $DATA (prepare via prepare_kvdata.py)" >&2; exit 1; }

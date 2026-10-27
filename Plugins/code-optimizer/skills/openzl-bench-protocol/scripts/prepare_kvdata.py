@@ -38,6 +38,43 @@ BYTES_PER_ELT = {"bf16": 2, "e4m3": 1, "e5m2": 1}
 # histogram chunk length: keeps per-chunk temporary copies bounded (~32MB)
 _BINCOUNT_CHUNK = 1 << 22
 
+# minimum torch version for .pt loading: before 2.6 torch.load defaults to
+# weights_only=False (full pickle), so the safe behavior would depend on the
+# torch version installed on the machine; refuse older releases explicitly
+MIN_TORCH = (2, 6)
+
+
+def _torch_version(torch):
+    """(major, minor) from torch.__version__ ('2.6.0+cu124' -> (2, 6))."""
+    ver = []
+    for part in torch.__version__.split(".")[:2]:
+        digits = ""
+        for ch in part:
+            if not ch.isdigit():
+                break
+            digits += ch
+        ver.append(int(digits) if digits else 0)
+    return tuple(ver)
+
+
+def load_input(path):
+    """Load a pure-tensor .pt through the restricted weights_only unpickler.
+
+    .pt is pickle-based: without weights_only, a crafted file executes
+    arbitrary code at load time. weights_only=True restricts deserialization
+    to tensors and primitives, which is all this script consumes. torch < 2.6
+    is refused because its torch.load defaults to weights_only=False and its
+    restricted loader lacks later hardening.
+    """
+    import torch
+    if _torch_version(torch) < MIN_TORCH:
+        raise SystemExit(
+            f"ERROR: torch {torch.__version__} < {MIN_TORCH[0]}.{MIN_TORCH[1]}: "
+            "this script only loads .pt via torch.load(weights_only=True), "
+            "whose safe defaults are not guaranteed on older torch. "
+            f"Upgrade torch (pip install -U 'torch>={MIN_TORCH[0]}.{MIN_TORCH[1]}') and retry.")
+    return torch.load(path, map_location="cpu", weights_only=True)
+
 
 def detect_dtype(tensor):
     t = str(tensor.dtype)
@@ -137,9 +174,7 @@ def main():
     ap.add_argument("--no-slice", action="store_true", help="skip slice emission")
     args = ap.parse_args()
 
-    import torch
-
-    x = torch.load(args.input, map_location="cpu")
+    x = load_input(args.input)
     dtype = args.dtype if args.dtype != "auto" else detect_dtype(x)
     x = x.contiguous().view(-1)
     if args.n_true > 0:

@@ -4,10 +4,13 @@
 #   prepare_kvdata.py  dtype 探测 / 位布局 / 熵计算 / CLI 契约（torch stub）
 #                      + 数值回归（分块 bincount vs Counter 参考实现，
 #                      含跨块边界，numpy 缺失时自动跳过）
-#                      + P2 回归看护（禁止 .tolist()/Counter 物化全量 Python 对象）
+#                      + P2 回归看护（禁止 .tolist()/Counter 物化全量 Python 对象；
+#                      torch.load 固定 weights_only=True，torch<2.6 明确报错）
 #   bench_kv.sh        mock unitBench 输出解析（MB/s / outbytes / R）、
-#                      缺数据与未注册场景的跳过行为、退出码
-#   td_loop.sh         参数契约、compress/decompress 吞吐与压缩比解析、rounds 模式
+#                      缺数据与未注册场景的跳过行为、退出码、
+#                      8MB 切片文件名契约（<stem>_8MB.bin，与 prepare_kvdata 对齐）
+#   td_loop.sh         参数契约、compress/decompress 吞吐与压缩比解析、rounds 模式、
+#                      切片文件名契约（默认 8MB、缺失回退带 WARN、非法 --slice 报错）
 #
 # 运行：
 #   bash skills/openzl-bench-protocol/cases/script-contract/run.sh
@@ -31,7 +34,7 @@ assert:
     file: results/result.json
     field: prepare_kvdata_ran
     op: gte
-    expect: 8
+    expect: 12
   - type: json_field
     file: results/result.json
     field: prepare_kvdata_failures
@@ -40,7 +43,7 @@ assert:
     file: results/result.json
     field: bench_kv_ran
     op: gte
-    expect: 4
+    expect: 5
   - type: json_field
     file: results/result.json
     field: bench_kv_failures
@@ -49,7 +52,7 @@ assert:
     file: results/result.json
     field: td_loop_ran
     op: gte
-    expect: 6
+    expect: 10
   - type: json_field
     file: results/result.json
     field: td_loop_failures

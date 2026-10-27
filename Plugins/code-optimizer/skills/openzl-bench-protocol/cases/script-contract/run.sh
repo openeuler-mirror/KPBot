@@ -6,7 +6,8 @@
 #   prepare_kvdata  python unit tests (torch stubbed; numpy parts optional)
 #   bench_kv        bench_kv.sh against a mock unitBench + mock data files
 #   td_loop         td_loop.sh argument/parsing contract against the same mock
-#   static          bash -n syntax checks + P2 regression guard (no .tolist())
+#   static          bash -n syntax checks + P2 regression guards (no .tolist(),
+#                   torch.load pinned to weights_only, no legacy slice names)
 #
 # Usage: bash cases/script-contract/run.sh   (from anywhere)
 
@@ -50,6 +51,16 @@ if grep -q "\.tolist()" "$PREPARE" || grep -q "Counter(" "$PREPARE"; then
 else
     check static "prepare_kvdata.py must not materialize python objects (P2)" 0
 fi
+if grep -n "torch\.load(" "$PREPARE" | grep -qv "weights_only=True"; then
+    check static "prepare_kvdata.py torch.load pinned to weights_only=True (P2)" 1
+else
+    check static "prepare_kvdata.py torch.load pinned to weights_only=True (P2)" 0
+fi
+if grep -Eq "qwen_kv_|(bf16|e4m3|e5m2)_[0-9]+MB" "$BENCH_KV" "$TD_LOOP"; then
+    check static "bench_kv.sh/td_loop.sh free of legacy slice filenames (P2)" 1
+else
+    check static "bench_kv.sh/td_loop.sh free of legacy slice filenames (P2)" 0
+fi
 
 # ---------------- prepare_kvdata python tests ----------------
 PY_OUT="$(python3 "$TEST_PY" 2>&1)"
@@ -88,6 +99,13 @@ mkdir -p "$MOCK_DATA"
 # e4m3 data only; 91356 bytes so ratio = 91356/45678 = 2.000
 dd if=/dev/zero of="$MOCK_DATA/qwen_test_kv_e4m3.bin" bs=91356 count=1 2>/dev/null
 
+# slice-contract data: full (91356 B -> R=2.000) plus an 8MB slice named per
+# prepare_kvdata.py convention (45678 B -> R=1.000, tells the two files apart)
+MOCK_DATA_SLICE="$TMP/kvdata-slice"
+mkdir -p "$MOCK_DATA_SLICE"
+dd if=/dev/zero of="$MOCK_DATA_SLICE/qwen_test_kv_e4m3.bin" bs=91356 count=1 2>/dev/null
+dd if=/dev/zero of="$MOCK_DATA_SLICE/qwen_test_kv_e4m3_8MB.bin" bs=45678 count=1 2>/dev/null
+
 # ---------------- bench_kv tests ----------------
 "$BENCH_KV" -h >/dev/null 2>&1; check bk "bench_kv.sh --help exits 0" $?
 
@@ -113,6 +131,14 @@ if [ $RC -eq 0 ] && echo "$OUT" | grep -q "SKIP kvFp8Decode: scenario not regist
     check bk "unregistered scenario skipped, registered one still runs" 0
 else
     check bk "unregistered scenario skipped, registered one still runs" 1
+fi
+
+OUT="$("$BENCH_KV" -f e4m3 -s 8MB -d "$MOCK_DATA_SLICE" -u "$MOCK_UB" 2>&1)"; RC=$?
+# slice file is 45678 B and mock outbytes=45678 -> R=1.000 (full file gives 2.000)
+if [ $RC -eq 0 ] && echo "$OUT" | grep -q "kvFp8Encode.*123\.4.*45678.*1\.000"; then
+    check bk "8MB slice resolved as <stem>_8MB.bin (prepare_kvdata naming)" 0
+else
+    check bk "8MB slice resolved as <stem>_8MB.bin (prepare_kvdata naming)" 1
 fi
 
 # ---------------- td_loop tests ----------------
@@ -145,6 +171,33 @@ if [ $RC -eq 0 ] && echo "$OUT" | grep -q "rounds=3"; then
 else
     check td "explicit rounds mode reports rounds=3" 1
 fi
+
+OUT="$(UB="$MOCK_UB" KVDATA_DIR="$MOCK_DATA_SLICE" "$TD_LOOP" --scenario compress --format e4m3 --cpu 0 --slice 8MB 2>&1)"; RC=$?
+if [ $RC -eq 0 ] && echo "$OUT" | grep -q "data=$MOCK_DATA_SLICE/qwen_test_kv_e4m3_8MB.bin" \
+   && echo "$OUT" | grep -q "ratio=1\.000"; then
+    check td "--slice 8MB resolves <stem>_8MB.bin (prepare_kvdata naming)" 0
+else
+    check td "--slice 8MB resolves <stem>_8MB.bin (prepare_kvdata naming)" 1
+fi
+
+OUT="$(UB="$MOCK_UB" KVDATA_DIR="$MOCK_DATA_SLICE" "$TD_LOOP" --scenario compress --format e4m3 --cpu 0 2>&1)"; RC=$?
+if [ $RC -eq 0 ] && echo "$OUT" | grep -q "qwen_test_kv_e4m3_8MB.bin"; then
+    check td "default slice is 8MB (aligned with prepare_kvdata --slice-mb)" 0
+else
+    check td "default slice is 8MB (aligned with prepare_kvdata --slice-mb)" 1
+fi
+
+OUT="$(UB="$MOCK_UB" KVDATA_DIR="$MOCK_DATA" "$TD_LOOP" --scenario compress --format e4m3 --cpu 0 --slice 128MB 2>&1)"; RC=$?
+if [ $RC -eq 0 ] && echo "$OUT" | grep -q "WARN" \
+   && echo "$OUT" | grep -q "data=$MOCK_DATA/qwen_test_kv_e4m3.bin"; then
+    check td "missing slice falls back to full with WARN (not silent)" 0
+else
+    check td "missing slice falls back to full with WARN (not silent)" 1
+fi
+
+UB="$MOCK_UB" KVDATA_DIR="$MOCK_DATA" "$TD_LOOP" --scenario compress --format e4m3 --cpu 0 --slice bogus \
+    >/dev/null 2>&1; RC=$?
+check td "invalid --slice exits non-zero" $([ $RC -ne 0 ] && echo 0 || echo 1)
 
 # ---------------- result.json ----------------
 SUCCESS=false

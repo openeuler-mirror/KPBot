@@ -54,16 +54,24 @@ done
 [ "$FORMATS" = "all" ] && FORMATS="bf16,e4m3,e5m2"
 IFS=',' read -r -a FMT_LIST <<< "$FORMATS"
 
-# format -> (full file, 8MB file) and scenario prefix
-file_of() { # $1=fmt $2=slice
-    case "$1:$2" in
-        bf16:full) echo "qwen_test_kv.bin" ;;
-        bf16:8MB)  echo "qwen_kv_8MB.bin" ;;
-        e4m3:full) echo "qwen_test_kv_e4m3.bin" ;;
-        e4m3:8MB)  echo "qwen_kv_e4m3_8MB.bin" ;;
-        e5m2:full) echo "qwen_test_kv_e5m2.bin" ;;
-        e5m2:8MB)  echo "qwen_kv_e5m2_8MB.bin" ;;
+# Naming contract (shared with td_loop.sh / prepare_kvdata.py, see SKILL.md):
+# <stem>.bin (full) and <stem>_<N>MB.bin (slice), where stem is the input .pt
+# basename without extension, e.g. qwen_test_kv_e4m3.pt -> qwen_test_kv_e4m3*.
+stem_of() { # $1=fmt
+    case "$1" in
+        bf16) echo "qwen_test_kv" ;;
+        e4m3) echo "qwen_test_kv_e4m3" ;;
+        e5m2) echo "qwen_test_kv_e5m2" ;;
     esac
+}
+file_of() { # $1=fmt $2=slice (full | <N>MB)
+    local stem
+    stem="$(stem_of "$1")"
+    if [ "$2" = "full" ]; then
+        echo "$stem.bin"
+    else
+        echo "${stem}_$2.bin"
+    fi
 }
 scen_prefix() { # bf16->Bf16, e4m3->Fp8, e5m2->E5M2
     case "$1" in
