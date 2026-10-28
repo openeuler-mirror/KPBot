@@ -1,4 +1,4 @@
-"""One-shot memory backend CLI (OpenViking or TencentDB), separate from the call/serve/demo commands.
+"""One-shot memory backend CLI (OpenViking, TencentDB or mem0), separate from the call/serve/demo commands.
 
 Every invocation creates a fresh client, initializes it from explicit trusted
 configuration, executes one operation, and closes the client in finally. There
@@ -54,8 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="kpbot memory backend",
         description=(
-            "One-shot memory backend client (OpenViking or TencentDB): initialize, "
-            "perform one operation, then close. CLI invocations have no cross-process "
+            "One-shot memory backend client (OpenViking, TencentDB or mem0): initialize, "
+            "run one operation, then close. CLI invocations have no cross-process "
             "state; initialize/status are fresh readiness probes, close releases only "
             "this invocation's client, not the service."
         ),
@@ -148,6 +148,9 @@ def create_backend(backend: str = "openviking") -> Any:
     if backend == "tencentdb":
         from .southbound import SouthboundMemory
         return SouthboundMemory()
+    if backend == "mem0":
+        from .backends.mem0_http import Mem0Backend
+        return Mem0Backend()
     from .backends.openviking_http import OpenVikingBackend
     return OpenVikingBackend()
 

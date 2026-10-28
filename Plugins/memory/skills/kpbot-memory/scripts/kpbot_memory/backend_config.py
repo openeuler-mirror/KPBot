@@ -28,11 +28,15 @@ BACKEND_OPTIONS = {
         {"endpoint", "api_key", "service_id", "agent_id", "owner_id",
          "max_input_bytes", "chunk_chars"}
     ),
+    "mem0": frozenset(
+        {"endpoint", "max_input_bytes", "derive_memories"}
+    ),
 }
 _OPTION_STRINGS = frozenset(
     {"endpoint", "api_key", "account_id", "user_id", "service_id", "agent_id", "owner_id"}
 )
 _OPTION_INTEGERS = frozenset({"max_input_bytes", "chunk_chars"})
+_OPTION_BOOLEANS = frozenset({"derive_memories"})
 _OPENVIKING_MODES = frozenset({"vectors_only", "semantic_and_vectors"})
 
 __all__ = ["BackendConfigError", "load_config", "validate_config"]
@@ -110,6 +114,9 @@ def _validate_options(backend: str, options: dict) -> None:
     for name in _OPTION_INTEGERS & options.keys():
         if type(options[name]) is not int or options[name] <= 0:
             raise BackendConfigError(f"backend option {name} must be a positive integer")
+    for name in _OPTION_BOOLEANS & options.keys():
+        if type(options[name]) is not bool:
+            raise BackendConfigError(f"backend option {name} must be a boolean")
     if "processing_mode" in options and options["processing_mode"] not in _OPENVIKING_MODES:
         raise BackendConfigError(
             "backend option processing_mode must be vectors_only or semantic_and_vectors")
@@ -127,7 +134,7 @@ def validate_config(config: dict) -> dict:
     if set(config) != CONFIG_FIELDS:
         raise BackendConfigError("backend configuration requires exactly the five documented fields")
     if config["backend"] not in BACKEND_OPTIONS:
-        raise BackendConfigError("only the openviking and tencentdb backends are supported", "UNSUPPORTED")
+        raise BackendConfigError("only the openviking, tencentdb and mem0 backends are supported", "UNSUPPORTED")
     for field in ("user_id", "current_project"):
         if not nonempty_string(config[field]):
             raise BackendConfigError(f"configuration {field} must be a non-empty string")
