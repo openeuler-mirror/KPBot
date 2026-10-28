@@ -37,20 +37,20 @@ if [ -d "${OPT}" ] && [ -n "$(find "${OPT}" -type f -print -quit 2>/dev/null)" ]
     fi
 fi
 
-# ---- 3) 一键入口可运行 ----
+# ---- 3) 一键入口可运行（ENTRY 一律相对框架根，执行时切到框架根）----
 ENTRY=""
 if [ -f "${OPT}/ci/run_conformance.sh" ]; then
-    ENTRY="ci/run_conformance.sh"
+    ENTRY="./ci/run_conformance.sh"
 elif [ -f "${OPT}/Makefile" ] || [ -f "${OPT}/makefile" ]; then
-    ENTRY="make -C ${OPT}"
+    ENTRY="make -C ."
 else
     first_sh="$(find "${OPT}" -maxdepth 3 -type f -name '*.sh' -print -quit 2>/dev/null || true)"
-    [ -n "${first_sh}" ] && ENTRY="bash ${first_sh}"
+    [ -n "${first_sh}" ] && ENTRY="./${first_sh#"${OPT}"/}"
 fi
 
 RUN_RC=127
 if [ "${PRESENT}" = "1" ] && [ -n "${ENTRY}" ]; then
-    timeout 300 bash -lc "${ENTRY}" >results/framework_run.log 2>&1
+    ( cd "${OPT}" && timeout 300 bash -lc "${ENTRY}" ) >results/framework_run.log 2>&1
     RUN_RC=$?
 fi
 

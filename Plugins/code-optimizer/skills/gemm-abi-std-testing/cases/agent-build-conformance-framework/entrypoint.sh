@@ -1,10 +1,32 @@
 #!/usr/bin/env bash
 # entrypoint.sh —— 容器内驱动 opencode 执行任务，解析 trace，调用 verify.sh
 # 与 docs/case-spec.md 的运行时契约一致（容器内 /workspace）。
+#
+# 凭证与权限加固（对齐仓内 operation-fusion 等用例的既定做法）：
+#   - 凭证整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不落盘、不挂载
+#   - umask 077 + 隔离 HOME 解码，trap cleanup EXIT 清理
+#   - 项目级 opencode.json 显式 deny bash/webfetch/websearch（--auto 下依然生效）
 set -uo pipefail
 
 cd /workspace
 mkdir -p results
+
+# ---- 凭证重组：OPENCODE_AUTH_JSON 整文件 base64 → 隔离 HOME 下 auth.json ----
+umask 077
+AUTH_TMP="$(mktemp /tmp/opencode_auth.XXXXXX)"
+printf '%s' "${OPENCODE_AUTH_JSON:-}" | base64 -d > "${AUTH_TMP}"
+export HOME=/tmp/opencode-home
+mkdir -p "${HOME}/.local/share/opencode"
+cp "${AUTH_TMP}" "${HOME}/.local/share/opencode/auth.json"
+
+# ---- 项目级权限：deny bash/webfetch/websearch（标准文本已本地提供，无需外网）----
+printf '%s\n' '{"permission":{"bash":"deny","webfetch":"deny","websearch":"deny","edit":"allow"}}' > /workspace/opencode.json
+
+# ---- 运行结束后清理凭证 ----
+cleanup() {
+    rm -rf "${AUTH_TMP}" /tmp/opencode-home
+}
+trap cleanup EXIT
 
 SKILL_MODE="${SKILL_MODE:-with}"          # with | without
 

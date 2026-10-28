@@ -226,7 +226,7 @@ void gemm(const CaseSpec& c, float alpha, const float* A,
 2. 混合工具链链接技巧：ABI adapter 目标文件放在参照库归档**之前**（符号赢者通吃）；Fortran ABI 细节（尾下划线、引用传参、隐藏 char 长度）在 adapter 内吸收。
 3. 环境固定：线程数与 NUMA 绑核写进 CI 脚本与所有运行命令（如 `OMP_NUM_THREADS=38 numactl -C 38-75`）。
 4. 层 1 官方驱动集成模板：复制驱动+参考输出数据 → 混合编译 → 运行（驱动非零退出不中断）→ `tail SUMM` + `grep "END OF TESTS"` + `grep -ci "FAIL|FATAL|INCORRECT"` 计数。
-5. 一键 CI：`ci/run_conformance.sh all|1|2|3`，DUT FAIL 计数 → 非零退出码；组件缺失 SKIP 不误报。
+5. 一键 CI：`ci/run_conformance.sh all|1|2|3`，DUT FAIL 计数 → 非零退出码；组件缺失 SKIP 不误报。脚本须以自身目录为基准（入口处 `cd "$(dirname "$0")"`）或全程使用框架根相对路径，保证从任意 cwd 调用都能正常运行。
 6. 基线对比四规则：同参数重跑（seed 派生保证旧用例数据不变）→ CSV 按 `(suite,shape,layout,trans,α,β)` 连接比较 verdict/maxerr/bit_equal_pct → **新增 FAIL=回归；FAIL→PASS=修复；WARN 变化=口径适配进展** → bit 列仅双后端模式有意义。
 
 **CI 入口示例（内联，可直接套改）**：

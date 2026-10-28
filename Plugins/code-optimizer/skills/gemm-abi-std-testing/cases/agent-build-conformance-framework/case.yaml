@@ -21,7 +21,7 @@ tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端�
 
 image: kpbot/code-optimizer-agent-conformance:1.0-openeuler24.03
 model: deepseek/deepseek-v4-flash
-auth: runtime_mount           # ~/.local/share/opencode/auth.json
+auth: env_injection          # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载
 
 ab:
   conditions: [with, without]      # 同一任务两条件对照
@@ -39,9 +39,9 @@ entrypoint: ["/workspace/entrypoint.sh"]
 
 env_requires:
   - x86_64 / aarch64 主机（纯 C 标量，无 ISA 依赖）
-  - opencode 二进制（运行时挂载）
-  - opencode auth.json（运行时挂载）
-  - 容器可访问模型 API（必要时 --network host）
+  - opencode 二进制（只读挂载）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载）
+  - 容器可访问模型 API（默认 bridge 网络即可）
 
 env_vars:
   MODEL: deepseek/deepseek-v4-flash
