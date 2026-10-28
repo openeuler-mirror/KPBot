@@ -12,11 +12,11 @@ REWORK 记录到 result.rework_events，将 return_to 及之后阶段置 pending
 
 ## 关键字段
 
-- source：基线 commit、版本和 baseline_id；补丁/构建的详细身份记 manifest。
+- source：基线 commit、版本和 baseline_id；无可用 Git 提交时 commit 记 `unknown`，CP1 复核版本和归档/源码摘要，CP2 仍须明确 baseline_id。补丁/构建的详细身份记 manifest。
 - history_policy：none 或 external；external 注明 source，仅表示可用输入，不声明已有候选结果。
 - contract：algorithm 与 active_algorithm_skill；本协议支持 rabitq/turboquant/ivfpq/ivfpqfs/hnsw。
 - selected_candidate：CP3-B 产出，CP4 完成前必须明确，selection_mode 为 user-confirmed 或 auto-ranked。
-- result.candidate_commit：pending（执行中）、committed（有授权且已提交，完整 40 位 SHA、committed_by=coordinator）、not_authorized（已接受但未授权，列 pending_files）、not_applicable（拒绝或不确定）。
+- result.candidate_commit：pending（执行中）、committed（有授权且已提交，完整 40/64 位 SHA、committed_by=coordinator）、not_authorized（已接受但未授权，列 pending_files）、not_applicable（拒绝或不确定）。
 - result.verdict：仅终态 ACCEPT/ACCEPT_WITH_NOTES/REJECT/INCONCLUSIVE；report 为相对 run_dir 路径。
 
 ## 身份与路径

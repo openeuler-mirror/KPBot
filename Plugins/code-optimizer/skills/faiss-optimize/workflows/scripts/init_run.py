@@ -119,7 +119,7 @@ def main() -> int:
         "result": {"candidate_commit": {"status": "pending"}},
         "decisions": decisions,
     }
-    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"OK: {state_path}")
     print(f"next: 校验 state（python3 validate_state.py {state_path}），随后进入 CP1")
     return 0

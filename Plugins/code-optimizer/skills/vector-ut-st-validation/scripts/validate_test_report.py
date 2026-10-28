@@ -27,6 +27,8 @@ def validate(data: object) -> list[str]:
     missing = REQUIRED - set(data)
     if missing:
         errors.append(f"missing fields: {sorted(missing)}")
+    if set(data) - REQUIRED:
+        errors.append(f"unknown fields: {sorted(set(data) - REQUIRED)}")
     if data.get("schema_version") != "vector-test-report.v1":
         errors.append("schema_version must be vector-test-report.v1")
     for field in ("subject", "baseline_commit", "candidate_commit"):
@@ -37,6 +39,8 @@ def validate(data: object) -> list[str]:
     if not isinstance(feature, dict) or not nonempty(feature.get("name")):
         errors.append("feature_switch.name must be non-empty")
     else:
+        if set(feature) - {"name", "off_tested", "on_tested"}:
+            errors.append("feature_switch contains unknown fields")
         if feature.get("off_tested") is not True or feature.get("on_tested") is not True:
             errors.append("feature-off and feature-on must both be tested")
 
@@ -71,7 +75,7 @@ def validate(data: object) -> list[str]:
                 ready_possible = False
                 continue
             values = [suite.get(field) for field in ("executed", "passed", "failed", "skipped")]
-            if not all(isinstance(value, int) and value >= 0 for value in values):
+            if not all(type(value) is int and value >= 0 for value in values):
                 errors.append(f"suites.{name} counters must be non-negative integers")
                 ready_possible = False
                 continue
@@ -87,7 +91,7 @@ def validate(data: object) -> list[str]:
         errors.append("risk_checks must be an object")
         ready_possible = False
     else:
-        for name in sorted(RISK_CHECKS):
+        for name in sorted(RISK_CHECKS) + [key for key in checks if key not in RISK_CHECKS]:
             check = checks.get(name)
             if not isinstance(check, dict):
                 errors.append(f"risk_checks.{name} is required")
@@ -96,11 +100,13 @@ def validate(data: object) -> list[str]:
             status = check.get("status")
             evidence = check.get("evidence")
             rationale = check.get("rationale")
-            if status not in {"pass", "fail", "not_applicable"}:
+            if status not in ("pass", "fail", "not_applicable"):
                 errors.append(f"risk_checks.{name}.status is invalid")
                 ready_possible = False
             if not isinstance(evidence, list) or not all(nonempty(item) for item in evidence):
                 errors.append(f"risk_checks.{name}.evidence must be a string array")
+            if not isinstance(rationale, str):
+                errors.append(f"risk_checks.{name}.rationale must be a string")
             if status == "pass" and not evidence:
                 errors.append(f"risk_checks.{name} pass requires evidence")
                 ready_possible = False
@@ -115,7 +121,7 @@ def validate(data: object) -> list[str]:
         errors.append("raw_artifacts must be a non-empty string array")
         ready_possible = False
     verdict = data.get("verdict")
-    if verdict not in {"READY", "REWORK", "BLOCKED"}:
+    if verdict not in ("READY", "REWORK", "BLOCKED"):
         errors.append("verdict must be READY, REWORK, or BLOCKED")
     if verdict == "READY" and not ready_possible:
         errors.append("verdict READY conflicts with failed, skipped, or missing gates")

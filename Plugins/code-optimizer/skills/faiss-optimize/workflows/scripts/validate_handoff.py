@@ -12,8 +12,9 @@
 退出码：0=PASS（可含 warning），1=FAIL。
 """
 import json
+import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "references" / "handoff.schema.json"
 TYPE_TO_AGENT = {
@@ -36,17 +37,25 @@ PRODUCED_BY_ENUM = set(TYPE_TO_AGENT.values()) | {"primary"}
 
 
 def programmatic_checks(h, errors, warnings):
+    if not isinstance(h, dict):
+        fail(errors, "handoff 必须是对象")
+        return
     if h.get("schema_version") != "kpbot-faiss-handoff.v1":
         fail(errors, f"schema_version 应为 kpbot-faiss-handoff.v1，实际 {h.get('schema_version')!r}")
     ht = h.get("handoff_type")
-    if ht not in TYPE_TO_AGENT:
+    if not isinstance(ht, str) or ht not in TYPE_TO_AGENT:
         fail(errors, f"handoff_type 非法：{ht!r}")
         return
-    if h.get("produced_by") not in PRODUCED_BY_ENUM:
+    if not isinstance(h.get("produced_by"), str) or h["produced_by"] not in PRODUCED_BY_ENUM:
         fail(errors, f"produced_by 非法：{h.get('produced_by')!r}")
+    if not isinstance(h.get("run_id"), str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,127}", h["run_id"]):
+        fail(errors, f"run_id 非法：{h.get('run_id')!r}")
 
     payload = h.get("payload", {})
-    if not isinstance(payload, dict) or not payload.get("summary"):
+    if not isinstance(payload, dict):
+        fail(errors, "payload 必须是对象")
+        return
+    if not isinstance(payload.get("summary"), str) or not payload["summary"].strip():
         fail(errors, "payload.summary 必填且非空")
 
     if ht == "blocker":
@@ -61,6 +70,8 @@ def programmatic_checks(h, errors, warnings):
                 fail(errors, "blocker.description 必填")
 
     review = h.get("review")
+    if (ht == "review-result" or "review" in h) and not isinstance(review, dict):
+        fail(errors, "review-result 必须带 review 对象及 verdict")
     if isinstance(review, dict):
         v = review.get("verdict")
         if v == "REWORK":
@@ -73,12 +84,18 @@ def programmatic_checks(h, errors, warnings):
         elif v not in ("ACCEPT", "ACCEPT_WITH_NOTES", "REJECT", "INCONCLUSIVE"):
             fail(errors, f"review.verdict 非法：{v!r}")
 
-    for a in payload.get("artifacts", []):
-        if not isinstance(a, str) or a.startswith("/") or ".." in Path(a).parts:
+    artifacts = payload.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        fail(errors, "payload.artifacts 必须是数组")
+        artifacts = []
+    for a in artifacts:
+        if (not isinstance(a, str) or not a or PurePosixPath(a).is_absolute()
+                or PureWindowsPath(a).drive or PureWindowsPath(a).root
+                or ".." in PurePosixPath(a).parts or ".." in PureWindowsPath(a).parts):
             fail(errors, f"payload.artifacts 非法（须相对路径且无 ..）：{a!r}")
 
     intended = h.get("intended_for")
-    if intended and intended in (set(TYPE_TO_AGENT.values()) | {"user"}) \
+    if isinstance(intended, str) and intended in (set(TYPE_TO_AGENT.values()) | {"user"}) \
             and intended != TYPE_TO_AGENT[ht]:
         warnings.append(f"intended_for={intended} 与 handoff_type={ht} 默认目标 {TYPE_TO_AGENT[ht]} 不符（请确认）")
 
@@ -96,15 +113,15 @@ def main() -> int:
         print(f"FAIL: 文件不存在：{path}")
         return 1
     try:
-        h = json.loads(path.read_text())
-    except json.JSONDecodeError as e:
+        h = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as e:
         print(f"FAIL: JSON 解析失败：{e}")
         return 1
 
     errors, warnings = [], []
     try:
         import jsonschema
-        schema = json.loads(SCHEMA_PATH.read_text())
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
         for err in sorted(jsonschema.Draft202012Validator(schema).iter_errors(h),
                           key=lambda e: list(e.path)):
             fail(errors, f"schema: {'/'.join(map(str, err.path)) or '<root>'}: {err.message}")

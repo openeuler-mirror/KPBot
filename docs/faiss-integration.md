@@ -37,3 +37,12 @@ bash tests/test_install_platform.sh
 
 该测试检查两种平台的技能安装、Faiss 角色注册与 OpenCode 路由。`faiss-optimize/evals/evals.json` 定义 21 个行为场景，它们是评估规格，不代表已经执行模型行为评测。
 安装与结构验证通过，也不代表已经完成特定算法、数据集和硬件上的性能验收。
+
+契约回归：
+
+```bash
+python3 -m unittest discover -s tests -p 'test_faiss_contracts.py'
+python3 -m unittest discover -s tests -p 'test_vector_report_contract.py'
+```
+
+安装 Python `jsonschema` 后还会核验生产状态与正式 schema 的一致性；状态和交接测试同时通过 `python -S` 覆盖缺少可选依赖的模式。用例包括非 Git 源码、空仓库、缺少 Git、SHA-1/SHA-256、非 UTF-8 系统区域设置、状态机与报告门禁。

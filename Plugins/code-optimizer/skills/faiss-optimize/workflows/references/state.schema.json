@@ -48,8 +48,15 @@
       "properties": {
         "baseline_commit": {
           "type": "string",
-          "pattern": "^[0-9a-f]{7,40}$",
-          "description": "参考源码的Git commit；身份缺失时补充证据，不虚构commit。"
+          "description": "参考源码的 Git commit（SHA-1 或 SHA-256）；发布归档、空仓库或 Git 不可用时明确记 unknown。CP1 复核版本和归档/源码摘要，CP2 仍须记录可复现的 baseline_id 与 manifest，unknown 不能代替基线身份。",
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{7,64}$"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
         },
         "faiss_version": {
           "type": "string",
@@ -220,8 +227,8 @@
             },
             "sha": {
               "type": "string",
-              "pattern": "^[0-9a-f]{40}$",
-              "description": "status=committed 时必填（完整 40 位）"
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+              "description": "status=committed 时必填：完整 SHA-1（40 位）或 SHA-256（64 位）提交身份"
             },
             "committed_by": {
               "const": "coordinator"

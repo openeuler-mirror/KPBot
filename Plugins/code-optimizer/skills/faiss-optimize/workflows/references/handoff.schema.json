@@ -188,6 +188,23 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff_type": {
+            "const": "review-result"
+          }
+        },
+        "required": [
+          "handoff_type"
+        ]
+      },
+      "then": {
+        "required": [
+          "review"
+        ]
+      }
     }
   ]
 }
