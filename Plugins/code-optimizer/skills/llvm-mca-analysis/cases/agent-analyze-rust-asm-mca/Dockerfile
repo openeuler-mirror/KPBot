@@ -15,8 +15,10 @@ RUN dnf install -y \
     && rustc --version && llvm-mca --version | head -1
 
 # skill 装入 staging（含 scripts/mca_analyze.py），运行时由 entrypoint 按 SKILL_MODE 决定是否接入
+# chmod a+rX：COPY 继承源目录权限（umask 077 下 700/600），非特权 optimizer 用户
+# 运行期需读 staging 装配 .opencode/skills，不开放读权限 with 臂 cp 会失败
 COPY skills/llvm-mca-analysis/ /staging/skill/
-RUN rm -rf /staging/skill/cases
+RUN rm -rf /staging/skill/cases && chmod -R a+rX /staging/skill
 
 COPY skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/src/ /workspace/src/
 COPY skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/bench/ /workspace/bench/

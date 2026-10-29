@@ -230,6 +230,30 @@ def strip_rust_hash(sym):
     return RUST_HASH_RE.sub("", sym or "")
 
 
+def demangle_legacy_segments(sym):
+    """把 legacy mangled 前缀（_ZN 后、17h<hash>E 剥离后）解析成段列表。
+
+    "_ZN6kernel4calc3dot" -> ["kernel", "calc", "dot"]。非 _ZN 形状返回 []。
+    段内转义（如 $ 转义 unicode）不展开——比对只要求段名逐字相等。
+    """
+    s = strip_rust_hash(sym or "")
+    if not s.startswith("_ZN"):
+        return []
+    s = s[3:]
+    segs = []
+    while s:
+        m = re.match(r"(\d+)", s)
+        if not m:
+            return []  # 段长损坏（非纯 legacy 形状）
+        n = int(m.group(1))
+        s = s[m.end():]
+        if n <= 0 or len(s) < n:
+            return []
+        segs.append(s[:n])
+        s = s[n:]
+    return segs
+
+
 def rust_function_variants(func):
     """生成 --function 的候选匹配集（用于 Rust mangled 符号 hash 容忍匹配）。
 
@@ -265,7 +289,32 @@ def match_rust_label(label, func):
     for cand in candidates:
         if label == cand or stripped == cand:
             return True
+    # 尾部对齐：容忍外层 crate 名段差异。库 crate（如 SKILL.md 用例 1 的
+    # pub mod calc，文件 kernel.rs）编译产出的符号是 _ZN6kernel4calc3dot17h...E，
+    # --function calc::dot 生成的候选 _ZN4calc3dot 缺外层 crate 段无法整串相等。
+    # 把 label 剥 hash 后解析成段，候选段为 label 段的尾部（末 len 段全等）即命中。
+    label_segs = demangle_legacy_segments(label)
+    if label_segs:
+        for cand in candidates:
+            if not cand.startswith("_ZN"):
+                continue
+            cand_segs = demangle_legacy_segments(cand)
+            if not cand_segs:
+                continue
+            if len(cand_segs) <= len(label_segs) and \
+                    label_segs[-len(cand_segs):] == cand_segs:
+                return True
     return False
+
+
+# rustc 不含 hip10c/hip11/hip12 等 LLVM 调度模型（clang 认、rustc 不认，
+# 传不识别的 cpu 名只会被忽略并告警）。rustc 侧单独映射：
+# - tsv110 rustc 原生支持；其余鲲鹏型号退 native（目标机本机编译=目标 cpu）。
+# - aarch64 rustc 对非 tsv110 目标要求显式 +neon 才能保证 ABI 正确。
+RUSTC_CPU_MAP = {
+    "tsv110": "tsv110",
+    "hip09": "native", "hip10c": "native", "hip11": "native", "hip12": "native",
+}
 
 
 def compile_rust_source_to_asm(source, mcpu, extra_flags):
@@ -279,10 +328,22 @@ def compile_rust_source_to_asm(source, mcpu, extra_flags):
         die("未找到 rustc。--source rust 模式需要 rustc 编译源码。")
     if not os.path.isfile(source):
         die("--source 指定的文件不存在: %s" % source)
+    rustc_cpu = RUSTC_CPU_MAP.get(mcpu, "native")
+    # 库 crate（无 fn main，如 SKILL.md 用例 1 的 pub mod 形态）需 --crate-type=lib，
+    # 否则 rustc 报 E0601 main function not found。
+    try:
+        with open(source, "r", errors="replace") as f:
+            src_text = f.read()
+    except OSError as e:
+        die("读取源码失败: %s" % e)
+    is_lib = not re.search(r"\bfn\s+main\s*\(", src_text)
     tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".s", delete=False)
     tmp.close()
     cmd = ["rustc", "-O", "--target=%s" % RUST_TRIPLE,
-           "-C", "target-cpu=%s" % mcpu, "--emit=asm", "-o", tmp.name]
+           "-C", "target-cpu=%s" % rustc_cpu,
+           "-C", "target-feature=+neon", "--emit=asm", "-o", tmp.name]
+    if is_lib:
+        cmd.append("--crate-type=lib")
     if extra_flags:
         cmd += extra_flags
     cmd.append(source)

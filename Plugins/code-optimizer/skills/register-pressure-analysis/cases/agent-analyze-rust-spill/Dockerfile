@@ -14,8 +14,10 @@ RUN dnf install -y \
     && rustc --version
 
 # skill 装入 staging（含 scripts/analyze_assembly_spill.py），运行时由 entrypoint 按 SKILL_MODE 决定是否接入
+# chmod a+rX：COPY 继承源目录权限（umask 077 下 700/600），非特权 optimizer 用户
+# 运行期需读 staging 装配 .opencode/skills，不开放读权限 with 臂 cp 会失败
 COPY skills/register-pressure-analysis/ /staging/skill/
-RUN rm -rf /staging/skill/cases
+RUN rm -rf /staging/skill/cases && chmod -R a+rX /staging/skill
 
 COPY skills/register-pressure-analysis/cases/agent-analyze-rust-spill/src/ /workspace/src/
 COPY skills/register-pressure-analysis/cases/agent-analyze-rust-spill/bench/ /workspace/bench/

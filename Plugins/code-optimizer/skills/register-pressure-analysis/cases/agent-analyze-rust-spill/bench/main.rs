@@ -30,14 +30,12 @@ fn main() {
     let b_tiles: Vec<[[f32; 4]; 4]> =
         (0..n).map(|i| gen_tile(0x0fed_cba9_8765_4321u64.wrapping_add(i as u64))).collect();
 
-    // 标量参照：手写 FMA 4x4 tile（c[j][l] += a[j][m]*b[m][l]）
+    // 标量参照：逐 lane FMA（与 kernel vfmaq_f32(c, a, b) 语义一致：c[j][l] += a[j][l]*b[j][l]）
     let scalar_ref = |a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]| -> [[f32; 4]; 4] {
         let mut c = [[0.0f32; 4]; 4];
         for j in 0..4usize {
             for l in 0..4usize {
-                for m in 0..4usize {
-                    c[j][l] += a[j][m] * b[m][l];
-                }
+                c[j][l] += a[j][l] * b[j][l];
             }
         }
         c
