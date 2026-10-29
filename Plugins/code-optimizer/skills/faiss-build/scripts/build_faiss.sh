@@ -171,7 +171,34 @@ if [ -n "$blas" ]; then
 fi
 
 cmake "${configure_args[@]}" 2>&1 | tee "$run_dir/cmake-configure.log"
-cmake --build "$build_dir" -j"$jobs" --target faiss 2>&1 | tee "$run_dir/build.log"
+
+# The manifest below describes this helper's fixed build shape. Check the actual
+# cache so extra arguments or project FORCE assignments cannot invalidate it.
+python3 - "$build_dir/CMakeCache.txt" "$krl" <<'PY'
+import sys
+from pathlib import Path
+
+cache = {}
+try:
+    for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+        if line.startswith(("#", "//")) or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        cache[key.split(":", 1)[0]] = value
+except OSError as exc:
+    raise SystemExit(f"Cannot verify effective CMake settings: {exc}")
+
+expected = {"CMAKE_BUILD_TYPE": "Release", "FAISS_OPT_LEVEL": "generic"}
+for key, value in expected.items():
+    if cache.get(key, "").lower() != value.lower():
+        raise SystemExit(f"Effective {key}={cache.get(key)!r} conflicts with helper manifest {value!r}; use native CMake for a different build shape")
+if sys.argv[2]:
+    enabled = cache.get("KRL", "").upper() in {"1", "ON", "YES", "TRUE", "Y"}
+    if "KRL" not in cache or enabled != (sys.argv[2] == "on"):
+        raise SystemExit("Effective KRL setting conflicts with --krl and the helper manifest")
+PY
+
+cmake --build "$build_dir" --config Release -j"$jobs" --target faiss 2>&1 | tee "$run_dir/build.log"
 
 library="$build_dir/faiss/libfaiss.so"
 compile_commands="$build_dir/compile_commands.json"

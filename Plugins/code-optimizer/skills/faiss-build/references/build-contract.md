@@ -32,6 +32,8 @@ cmake --build <independent-build-dir> --target faiss --parallel <jobs>
 
 `--candidate-macro` 指定待核验的实际编译定义，不自动启用 CMake 选项；需要时通过 `--cmake-arg -DFAISS_ALGORITHM_CANDIDATE=ON` 启用。已修改源码的 OFF 验证可用 `current-head-profile` 模式并记录工作区身份；它不替代独立的原始基线。
 
+辅助脚本的 manifest 声明 Release / generic 构建。配置后会核对实际 `CMakeCache.txt`；附加参数或工程中的强制赋值若改变该形状，或与显式 `--krl` 冲突，将停止构建并保留配置日志。其他构建形状使用项目原生 CMake 命令并记录实际配置，不沿用该辅助脚本的固定声明。
+
 ## 失败处理
 
 保留失败日志并报告具体配置、编译、链接或宏命中问题。不得为通过构建改变冻结查询参数，或把未成功的产物作为正式对照。

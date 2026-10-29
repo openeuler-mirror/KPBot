@@ -41,7 +41,7 @@ bash tests/test_install_platform.sh
 契约回归：
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_faiss_contracts.py'
+python3 -m unittest discover -s tests -p 'test_faiss_*contract*.py'
 python3 -m unittest discover -s tests -p 'test_vector_report_contract.py'
 ```
 

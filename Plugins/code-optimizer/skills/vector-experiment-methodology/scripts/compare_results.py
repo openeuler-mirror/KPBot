@@ -13,13 +13,29 @@ from typing import Any
 
 
 def median_number(rows: list[dict[str, Any]], field: str) -> float:
-    values = [row[field] for row in rows if isinstance(row.get(field), (int, float))]
+    values = []
+    for index, row in enumerate(rows):
+        value = row.get(field)
+        if type(value) not in (int, float):
+            raise ValueError(f"sample {index} field {field!r} must be a finite number")
+        try:
+            number = float(value)
+        except OverflowError as exc:
+            raise ValueError(f"sample {index} field {field!r} is outside numeric range") from exc
+        if not math.isfinite(number):
+            raise ValueError(f"sample {index} field {field!r} must be finite")
+        values.append(number)
     if not values:
         raise ValueError(f"field {field!r} has no numeric samples")
-    return float(statistics.median(values))
+    median = float(statistics.median(values))
+    if not math.isfinite(median):
+        raise ValueError(f"field {field!r} median is outside numeric range")
+    return median
 
 
 def compare(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("input must be an object")
     perf_field = payload.get("performance_field")
     if not isinstance(perf_field, str) or not perf_field:
         raise ValueError("performance_field must be a non-empty string")
@@ -28,7 +44,7 @@ def compare(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("higher_is_better must be boolean")
     correctness_fields = payload.get("correctness_fields", [])
     if not isinstance(correctness_fields, list) or not all(
-        isinstance(item, str) for item in correctness_fields
+        isinstance(item, str) and item.strip() for item in correctness_fields
     ):
         raise ValueError("correctness_fields must be an array of strings")
     datasets = payload.get("datasets")
@@ -54,6 +70,8 @@ def compare(payload: dict[str, Any]) -> dict[str, Any]:
         if a <= 0 or b <= 0:
             raise ValueError(f"dataset {name!r} performance medians must be positive")
         speedup = b / a if higher_is_better else a / b
+        if not math.isfinite(speedup) or speedup <= 0:
+            raise ValueError(f"dataset {name!r} speedup is outside numeric range")
         speedups.append(speedup)
 
         correctness: dict[str, Any] = {}
@@ -98,14 +116,14 @@ def main() -> int:
     try:
         payload = json.loads(args.input.read_text(encoding="utf-8"))
         result = compare(payload)
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        rendered = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+        if args.output:
+            args.output.write_text(rendered, encoding="utf-8")
+        else:
+            print(rendered, end="")
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, OverflowError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
-    if args.output:
-        args.output.write_text(rendered, encoding="utf-8")
-    else:
-        print(rendered, end="")
     return 0
 
 
