@@ -186,7 +186,10 @@ class NorthboundTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.memory.initialize(candidate), ready())
 
     async def test_invalid_config_rejected_before_backend(self):
-        for invalid in ({}, None, {**config(), "user_id": ""}, {**config(), "roles": ["read"]}):
+        for invalid in ({}, None, {**config(), "user_id": ""}, {**config(), "roles": ["read"]},
+                        {**config(), "backend": []}, {**config(), "backend": {}},
+                        {**config(), "options": {"processing_mode": []}},
+                        {**config(), "options": {"processing_mode": {}}}):
             with self.subTest(invalid=invalid):
                 self.assertError(await self.memory.initialize(invalid), "INVALID_ARGUMENT")
         self.assertEqual(self.backend.calls, [])
@@ -571,6 +574,34 @@ class NorthboundTests(unittest.IsolatedAsyncioTestCase):
             self.assertError(result, "WRITE_UNKNOWN")
             self.assertEqual(result["error"]["source_id"], "viking://already-allocated-original")
             self.assertEqual(len(self.backend.calls), before + 1)
+
+    async def test_confirmed_original_survives_postprocessing_deadline_only(self):
+        await self.init()
+        for external in (False, True):
+            with self.subTest(external=external):
+                entered = asyncio.Event()
+
+                async def confirmed_write(payload):
+                    entered.set()
+                    try:
+                        await asyncio.Event().wait()
+                    except asyncio.CancelledError as exc:
+                        exc.source_id = "confirmed-original"
+                        exc.confirmed_source_id = "confirmed-original"
+                        raise
+
+                self.backend.hooks["store_process"] = confirmed_write
+                if external:
+                    task = asyncio.create_task(self.memory.remember(record("task_process")))
+                    await asyncio.wait_for(entered.wait(), 1)
+                    task.cancel()
+                    result = await task
+                    self.assertError(result, "WRITE_UNKNOWN")
+                    self.assertEqual(result["error"]["source_id"], "confirmed-original")
+                else:
+                    result = await self.memory.remember(record("task_process"), timeout=0.01)
+                    self.assertEqual(result, {"ok": True, "data": {
+                        "source_id": "confirmed-original", "processing": "unknown"}})
 
     async def test_read_and_initialize_cancellation_propagate(self):
         for method in ("initialize", "search"):

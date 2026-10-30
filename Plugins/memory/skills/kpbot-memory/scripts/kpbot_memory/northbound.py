@@ -8,8 +8,9 @@ Each instance has an in-process lifetime; CLI invocations cannot share it.
 
 The facade only validates identity, scope and JSON shapes. It never summarises,
 extracts experience, truncates content, retries writes or invents provenance.
-Read cancellation propagates; cancellation after entering a write is reported
-as WRITE_UNKNOWN because it cannot prove that the adapter did not persist it.
+Read cancellation propagates; caller cancellation after entering a write is
+reported as WRITE_UNKNOWN. A deadline reached after an adapter has confirmed
+the full original preserves storage success with processing unknown.
 """
 from __future__ import annotations
 
@@ -57,13 +58,13 @@ def _known_source(value: Any) -> str | None:
     return None
 
 
-def _exception_source(exc: BaseException) -> str | None:
+def _exception_source(exc: BaseException, attribute: str = "source_id") -> str | None:
     """wait_for chains TimeoutError from the adapter's CancelledError."""
     visited = set()
     current: BaseException | None = exc
     while current is not None and id(current) not in visited:
         visited.add(id(current))
-        source = _known_source(getattr(current, "source_id", None))
+        source = _known_source(getattr(current, attribute, None))
         if source is not None:
             return source
         current = current.__cause__
@@ -135,9 +136,10 @@ class NorthboundMemory:
             return _error("TIMEOUT", "operation timed out before execution")
         started = False
         cancelled_source = None
+        confirmed_source = None
 
         async def run() -> Any:
-            nonlocal started, cancelled_source
+            nonlocal started, cancelled_source, confirmed_source
             # No await separates this marker from entering a write adapter call.
             started = True
             remaining = max(deadline - monotonic(), 0.0)
@@ -150,6 +152,7 @@ class NorthboundMemory:
                 # External cancellation may create a *different* outer exception
                 # from the child task's cancellation. Retain its confirmed locator.
                 cancelled_source = _exception_source(exc)
+                confirmed_source = _exception_source(exc, "confirmed_source_id")
                 raise
 
         try:
@@ -157,6 +160,12 @@ class NorthboundMemory:
         except asyncio.TimeoutError as exc:
             source_id = _exception_source(exc) or cancelled_source
             if write and started:
+                # An adapter may have already verified the full original before
+                # the deadline cancels optional post-processing. Preserve that
+                # confirmation, without claiming the post-processing completed.
+                confirmed = _exception_source(exc, "confirmed_source_id") or confirmed_source
+                if confirmed is not None:
+                    return {"ok": True, "data": {"source_id": confirmed, "processing": "unknown"}}
                 return _error("WRITE_UNKNOWN", "write timed out; persistence is unconfirmed", source_id)
             return _error("TIMEOUT", "operation timed out", source_id)
         except asyncio.CancelledError as exc:

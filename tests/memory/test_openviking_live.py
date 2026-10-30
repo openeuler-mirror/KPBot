@@ -22,7 +22,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from kpbot_memory.backend_config import load_config
-from kpbot_memory.backends import OpenVikingBackend
+from kpbot_memory.backends.openviking_http import OpenVikingBackend
 from kpbot_memory.northbound import NorthboundMemory
 
 
@@ -75,6 +75,11 @@ class RealOpenVikingTests(unittest.IsolatedAsyncioTestCase):
         for kind, project, content in [
             ("experience", other_project, experience),
             ("task_process", first_project, process),
+            # Independent distractors: same kind in another project, and
+            # another kind in the target project, with equally relevant text.
+            ("experience", first_project, {**experience, "fixture": "other-project"}),
+            ("task_process", other_project,
+             process + [{"role": "assistant", "content": "循环不变量", "fixture": "other-kind"}]),
         ]:
             result = await memory.remember({
                 "kind": kind, "project_id": project,
@@ -117,10 +122,24 @@ class RealOpenVikingTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(private["data"]["source_id"], by_id)
         self.assertTrue(all(item["owner_id"] == self.config["user_id"] for item in by_id.values()))
 
-        scoped = await memory.recall({**request, "project_ids": [other_project], "kinds": ["experience"]}, timeout=120)
-        self.assertTrue(scoped["ok"], scoped)
-        self.assertTrue(all(item["project_id"] == other_project and item["kind"] == "experience"
-                            for item in scoped["data"]["items"]))
+        # Check project and kind separately as well as together; an empty
+        # result must not pass, and ignoring either filter must be observable.
+        for projects, kinds in [
+            ([other_project], ["experience", "task_process"]),
+            ([first_project, other_project], ["experience"]),
+            ([other_project], ["experience"]),
+        ]:
+            scoped = await memory.recall({**request, "project_ids": projects,
+                                          "kinds": kinds}, timeout=120)
+            self.assertTrue(scoped["ok"], scoped)
+            sources = {item["source_id"] for item in scoped["data"]["items"]}
+            for source, kind, project, _ in saved:
+                if project in projects and kind in kinds:
+                    self.assertIn(source, sources, "requested fixture must be recalled")
+                else:
+                    self.assertNotIn(source, sources, "out-of-scope fixture must be excluded")
+            self.assertTrue(all(item["project_id"] in projects and item["kind"] in kinds
+                                for item in scoped["data"]["items"]))
         shared = await memory.recall({**request, "include_shared": True})
         self.assertEqual(shared["error"]["code"], "UNSUPPORTED")
         forged = await memory.remember({"kind": "experience", "project_id": first_project,

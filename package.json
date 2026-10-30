@@ -8,6 +8,8 @@
   "files": [
     "bin/",
     "Plugins/",
+    "!Plugins/**/__pycache__/",
+    "!Plugins/**/*.pyc",
     ".claude-plugin/",
     "install.sh",
     "docs/STANDARDS.md",
@@ -17,7 +19,12 @@
   ],
   "scripts": {
     "pack:inspect": "npm pack --dry-run",
-    "prepublishOnly": "npm pack --dry-run"
+    "prepublishOnly": "npm pack --dry-run",
+    "test:install": "bash tests/test_install_platform.sh",
+    "test:memory": "python3 -m unittest discover -s tests/memory -p 'test_*.py'",
+    "test:memory:package": "bash tests/test_memory_package.sh",
+    "memory": "python3 Plugins/memory/skills/kpbot-memory/scripts/kpbot-memory.py",
+    "memory:help": "python3 Plugins/memory/skills/kpbot-memory/scripts/kpbot-memory.py --help"
   },
   "engines": {
     "node": ">=18"

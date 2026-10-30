@@ -6,8 +6,9 @@ an already configured ``client`` for testing; clients expose async
 request/aclose. Injected clients must honour the supplied timeout and must
 not follow redirects.
 
-Options: endpoint (credential-free HTTP(S) origin, required), owner_id
-(injected by the trusted facade; binds record/search identity), max_input_bytes
+Options: endpoint (credential-free HTTP(S) origin, required), api_key
+(optional official X-API-Key credential; omit only for auth-disabled services),
+owner_id (injected by the trusted facade; binds record/search identity), max_input_bytes
 (default 1048576 UTF-8 bytes of the complete serialized record), and
 derive_memories (default true; task_process submissions additionally run the
 backend's native LLM extraction in an isolated namespace).
@@ -139,7 +140,8 @@ class Mem0Backend(object):
 
     async def _bounded(self, operation: Callable, timeout: Any, *,
                        source_id=None,
-                       write_started: list | None = None) -> dict:
+                       write_started: list | None = None,
+                       confirmed_source: list | None = None) -> dict:
         try:
             seconds = self._validate_timeout(timeout)
             deadline = time.monotonic() + seconds
@@ -147,6 +149,9 @@ class Mem0Backend(object):
         except asyncio.CancelledError:
             raise
         except asyncio.TimeoutError:
+            if confirmed_source is not None and confirmed_source[0] is not None:
+                return _success({"source_id": confirmed_source[0],
+                                 "processing": "unknown"})
             uncertain = write_started is not None and write_started[0]
             if uncertain:
                 return _error("WRITE_UNKNOWN",
@@ -190,7 +195,7 @@ class Mem0Backend(object):
     def _normalize_options(options: Any) -> dict:
         if not isinstance(options, dict):
             raise _Failure("INVALID_ARGUMENT", "options must be an object.")
-        allowed = {"endpoint", "owner_id", "max_input_bytes", "derive_memories"}
+        allowed = {"endpoint", "api_key", "owner_id", "max_input_bytes", "derive_memories"}
         if set(options) - allowed:
             raise _Failure("INVALID_ARGUMENT",
                            "Unknown mem0 configuration option.")
@@ -213,6 +218,8 @@ class Mem0Backend(object):
             raise _Failure("INVALID_ARGUMENT",
                            "endpoint must be a credential-free HTTP(S) origin.")
         normalized["endpoint"] = endpoint.rstrip("/")
+        if "api_key" in normalized and not _text(normalized["api_key"]):
+            raise _Failure("INVALID_ARGUMENT", "api_key must be a nonempty string.")
         if not _text(normalized.get("owner_id")):
             raise _Failure("INVALID_ARGUMENT",
                            "owner_id must be a nonempty string.")
@@ -231,8 +238,8 @@ class Mem0Backend(object):
 
         Args:
             options: Configuration mapping with the required ``endpoint``
-                and ``owner_id`` plus optional ``max_input_bytes`` and
-                ``derive_memories``.
+                and ``owner_id`` plus optional ``api_key``, ``max_input_bytes``
+                and ``derive_memories``.
             timeout: Total seconds allowed for the whole initialization.
 
         Returns:
@@ -250,7 +257,7 @@ class Mem0Backend(object):
                         raise _Failure(
                             "INVALID_ARGUMENT",
                             "Use a new instance to change configuration.")
-                    await self._probe(deadline)
+                    await self._probe(config, deadline)
                 else:
                     if (self._client is not None
                             and self._client is not self._provided_client):
@@ -272,7 +279,7 @@ class Mem0Backend(object):
                             base_url=config["endpoint"],
                             timeout=self._remaining(deadline),
                             follow_redirects=False, trust_env=False)
-                    await self._probe(deadline)
+                    await self._probe(config, deadline)
                     self._options = config
                     self._initialized = True
                 self._state = "ready"
@@ -286,8 +293,9 @@ class Mem0Backend(object):
             self._message = result["error"]["message"]
         return result
 
-    async def _probe(self, deadline: float) -> None:
-        data = await self._request("GET", "/openapi.json", deadline)
+    async def _probe(self, config: dict, deadline: float) -> None:
+        headers = {"X-API-Key": config["api_key"]} if "api_key" in config else {}
+        data = await self._request("GET", "/openapi.json", deadline, headers=headers)
         try:
             schema = data["components"]["schemas"]["MemoryCreate"]["properties"]
         except (KeyError, TypeError):
@@ -296,6 +304,14 @@ class Mem0Backend(object):
             raise _Failure(
                 "UNAVAILABLE",
                 "mem0 service does not expose verbatim storage (infer).")
+        # Scoped listing verifies access without a write or an admin-only
+        # all-memory listing. A reserved project keeps business data out of the probe.
+        data = await self._request(
+            "GET", "/memories", deadline, headers=headers,
+            params={"user_id": _namespace("raw", "experience", config["owner_id"],
+                                          "kpbot-health-probe"), "top_k": 1})
+        if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+            raise _Failure("BACKEND_ERROR", "mem0 scoped readiness probe returned an invalid result.")
 
     async def status(self, *, timeout=30.0) -> dict:
         """Report the backend state after re-probing the service.
@@ -310,7 +326,7 @@ class Mem0Backend(object):
             async with self._lifecycle:
                 if self._initialized and self._state != "closed":
                     try:
-                        await self._probe(deadline)
+                        await self._probe(self._options, deadline)
                     except _Failure as exc:
                         self._state = "unavailable"
                         self._message = exc.message
@@ -340,11 +356,14 @@ class Mem0Backend(object):
     async def _request(self, method: str, path: str, deadline: float, *,
                        write_started: list | None = None, **kwargs):
         remaining = self._remaining(deadline)
+        headers = dict(kwargs.pop("headers", {}))
+        if self._options is not None and "api_key" in self._options:
+            headers.setdefault("X-API-Key", self._options["api_key"])
         if write_started is not None:
             write_started[0] = True
         try:
             response = await self._client.request(
-                method, path, timeout=remaining, **kwargs)
+                method, path, timeout=remaining, headers=headers, **kwargs)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -435,6 +454,7 @@ class Mem0Backend(object):
     async def _store(self, record: dict, kind: str, timeout: Any) -> dict:
         started = [False]
         locator = [None]
+        confirmed_source = [None]
 
         async def operation(deadline):
             self._require_ready()
@@ -470,9 +490,12 @@ class Mem0Backend(object):
                                 and _text(item.get("id"))):
                             memory_id = item["id"]
                             break
-            except (asyncio.TimeoutError, _Failure):
-                # A native error, even 4xx, is no proof the write never reached
-                # storage; without a confirmed locator nothing can be verified.
+            except _Failure as exc:
+                # Official 401/403 authentication dependencies reject before
+                # entering the mutation handler. Other errors may follow a write.
+                if exc.code == "ACCESS_DENIED":
+                    raise
+            except asyncio.TimeoutError:
                 pass
             if memory_id is None:
                 # Nothing was confirmed; the write may still have partially
@@ -495,6 +518,7 @@ class Mem0Backend(object):
                     "WRITE_UNKNOWN",
                     "Persisted original did not match the full "
                     "submitted input.")
+            confirmed_source[0] = memory_id
             processing = "ready"
             if kind == "task_process" and self._options["derive_memories"]:
                 if deadline - time.monotonic() <= 0:
@@ -521,10 +545,13 @@ class Mem0Backend(object):
 
         try:
             result = await self._data_bounded(operation, timeout,
-                                              write_started=started)
+                                              write_started=started,
+                                              confirmed_source=confirmed_source)
         except asyncio.CancelledError as exc:
             if started[0] and locator[0] is not None:
                 exc.source_id = locator[0]
+            if confirmed_source[0] is not None:
+                exc.confirmed_source_id = confirmed_source[0]
             raise
         if not result["ok"] and started[0]:
             result["error"]["source_id"] = locator[0]

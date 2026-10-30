@@ -43,8 +43,10 @@ class FakeClient:
         self.closed = False
 
     async def request(self, method, path, timeout=None, json=None, **kwargs):
-        self.requests.append({"method": method, "path": path, "json": json, "timeout": timeout})
+        self.requests.append({"method": method, "path": path, "json": json, "timeout": timeout, **kwargs})
         result = self.handler(method, path, json)
+        if asyncio.iscoroutine(result):
+            result = await result
         if isinstance(result, Exception):
             raise result
         return result
@@ -60,8 +62,8 @@ def static_handler(responses):
     def handler(method, path, json):
         if (method, path) in queues and queues[(method, path)]:
             return queues[(method, path)].pop(0)
-        if (method, path) == ("GET", "/openapi.json"):
-            return FakeResponse(data=OPENAPI)
+        if method == "GET" and path in ("/openapi.json", "/memories"):
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
         return FakeResponse(status=404, data={"detail": "not found"})
 
     return handler
@@ -97,6 +99,54 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         denied = await backend.store_experience(record(), timeout=5)
         self.assertEqual(denied["error"]["code"], "NOT_READY")
 
+    async def test_api_key_on_scoped_readiness_and_business_requests(self):
+        client = FakeClient(static_handler({("POST", "/search"): FakeResponse(data={"results": []})}))
+        backend = Mem0Backend(client_factory=lambda **kwargs: client)
+        options = {**BASE_OPTIONS, "api_key": "test-key-not-a-real-secret"}
+        self.assertTrue((await backend.initialize(options))["ok"])
+        self.assertEqual([r["path"] for r in client.requests], ["/openapi.json", "/memories"])
+        probe = client.requests[-1]
+        self.assertEqual(probe["method"], "GET")
+        self.assertEqual(probe["params"], {
+            "user_id": '["kpbot-mem0","raw","experience","user-01","kpbot-health-probe"]',
+            "top_k": 1,
+        })
+        result = await backend.search({"query": "test", "features": [],
+            "sources": [{"project_id": "p", "owner_id": "user-01"}],
+            "kinds": ["experience"], "limit": 1})
+        self.assertTrue(result["ok"], result)
+        self.assertEqual((await backend.status())["data"]["state"], "ready")
+        self.assertTrue(all(r["headers"] == {"X-API-Key": options["api_key"]}
+                            for r in client.requests))
+        await backend.close()
+
+    async def test_protected_probe_denial_prevents_ready_and_status_rechecks(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                client = FakeClient(static_handler({("GET", "/memories"): [
+                    FakeResponse(status=status), FakeResponse(data={"results": []}),
+                    FakeResponse(status=status)]}))
+                backend = Mem0Backend(client=client)
+                denied = await backend.initialize(BASE_OPTIONS)
+                self.assertEqual(denied["error"]["code"], "ACCESS_DENIED")
+                self.assertEqual((await backend.status())["data"]["state"], "unavailable")
+                self.assertTrue((await backend.initialize(BASE_OPTIONS))["ok"])
+                state = await backend.status()
+                self.assertEqual(state["data"]["state"], "unavailable")
+                self.assertNotIn("test-key", state["data"]["message"])
+                await backend.close()
+
+    async def test_expired_key_write_denial_is_not_unknown(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                backend = await self._init(static_handler({
+                    ("POST", "/memories"): FakeResponse(status=status)}))
+                result = await backend.store_experience(record())
+                self.assertEqual(result["error"]["code"], "ACCESS_DENIED")
+                self.assertIsNone(result["error"]["source_id"])
+                self.assertEqual(sum(r["method"] == "POST" for r in backend._client.requests), 1)
+                await backend.close()
+
     async def test_uninitialized_data_methods_are_not_ready(self):
         backend = Mem0Backend(client=FakeClient(static_handler({})))
         result = await backend.store_experience(record(), timeout=5)
@@ -108,6 +158,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         backend = Mem0Backend(client=FakeClient(static_handler({})))
         for bad in ({"owner_id": "u"}, {**BASE_OPTIONS, "endpoint": "ftp://x"}, {**BASE_OPTIONS, "endpoint": "http://u:p@h/"},
                     {**BASE_OPTIONS, "max_input_bytes": 0}, {**BASE_OPTIONS, "derive_memories": "yes"},
+                    {**BASE_OPTIONS, "api_key": ""}, {**BASE_OPTIONS, "api_key": []},
                     {**BASE_OPTIONS, "unknown": 1}, {"endpoint": "http://127.0.0.1:8888"}):
             result = await backend.initialize(bad, timeout=5)
             self.assertEqual(result["error"]["code"], "INVALID_ARGUMENT", bad)
@@ -138,8 +189,8 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(method, path, payload):
             calls.append((method, path, payload))
-            if (method, path) == ("GET", "/openapi.json"):
-                return FakeResponse(data=OPENAPI)
+            if method == "GET" and path in ("/openapi.json", "/memories"):
+                return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
             if (method, path) == ("POST", "/memories"):
                 assert payload["infer"] is False
                 assert payload["user_id"] == '["kpbot-mem0","raw","experience","user-01","project-a"]'
@@ -152,7 +203,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         backend = await self._init(handler)
         result = await backend.store_experience(rec, timeout=5)
         self.assertEqual(result, {"ok": True, "data": {"source_id": "m-1", "processing": "ready"}})
-        self.assertEqual([c[1] for c in calls], ["/openapi.json", "/memories", "/memories/m-1"])
+        self.assertEqual([c[1] for c in calls], ["/openapi.json", "/memories", "/memories", "/memories/m-1"])
 
     async def test_store_experience_never_derives(self):
         rec = record()
@@ -163,7 +214,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
                 return FakeResponse(data={"results": [{"id": "m-1", "memory": text, "event": "ADD"}]})
             if (method, path) == ("GET", "/memories/m-1"):
                 return FakeResponse(data={"id": "m-1", "memory": text})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
         backend = await self._init(ok_handler)
         result = await backend.store_experience(rec, timeout=5)
@@ -187,7 +238,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
                 return FakeResponse(data={"results": [{"id": "d-1", "memory": "提炼事实", "event": "ADD"}]})
             if (method, path) == ("GET", "/memories/raw-1"):
                 return FakeResponse(data={"id": "raw-1", "memory": text})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
         backend = Mem0Backend(client=FakeClient(handler))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
@@ -207,7 +258,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
                 return FakeResponse(status=500, data={"detail": "boom"})
             if (method, path) == ("GET", "/memories/raw-1"):
                 return FakeResponse(data={"id": "raw-1", "memory": text})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
         backend = Mem0Backend(client=FakeClient(handler))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
@@ -215,6 +266,70 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["data"], {"source_id": "raw-1", "processing": "failed"})
         self.assertTrue(state["derive_failed"])
+
+    def _slow_process_client(self, *, slow_raw=False):
+        state = {"text": None, "readback": False, "derive_started": asyncio.Event()}
+
+        async def handler(method, path, payload):
+            if method == "POST" and path == "/memories":
+                if payload["infer"]:
+                    state["derive_started"].set()
+                    await asyncio.sleep(60)
+                if slow_raw:
+                    await asyncio.sleep(60)
+                state["text"] = payload["messages"][0]["content"]
+                return FakeResponse(data={"results": [{"id": "raw-1", "event": "ADD"}]})
+            if path == "/memories/raw-1":
+                state["readback"] = True
+                return FakeResponse(data={"id": "raw-1", "memory": state["text"]})
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
+
+        return FakeClient(handler), state
+
+    async def test_total_derivation_timeout_preserves_confirmed_original(self):
+        client, state = self._slow_process_client()
+        backend = Mem0Backend(client=client)
+        self.assertTrue((await backend.initialize(BASE_OPTIONS))["ok"])
+        result = await backend.store_process(record("task_process"), timeout=0.05)
+        self.assertTrue(state["readback"])
+        self.assertTrue(state["derive_started"].is_set())
+        self.assertEqual(result, {"ok": True, "data": {"source_id": "raw-1", "processing": "unknown"}})
+        await backend.close()
+
+    async def test_raw_write_timeout_remains_unknown(self):
+        client, state = self._slow_process_client(slow_raw=True)
+        backend = Mem0Backend(client=client)
+        self.assertTrue((await backend.initialize(BASE_OPTIONS))["ok"])
+        result = await backend.store_process(record("task_process"), timeout=0.05)
+        self.assertFalse(state["readback"])
+        self.assertEqual(result["error"]["code"], "WRITE_UNKNOWN")
+        await backend.close()
+
+    async def test_caller_cancellation_after_confirmation_still_propagates(self):
+        client, state = self._slow_process_client()
+        backend = Mem0Backend(client=client)
+        self.assertTrue((await backend.initialize(BASE_OPTIONS))["ok"])
+        task = asyncio.create_task(backend.store_process(record("task_process")))
+        await asyncio.wait_for(state["derive_started"].wait(), timeout=1)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError) as caught:
+            await task
+        self.assertEqual(caught.exception.source_id, "raw-1")
+        self.assertEqual(caught.exception.confirmed_source_id, "raw-1")
+        await backend.close()
+
+    async def test_northbound_total_deadline_keeps_confirmed_original(self):
+        from kpbot_memory.northbound import NorthboundMemory
+        client, state = self._slow_process_client()
+        memory = NorthboundMemory(Mem0Backend(client=client))
+        config = {"backend": "mem0", "user_id": "user-01", "current_project": "project-a",
+                  "allowed_projects": ["project-a"],
+                  "options": {"endpoint": BASE_OPTIONS["endpoint"], "derive_memories": True}}
+        self.assertTrue((await memory.initialize(config))["ok"])
+        result = await memory.remember(record("task_process"), timeout=0.05)
+        self.assertTrue(state["readback"])
+        self.assertEqual(result, {"ok": True, "data": {"source_id": "raw-1", "processing": "unknown"}})
+        await memory.close()
 
     async def test_store_process_derivation_off(self):
         rec = record(kind="task_process", content=[{"role": "user", "content": "x"}])
@@ -225,7 +340,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
                 return FakeResponse(data={"results": [{"id": "raw-1", "memory": text, "event": "ADD"}]})
             if (method, path) == ("GET", "/memories/raw-1"):
                 return FakeResponse(data={"id": "raw-1", "memory": text})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
         backend = Mem0Backend(client=FakeClient(handler))
         self.assertTrue((await backend.initialize({**BASE_OPTIONS, "derive_memories": False}, timeout=5))["ok"])
@@ -240,7 +355,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         def handler500(method, path, payload):
             if (method, path) == ("POST", "/memories"):
                 return FakeResponse(status=500, data={"detail": "x"})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
         backend = Mem0Backend(client=FakeClient(handler500))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
         result = await backend.store_experience(rec, timeout=5)
@@ -254,7 +369,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
                 return FakeResponse(data={"results": [{"id": "m-9", "memory": text, "event": "ADD"}]})
             if (method, path) == ("GET", "/memories/m-9"):
                 return FakeResponse(data={"id": "m-9", "memory": "被篡改的内容"})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
         backend = Mem0Backend(client=FakeClient(handler_mismatch))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
         result = await backend.store_experience(rec, timeout=5)
@@ -264,7 +379,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         def handler_noadd(method, path, payload):
             if (method, path) == ("POST", "/memories"):
                 return FakeResponse(data={"results": []})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
         backend = Mem0Backend(client=FakeClient(handler_noadd))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
         result = await backend.store_experience(rec, timeout=5)
@@ -296,7 +411,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(method, path, payload):
             if (method, path) != ("POST", "/search"):
-                return FakeResponse(data=OPENAPI)
+                return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
             ns = payload["user_id"]
             if ns == '["kpbot-mem0","raw","experience","user-01","project-a"]':
                 return search_response([
@@ -351,7 +466,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         def handler(method, path, payload):
             if (method, path) == ("POST", "/search"):
                 return FakeResponse(data={"results": noise})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
         backend = Mem0Backend(client=FakeClient(handler))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
@@ -364,7 +479,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         def handler(method, path, payload):
             if (method, path) == ("POST", "/search"):
                 return FakeResponse(status=500, data={"detail": "x"})
-            return FakeResponse(data=OPENAPI)
+            return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
         backend = Mem0Backend(client=FakeClient(handler))
         self.assertTrue((await backend.initialize(BASE_OPTIONS, timeout=5))["ok"])
@@ -395,7 +510,7 @@ class Mem0BackendTests(unittest.IsolatedAsyncioTestCase):
         class SlowClient:
             async def request(self, method, path, timeout=None, json=None, **kwargs):
                 await asyncio.sleep(10)
-                return FakeResponse(data=OPENAPI)
+                return FakeResponse(data=OPENAPI if path == "/openapi.json" else {"results": []})
 
             async def aclose(self):
                 pass
@@ -409,7 +524,7 @@ class Mem0ConfigIntegrationTests(unittest.TestCase):
     def test_config_roundtrip_and_create_backend(self):
         import tempfile, os, stat
         from kpbot_memory.backend_config import load_config
-        from kpbot_memory.backend_cli import create_backend
+        from kpbot_memory.cli.backend import create_backend
         config = {"backend": "mem0", "user_id": "user-01", "current_project": "project-a",
                   "allowed_projects": ["project-a", "project-b"],
                   "options": {"endpoint": "http://127.0.0.1:8888", "derive_memories": True}}

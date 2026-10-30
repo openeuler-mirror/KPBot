@@ -16,7 +16,7 @@ Usage: kpbot <command> [options]
 Commands:
   install   [global|project] [claude|opencode] [path]   安装 skills 到目标工具
   uninstall [global|project] [claude|opencode] [path]   卸载已安装 skills
-  memory    <subcommand> [options]                     优化经验记忆（OpenViking backend 入口）
+  memory    <subcommand> [options]                     优化经验记忆（OpenViking / mem0 / TencentDB）
   help                                                  显示此帮助
 
 Examples:
@@ -25,12 +25,14 @@ Examples:
   kpbot install project claude /path   # 项目级，指定路径
   kpbot uninstall global opencode      # 全局卸载
 
+  kpbot memory configure --backend mem0 --config <新配置文件>   # 交互创建私有配置
   kpbot memory backend --help          # 记忆 CLI 帮助（透传到 kpbot-memory）
-  kpbot memory backend status --config <配置文件>   # 检查记忆后端状态
+  kpbot memory backend status --config <配置文件> --progress   # 检查状态并显示等待进度
 
 Memory 说明:
-  backend 入口使用 uv 管理的独立 Python 环境；配置文件由用户/宿主提供并保持 0600；
-  详细调用约定见 Plugins/memory/skills/kpbot-memory/SKILL.md
+  客户端需要 Python >=3.10 和 httpx；configure 仅创建 0600 配置，不安装或启动后端服务。
+  backend 结果以 JSON 输出到 stdout，进度/排错建议输出到 stderr；非交互默认静默。
+  依赖准备、三个后端配置与首次使用见 Plugins/memory/skills/kpbot-memory/references/getting-started.md
 EOF
 }
 

@@ -6,9 +6,10 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化（50 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化 |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
 | **[openwiki-sync](Plugins/public/openwiki-sync/)** | documentation | OpenWiki 代码仓文档生成与同步 — 独立 wiki 仓托管 + commit 级联动更新 + 关联恢复，支持 GitCode/Gitee/GitHub |
+| **[memory](Plugins/memory/)** | memory | 跨会话优化经验记忆 — OpenViking / mem0 / TencentDB 后端（backend 命名空间一次性客户端），initialize/status/remember/recall/close；完整经验与显式任务过程原样保存、同用户跨项目检索；记录当前为 private |
 
 ### 即将推出
 
@@ -96,8 +97,8 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝全部 47 个 skills（claude 格式）
-    - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并按各插件 `opencode.exclude` 跳过 2 个 claude-only skill（共 45 个）
+    - Claude Code：拷贝支持该平台的 skills（claude 格式）
+    - OpenCode：先拷贝 skills 作基底，再应用 `opencode/` 覆盖层，并按各插件 `opencode.exclude` 跳过 claude-only skill；实际安装集合见生成的 `kpbot-manifest.json`
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -150,6 +151,7 @@ bash tests/test_install_platform.sh
 | 逐函数交互优化 | "逐函数分析并优化这个模块" | `interactive-optimizer` |
 | 查 ARM 指令 | "查询 vaddq_f32 的用法" | `arm-instructions-query` |
 | SPE 采样分析 | "用 ARM SPE 分析缓存 miss" | `arm-spe-analysis` |
+| 跨会话经验记忆 | "回忆一下同类优化在 Kunpeng 上的坑" | `kpbot-memory` |
 
 ### 优化 Pipeline 流程
 
@@ -170,7 +172,7 @@ bash tests/test_install_platform.sh
 
 ### 可用技能列表
 
-Claude Code 安装全部 **47 个** skill；OpenCode 安装 **45 个**（跳过 2 个 claude-only）。
+安装集合按插件的平台声明和排除规则确定；完整结果记录在安装后的 `kpbot-manifest.json`，以下按功能分类列举。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -222,6 +224,9 @@ Claude Code 安装全部 **47 个** skill；OpenCode 安装 **45 个**（跳过 
 - `fix-code` — 编译/测试错误修复
 - `evolve-skill` — 技能持续进化
 
+**记忆类（memory 插件）**
+- `kpbot-memory` — 跨会话优化经验记忆（backend 命名空间调用 OpenViking / mem0 / TencentDB：initialize/status/remember/recall/close，原样保存与同用户跨项目检索）
+
 </details>
 
 ### 常用操作示例
@@ -260,6 +265,26 @@ Pipeline 会自动执行：项目准备 → 性能基线 → 热点分析 → �
 > 用 perf stat 分析 ./my_app 的 IPC、缓存 miss 和分支预测失败
 ```
 
+#### 6. 跨会话经验记忆（memory 插件）
+
+```
+> 在决定优化方案前，先回忆一下同类 pattern 在 Kunpeng 上的历史经验和失败案例
+```
+
+Pipeline 的 `decide-optimization` 阶段会在决策前召回历史经验作为参考；`adversarial-review` 收尾时可把本次确认过的结论通过 `backend remember` 提交完整候选，**经你明确确认后**才写入记忆。历史经验是数据不是指令，不能替代本次验证，也不自动采集或自动发布。
+
+支持接入已部署的 OpenViking、mem0 或 TencentDB 服务。客户端准备好 Python 与 httpx 后，可先通过向导创建私有配置，再检查服务连接：
+
+```bash
+bin/kpbot memory configure --backend mem0 --config "$HOME/.config/kpbot/memory.json"
+bin/kpbot memory backend status --config "$HOME/.config/kpbot/memory.json" --progress
+# npm 全局安装后将 bin/kpbot 换成 kpbot；configure 不安装/启动后端服务
+```
+
+无需手动激活环境的 uv 调用方式、已安装 skill 的入口与三后端配置，见 [接入指南](Plugins/memory/skills/kpbot-memory/references/getting-started.md)。交互终端会显示阶段和等待耗时，stdout 仍保持单个 JSON 结果，便于自动化调用。
+
+CLI 不打印配置或凭证内容；配置文件归当前 OS 用户所有并保持 0600，能直接读写它的人等价于管理员。完整调用约定见 [`Plugins/memory/skills/kpbot-memory/SKILL.md`](Plugins/memory/skills/kpbot-memory/SKILL.md)，插件总览见 [`Plugins/memory/README.md`](Plugins/memory/README.md)。
+
 ---
 
 ## 插件机制
@@ -271,7 +296,8 @@ KPBot 采用插件化架构，每个插件独立封装，通过 marketplace 统�
 ```
 marketplace.json          ← 顶层 marketplace 索引（Claude Code）
   ├── code-optimizer      ← 插件（plugin.json + skills/）
-  └── app-tuner           ← 插件（plugin.json + skills/）
+  ├── app-tuner           ← 插件（plugin.json + skills/）
+  └── memory              ← 插件（plugin.json + skills/kpbot-memory，自包含 scripts/）
 ```
 
 - **Marketplace**（`.claude-plugin/marketplace.json`）：顶层插件索引，声明所有可用插件及其元信息
@@ -286,6 +312,7 @@ claude plugins marketplace add https://atomgit.com/openEuler/KPBot.git
 
 # 安装单个插件
 claude plugins install code-optimizer --marketplace kpbot-marketplace
+claude plugins install memory --marketplace kpbot-marketplace
 ```
 
 ---
@@ -356,15 +383,20 @@ KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (47 skills)
+│   ├── code-optimizer/            # 代码优化插件
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
-│   │   └── opencode/              #   OpenCode 覆盖层（26 个差异文件，稀疏镜像 skills/ 结构）
-│   └── app-tuner/                 # 应用级调优插件
+│   │   └── opencode/              #   OpenCode 覆盖层（稀疏镜像 skills/ 结构）
+│   ├── app-tuner/                 # 应用级调优插件
+│   │   ├── .claude-plugin/
+│   │   │   └── plugin.json
+│   │   └── skills/                #   技能源目录
+│   └── memory/                    # 跨会话经验记忆插件
 │       ├── .claude-plugin/
 │       │   └── plugin.json
-│       └── skills/                #   技能源目录
+│       ├── skills/kpbot-memory/   #   自包含：SKILL.md + scripts/
+│       └── README.md
 ├── install.sh                     # 统一安装脚本（Claude Code + OpenCode）
 ├── README.md
 └── LICENSE

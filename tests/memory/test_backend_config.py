@@ -57,6 +57,7 @@ class ConfigValidationTests(unittest.TestCase):
     def test_invalid_configuration_types(self):
         cases = [None, [], "config"]
         for field, values in {
+            "backend": [None, [], {}, 1, True],
             "user_id": [None, "", "  ", 1, []],
             "current_project": [None, "", " ", 1, []],
             "allowed_projects": [None, [], "project-a", [""], [1], ["project-a", "project-a"]],
@@ -78,7 +79,7 @@ class ConfigValidationTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "ACCESS_DENIED")
 
     def test_backend_selection_is_explicit(self):
-        for name in ("", "OPENVIKING", "OpenViking", None):
+        for name in ("", "OPENVIKING", "OpenViking"):
             candidate = config()
             candidate["backend"] = name
             with self.subTest(name=name), self.assertRaises(BackendConfigError) as caught:
@@ -104,14 +105,14 @@ class ConfigValidationTests(unittest.TestCase):
             ("max_input_bytes", (None, "big", 1.5, True, 0, -1)),
         ):
             for value in values:
-                for backend in ("openviking", "tencentdb"):
+                for backend in ("openviking", "tencentdb", "mem0"):
                     candidate = config()
                     candidate["backend"] = backend
                     candidate["options"] = {name: value}
                     with self.subTest(backend=backend, name=name, value=value), self.assertRaises(BackendConfigError) as caught:
                         validate_config(candidate)
                     self.assertEqual(caught.exception.code, "INVALID_ARGUMENT")
-        for value in (None, "", 1, "vectors", "semantic"):
+        for value in (None, "", 1, [], {}, "vectors", "semantic"):
             candidate = config()
             candidate["options"] = {"processing_mode": value}
             with self.subTest(value=value), self.assertRaises(BackendConfigError) as caught:
@@ -124,6 +125,13 @@ class ConfigValidationTests(unittest.TestCase):
         candidate["options"] = {"endpoint": "https://memory.example.com:8420", "api_key": "token",
                                 "service_id": "service-1", "agent_id": "kpbot", "owner_id": "local-user",
                                 "max_input_bytes": 2097152, "chunk_chars": 8000}
+        self.assertEqual(validate_config(candidate), candidate)
+
+    def test_mem0_api_key_is_a_trusted_configuration_option(self):
+        candidate = config()
+        candidate["backend"] = "mem0"
+        candidate["options"] = {"endpoint": "http://127.0.0.1:8888",
+                                "api_key": "test-only-key", "derive_memories": False}
         self.assertEqual(validate_config(candidate), candidate)
 
     def test_non_json_and_nonfinite_options_rejected_without_echo(self):
