@@ -1,4 +1,4 @@
-"""One-shot memory backend CLI (OpenViking, TencentDB or mem0), separate from the call/serve/demo commands.
+"""One-shot memory backend CLI for OpenViking, TencentDB or mem0.
 
 Every invocation creates a fresh client, initializes it from explicit trusted
 configuration, executes one operation, and closes the client in finally. There
@@ -19,13 +19,87 @@ import asyncio
 import json
 import math
 import sys
+from time import monotonic
 from typing import Any
 
-from .backend_config import BackendConfigError, clone_json, load_config
-from .northbound import NorthboundMemory
+from ..backend_config import BackendConfigError, clone_json, load_config
+from ..northbound import NorthboundMemory
 
 DEFAULT_MAX_INPUT_BYTES = 1_048_576
 OPERATIONS = ("initialize", "status", "remember", "recall", "close")
+_PROGRESS_INTERVAL = 1.0
+
+
+class _Progress:
+    """Human-only stage reporting; never render backend or configuration values."""
+
+    def __init__(self, enabled: bool):
+        self.enabled = enabled
+
+    def _write(self, text: str) -> None:
+        if self.enabled:
+            try:
+                sys.stderr.write(text)
+                sys.stderr.flush()
+            except (OSError, ValueError):
+                # Progress is observational; a closed stderr must not change
+                # an operation's JSON result or interrupt client cleanup.
+                self.enabled = False
+
+    def _line(self, stage: str, state: str, started: float) -> None:
+        self._write(f"[memory] {stage}: {state}; elapsed={monotonic() - started:.1f}s\n")
+
+    async def run(self, stage: str, operation):
+        if not self.enabled:
+            return await operation
+        started = monotonic()
+        self._line(stage, "started", started)
+
+        async def heartbeat():
+            while True:
+                await asyncio.sleep(_PROGRESS_INTERVAL)
+                self._line(stage, "waiting", started)
+
+        ticker = asyncio.create_task(heartbeat(), name="memory-cli-progress")
+        try:
+            result = await operation
+            state = "failed" if isinstance(result, dict) and result.get("ok") is False else "completed"
+            self._line(stage, state, started)
+            return result
+        except BaseException:
+            self._line(stage, "interrupted", started)
+            raise
+        finally:
+            ticker.cancel()
+            # Consume the ticker's cancellation without swallowing a fresh
+            # cancellation of this command while the ticker is being joined.
+            await asyncio.gather(ticker, return_exceptions=True)
+
+    def failure_hint(self, result: dict | None, backend: str | None) -> None:
+        if not self.enabled or not isinstance(result, dict) or result.get("ok") is not False:
+            return
+        code = result.get("error", {}).get("code")
+        hints = {
+            "INVALID_ARGUMENT": "Check backend --help, the trusted configuration, and input JSON fields.",
+            "ACCESS_DENIED": "Check configuration ownership/mode 0600, credentials, and allowed user/project scope.",
+            "UNSUPPORTED": "Use only the selected backend's supported options; shared recall is not available.",
+            "NOT_READY": "Check that initialization succeeds before using the memory client.",
+            "TIMEOUT": "Check service reachability and model/storage latency before adjusting --timeout.",
+            "WRITE_UNKNOWN": "Do not automatically resubmit; use the JSON source_id to investigate the original write.",
+            "TOO_LARGE": "Check the configured byte limit and backend request limits; do not truncate original content.",
+            "READ_FAILED": "Check backend storage and record availability; do not treat this as an empty search.",
+            "BACKEND_ERROR": "Inspect the backend service logs and installed dependencies for the failed operation.",
+        }
+        if code == "UNAVAILABLE":
+            hint = {
+                "openviking": "Check the OpenViking service, account/user credentials, and embedding/index readiness.",
+                "mem0": "Check the mem0 REST service, API key, and database availability.",
+                "tencentdb": "Check MemoryCore 2.0.3, service identity/credentials, and BM25 or embedding availability.",
+            }.get(backend, "Check the selected backend service and installed client dependencies.")
+            hint += " Ensure httpx==0.28.1 is installed in the Python interpreter running this command; see the bundled backend guide."
+        else:
+            hint = hints.get(code, "Inspect the JSON error and selected backend documentation for the failed operation.")
+        self._write(f"[memory] Next step: {hint}\n")
 
 __all__ = ["main", "build_parser", "create_backend"]
 
@@ -70,6 +144,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--task-id", help="required for text submission: task ID")
     parser.add_argument("--timeout", type=_positive_timeout, default=30.0,
                         help="finite positive seconds for initialize + operation (default 30; excludes close cleanup)")
+    progress = parser.add_mutually_exclusive_group()
+    progress.add_argument("--progress", dest="progress", action="store_true",
+                          help="show stages and elapsed waiting time on stderr (default when stderr is a TTY)")
+    progress.add_argument("--no-progress", dest="progress", action="store_false",
+                          help="disable stderr progress and human failure hints")
+    parser.set_defaults(progress=None)
     return parser
 
 
@@ -146,54 +226,88 @@ def _payload(args: argparse.Namespace, limit: int) -> dict | None:
 def create_backend(backend: str = "openviking") -> Any:
     """Import only for this namespace; httpx itself remains initialize-time lazy."""
     if backend == "tencentdb":
-        from .southbound import SouthboundMemory
-        return SouthboundMemory()
+        from ..backends.tencentdb_http import TencentDBBackend
+        return TencentDBBackend()
     if backend == "mem0":
-        from .backends.mem0_http import Mem0Backend
+        from ..backends.mem0_http import Mem0Backend
         return Mem0Backend()
-    from .backends.openviking_http import OpenVikingBackend
+    from ..backends.openviking_http import OpenVikingBackend
     return OpenVikingBackend()
 
 
-async def _execute(config: dict, operation: str, payload: dict | None, timeout: float) -> dict | None:
+async def _execute(config: dict, operation: str, payload: dict | None, timeout: float,
+                   *, progress: _Progress | None = None) -> dict | None:
+    progress = progress or _Progress(False)
     memory = NorthboundMemory(create_backend(config["backend"]))
     deadline = asyncio.get_running_loop().time() + timeout
     result: dict | None = None
+    primary_produced = False
+    close_reported = False
+
+    async def run_stage(stage: str, call, *, bootstrap: bool = False):
+        nonlocal result, primary_produced
+        # Do not let a prior readiness result stand in for a cancelled data call.
+        result, primary_produced = None, False
+
+        async def capture():
+            nonlocal result, primary_produced
+            value = await call
+            if bootstrap and value["ok"] and value["data"].get("state") != "ready":
+                value = _error("UNAVAILABLE", "backend initialization did not reach ready")
+            if not bootstrap or operation == "initialize" or not value["ok"]:
+                # Capture before progress completion joins its ticker. A cancel
+                # during that observational await cannot erase this outcome.
+                result, primary_produced = value, True
+            return value
+
+        return await progress.run(stage, capture())
+
     try:
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             result = _error("TIMEOUT", "command timed out before initialization")
         else:
-            result = await memory.initialize(config, timeout=remaining)
+            result = await run_stage("initialize", memory.initialize(config, timeout=remaining), bootstrap=True)
         if result["ok"]:
-            if result["data"].get("state") != "ready":
-                result = _error("UNAVAILABLE", "backend initialization did not reach ready")
-            elif operation == "initialize":
+            if operation == "initialize":
                 pass  # Return this probe's status, then release its client.
             elif operation == "close":
-                result = await memory.close()
+                close_reported = True
+                result = await run_stage("close", memory.close())
             else:
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
                     result = _error("TIMEOUT", "command timed out before the requested operation")
                 elif operation == "status":
-                    result = await memory.status(timeout=remaining)
+                    result = await run_stage("status", memory.status(timeout=remaining))
                 elif operation == "remember":
-                    result = await memory.remember(payload, timeout=remaining)
+                    result = await run_stage("remember", memory.remember(payload, timeout=remaining))
                 else:
-                    result = await memory.recall(payload, timeout=remaining)
+                    result = await run_stage("recall", memory.recall(payload, timeout=remaining))
     except asyncio.CancelledError:
         # Started writes are converted to WRITE_UNKNOWN inside the facade.
-        result = _error("BACKEND_ERROR", "backend command was cancelled")
+        if not primary_produced:
+            result = _error("BACKEND_ERROR", "backend command was cancelled")
     except Exception:
-        result = _error("BACKEND_ERROR", "backend command failed without a confirmed result")
+        if not primary_produced:
+            result = _error("BACKEND_ERROR", "backend command failed without a confirmed result")
     finally:
-        try:
+        cleanup, cleanup_produced = None, False
+
+        async def capture_close():
+            nonlocal cleanup, cleanup_produced
             cleanup = await memory.close()
+            cleanup_produced = True
+            return cleanup
+
+        try:
+            await progress.run("close cleanup" if close_reported else "close", capture_close())
         except asyncio.CancelledError:
-            cleanup = _error("BACKEND_ERROR", "backend client cleanup was cancelled")
+            if not cleanup_produced:
+                cleanup = _error("BACKEND_ERROR", "backend client cleanup was cancelled")
         except Exception:
-            cleanup = _error("BACKEND_ERROR", "backend client cleanup failed")
+            if not cleanup_produced:
+                cleanup = _error("BACKEND_ERROR", "backend client cleanup failed")
         # Preserve primary failures, including a known uncertain-write source.
         if cleanup is not None and (result is None or result.get("ok") is True):
             # A confirmed save remains attributable even if releasing its client
@@ -214,12 +328,23 @@ def _emit(result: dict | None) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    enabled = sys.stderr.isatty()
+    # Even parser failures can request safe hints; never echo rejected tokens.
+    if "--no-progress" in arguments:
+        enabled = False
+    elif "--progress" in arguments:
+        enabled = True
+    progress = _Progress(enabled)
+    backend = None
     try:
-        args = build_parser().parse_args(argv)
+        args = build_parser().parse_args(arguments)
+        progress.enabled = enabled if args.progress is None else args.progress
         _validate_arguments(args)
         config = load_config(args.config)
+        backend = config["backend"]
         payload = _payload(args, _input_limit(config))
-        result = asyncio.run(_execute(config, args.operation, payload, args.timeout))
+        result = asyncio.run(_execute(config, args.operation, payload, args.timeout, progress=progress))
     except BackendConfigError as exc:
         result = _error(exc.code, exc.message)
     except ImportError:
@@ -228,5 +353,6 @@ def main(argv: list[str] | None = None) -> int:
         result = _error("BACKEND_ERROR", "backend command was interrupted")
     except Exception:
         result = _error("BACKEND_ERROR", "backend command failed without a valid result")
+    progress.failure_hint(result, backend)
     _emit(result)
     return 0 if result is None or result.get("ok") is True else 1

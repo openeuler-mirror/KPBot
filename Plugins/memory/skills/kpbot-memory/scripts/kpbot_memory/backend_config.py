@@ -29,7 +29,7 @@ BACKEND_OPTIONS = {
          "max_input_bytes", "chunk_chars"}
     ),
     "mem0": frozenset(
-        {"endpoint", "max_input_bytes", "derive_memories"}
+        {"endpoint", "api_key", "max_input_bytes", "derive_memories"}
     ),
 }
 _OPTION_STRINGS = frozenset(
@@ -117,7 +117,10 @@ def _validate_options(backend: str, options: dict) -> None:
     for name in _OPTION_BOOLEANS & options.keys():
         if type(options[name]) is not bool:
             raise BackendConfigError(f"backend option {name} must be a boolean")
-    if "processing_mode" in options and options["processing_mode"] not in _OPENVIKING_MODES:
+    if "processing_mode" in options and (
+        not isinstance(options["processing_mode"], str)
+        or options["processing_mode"] not in _OPENVIKING_MODES
+    ):
         raise BackendConfigError(
             "backend option processing_mode must be vectors_only or semantic_and_vectors")
 
@@ -133,6 +136,8 @@ def validate_config(config: dict) -> dict:
         raise BackendConfigError("backend configuration must be an object")
     if set(config) != CONFIG_FIELDS:
         raise BackendConfigError("backend configuration requires exactly the five documented fields")
+    if not isinstance(config["backend"], str):
+        raise BackendConfigError("backend must be a string")
     if config["backend"] not in BACKEND_OPTIONS:
         raise BackendConfigError("only the openviking, tencentdb and mem0 backends are supported", "UNSUPPORTED")
     for field in ("user_id", "current_project"):

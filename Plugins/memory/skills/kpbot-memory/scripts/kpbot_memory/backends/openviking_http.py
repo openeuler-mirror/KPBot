@@ -543,6 +543,8 @@ class OpenVikingBackend:
                               "kind": kind, "project_id": project,
                               "owner_id": record["owner_id"], "task_id": record["task_id"],
                               "source_id": uri, "score": score})
+                if len(items) >= limit:
+                    break
             if failed_reads and not items:
                 raise _Failure("READ_FAILED", "All returnable hits failed original-content readback.")
             return _success({"items": items[:limit], "partial": bool(failed_reads)})

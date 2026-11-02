@@ -44,6 +44,18 @@
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["openwiki", "wiki", "documentation", "docs", "knowledge", "agent-docs", "sync", "mirror", "gitcode", "gitee", "github", "automation"]
+    },
+    {
+      "name": "memory",
+      "description": "跨会话优化经验记忆 — 通过 backend 命名空间调用 OpenViking、mem0 或 TencentDB 后端（一次性客户端），提供 initialize/status/remember/recall/close：完整经验与显式任务过程原样可逆保存，同用户跨项目检索。记录当前为 private。历史经验仅作参考：不自动采集、不自动发布、不替代验证",
+      "author": {
+        "name": "Kunpeng Acceleration Team"
+      },
+      "category": "memory",
+      "source": "./Plugins/memory",
+      "version": "1.0.0",
+      "platforms": ["claude", "opencode"],
+      "tags": ["memory", "cross-session", "experience", "openviking", "kunpeng", "arm", "aarch64", "optimization"]
     }
   ]
 }

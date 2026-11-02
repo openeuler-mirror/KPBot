@@ -16,7 +16,7 @@ _SCRIPTS = Path(__file__).resolve().parents[2] / "Plugins/memory/skills/kpbot-me
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from kpbot_memory.backends import OpenVikingBackend
+from kpbot_memory.backends.openviking_http import OpenVikingBackend
 
 
 def canonical(value):
@@ -543,6 +543,50 @@ class OpenVikingBackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["data"]["processing"], "unknown")
         self.assertEqual(sum(path.endswith("/write") for _, path, _ in self.fake.calls), 1)
         self.assertEqual(sum(path.endswith("/download") for _, path, _ in self.fake.calls), 1)
+
+    async def test_limit_stops_before_unneeded_slow_lower_ranked_read(self):
+        await self.init()
+        first = await self.store(self.record(project="project-a"))
+        second = await self.store(self.record(project="project-b"))
+        self.fake.scores.update({first: 0.9, second: 0.1})
+        reads = []
+
+        async def download(method, kwargs):
+            uri = kwargs["params"]["uri"]
+            reads.append(uri)
+            if uri == second:
+                await asyncio.sleep(1)
+            return FakeResponse(content=self.fake.resources[uri])
+
+        self.fake.handlers["/api/v1/content/download"] = download
+        result = await self.backend.search(
+            self.request(projects=("project-a", "project-b"), limit=1), timeout=0.1)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual([item["source_id"] for item in result["data"]["items"]], [first])
+        self.assertEqual(reads, [first])
+        self.assertFalse(result["data"]["partial"])
+
+    async def test_limit_counts_only_valid_results_and_preserves_failed_read_fallback(self):
+        await self.init()
+        failed = await self.store(self.record(project="project-a"))
+        unauthorized = await self.store(self.record(project="project-b"))
+        valid = await self.store(self.record(project="project-c"))
+        unused = await self.store(self.record(project="project-d"))
+        self.fake.resources[failed] = b"invalid JSON"
+        envelope = json.loads(self.fake.resources[unauthorized])
+        envelope["record"]["owner_id"] = "other-user"
+        envelope["record_sha256"] = hashlib.sha256(canonical(envelope["record"])).hexdigest()
+        self.fake.resources[unauthorized] = canonical(envelope)
+        self.fake.scores.update({failed: 0.9, unauthorized: 0.8, valid: 0.7, unused: 0.6})
+        self.fake.calls.clear()
+        result = await self.backend.search(self.request(
+            projects=("project-a", "project-b", "project-c", "project-d"), limit=1))
+        self.assertTrue(result["ok"], result)
+        self.assertEqual([item["source_id"] for item in result["data"]["items"]], [valid])
+        self.assertTrue(result["data"]["partial"])
+        reads = [kwargs["params"]["uri"] for _, path, kwargs in self.fake.calls
+                 if path == "/api/v1/content/download"]
+        self.assertEqual(reads, [failed, unauthorized, valid])
 
     async def test_partial_read_failure_and_all_failed_reads(self):
         await self.init()

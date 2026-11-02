@@ -1,6 +1,6 @@
 """One-shot backend CLI tests using async fakes; no server or SDK calls.
 
-Run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.memory.test_backend_cli -v
+Run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.memory.test_cli_backend -v
 """
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import io
 import json
 import os
 from pathlib import Path
+import re
+from types import SimpleNamespace
 import subprocess
 import sys
 import tempfile
@@ -22,7 +24,8 @@ SCRIPTS = Path(__file__).resolve().parents[2] / "Plugins/memory/skills/kpbot-mem
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from kpbot_memory import backend_cli, cli  # noqa: E402
+from kpbot_memory import cli  # noqa: E402
+from kpbot_memory.cli import backend as backend_cli  # noqa: E402
 
 
 def trusted():
@@ -419,6 +422,128 @@ class BackendCliTests(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn("kpbot memory backend", stderr.getvalue())
 
+    def test_configure_dispatch_preserves_arguments_without_backend_creation(self):
+        arguments = ["--backend", "mem0", "--config", "/private path/config.json"]
+        configure_main = mock.Mock(return_value=0)
+        with mock.patch.dict(sys.modules, {"kpbot_memory.cli.configure": SimpleNamespace(main=configure_main)}), \
+                mock.patch.object(backend_cli, "create_backend") as factory:
+            self.assertEqual(cli.main(["configure", *arguments]), 0)
+        configure_main.assert_called_once_with(arguments)
+        factory.assert_not_called()
+
+    def _run_with_progress(self, arguments, *, tty=False):
+        class Stderr(io.StringIO):
+            def isatty(self):
+                return tty
+
+        stdout, stderr = io.StringIO(), Stderr()
+        with mock.patch.object(backend_cli, "create_backend", side_effect=self.factory), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            status = cli.main(["backend", *arguments, "--config", str(self.config_path)])
+        output = stdout.getvalue()
+        self.assertEqual(len(output.splitlines()), 1)
+        result = json.loads(output)
+        self.assertEqual(output, json.dumps(result, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n")
+        return status, result, stderr.getvalue()
+
+    def test_progress_defaults_to_stderr_tty_and_can_be_explicitly_overridden(self):
+        for tty, flags, expected in ((False, [], False), (True, [], True),
+                                     (False, ["--progress"], True), (True, ["--no-progress"], False)):
+            with self.subTest(tty=tty, flags=flags):
+                self.backend = CliBackend()
+                status, result, stderr = self._run_with_progress(["status", *flags], tty=tty)
+                self.assertEqual(status, 0)
+                self.assertEqual(result, ready())
+                if expected:
+                    for stage in ("initialize", "status", "close"):
+                        self.assertIn(f"{stage}: started", stderr)
+                        self.assertIn(f"{stage}: completed", stderr)
+                    self.assertNotIn("TOP-SECRET-CONFIG", stderr)
+                    self.assertNotIn(str(self.config_path), stderr)
+                else:
+                    self.assertEqual(stderr, "")
+
+    def test_progress_waiting_reports_real_elapsed_time_and_cleanup_stage(self):
+        async def slow(payload, timeout):
+            await asyncio.sleep(0.12)
+            return ready()
+
+        self.backend.hooks["initialize"] = slow
+        self.backend.hooks["close"] = lambda payload, timeout: asyncio.sleep(0.04)
+        with mock.patch.object(backend_cli, "_PROGRESS_INTERVAL", 0.02):
+            status, result, stderr = self._run_with_progress(["initialize", "--progress"])
+        self.assertEqual(status, 0)
+        self.assertEqual(result, ready())
+        self.assertIn("initialize: waiting", stderr)
+        self.assertIn("close: waiting", stderr)
+        elapsed = [float(value) for value in re.findall(r"initialize: .*?elapsed=([0-9.]+)s", stderr)]
+        self.assertEqual(elapsed, sorted(elapsed))
+        self.assertGreaterEqual(elapsed[-1], 0.1)
+        self.assertNotIn("%", stderr)
+        self.assertEqual(self.names(), ["initialize", "close"])
+
+    def test_progress_failure_hints_are_static_and_do_not_render_backend_details(self):
+        expected = error("UNAVAILABLE", "TOP-SECRET-SOURCE")
+        expected["error"]["message"] = "TOP-SECRET-MESSAGE"
+        self.backend.replies["initialize"] = expected
+        status, result, stderr = self._run_with_progress(["initialize", "--progress"])
+        self.assertEqual(status, 1)
+        self.assertEqual(result, expected)
+        self.assertIn("initialize: failed", stderr)
+        self.assertIn("Next step:", stderr)
+        self.assertIn("OpenViking", stderr)
+        self.assertIn("httpx==0.28.1", stderr)
+        self.assertIn("Python interpreter running this command", stderr)
+        self.assertIn("bundled backend guide", stderr)
+        self.assertNotIn("TOP-SECRET", stderr)
+        self.assertNotIn(str(self.config_path), stderr)
+        self.assertIn("close: completed", stderr)
+        self.backend.replies["initialize"] = error("TOP-SECRET-CODE")
+        _, _, stderr = self._run_with_progress(["initialize", "--progress"])
+        self.assertNotIn("TOP-SECRET", stderr)
+
+    def test_closed_progress_output_does_not_change_json_or_skip_close(self):
+        class BrokenStderr(io.StringIO):
+            def isatty(self):
+                return True
+
+            def write(self, text):
+                raise BrokenPipeError("closed progress consumer")
+
+        stdout = io.StringIO()
+        with mock.patch.object(backend_cli, "create_backend", side_effect=self.factory), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(BrokenStderr()):
+            status = cli.main(["backend", "status", "--config", str(self.config_path)])
+        self.assertEqual(status, 0)
+        self.assertEqual(json.loads(stdout.getvalue()), ready())
+        self.assertEqual(len(stdout.getvalue().splitlines()), 1)
+        self.assertEqual(self.names(), ["initialize", "status", "close"])
+
+    def test_parser_failure_progress_hint_does_not_echo_rejected_values(self):
+        status, result, stderr = self._run_with_progress(["status", "--progress", "--unknown=TOP-SECRET-ARG"])
+        self.assert_error(status, result, "INVALID_ARGUMENT")
+        self.assertIn("Next step:", stderr)
+        self.assertNotIn("TOP-SECRET", stderr)
+        self.assertEqual(self.names(), [])
+
+    def test_tty_help_shows_options_without_progress_or_backend_creation(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(backend_cli, "create_backend") as factory, \
+                mock.patch.object(stderr, "isatty", return_value=True), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as caught:
+                cli.main(["backend", "--help"])
+        self.assertEqual(caught.exception.code, 0)
+        self.assertIn("--progress", stdout.getvalue())
+        self.assertIn("--no-progress", stdout.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
+        factory.assert_not_called()
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(cli.main(["--help"]), 0)
+        self.assertIn("kpbot memory configure", stdout.getvalue())
+        self.assertIn("kpbot memory backend", stdout.getvalue())
+
     def test_help_explains_one_shot_lifecycle_without_creating_backend(self):
         stdout = io.StringIO()
         with mock.patch.object(backend_cli, "create_backend") as factory, contextlib.redirect_stdout(stdout):
@@ -447,6 +572,112 @@ class BackendCliTests(unittest.TestCase):
 
 
 class BackendSessionCancellationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_progress_tickers_stop_after_cancelled_read_write_and_close(self):
+        for stage in ("search", "store_process", "close"):
+            with self.subTest(stage=stage):
+                backend = CliBackend()
+                entered = asyncio.Event()
+                stderr = io.StringIO()
+
+                async def wait(payload, timeout):
+                    entered.set()
+                    try:
+                        await asyncio.Event().wait()
+                    except asyncio.CancelledError as exc:
+                        if stage == "store_process":
+                            exc.source_id = "allocated-process-source"
+                        raise
+
+                backend.hooks[stage] = wait
+                operation = "remember" if stage == "store_process" else "recall"
+                payload = record("task_process") if operation == "remember" else {"query": "q"}
+                if stage == "close":
+                    operation, payload = "initialize", None
+                with mock.patch.object(backend_cli, "create_backend", return_value=backend), \
+                        contextlib.redirect_stderr(stderr):
+                    task = asyncio.create_task(backend_cli._execute(
+                        trusted(), operation, payload, 30, progress=backend_cli._Progress(True)))
+                    await asyncio.wait_for(entered.wait(), 1)
+                    task.cancel()
+                    result = await task
+                self.assertEqual(result["error"]["code"],
+                                 "WRITE_UNKNOWN" if stage == "store_process" else "BACKEND_ERROR")
+                if stage == "store_process":
+                    self.assertEqual(result["error"]["source_id"], "allocated-process-source")
+                self.assertEqual(sum(name == "close" for name, _, _ in backend.calls), 1)
+                self.assertIn("close: started", stderr.getvalue())
+                self.assertFalse([t for t in asyncio.all_tasks()
+                                  if t.get_name() == "memory-cli-progress" and not t.done()])
+
+    async def test_post_result_progress_cancellation_preserves_success_and_known_failure(self):
+        cases = [{"ok": True, "data": {"source_id": "original-locator", "processing": "pending"}},
+                 error("WRITE_UNKNOWN", "known-uncertain-source")]
+        for expected in cases:
+            with self.subTest(ok=expected["ok"]):
+                backend = CliBackend()
+                backend.replies["store_experience"] = expected
+
+                class CancelAfterResult(backend_cli._Progress):
+                    def _line(self, stage, state, started):
+                        super()._line(stage, state, started)
+                        if stage == "remember" and state in ("completed", "failed"):
+                            asyncio.current_task().cancel()
+
+                with mock.patch.object(backend_cli, "create_backend", return_value=backend), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    task = asyncio.create_task(backend_cli._execute(
+                        trusted(), "remember", record(), 30, progress=CancelAfterResult(True)))
+                    result = await task
+                self.assertEqual(result, expected)
+                self.assertEqual([name for name, _, _ in backend.calls],
+                                 ["initialize", "store_experience", "close"])
+                self.assertFalse([t for t in asyncio.all_tasks()
+                                  if t.get_name() == "memory-cli-progress" and not t.done()])
+
+    async def test_post_close_progress_cancellation_preserves_primary_result(self):
+        backend = CliBackend()
+
+        class CancelAfterClose(backend_cli._Progress):
+            def _line(self, stage, state, started):
+                super()._line(stage, state, started)
+                if stage == "close" and state == "completed":
+                    asyncio.current_task().cancel()
+
+        with mock.patch.object(backend_cli, "create_backend", return_value=backend), \
+                contextlib.redirect_stderr(io.StringIO()):
+            task = asyncio.create_task(backend_cli._execute(
+                trusted(), "remember", record(), 30, progress=CancelAfterClose(True)))
+            result = await task
+        self.assertEqual(result, {"ok": True, "data": {
+            "source_id": "original-locator", "processing": "pending"}})
+        self.assertEqual([name for name, _, _ in backend.calls], ["initialize", "store_experience", "close"])
+        self.assertFalse([t for t in asyncio.all_tasks()
+                          if t.get_name() == "memory-cli-progress" and not t.done()])
+
+    async def test_post_initialize_cancel_is_not_a_successful_unexecuted_business_call(self):
+        for operation in ("initialize", "remember"):
+            with self.subTest(operation=operation):
+                backend = CliBackend()
+
+                class CancelAfterInitialize(backend_cli._Progress):
+                    def _line(self, stage, state, started):
+                        super()._line(stage, state, started)
+                        if stage == "initialize" and state == "completed":
+                            asyncio.current_task().cancel()
+
+                with mock.patch.object(backend_cli, "create_backend", return_value=backend), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    task = asyncio.create_task(backend_cli._execute(
+                        trusted(), operation, record(), 30, progress=CancelAfterInitialize(True)))
+                    result = await task
+                if operation == "initialize":
+                    self.assertEqual(result, ready())
+                else:
+                    self.assertEqual(result["error"]["code"], "BACKEND_ERROR")
+                self.assertEqual([name for name, _, _ in backend.calls], ["initialize", "close"])
+                self.assertFalse([t for t in asyncio.all_tasks()
+                                  if t.get_name() == "memory-cli-progress" and not t.done()])
+
     async def test_cancelled_write_session_still_closes_and_retains_allocated_source(self):
         backend = CliBackend()
         entered = asyncio.Event()

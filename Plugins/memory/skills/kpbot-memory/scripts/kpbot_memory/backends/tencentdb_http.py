@@ -106,7 +106,7 @@ def _reject_constant(value: str) -> None:
     raise ValueError("Nonfinite JSON constant")
 
 
-class SouthboundMemory:
+class TencentDBBackend:
     """Async adapter; one configured owner, any number of projects, private only."""
 
     def __init__(self, *, client_factory: Callable | None = None, client: Any = None):
@@ -191,7 +191,7 @@ class SouthboundMemory:
         normalized.setdefault("chunk_chars", 8000)
         for name in ("api_key", "service_id", "agent_id", "owner_id"):
             value = normalized.get(name)
-            if not _text(value) or len(value) > 128 or not SouthboundMemory._control_free(value):
+            if not _text(value) or len(value) > 128 or not TencentDBBackend._control_free(value):
                 raise _Failure("INVALID_ARGUMENT", f"{name} must be a nonempty header-safe string.")
         endpoint = normalized["endpoint"]
         if not isinstance(endpoint, str):
@@ -390,15 +390,22 @@ class SouthboundMemory:
         return messages
 
     @staticmethod
-    def _batches(messages: list[dict]) -> list[list[dict]]:
-        # v3 conversation/add accepts at most 100 messages and the gateway body
-        # limit is 1 MiB; 700k UTF-8 bytes of content leaves a safety margin.
-        batches, batch, size = [], [], 96
+    def _batches(messages: list[dict], scope: dict) -> list[list[dict]]:
+        # Match httpx's compact, ensure_ascii=False JSON wire encoding. Key
+        # ordering does not change byte length. Include the complete outer
+        # scope and JSON-escaped messages, not their unescaped content lengths.
+        overhead = len(_encode({**scope, "messages": []}))
+        batches, batch, size = [], [], overhead
         for message in messages:
-            cost = len(message["content"].encode("utf-8")) + 48
+            encoded_size = len(_encode(message))
+            if overhead + encoded_size > _BATCH_BYTES:
+                raise _Failure("TOO_LARGE",
+                               f"One native request exceeds {_BATCH_BYTES} UTF-8 JSON bytes including scope.")
+            cost = encoded_size + bool(batch)  # comma between array elements
             if batch and (len(batch) >= _BATCH_MESSAGES or size + cost > _BATCH_BYTES):
                 batches.append(batch)
-                batch, size = [], 96
+                batch, size = [], overhead
+                cost = encoded_size
             batch.append(message)
             size += cost
         if batch:
@@ -427,19 +434,18 @@ class SouthboundMemory:
             if len(body) > maximum:
                 raise _Failure("TOO_LARGE", f"Complete submission envelope exceeds {maximum} UTF-8 bytes.")
             messages = self._chunk_messages(body.decode("utf-8"), kind, source_id)
+            scope = {"session_id": source_id, "team_id": frozen["project_id"],
+                     "agent_id": self._options["agent_id"],
+                     "user_id": self._options["owner_id"], "task_id": frozen["task_id"]}
             failure = None
-            for batch in self._batches(messages):
+            for batch in self._batches(messages, scope):
                 if failure is not None:
                     # Never issue new writes once a batch reported a failure.
                     break
                 try:
                     await self._v3("POST", "/v3/conversation/add", deadline,
                                    write_started=started,
-                                   body={"session_id": source_id, "messages": batch,
-                                         "team_id": frozen["project_id"],
-                                         "agent_id": self._options["agent_id"],
-                                         "user_id": self._options["owner_id"],
-                                         "task_id": frozen["task_id"]})
+                                   body={**scope, "messages": batch})
                 except _Failure as exc:
                     # A native HTTP/error code carries no execution-stage proof.
                     # Even 400/413/403 may follow a partially executed write.

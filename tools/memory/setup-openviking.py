@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Prepare a private, CPU-only OpenViking development fixture; never start a server.
 
-All mutable state lives in this checkout's .runtime/openviking directory.
+Service state lives in this checkout's .runtime/openviking directory. The
+versioned .gitignore provides baseline protection; a local Git exclusion is
+added as a fallback without changing tracked ignore rules.
 Only the provision subcommand contacts a running loopback server. Keys are
 created or recovered in memory and written to mode-0600 files, never printed.
 """
@@ -19,10 +21,12 @@ import shutil
 import stat
 import subprocess
 import sys
+import threading
+import time
 from urllib import error, request
 from urllib.parse import urlsplit
 
-REPO = Path(__file__).absolute().parents[5]
+REPO = Path(__file__).absolute().parents[2]
 RUNTIME = REPO / ".runtime" / "openviking"
 ACCOUNT = "kpbot-dev-smoke"
 ADMIN = "fixture-admin"
@@ -46,6 +50,44 @@ class SetupError(RuntimeError):
     """An error whose text contains no credentials or HTTP response bodies."""
 
 
+def report(message: str) -> None:
+    print("[memory setup] " + message, file=sys.stderr, flush=True)
+
+
+@contextlib.contextmanager
+def progress(stage: str, *, interval: float = 5):
+    """Report actual elapsed waiting time without exposing subprocess input."""
+    started = time.monotonic()
+    stopped = threading.Event()
+    report(stage)
+
+    def heartbeat():
+        while not stopped.wait(interval):
+            report(f"{stage}：仍在执行，已等待 {int(time.monotonic() - started)} 秒")
+
+    worker = threading.Thread(target=heartbeat, daemon=True)
+    worker.start()
+    complete = False
+    try:
+        yield
+        complete = True
+    finally:
+        stopped.set()
+        worker.join()
+        report(f"{stage}：{'完成' if complete else '未完成'}，耗时 {time.monotonic() - started:.1f} 秒")
+
+
+def require_checkout() -> None:
+    """The development fixture must never infer a runtime above an installed skill."""
+    expected = REPO / "tools/memory/setup-openviking.py"
+    if (Path(__file__).absolute() != expected or not (REPO / "install.sh").is_file()
+            or not (REPO / ".git").exists()):
+        raise SetupError(
+            "This development helper requires a KPBot source checkout; no files were created. "
+            "For an installed skill, use kpbot-memory.py configure to create a client config, "
+            "then backend status to connect to an existing service.")
+
+
 class HTTPFailure(SetupError):
     def __init__(self, status: int):
         self.status = status
@@ -62,8 +104,30 @@ def checked(path: Path) -> Path:
     return path
 
 
+def ensure_local_exclusion() -> None:
+    """Add a local fallback to the versioned .gitignore runtime exclusion."""
+    try:
+        result = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--git-path", "info/exclude"],
+                                check=True, capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError):
+        raise SetupError("Cannot locate the checkout's local Git exclude; no runtime was prepared") from None
+    path = Path(result.stdout.strip())
+    if not path.is_absolute():
+        path = REPO / path
+    if path.is_symlink():
+        raise SetupError("Local Git exclude must not be a symlink")
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if "/.runtime/" not in existing.splitlines():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(("\n" if existing and not existing.endswith("\n") else "")
+                         + "# Private memory development environment\n/.runtime/\n")
+
+
 def prepare_directories() -> None:
     os.umask(0o077)
+    ensure_local_exclusion()
     parent = REPO / ".runtime"
     if parent.resolve() != parent:
         raise SetupError("Refusing a symlinked .runtime directory")
@@ -209,6 +273,8 @@ def download_model() -> Path:
     temporary = checked(model.parent / (MODEL + "." + secrets.token_hex(8) + ".part"))
     digest = hashlib.sha256()
     total = 0
+    reported = 0
+    report(f"开始下载模型：0 / {MODEL_SIZE} 字节")
     try:
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "wb") as stream:
@@ -220,6 +286,9 @@ def download_model() -> Path:
                         raise SetupError("Model download exceeds the approved size")
                     digest.update(block)
                     stream.write(block)
+                    if total - reported >= 4 * 1024 * 1024 or total == MODEL_SIZE:
+                        report(f"模型下载：{total} / {MODEL_SIZE} 字节（{total / MODEL_SIZE:.0%}）；完成后还需校验 SHA256")
+                        reported = total
             stream.flush()
             os.fsync(stream.fileno())
         if total != MODEL_SIZE or digest.hexdigest() != MODEL_SHA256:
@@ -275,10 +344,13 @@ def configuration() -> dict:
 
 def setup(args) -> None:
     if not args.skip_install:
-        install_dependencies(args.python)
+        with progress("创建/复用独立 Python 环境并安装固定版本依赖（首次可能编译本地组件）"):
+            install_dependencies(args.python)
     else:
-        package_versions()
-    model = download_model()
+        with progress("检查已安装依赖版本"):
+            package_versions()
+    with progress("下载或验证本地嵌入模型"):
+        model = download_model()
     path = RUNTIME / "ov.conf"
     if not path.exists():
         write_new_json(path, server_configuration(args.port, model))
@@ -295,7 +367,8 @@ def setup(args) -> None:
     print("Interpreter:", RUNTIME / "venv" / "bin" / "python")
     print("Server entry:", RUNTIME / "venv" / "bin" / "openviking-server")
     print("Configuration:", RUNTIME / "ov.conf")
-    print("No VLM is configured; the doctor's VLM failure is expected.")
+    print("Next: start the printed server entry with --config pointing to the configuration above, then run this helper's provision command.")
+    print("No VLM is configured; only the local vectors-only path is prepared.")
 
 
 class NoRedirect(request.HTTPRedirectHandler):
@@ -429,17 +502,34 @@ def main(argv=None) -> int:
     if hasattr(args, "port") and not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
     try:
+        require_checkout()
         prepare_directories()
         with runtime_lock():
-            args.action(args)
+            if args.command in ("provision", "verify"):
+                with progress("核验并配置测试用户（服务需已启动）" if args.command == "provision"
+                              else "核验本地环境（不会检查服务连接）"):
+                    args.action(args)
+            else:
+                args.action(args)
         return 0
     except SetupError as exc:
         print("Setup/provision refused:", str(exc), file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError:
+        print("Dependency command failed; inspect the tool output above, verify uv/Python and native build prerequisites, then rerun explicitly. No credential was printed.", file=sys.stderr)
+        return 1
+    except error.URLError:
+        hint = ("Check network access to the model host, then rerun setup explicitly."
+                if args.command == "setup" else
+                "Start the separate OpenViking server and check its configured port, then rerun provision.")
+        print("Connection failed. " + hint, file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("Cancelled; existing configuration and keys were not overwritten.", file=sys.stderr)
+        return 130
     except Exception as exc:
-        # Suppress untrusted HTTP bodies and arbitrary exception strings, which
-        # could include credentials. The parent can inspect private local logs.
-        print("Setup/provision failed (" + type(exc).__name__ + "); credentials were not printed.", file=sys.stderr)
+        # Suppress untrusted HTTP bodies and arbitrary exception strings.
+        print("Setup/provision failed (" + type(exc).__name__ + "); credentials were not printed. Check local file permissions and the documented prerequisites.", file=sys.stderr)
         return 1
 
 

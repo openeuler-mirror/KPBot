@@ -18,7 +18,7 @@ _SCRIPTS = Path(__file__).resolve().parents[2] / "Plugins/memory/skills/kpbot-me
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from kpbot_memory.southbound import SouthboundMemory
+from kpbot_memory.backends.tencentdb_http import TencentDBBackend
 
 SECRET_MARKER = "TOP-SECRET-TOKEN-DO-NOT-EXPOSE"
 SCOPE = ("project-a", "kpbot", "kpbot-user")
@@ -132,7 +132,7 @@ class FakeClient:
 class TencentDBSecurityTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.fake = FakeClient()
-        self.backend = SouthboundMemory(client=self.fake)
+        self.backend = TencentDBBackend(client=self.fake)
         self.options = {"api_key": "secret-key-" + SECRET_MARKER, "service_id": "default",
                         "owner_id": "kpbot-user"}
         self.query = {"query": "循环 优化", "features": [],

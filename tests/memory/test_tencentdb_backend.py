@@ -16,7 +16,7 @@ _SCRIPTS = Path(__file__).resolve().parents[2] / "Plugins/memory/skills/kpbot-me
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from kpbot_memory.southbound import SouthboundMemory
+from kpbot_memory.backends.tencentdb_http import TencentDBBackend
 
 
 def canonical(value):
@@ -83,6 +83,11 @@ class FakeClient:
         if method == "GET" and path == "/health":
             return FakeResponse(200, self.health)
         body = kwargs.get("json") or {}
+        # Same compact UTF-8 JSON serialization as httpx's json= request body.
+        wire = json.dumps(body, ensure_ascii=False, allow_nan=False,
+                          separators=(",", ":")).encode("utf-8")
+        if len(wire) > 1_048_576:
+            return error_envelope(413)
         sessions = self._rows(body)
         if path == "/v3/conversation/add":
             messages = body.get("messages")
@@ -140,10 +145,10 @@ class FakeClient:
         self.close_count += 1
 
 
-class SouthboundMemoryTests(unittest.IsolatedAsyncioTestCase):
+class TencentDBBackendTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.fake = FakeClient()
-        self.backend = SouthboundMemory(client=self.fake)
+        self.backend = TencentDBBackend(client=self.fake)
         self.options = {"api_key": "test-only-placeholder", "service_id": "default",
                         "owner_id": "kpbot-user"}
 
@@ -200,7 +205,7 @@ class SouthboundMemoryTests(unittest.IsolatedAsyncioTestCase):
             captured.update(kwargs)
             return FakeClient(**kwargs)
 
-        backend = SouthboundMemory(client_factory=factory)
+        backend = TencentDBBackend(client_factory=factory)
         result = await backend.initialize(dict(self.options), timeout=30)
         self.assertTrue(result["ok"], result)
         headers = captured["headers"]
@@ -360,6 +365,36 @@ class SouthboundMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(len(adds), 2)
         for _, _, kwargs in adds:
             self.assertLessEqual(len(kwargs["json"]["messages"]), 100)
+
+    async def test_batches_bound_escaped_wire_json_including_outer_scope(self):
+        await self.ready()
+        # The original envelope is below max_input_bytes, but serializing its
+        # backslashes again for the HTTP body roughly doubles their wire size.
+        record = self.record(kind="task_process", content="\\" * 400000,
+                             task_id='scope-"\\' * 10000)
+        result = await self.backend.store_process(record, timeout=30)
+        self.assertTrue(result["ok"], result)
+        adds = self.calls("/v3/conversation/add")
+        self.assertGreater(len(adds), 1)
+        for _, _, kwargs in adds:
+            body = kwargs["json"]
+            wire = json.dumps(body, ensure_ascii=False, allow_nan=False,
+                              separators=(",", ":")).encode("utf-8")
+            self.assertLessEqual(len(wire), 700000)
+            self.assertEqual(body["task_id"], record["task_id"])
+            self.assertLessEqual(len(body["messages"]), 100)
+        text, present, expected = await self.backend._reassemble(
+            record["project_id"], result["data"]["source_id"],
+            asyncio.get_running_loop().time() + 30)
+        self.assertEqual(present, expected)
+        self.assertEqual(json.loads(text)["record"], record)
+
+    async def test_oversized_outer_scope_rejected_before_any_write(self):
+        await self.ready()
+        result = await self.backend.store_experience(
+            self.record(task_id="t" * 700000), timeout=30)
+        self.error(result, "TOO_LARGE")
+        self.assertEqual(self.calls("/v3/conversation/add"), [])
 
     async def test_store_write_then_readback_mismatch_is_write_unknown(self):
         await self.ready()
@@ -680,7 +715,7 @@ class SouthboundMemoryTests(unittest.IsolatedAsyncioTestCase):
         stored = await self.backend.store_experience(self.record(content={"text": "循环 优化"}), timeout=30)
         self.assertTrue(stored["ok"], stored)
         self.assertIsNone(await self.backend.close())
-        fresh = SouthboundMemory(client=self.fake)
+        fresh = TencentDBBackend(client=self.fake)
         result = await fresh.initialize(dict(self.options), timeout=30)
         self.assertTrue(result["ok"], result)
         found = await fresh.search(self.request(), timeout=30)
