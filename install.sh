@@ -19,6 +19,15 @@ err()  { echo -e "  ${RED}✗${NC}${DIM} $*${NC}"; }
 info() { echo -e "  ${DIM}${CYAN}→${NC}${DIM} $*${NC}"; }
 step() { echo -e "${DIM}$*${NC}"; }
 
+PYTHON_BIN=""
+for _cand in python3 python; do
+    if command -v "$_cand" >/dev/null 2>&1 && \
+       "$_cand" -c 'import json,sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)' >/dev/null 2>&1; then
+        PYTHON_BIN="$_cand"
+        break
+    fi
+done
+
 # Safe install config file with backup and conflict handling.
 # $1 = generated temp file path
 # $2 = target file path
@@ -140,7 +149,7 @@ TOOL="claude"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
-VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "unknown")
+VERSION=$("${PYTHON_BIN}" -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "unknown")
 # Plugins: iterate all plugin skill directories dynamically
 PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
 
@@ -150,7 +159,7 @@ plugin_supports_tool() {
     local plugin_dir="$1"
     local pjson="$plugin_dir/.claude-plugin/plugin.json"
     [ -f "$pjson" ] || return 0   # legacy plugin without metadata: install everywhere
-    python3 - "$pjson" "$TOOL" <<'PY'
+    "${PYTHON_BIN}" - "$pjson" "$TOOL" <<'PY'
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
@@ -169,7 +178,7 @@ plugin_skill_excludes() {
     local plugin_dir="$1"
     local pjson="$plugin_dir/.claude-plugin/plugin.json"
     [ -f "$pjson" ] || return 0
-    python3 - "$pjson" "$TOOL" <<'PY'
+    "${PYTHON_BIN}" - "$pjson" "$TOOL" <<'PY'
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
@@ -213,6 +222,11 @@ if [ $# -gt 0 ]; then
     esac
 fi
 
+if [ -z "$PYTHON_BIN" ]; then
+    err "python 3.x is required but not found in PATH (tried: python3, python). Install python3 and retry."
+    exit 1
+fi
+
 # --- Determine config root directory ---
 if [ "$LEVEL" = "global" ]; then
     if [ "$TOOL" = "opencode" ]; then
@@ -223,6 +237,10 @@ if [ "$LEVEL" = "global" ]; then
 else
     # Project-level: default to current directory, allow override via install_path arg
     if [ -n "$INSTALL_PATH" ]; then
+        if ! mkdir -p "$INSTALL_PATH" 2>/dev/null; then
+            err "Cannot create install path: $INSTALL_PATH"
+            exit 1
+        fi
         INSTALL_BASE="$(cd "$INSTALL_PATH" && pwd)"
     else
         INSTALL_BASE="$PWD"
@@ -337,7 +355,7 @@ mkdir -p "$CONFIG_ROOT/skills"
 # 2) 上次安装清单 kpbot-manifest.json 中记录的 skill（覆盖已改名/下线的无主残留）
 CLEAN_LIST="$SKILLS_TO_INSTALL"
 if [ -f "$CONFIG_ROOT/kpbot-manifest.json" ]; then
-    manifest_skills=$(python3 -c "
+    manifest_skills=$("${PYTHON_BIN}" -c "
 import json
 m = json.load(open('$CONFIG_ROOT/kpbot-manifest.json'))
 for s in m.get('installed_skills', []):
@@ -589,7 +607,7 @@ SKILLS_JSON="[]"
 if [ -d "$CONFIG_ROOT/skills" ]; then
   SKILLS_JSON=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | while read d; do
     basename "$d"
-  done | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))" 2>/dev/null || echo "[]")
+  done | "${PYTHON_BIN}" -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))" 2>/dev/null || echo "[]")
 fi
 
 cat > "$MANIFEST" << MANIFEST_EOF
