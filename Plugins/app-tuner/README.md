@@ -79,6 +79,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
 
+### 独立诊断 skill
+
+| 技能 | 描述 |
+|------|------|
+| `rocksdb-perf-diagnostics` | RocksDB 性能诊断与优化 — 用 LOG / properties / Statistics / perf_context / EventListener 定位写停顿、compaction 积压、读写/空间放大,并在授权下执行单变量复测 |
+
 ## 目录结构
 
 ```
@@ -93,12 +99,18 @@ app-tuner/
 ├── examples/                          # 示例运行产物
 │   └── mysql-test/
 ├── skills/                            # 技能目录(扁平)
-│   └── kpbot-app-tuner/               # 主 skill
-│       ├── SKILL.md                   # 唯一规范源
-│       ├── agents/                    # 平台 agent 配置
-│       ├── references/                # 参考文档(22 个)
-│       ├── scripts/                   # 脚本(22 个)
-│       └── subskills/                 # 自研分析型子 skill(12 个，含 scripts/ 和 references/)
+│   ├── kpbot-app-tuner/               # 主 skill
+│   │   ├── SKILL.md                   # 唯一规范源
+│   │   ├── agents/                    # 平台 agent 配置
+│   │   ├── references/                # 参考文档(22 个)
+│   │   ├── scripts/                   # 脚本(22 个)
+│   │   └── subskills/                 # 自研分析型子 skill(12 个，含 scripts/ 和 references/)
+│   └── rocksdb-perf-diagnostics/      # 独立诊断 skill
+│       ├── SKILL.md
+│       ├── references/                # 观测面、日志、统计、参数、报告模板
+│       ├── scripts/                   # LOG 解析、property 采集
+│       ├── evals/                     # skill-creator 评估 + with/without 脚本
+│       └── cases/                     # KPBot agent 级 A/B 用例
 └── opencode/                          # OpenCode 覆盖层(差异文件)
 ```
 
@@ -123,6 +135,7 @@ app-tuner/
 | 完整优化流程 | "帮我优化这个服务器应用的性能" | `kpbot-app-tuner` |
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
+| RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
 
 ### 优化工作流
 
