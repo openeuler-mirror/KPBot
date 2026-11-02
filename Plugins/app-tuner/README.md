@@ -73,6 +73,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `database-workload-analysis` | 数据库专项分析(MySQL/InnoDB) |
 | `other-optimization` | 其他优化方向兜底 |
 
+### 工具辅助类 skill
+
+| 技能 | 描述 |
+|------|------|
+| `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
+
 ## 目录结构
 
 ```
