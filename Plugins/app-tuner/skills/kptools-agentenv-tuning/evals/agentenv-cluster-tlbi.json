@@ -1,0 +1,93 @@
+{
+  "skill_name": "agentenv-cluster-tlbi",
+  "evals": [
+    {
+      "id": 3,
+      "prompt": "我已经把 AgentENV cpuset 绑到一个 cluster，只有 taskset 的验证结果，没有范围控制实现信息。能否写成本次 TLBI 优化通过？",
+      "expected_output": "只认可绑定验证，TLBI 机制及收益仍未验证；要求实际实现和当前对照数据，覆盖相应正确性条件，不填写未测收益。",
+      "files": [],
+      "expectations": [
+        "将绑核验证与 TLBI 范围控制验证分开",
+        "要求实现证据与真实 A/B，不把绑定结果当作机制收益"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "准备用 agentenv-cluster-tlbi 生成布局建议：机器有多个 socket，部分 CPU 的 cluster_id 数值相同，die_id 文件不存在；目标使用 cgroup v1。可否把缺失 die_id 当 0，再把所有同 cluster_id 的 CPU 合并？",
+      "expected_output": "缺失字段保持 unknown，按 package/die/cluster 和平台资料解释层级，不跨 socket 盲合并；按 v1 membership 和实际挂载根解释 cpuset，仍需独立 TLBI 机制与一致性证据。",
+      "files": [],
+      "expectations": [
+        "不将缺失 die_id 当作 0，也不按单一 cluster_id 跨 socket 合并 CPU",
+        "区分 cgroup v1 目标层级与 v2 路径，布局不能证明 TLBI 已生效"
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "我在Host启动参数加了kvm-arm.dvmbm_enabled=1，也给沙箱绑了核。只有cmdline和taskset输出，能否认定TLBI范围优化已生效？关闭时直接删参数可以吗？",
+      "expected_output": "核对实际内核识别、参数类型/默认值、所需硬件和策略；从实现定位有效参数/日志/位图证据，不只看cmdline或绑定。禁用按真实语义核验，不能假定删参数等于关或编造在线sysctl。",
+      "files": [],
+      "expectations": [
+        "区分Host启动参数、运行时机制生效、CPU布局与性能结果",
+        "核实默认状态和关闭接口，不把未知关闭值或sysfs路径当通用事实"
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "有一份预编译aarch64 UnixBench离线包，含Perl、libperl和make shim，但还没确认与基础镜像的glibc匹配。沙箱不能联网，make返回0且spawn的ldd没报错，是否已能直接制作正式基准快照？",
+      "expected_output": "先核对来源/哈希/归档路径、ELF架构与解释器、glibc/Perl ABI及库目录；同时验证实际Perl与spawn依赖并运行真实用例。make shim不证明编译成功，不默认apt联网；在自有Guest内安装、自检后创建并恢复验证显式命名快照。",
+      "files": [
+        "references/tlbi-benchmark.md"
+      ],
+      "expectations": [
+        "检查包与镜像ABI及Perl加载路径，不把shim退出码或单个ldd结果当完整通过",
+        "离线材料只在本轮Guest安装，先自检再冻结和恢复验证快照，不在Host根目录解包"
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "脚本用ps查qemu来定位实际Firecracker沙箱，随后taskset -pc传的是pCPU编号。分配给不同沙箱的逻辑CPU列表没有重叠，但机器开着SMT，能否称为物理核一对一？",
+      "expected_output": "按实际VMM与沙箱身份找到PID，识别fc_vcpu线程，不混入主/API线程；查询taskset传TID。按package/cluster/core和sibling映射核实物理共享，逻辑列表不交叉不保证独占物理核，每次恢复重查TID。",
+      "files": [
+        "references/tlbi-benchmark.md"
+      ],
+      "expectations": [
+        "修正QEMU/Firecracker身份混用以及taskset查询对象，核对本轮实际vCPU TID",
+        "区分逻辑CPU与物理核/SMT，避免恢复后复用旧PID/TID"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "新DVMBM补丁计划只记录vCPU当前运行的pCPU，迁走就删除旧位。920C/E和920G粒度可能不同，是否可以直接按型号套CPU位图并省略其他CPU的失效？",
+      "expected_output": "核对实际更新策略、逐vCPU/cluster能力及硬件位图编码；型号是线索不是生效证明。要求覆盖历史TLB驻留、迁移与失效并发、cpuset改变和上下文复用的同步/屏障；未证明旧条目退休前不能移除必要失效目标，不凭文字生成省略TLBI的补丁。",
+      "files": [],
+      "expectations": [
+        "当前正在运行的集合不等于可能持有TLB项的集合，要求历史驻留与同步正确性",
+        "核实平台粒度与编码，不只按型号或连续CPU编号推定广播范围"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "UnixBench只跑spawn时的Partial Only分数能否与全量总分比较？BASELINE列是否就是我的关闭组？并发均值和总lps如何判断线性度，开启收益能否用开启值作分母？",
+      "expected_output": "固定子项和版本，lps与派生INDEX不是独立证据；BASELINE是工具归一化参考，不是OFF实测。开启增益用OFF分母；每个开关状态建匹配单沙箱基线，报告每VM值/保留率，只有共同稳定窗口下才估计聚合吞吐和扩展效率。",
+      "files": [
+        "references/tlbi-benchmark.md"
+      ],
+      "expectations": [
+        "区分子项/全量、归一化参考/OFF实测、开启提升/关闭下降的分母",
+        "以匹配单沙箱基线和真实并发窗口计算线性度，不把分数当恢复延迟"
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "单板重启后时间回退，教程里有固定date命令；制作脚本和跑分脚本的默认快照名也不一致。可以照抄旧日期、直接用默认快照和其他单板的并发上限跑吗？",
+      "expected_output": "先校验可信时间并在授权下恢复真实当前时间/同步，测量使用单调时钟，不照抄日期；显式传入并核对同一快照ID和工具内容，按当前CPU/可用内存与预留确定并发，不沿用外板上限。",
+      "files": [
+        "references/tlbi-benchmark.md"
+      ],
+      "expectations": [
+        "不未经核实设置旧日期，不在测量中途校时；校时和重启边界明确",
+        "审查现有脚本，显式统一快照并按本机预算设置实验，不写死案例参数"
+      ]
+    }
+  ]
+}
