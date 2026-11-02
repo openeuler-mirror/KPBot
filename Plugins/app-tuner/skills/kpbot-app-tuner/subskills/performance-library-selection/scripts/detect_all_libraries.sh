@@ -1,10 +1,14 @@
 #!/bin/bash
 # 统一库类型识别脚本 (静态 + 动态联合分析)
-# 输入: REPORT_PATH — 支持以下格式（自动检测）:
-#   1. 含 "symbol" 字段的标准 JSON 报告（原始格式）
-#   2. perf report 文本（含 "perf report" 或 "%" + "[.]" 行）
-#   3. 主框架 evidence_report.json（含 perf_data_path / evidence_files 等字段）
-#   4. 包含 maps_libs / lsof_libs 路径引用的 JSON
+# 输入: REPORT_PATH [STEP_TRACE_CSV] — 支持以下格式（自动检测）:
+#   1. run_and_profile.sh 输出的标准 JSON 报告（含 "symbol" 字段 hotspots + libraries 库列表）
+#   2. perf report 文本（含 "perf report" 或 "%" + "[."] 行）
+#   3. 主框架 evidence_report.json（含 perf_data_path / evidence_files / perf.perf_report_path 等字段）
+#   4. 其他含 hot_symbols / detected_libraries 的结构化 JSON
+# 可选第二参数 STEP_TRACE_CSV: CANN profiler 的 step_trace_time.csv 路径（主框架 evidence 中的
+#   本轮现场数据）。ascend_runtime 门控消费其 hostbound 信号（Free 为 Stage 最大分量）——训练负载的
+#   分配压力常分散于非锁符号路径（pymalloc arena / operator new / CANN 容器 realloc），
+#   仅凭 perf 锁符号占比会系统性低估，hostbound 与锁竞争构成 OR 关系双触发。
 # 输出: JSON 格式，包含 detected_libraries 数组
 # 检测类别: allocators, hash_functions, compression, crypto, json,
 #           memory_operations, pattern_matching, linear_algebra, math,
@@ -14,6 +18,7 @@
 set -euo pipefail
 
 REPORT_FILE=$1
+STEP_TRACE=${2:-}
 
 if [[ -z "$REPORT_FILE" ]]; then
     echo '{"error": "report path is required"}'
@@ -44,7 +49,7 @@ else
     INPUT_TYPE="unknown"
     if grep -qE '^\s+[0-9]+\.[0-9]+%\s+' "$REPORT_FILE" 2>/dev/null && grep -qE '\[\.\]' "$REPORT_FILE" 2>/dev/null; then
         INPUT_TYPE="perf_report"
-    elif grep -qE '"perf_data_path"|"evidence_files"|"perf_report_path"|"loaded_libraries"|"perf_report"|"maps_libs_path"|"perf_available"' "$REPORT_FILE" 2>/dev/null; then
+    elif grep -qE '"perf_data_path"|"evidence_files"|"perf_report_path"|"loaded_libraries"|"perf_available"' "$REPORT_FILE" 2>/dev/null; then
         INPUT_TYPE="evidence_report_json"
     elif grep -qE '"hot_symbols"|"detected_libraries"' "$REPORT_FILE" 2>/dev/null; then
         INPUT_TYPE="structured_json_no_symbol"
@@ -59,10 +64,10 @@ symbols = []
 dso_lines = []
 with open('$REPORT_FILE', errors='ignore') as f:
     for line in f:
-        m = re.match(r'\s+([\d.]+)%\s+\S+\s+\S+\s+\[.\]\s+(.+)', line)
+        m = re.match(r'\s+([\d.]+)%(?:\s+\S+)?\s+(\S+)\s+\[.\]\s+(.+)', line)
         if m:
             pct = float(m.group(1))
-            sym = m.group(2).strip()
+            sym = m.group(3).strip()
             if pct > 0.01 and not sym.startswith('0x'):
                 symbols.append({'symbol': sym, 'overhead_pct': pct})
         if '.so' in line:
@@ -86,26 +91,20 @@ report = {}
 try:
     data = json.loads(text)
     # 提取已加载的库列表
-    for key in ('loaded_libraries', 'maps_libs', 'lsof_libs'):
+    for key in ('loaded_libraries', 'libraries', 'maps_libs', 'lsof_libs'):
         if key in data:
             report['loaded_libraries'] = data[key]
             break
     # 提取 perf report 文本路径（仅读取已有文本，不调用 perf report）
-    # 优先级：perf_self_report_path（Self% 干净三列格式）> perf_report_path > evidence_files.perf_report > 顶层 perf_report
+    # 优先级：perf.perf_report_path（主框架格式）> evidence_files.perf_report
     evidence_files = data.get('evidence_files', {})
     perf_report_path = ''
-    # 1. 优先使用 perf_self_report_path（perf_sampling_online.sh 生成的 --no-children 格式）
-    if data.get('perf_self_report_path'):
-        perf_report_path = data['perf_self_report_path']
-    # 2. perf.perf_report_path（主框架格式）
-    elif isinstance(data.get('perf'), dict):
+    # 1. perf.perf_report_path（主框架格式）
+    if isinstance(data.get('perf'), dict):
         perf_report_path = data['perf'].get('perf_report_path', '')
-    # 3. evidence_files.perf_report
+    # 2. evidence_files.perf_report
     if not perf_report_path and isinstance(evidence_files, dict):
         perf_report_path = evidence_files.get('perf_report', '')
-    # 4. 顶层 perf_report（perf_sampling_online.sh 输出，可能为 call-graph 格式）
-    if not perf_report_path:
-        perf_report_path = data.get('perf_report', '')
     perf_text = ''
     if perf_report_path and os.path.isfile(perf_report_path) and os.path.getsize(perf_report_path) > 0:
         with open(perf_report_path, errors='ignore') as pf:
@@ -114,10 +113,10 @@ try:
     dso_lines = []
     if perf_text:
         for line in perf_text.split('\n'):
-            m = re.match(r'\s+([\d.]+)%\s+\S+\s+\S+\s+\[.\]\s+(.+)', line)
+            m = re.match(r'\s+([\d.]+)%(?:\s+\S+)?\s+(\S+)\s+\[.\]\s+(.+)', line)
             if m:
                 pct = float(m.group(1))
-                sym = m.group(2).strip()
+                sym = m.group(3).strip()
                 if pct > 0.01 and not sym.startswith('0x'):
                     symbols.append({'symbol': sym, 'overhead_pct': pct})
             if '.so' in line:
@@ -133,15 +132,6 @@ try:
                         extra_text_parts.append(ef.read())
                 except Exception:
                     pass
-    # 兼容 perf_sampling_online.sh 直接输出的 *_path 顶层字段
-    for pk in ('maps_libs_path', 'lsof_libs_path', 'environ_path'):
-        fp = data.get(pk, '')
-        if fp and os.path.isfile(fp) and os.path.getsize(fp) > 0:
-            try:
-                with open(fp, errors='ignore') as ef:
-                    extra_text_parts.append(ef.read())
-            except Exception:
-                pass
     extra_text = '\n'.join(extra_text_parts)
     # 同时把原始 JSON 文本也包含进来，供 grep 检测库名
     report['hot_symbols'] = symbols[:100]
@@ -192,10 +182,10 @@ symbols = []
 with open('$REPORT_FILE', errors='ignore') as f:
     text = f.read()
     for line in text.splitlines():
-        m = re.match(r'\s+([\d.]+)%\s+\S+\s+\S+\s+\[.\]\s+(.+)', line)
+        m = re.match(r'\s+([\d.]+)%(?:\s+\S+)?\s+(\S+)\s+\[.\]\s+(.+)', line)
         if m:
             pct = float(m.group(1))
-            sym = m.group(2).strip()
+            sym = m.group(3).strip()
             if pct > 0.01 and not sym.startswith('0x'):
                 symbols.append({'symbol': sym, 'overhead_pct': pct})
 # raw_text 保留原始内容，供 grep 匹配库名（lsof/maps 纯文本列表场景）
@@ -287,7 +277,9 @@ detect_category() {
 # ==============================================================================
 
 # 1. 内存分配器 (allocators)
-detect_category "allocators" "jemalloc:jemalloc,tcmalloc:tcmalloc" "malloc|calloc|free|realloc" "glibc malloc"
+# 词边界约束: free 若为裸子串会误匹配 poll_freewait 等无关符号;
+# (malloc|calloc|realloc|free) 后必须跟非小写字母/下划线或行尾, 兼容 __libc_free/_int_free/cfree@plt 等
+detect_category "allocators" "jemalloc:jemalloc,tcmalloc:tcmalloc" "(malloc|calloc|realloc|free)([^[:lower:]_]|$)" "glibc malloc"
 
 # 2. 哈希函数 (hash_functions) — 动态模式排除 std::hash/std::_Hashtable 误匹配
 detect_category "hash_functions" "xxhash:xxhash" "xxh64|xxh32|xxhash|XXH" "builtin"
@@ -299,7 +291,7 @@ detect_category "compression" "isa-l:ISA-L,libz\.so:zlib" "deflate|inflate|crc32
 detect_category "crypto" "gmssl:GMSSL,libcrypto|libssl|openssl:openssl" "AES|SHA|MD5|SM4|SSL|EVP_" "openssl"
 
 # 5. JSON 解析 (json)
-detect_category "json" "sonic:sonic-cpp,rapidjson:RapidJSON" "json_parse|sonic_parse|rapidjson" "builtin json"
+detect_category "json" "sonic:sonic-cpp,rapidjson:RapidJSON" "json_parse|sonic_parse|rapidjson|scanstring_unicode|scan_once_unicode" "builtin json"
 
 # 6. 内存操作 (memory_operations)
 detect_category "memory_operations" "libmem:libmem,libco\.so:libco,libstringlib:bisheng-stringlib" "memcpy|memset|memcmp|memmove" "libc"
@@ -323,7 +315,7 @@ detect_category "dnn" "" "conv[0-9]|pool[0-9]|relu|matmul|dnn" "DNN Framework"
 detect_category "fft" "libfftw3:FFTW" "fft|ifft|dft" "FFTW"
 
 # 13. 视频编解码 (video)
-detect_category "video" "x265:X265,x264:X264" "encode|decode|h26" "Generic Video Codec"
+detect_category "video" "x265:X265,x264:X264" "x264_|x265_|h264_|h265_|avcodec|ffmpeg" "Generic Video Codec"
 
 # 14. 序列化 (serialization)
 detect_category "serialization" "libprotobuf:Protobuf" "protobuf|ParseFromArray|SerializeToString" "Protobuf"
@@ -332,15 +324,37 @@ detect_category "serialization" "libprotobuf:Protobuf" "protobuf|ParseFromArray|
 detect_category "sql_acceleration" "libsparksql_native:sparksql_native" "sparksql|codegen|native_sql" "sparksql_native"
 
 # 16. 网络通信 (network)
-detect_category "network" "ktls:KTLS" "tls_tx|tls_rx|send|recv|tcp_|udp_" "Standard Network"
+detect_category "network" "ktls:KTLS" "tls_tx|tls_rx|tcp_sendmsg|tcp_recvmsg|udp_sendmsg|udp_recvmsg|ssl_write|ssl_read|ktls" "Standard Network"
 
 # 17. 键值存储引擎 (kv_storage)
 detect_category "kv_storage" "librocksdbjni|librocksdb:RocksDB" "rocksdb::|DBImpl|CompactionJob|MemTable|BlockBasedTable" "RocksDB"
 
-# 18. Ascend NPU 运行时 (ascend_runtime) — 特殊门控逻辑
-# 检测 CANN/torch_npu 库加载，并识别其内部容器操作隐含的 malloc 锁竞争
-# 硬门控：必须有本轮现场 perf 采集成功（report 中含非空 symbol 字段）才能输出推荐结论；
-#         perf 失败/降级/缺失时，ascend_runtime 标记为 blocked 供规则引擎门控（规则引擎不得基于此输出推荐结论）
+# 18. Ascend NPU 运行时 (ascend_runtime) — 特殊门控逻辑（双信号 OR 触发）
+# 检测 CANN/torch_npu 库加载，按两个正交现场信号判定:
+#   信号A 锁竞争: 本轮 perf 锁符号（pthread_mutex/rwlock）占比 > 5%（直接机制证据）
+#   信号B hostbound: 本轮 CANN profiler step_trace 末步 Free 为 Stage 最大分量
+#            （Free > Computing 且 Free > Communication，即 host 侧空隙是主要瓶颈——
+#            不设固定百分比阈值，关注 hostbound 是否为主要瓶颈本身；
+#            分配压力分散于 pymalloc arena / operator new / CANN 容器 realloc 等非锁符号路径，
+#            perf 锁符号会系统性低估——A+K 训练实测: 锁 0.5% 弱信号下 tcmalloc 实测步耗时 -10%）
+# 任一命中即输出推荐证据；均未命中为信号弱。perf 完全失败仍标记 blocked（红线 #3）。
+HOSTBOUND_HIT=false
+HOSTBOUND_DESC=""
+FREE_RATIO=""
+if [[ -n "$STEP_TRACE" ]] && [[ -f "$STEP_TRACE" ]]; then
+    # step_trace_time.csv 列: 3 Computing, 6 Communication, 7 Free, 8 Stage; 取最后一个数据行（稳态步）
+    HB_PARSE=$(awk -F',' 'NR>1 && NF>=8 && ($8+0)>0 {c=$3; m=$6; f=$7; s=$8; st=$2} END {if (s>0) printf "%.1f %.1f %.1f %.1f %.1f %.1f %s", f/s*100, c/s*100, m/s*100, f/1e6, c/1e6, s/1e6, st}' "$STEP_TRACE" 2>/dev/null || true)
+    if [[ -n "$HB_PARSE" ]]; then
+        read -r FREE_RATIO COMP_RATIO COMM_RATIO FREE_S COMP_S STAGE_S HB_STEP <<< "$HB_PARSE"
+        if awk -v f="$FREE_RATIO" -v c="$COMP_RATIO" -v m="$COMM_RATIO" 'BEGIN{exit !(f>c && f>m)}'; then
+            HOSTBOUND_HIT=true
+            HOSTBOUND_DESC="CANN step_trace 末步(step ${HB_STEP}) Free/Stage=${FREE_RATIO}% 为最大分量（Computing=${COMP_RATIO}%、Communication=${COMM_RATIO}%），hostbound 是主要瓶颈"
+        else
+            HOSTBOUND_DESC="CANN step_trace 末步(step ${HB_STEP}) Free/Stage=${FREE_RATIO}%（Computing=${COMP_RATIO}%、Communication=${COMM_RATIO}%），Free 非最大分量，hostbound 非主要瓶颈"
+        fi
+    fi
+fi
+
 if grep -qiE "libruntime_v100|libtorch_npu|libhccl\.so|libascendcl" "$NORMALIZED_FILE"; then
     ASCEND_LOCK_HIT=false
     PERF_CURRENT=false
@@ -388,17 +402,21 @@ try:
 except:
     print('0.00')
 " 2>/dev/null || echo "0.00")
-        # 锁竞争占比 >5% 才标记 CANN 锁竞争，否则仅标记 CANN 库加载
         if awk "BEGIN{exit !($LOCK_PCT > 5)}"; then
             ASCEND_LOCK_HIT=true
         fi
-        if [[ "$ASCEND_LOCK_HIT" == "true" ]]; then
+        if [[ "$ASCEND_LOCK_HIT" == "true" && "$HOSTBOUND_HIT" == "true" ]]; then
+            add_detection "ascend_runtime" "glibc malloc (CANN 锁竞争+hostbound)" "综合" "检测到 CANN/torch_npu 库加载，双信号命中: perf 锁竞争 ${LOCK_PCT}%（>5% 阈值）+ ${HOSTBOUND_DESC}，建议评估 tcmalloc 替换" "current"
+        elif [[ "$ASCEND_LOCK_HIT" == "true" ]]; then
             add_detection "ascend_runtime" "glibc malloc (CANN 锁竞争)" "综合" "检测到 CANN/torch_npu 库加载且本轮 perf 锁竞争热点合计 ${LOCK_PCT}%（>5% 阈值），建议二次归因后评估 tcmalloc 替换" "current"
+        elif [[ "$HOSTBOUND_HIT" == "true" ]]; then
+            add_detection "ascend_runtime" "glibc malloc (hostbound)" "综合" "检测到 CANN/torch_npu 库加载，perf 锁竞争热点合计 ${LOCK_PCT}%（低于 5% 阈值，锁符号对分散分配压力代表性不足），但 ${HOSTBOUND_DESC}，host 侧分配压力为主要瓶颈特征，仍建议评估 tcmalloc 替换并以现场 A/B 实测量化收益" "current"
         else
-            add_detection "ascend_runtime" "glibc malloc" "综合" "检测到 CANN/torch_npu 库加载，本轮 perf 采集成功但锁竞争热点合计仅 ${LOCK_PCT}%（低于 5% 阈值），CANN 锁竞争信号弱" "current"
+            add_detection "ascend_runtime" "glibc malloc" "综合" "检测到 CANN/torch_npu 库加载，本轮 perf 采集成功但锁竞争热点合计仅 ${LOCK_PCT}%（低于 5% 阈值）${HOSTBOUND_DESC:+，$HOSTBOUND_DESC}，CANN 锁竞争信号弱" "current"
         fi
     else
         # perf 采集失败/降级/缺失：ascend_runtime 标记 blocked，禁止基于知识库历史数据推荐
+        # （hostbound 信号不单独解除 blocked——红线 #3 要求现场 perf 采集成功为前提）
         add_detection "ascend_runtime" "glibc malloc" "静态" "检测到 CANN/torch_npu 库加载，但本轮 perf 采集失败或缺失，ascend_runtime 类别标记 blocked，禁止基于历史数据推荐替换" "blocked"
     fi
 fi

@@ -1,6 +1,6 @@
 ---
 name: compiler-optimization
-description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 kpbot-app-tuner 的子 skill 使用。也覆盖 A+K 场景（昇腾 NPU + 鲲鹏 CPU）的编译优化，包括毕昇编译器选型、Python/PyTorch/torch_npu 的 LTO/PGO 编译优化。
+description: 根据热点函数、topdown/PMU、构建日志、二进制反汇编和源码可变更边界，分析编译器版本、架构参数、LTO、PGO/AutoFDO、代码布局、向量化、原子/CRC 指令和源码配套优化，作为 kpbot-app-tuner 的子 skill 使用。也覆盖 A+K 场景（昇腾 NPU + 鲲鹏 CPU）的编译优化，包括毕昇编译器选型、Python/PyTorch/torch_npu 的 LTO/PGO 编译优化，以及 BRBE/CSSPGO 采样式 PGO 备选路径（免插桩，perf+llvm-profgen 采集）。
 ---
 
 # Compiler Optimization
@@ -27,8 +27,9 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 - ARM64 编译选项 5 阶段操作工作流（项目分析→CPU特性检测→运行时分析→优化配置生成→验证）：`references/compiler-option-playbook.md`
 - MySQL ARM64/LSE/CRC 专项、补丁和二进制等价门控：`references/mysql-arm64-playbook.md`
 - MySQL LSE outline atomics patch：见 `references/mysql-arm64-playbook.md` 中的补丁内容与应用方法
-- A+K 场景毕昇编译器自动化编译脚本（BiSheng Python/PyTorch/torch_npu LTO+PGO 编译流程）：`scripts/ak_compile_optimize.sh`
+- A+K 场景毕昇编译器自动化编译脚本（BiSheng Python/PyTorch/torch_npu LTO+PGO 编译流程，含 css_pgo BRBE 路径）：`scripts/ak_compile_optimize.sh`
 - A+K 训练场景全链编译实战（源码获取/毕昇安装/容器处理/ABI 双栈共存/rpath）：`references/ak-compiler-playbook.md`
+- BRBE/CSSPGO 采样式 PGO（免插桩备选路径：gen/collect/use 三段流程、决策矩阵、与插桩 PGO 的优劣对比、实测数据）：`references/csspgo-brbe-playbook.md`
 - torch_npu Wheel 打包（setuptools≥84 绕过 build_py 导致 csrc/include/third_party 缺失）、BdistWheelBuild 修复、增量 vs 全新构建、whl 内容指纹与多机一致性：`references/torchnpu-wheel-packaging-playbook.md`
 - 公共依赖、perf/PMU 权限和降级：`../../references/prerequisites.md`
 
@@ -67,6 +68,9 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 - `scripts/perf_hotspot.sh <pid> [duration] [output_dir]` — 采集 ARM64 热点函数（top 50 + 火焰图数据），用于编译选项推荐。仅只读采集，不修改环境。
   - 用法详见 `references/compiler-option-playbook.md` 阶段 3。
+- `scripts/brbe_env_check.sh [--container <name>] [--workdir <dir>] [--json-only]` — BRBE/CSSPGO 收益验证前置门控（只读）：鲲鹏 CPU/昇腾 NPU(/dev/davinci*)/CANN/毕昇/llvm-profgen/BRBE 硬件（**真实分支栈校验，非 perf 退出码**）、当前 torch 栈编译器身份（readelf .comment）、磁盘。逐项 PASS/FAIL + JSON 总结（`ready|blocked` + blocked_reasons + next_steps）。
+- `scripts/brbe_ab_benchmark.sh` — A/B 收益验证 harness：`--mode run --label <baseline|gen|use> --cmd "<压测命令>" [--rounds 5] [--metric-regex 'tok/s']` 多轮压测+指标提取+均值/CV 统计；`--mode compare` 增益判定（accept / reject(gain<=noise) / reject(below_min_gain) / regression→rollback），对应候选动作 `rejection_criteria`。
+  - 目标节点完整验证序列（门控→基线→gen→collect→use→compare）见 `references/csspgo-brbe-playbook.md`。
 
 ## 分析流程
 
@@ -89,13 +93,15 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
    **第 2 步: 检测硬件是否为 Ascend NPU + 鲲鹏 CPU**
 
-   Agent 用 Bash 工具执行以下命令检测昇腾 NPU 设备:
+   Agent 用 Bash 工具检测昇腾 NPU 设备（**不要用 `lspci "processing accelerators"`**：该 PCI 类别是通用"加速器"，会命中 HiSilicon ZIP 压缩引擎，从而把**无 NPU 的机器误判为有 NPU**）：
 
    ```
-   bash -c 'lspci 2>/dev/null | grep -i "processing accelerators\|d100\|d500\|d801" | head -1'
+   bash -c 'ls /dev/davinci[0-9]* 2>/dev/null | head -1; command -v npu-smi 2>/dev/null'
    ```
 
-   CPU 是否为鲲鹏通过 `lscpu` 确认。
+   有 `/dev/davinci*` 设备节点（或 `npu-smi` 可见）才是真昇腾 NPU —— ZIP 压缩引擎不会产生 `/dev/davinci*`。
+
+   CPU 是否为鲲鹏通过 `lscpu`（`Vendor ID: HiSilicon`）确认。
 
    - NPU 检测到 + CPU 为鲲鹏 → 判定为 A+K 场景，加载 `references/ak-compiler-playbook.md`，进入步骤 2a
    - 不匹配 → 按通用编译优化流程处理
@@ -130,6 +136,7 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
    - 每个动作必须有适用前提、构建命令、验证命令、功能 smoke test、性能 A/B、回退路径和不采纳条件。
    - 若需要源码修改且 `source_change_allowed=false`，只能进入 `blocked_source_candidates`。
    - A+K 场景下：根据经验库的优化手段决策表排序候选动作（LTO 优先于 LTO+PGO，按编译顺序排列）。
+   - PGO 路径选择：默认插桩 PGO（`lto_pgo`）；仅当无法部署插桩版（只能对生产进程采样）或需要低侵入快速验证时，才把 BRBE/CSSPGO（`css_pgo`）列为候选，选型规则见 `references/csspgo-brbe-playbook.md` 决策矩阵。
 
 ## 候选优先级
 
@@ -262,6 +269,38 @@ llvm-cov export -instr-profile=/tmp/profile/default.profdata \
 - 纯 ThinLTO（无 PGO）不仅没收益反而退步 22.4%，说明 torch_npu 在无 profile 引导下 ThinLTO 的内联/布局决策劣于原版。
 - NPU 适配层有大量 device launch 路径，ThinLTO 的跨模块内联若无 profile 引导，可能把冷路径内联进热路径。
 - **结论：NPU 推理场景 torch_npu 必须 PGO，不能只做 ThinLTO。**
+
+## BRBE/CSSPGO 采样 PGO（css_pgo 备选路径）
+
+BRBE（Branch Record Buffer Extension）是 ARM 硬件分支记录扩展；CSSPGO 用 `perf` BRBE 采样 + `llvm-profgen` 生成 sample profile，**免插桩**即可指导编译（`-fprofile-sample-use`）。定位是插桩 PGO 的低侵入备选，不是替代。
+
+### 决策规则
+
+| 条件 | 选择 |
+|---|---|
+| 默认 / 追求最大收益（插桩版可部署、负载可复现） | 插桩 PGO（`lto_pgo`）——torch 侧比 BRBE 多约 3~4%，实测 +18.1% vs +15.1% |
+| 无法把插桩版装进目标环境，只能对现有生产进程采样 | `css_pgo` |
+| 插桩多进程刷盘坑不可解（vLLM v1 子进程环境重建，无法注入 sitecustomize.py） | `css_pgo`（perf -p 逐进程采样，无环境变量依赖） |
+| 低侵入快速验证编译器迁移收益 | `css_pgo` |
+| Python 侧单独评估 | 两者等价（实测差异噪声级 +0~0.4%） |
+| 磁盘敏感（gen 产物需完整 -g：torch whl 972MB / .so 2.9GB）或无 llvm-profgen / 无 BRBE 硬件 | 插桩 PGO |
+
+### 脚本用法
+
+```
+# gen：伪探针 + 完整 -g 构建（产物含 DWARF，供 llvm-profgen 枚举函数）
+ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage gen --source-dir <dir>
+# collect：对运行中的 gen 版进程采样（只读，不需源码/编译环境）
+ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage collect --pid <pid> --binary <gen产物.so> [--duration 90] [--page-size 65536]
+# use：用 sample profile 重编译（去 -g，必须保留 -fpseudo-probe-for-profiling）
+ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage use --source-dir <dir>
+```
+
+- profile 产物：`<profile-dir>/<component>.spgo.profraw`（可用 `--css-profile` 覆盖）。
+- 必读坑（完整清单见 `references/csspgo-brbe-playbook.md`）：共享库必须完整 `-g`（`-gline-tables-only` 不够）；use 阶段必须保留 `-fpseudo-probe-for-profiling`（Python 的 LDFLAGS 也要带，否则 profile 被忽略）；`-page-size` 须与目标 OS 页大小一致；vLLM v1 采集须选对进程（Worker 承担算子计算）。
+- **`--binary` 与 perf mmap 事件名必须一致**：`llvm-profgen` 按 mmap 事件里的文件名匹配二进制。若 `--binary` 传软链（如 `python3 -> python3.10`），basename 与 mmap 名不符会**静默产出 0 字节空 profile**（日志仅提示 `No relevant mmap event ... No samples in perf script`）。collect 阶段现已自动 `readlink -f` 解析真实路径，并在 perf script 导出后交叉校验 mmap 名，不匹配时直接报 `binary_mmap_mismatch` 而非空 profile。
+- **use 阶段必须真正重编**：Python 流程在 gen 与 use 之间复用同一 `--source-dir` 时，`make` 会认为 `.o` 已最新而跳过重编，导致 use 静默沿用 gen 产物、完全忽略 sample profile 却仍报 success。脚本现于 `make` 前执行 `make clean`；即便如此，仍推荐 gen/use 各用一份独立源码树（省去清理时间也避免 configure 残留状态）。
+- 实测数据（鲲鹏+昇腾 vLLM，8 配置同窗口对比、决策根因分析）见 `references/csspgo-brbe-playbook.md`。
 
 ## vLLM 算子编译优化
 

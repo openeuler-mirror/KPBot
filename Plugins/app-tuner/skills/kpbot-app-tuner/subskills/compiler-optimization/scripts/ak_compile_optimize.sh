@@ -19,6 +19,12 @@ set -euo pipefail
 #   ak_compile_optimize.sh --component pytorch --optimize lto_pgo --stage profile_gen --source-dir /src/pytorch
 #   # PyTorch PGO 二次编译
 #   ak_compile_optimize.sh --component pytorch --optimize lto_pgo --stage profile_use --source-dir /src/pytorch
+#   # PyTorch CSSPGO(BRBE) gen（伪探针 + 完整 -g）
+#   ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage gen --source-dir /src/pytorch
+#   # CSSPGO collect（对运行中的 gen 版进程采样，免插桩）
+#   ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage collect --pid 12345 --binary /path/libtorch_cpu.so
+#   # CSSPGO use（用 sample profile 重编译）
+#   ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage use --source-dir /src/pytorch
 
 COMPONENT=""
 OPTIMIZE=""
@@ -31,6 +37,13 @@ CONTAINER=""
 CHECK_ONLY=false
 VERIFY=false
 DRY_RUN=false
+# css_pgo(BRBE/CSSPGO) 专用
+PID=""
+BINARY_PATH=""
+COLLECT_DURATION=90
+PAGE_SIZE=""
+CSS_PROFILE=""
+LLVM_PROFGEN=""
 
 usage() {
   cat <<'EOF'
@@ -39,17 +52,23 @@ Usage:
 
 Required:
   --component <name>       组件: python | pytorch | torch_npu
-  --optimize <type>        优化类型: lto | lto_pgo
+  --optimize <type>        优化类型: lto | lto_pgo | css_pgo
   --stage <stage>          编译阶段:
-                             lto 模式: compile
-                             lto_pgo 模式: profile_gen | profile_use
+                              lto 模式: compile
+                              lto_pgo 模式: compile | profile_gen | profile_use
+                              css_pgo 模式: gen | collect | use
 
 Options:
   --source-dir <dir>       源码目录（不指定则自动下载）
-  --install-dir <dir>      安装目录（Python 必填）
+  --install-dir <dir>       安装目录（Python 必填）
   --python-version <ver>   Python 版本号（torch_npu 编译用，不指定则自动检测）
   --profile-dir <dir>      PGO profile 目录（默认 /tmp/profile）
   --container <name>       在指定容器内执行（docker exec）
+  --pid <pid>              css_pgo collect: 目标进程 PID（须运行 gen 版负载）
+  --binary <path>          css_pgo collect: 含完整 DWARF 的 gen 产物（.so/可执行文件）
+  --duration <seconds>     css_pgo collect: 采样时长（默认 90 秒）
+  --page-size <size>       css_pgo collect: llvm-profgen -page-size（须与目标 OS 页大小一致，如 65536；本机 llvm-profgen 不支持时不传）
+  --css-profile <file>     css_pgo use: sample profile 路径（默认 <profile-dir>/<component>.spgo.profraw）
   --check-only             只检查环境不编译
   --verify                 编译后验证
   --dry-run                只输出命令不实际执行
@@ -67,6 +86,11 @@ while [[ $# -gt 0 ]]; do
     --python-version) PYTHON_VERSION="${2:?}"; shift 2 ;;
     --profile-dir) PROFILE_DIR="${2:?}"; shift 2 ;;
     --container) CONTAINER="${2:?}"; shift 2 ;;
+    --pid) PID="${2:?}"; shift 2 ;;
+    --binary) BINARY_PATH="${2:?}"; shift 2 ;;
+    --duration) COLLECT_DURATION="${2:?}"; shift 2 ;;
+    --page-size) PAGE_SIZE="${2:?}"; shift 2 ;;
+    --css-profile) CSS_PROFILE="${2:?}"; shift 2 ;;
     --check-only) CHECK_ONLY=true; shift ;;
     --verify) VERIFY=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
@@ -124,6 +148,172 @@ check_bisheng() {
     return 1
   fi
   log "毕昇编译器: ${result}"
+  return 0
+}
+
+# ── CSSPGO(BRBE) 专用 ────────────────────────────────────────
+
+check_llvm_profgen() {
+  log "检测 llvm-profgen（CSSPGO sample profile 生成工具）..."
+  local profgen=""
+  if command -v llvm-profgen >/dev/null 2>&1; then
+    profgen="$(command -v llvm-profgen)"
+  else
+    local clang_bin
+    clang_bin="$(command -v clang 2>/dev/null || true)"
+    if [[ -n "${clang_bin}" ]]; then
+      local cand="${clang_bin%/*}/llvm-profgen"
+      if [[ -x "${cand}" ]]; then
+        profgen="${cand}"
+      fi
+    fi
+  fi
+  if [[ -z "${profgen}" ]]; then
+    echo '{"status":"failed","fail_reason":"llvm_profgen_not_found","diagnostics":{"message":"未找到 llvm-profgen（随毕昇编译器/LLVM 发布，用于 perf script -> sample profile 转换）","recovery_steps":["安装毕昇编译器并 source /etc/profile.d/bisheng.sh 后重试","或确认 llvm-profgen 所在目录已加入 PATH"]},"retryable":false}'
+    return 1
+  fi
+  LLVM_PROFGEN="${profgen}"
+  log "llvm-profgen: ${profgen}"
+  return 0
+}
+
+css_profile_path() {
+  if [[ -n "${CSS_PROFILE}" ]]; then
+    echo "${CSS_PROFILE}"
+  else
+    echo "${PROFILE_DIR}/${COMPONENT}.spgo.profraw"
+  fi
+}
+
+check_css_profile() {
+  local profile_file
+  profile_file="$(css_profile_path)"
+  log "检查 CSS sample profile: ${profile_file}"
+  if ! run_in_target "[ -s \"${profile_file}\" ]"; then
+    cat <<EOF
+{"status":"failed","fail_reason":"css_profile_not_found","diagnostics":{"profile":"${profile_file}","possible_causes":["gen 阶段产物未安装/未运行（collect 采样的是旧二进制则 profile 无效）","collect 阶段未执行，或 llvm-profgen 产出为空","gen 构建缺完整 -g（共享库 -gline-tables-only 不够，DWARF 缺失导致空 profile）","--css-profile 路径配错"],"recovery_steps":["执行采集: ak_compile_optimize.sh --component ${COMPONENT} --optimize css_pgo --stage collect --pid <pid> --binary <gen产物>","确认 gen 构建含 -fpseudo-probe-for-profiling -g","重新执行: ak_compile_optimize.sh --component ${COMPONENT} --optimize css_pgo --stage use --css-profile <file>"]},"retryable":true}
+EOF
+    return 1
+  fi
+  local size=0
+  if [[ "${DRY_RUN}" != true ]]; then
+    size=$(run_in_target "stat -c %s ${profile_file} 2>/dev/null || echo 0")
+  fi
+  if [[ "${size}" -lt 10240 ]]; then
+    log "⚠️  profile 仅 ${size} 字节（<10KB），疑似空 profile（常见根因: gen 构建缺完整 -g / DWARF，llvm-profgen 枚举不到函数）"
+  fi
+  log "CSS profile 检查通过: ${profile_file} (${size} bytes)"
+  return 0
+}
+
+check_brbe_support() {
+  log "检测 BRBE 分支采样（真实负载采样 + brstack 真实分支对校验）..."
+  if [[ "${DRY_RUN}" == true ]]; then
+    log "BRBE 检测（dry-run 跳过）"
+    return 0
+  fi
+  run_in_target "mkdir -p ${PROFILE_DIR}"
+  local real
+  real=$(run_in_target "
+    bash -c 'while :; do :; done' >/dev/null 2>&1 & wp=\$!
+    sleep 0.3
+    perf record -g --call-graph fp -e cycles:u -j any,u -F 4000 -o ${PROFILE_DIR}/brbe_probe_\$\$.data -p \$wp -- sleep 3 >/dev/null 2>&1
+    kill \$wp 2>/dev/null; wait \$wp 2>/dev/null
+    perf script -F brstack -i ${PROFILE_DIR}/brbe_probe_\$\$.data 2>/dev/null | grep -cE '0x[1-9a-f][0-9a-f]+/0x[1-9a-f][0-9a-f]+'
+    rm -f ${PROFILE_DIR}/brbe_probe_\$\$.data
+  ")
+  if [[ "${real:-0}" =~ ^[0-9]+$ && "${real:-0}" -ge 20 ]]; then
+    log "BRBE 分支采样确认（真实分支栈 ${real} 条）"
+    return 0
+  fi
+  echo "{\"status\":\"failed\",\"fail_reason\":\"brbe_not_supported\",\"diagnostics\":{\"message\":\"brstack 无真实分支对（仅 0x0/ERET 退化，或 perf 不支持 -j any,u）：该节点无 FEAT_BRBE 或内核/perf 限制\",\"real_branch_lines\":\"${real:-0}\",\"hint\":\"/proc/cpuinfo 是否暴露 brbe 标志不可靠（部分内核不暴露但 BRBE 生效），以真实采样为准\",\"recovery_steps\":[\"换用支持 BRBE 的节点\",\"无 BRBE 时改走插桩 PGO: --optimize lto_pgo\"]},\"retryable\":false}"
+  return 1
+}
+
+collect_css_profile() {
+  [[ -n "${PID}" ]] || fail "--stage collect 需要 --pid（运行 gen 版负载的目标进程）"
+  [[ -n "${BINARY_PATH}" ]] || fail "--stage collect 需要 --binary（含完整 DWARF 的 gen 产物 .so/可执行文件）"
+  local profile_file
+  profile_file="$(css_profile_path)"
+  local perf_data="${PROFILE_DIR}/css_perf_${PID}.data"
+  local perf_script="${PROFILE_DIR}/css_perf_${PID}.script"
+
+  log "目标进程: PID=${PID}, 采样二进制: ${BINARY_PATH}, 时长: ${COLLECT_DURATION}s"
+
+  if ! run_in_target "[ -d \"/proc/${PID}\" ]"; then
+    fail "目标进程不存在: ${PID}（须先用 gen 产物启动真实负载）"
+  fi
+  if ! run_in_target "[ -f \"${BINARY_PATH}\" ]"; then
+    fail "采样二进制不存在: ${BINARY_PATH}（须为 gen 阶段产物，含完整 DWARF，否则 profile 为空）"
+  fi
+  if [[ "${DRY_RUN}" != true ]]; then
+    # llvm-profgen 依据 perf mmap 事件里的文件名匹配二进制；若 --binary 是软链
+    # （如 python3 -> python3.10），basename 与 mmap 名不一致会静默产出 0 样本空 profile。
+    local resolved_binary
+    resolved_binary="$(run_in_target "readlink -f ${BINARY_PATH}")"
+    if [[ -n "${resolved_binary}" && -f "${resolved_binary}" && "${resolved_binary}" != "${BINARY_PATH}" ]]; then
+      log "采样二进制为软链，解析为真实路径: ${resolved_binary}"
+      BINARY_PATH="${resolved_binary}"
+    fi
+  fi
+  run_in_target "mkdir -p ${PROFILE_DIR}"
+  run_in_target "rm -f ${perf_data} ${perf_script}"
+
+  check_brbe_support || return 1
+
+  log "perf record（BRBE 分支采样，帧指针调用栈）..."
+  if ! run_in_target "perf record -g --call-graph fp -e cycles:u -j any,u -o ${perf_data} -p ${PID} -- sleep ${COLLECT_DURATION}"; then
+    cat <<EOF
+{"status":"failed","fail_reason":"perf_record_failed","diagnostics":{"pid":"${PID}","possible_causes":["perf_event_paranoid 权限限制（尝试 sysctl -w kernel.perf_event_paranoid=1）","目标进程中途退出","BRBE 资源被其他会话占用"],"retryable":true}
+EOF
+    return 1
+  fi
+
+  log "perf script 导出 ip+brstack..."
+  if ! run_in_target "perf script -F ip,brstack --show-mmap-event -i ${perf_data} > ${perf_script}"; then
+    fail "perf script 导出失败"
+  fi
+
+  # 前置校验：perf mmap 事件中必须出现该二进制名，否则 llvm-profgen 会静默产出空 profile
+  if [[ "${DRY_RUN}" != true ]]; then
+    local bin_base
+    bin_base="$(basename "${BINARY_PATH}")"
+    # 经 run_in_target 执行：--container 模式下 perf_script 生成在容器内，
+    # 宿主机侧 grep 会因路径不存在而误报 binary_mmap_mismatch
+    if ! run_in_target "grep -aq -- '${bin_base}' ${perf_script}"; then
+      cat <<EOF
+{"status":"failed","fail_reason":"binary_mmap_mismatch","diagnostics":{"binary":"${BINARY_PATH}","perfscript":"${perf_script}","hint":"perf script 的 mmap 事件中未找到 ${bin_base}，llvm-profgen 无法把样本映射到二进制；常见原因是 --binary 与进程实际加载的文件名不一致（软链/重命名/tmp 副本）"},"retryable":true}
+EOF
+      return 1
+    fi
+  fi
+
+  local page_size_arg=""
+  if [[ -n "${PAGE_SIZE}" ]]; then
+    page_size_arg="-page-size=${PAGE_SIZE}"
+  fi
+
+  log "llvm-profgen 生成 sample profile..."
+  if ! run_in_target "${LLVM_PROFGEN} --binary=${BINARY_PATH} --perfscript=${perf_script} --output=${profile_file} --format=text ${page_size_arg}"; then
+    cat <<EOF
+{"status":"failed","fail_reason":"profgen_failed","diagnostics":{"binary":"${BINARY_PATH}","perfscript":"${perf_script}","hints":["共享库必须完整 -g（-gline-tables-only 不够）","部分 llvm-profgen 版本无 -page-size 选项，此时不传 --page-size","Invalid instructions 告警可忽略，整体失败需检查 perfscript 格式"],"retryable":true}
+EOF
+    return 1
+  fi
+
+  local size=0
+  if [[ "${DRY_RUN}" != true ]]; then
+    size=$(run_in_target "stat -c %s ${profile_file} 2>/dev/null || echo 0")
+  fi
+  if [[ "${DRY_RUN}" != true && "${size}" -lt 10240 ]]; then
+    cat <<EOF
+{"status":"failed","fail_reason":"empty_css_profile","diagnostics":{"profile":"${profile_file}","size":${size},"possible_causes":["gen 构建缺完整 -g（DWARF 缺失，llvm-profgen 枚举不到函数）","采样时长不足或目标进程空闲","--binary 指向了错误二进制（非 gen 产物）"],"recovery_steps":["重新 gen: ak_compile_optimize.sh --component ${COMPONENT} --optimize css_pgo --stage gen","用 --duration 延长采样后重新采集"],"retryable":true}
+EOF
+    return 1
+  fi
+
+  log "CSS profile 生成完成: ${profile_file} (${size} bytes)"
+  log "（perf.data/perf.script 保留于 ${PROFILE_DIR} 供排查）"
   return 0
 }
 
@@ -282,13 +472,14 @@ EOF
     return 1
   fi
 
-  local profraw_count
-  profraw_count=$(run_in_target "ls ${profile_dir}/*.profraw 2>/dev/null | wc -l")
-  log "找到 ${profraw_count} 个 .profraw 文件"
-
-  local empty_count
-  empty_count=$(run_in_target "find ${profile_dir} -name '*.profraw' -size 0 2>/dev/null | wc -l")
-  if [[ "${profraw_count}" -eq "${empty_count}" ]]; then
+  local profraw_count=0
+  local empty_count=0
+  if [[ "${DRY_RUN}" != true ]]; then
+    profraw_count=$(run_in_target "ls ${profile_dir}/*.profraw 2>/dev/null | wc -l")
+    log "找到 ${profraw_count} 个 .profraw 文件"
+    empty_count=$(run_in_target "find ${profile_dir} -name '*.profraw' -size 0 2>/dev/null | wc -l")
+  fi
+  if [[ "${DRY_RUN}" != true && "${profraw_count}" -eq "${empty_count}" ]]; then
     cat <<EOF
 {"status":"failed","fail_reason":"empty_profraw","diagnostics":{"profile_dir":"${profile_dir}","profraw_count":${profraw_count},"empty_count":${empty_count},"possible_causes":["模型运行时间过短，profile 数据未写入","进程异常退出，profile 未正常 flush"],"recovery_steps":["重新运行模型并确保正常完成","确认 profile 生成: ls -la ${profile_dir}/*.profraw","重新执行: ak_compile_optimize.sh --component ${COMPONENT} --optimize lto_pgo --stage profile_use"]},"retryable":true}
 EOF
@@ -304,9 +495,11 @@ merge_profile() {
   log "转换 profile 数据..."
   run_in_target "llvm-profdata merge ${profile_dir} -o ${profile_dir}/default.profdata"
 
-  local profdata_size
-  profdata_size=$(run_in_target "stat -c %s ${profile_dir}/default.profdata 2>/dev/null || echo 0")
-  if [[ "${profdata_size}" -eq 0 ]]; then
+  local profdata_size=0
+  if [[ "${DRY_RUN}" != true ]]; then
+    profdata_size=$(run_in_target "stat -c %s ${profile_dir}/default.profdata 2>/dev/null || echo 0")
+  fi
+  if [[ "${DRY_RUN}" != true && "${profdata_size}" -eq 0 ]]; then
     cat <<EOF
 {"status":"failed","fail_reason":"profdata_merge_failed","diagnostics":{"profile_dir":"${profile_dir}","profdata_path":"${profile_dir}/default.profdata","profdata_size":0,"recovery_steps":["检查 .profraw 文件是否有效","手动执行: llvm-profdata merge ${profile_dir} -o ${profile_dir}/default.profdata","重新执行: ak_compile_optimize.sh --component ${COMPONENT} --optimize lto_pgo --stage profile_use"]},"retryable":true}
 EOF
@@ -323,12 +516,33 @@ compile_python() {
   local install_dir="$2"
   local stage="$3"
 
-  log "编译 Python (${stage})..."
-
-  run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ && ./configure --prefix=${install_dir} --with-lto --enable-optimizations"
+  if [[ "${OPTIMIZE}" == "css_pgo" ]]; then
+    # CSSPGO(BRBE) Python：--with-lto 不加 --enable-optimizations（BRBE 采样 profile 替代内置 PGO）
+    # gen: 伪探针 + 完整 -g（llvm-profgen 依赖 DWARF 枚举函数）
+    # use: 必须保留 -fpseudo-probe-for-profiling，且 LDFLAGS 也要带（LTO 链接期绑定 profile）
+    local cflags="-O3 -fno-omit-frame-pointer -fpseudo-probe-for-profiling"
+    local ldflags="-zcommon-page-size=2097152 -zmax-page-size=2097152 -fno-plt -flto -fuse-ld=lld -Wl,-z,noseparate-code -Wl,-z,norelro"
+    local profile_file
+    profile_file="$(css_profile_path)"
+    case "${stage}" in
+      gen)
+        log "编译 Python CSSPGO gen（伪探针 + 完整 -g + LTO）..."
+        run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ && ./configure --prefix=${install_dir} --with-lto CFLAGS='${cflags} -g' LDFLAGS='${ldflags}'"
+        ;;
+      use)
+        log "编译 Python CSSPGO use（sample profile）..."
+        run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ && ./configure --prefix=${install_dir} --with-lto CFLAGS='${cflags} -fprofile-sample-use=${profile_file}' LDFLAGS='${ldflags} -fpseudo-probe-for-profiling -fprofile-sample-use=${profile_file}'"
+        ;;
+    esac
+  else
+    log "编译 Python (${stage})..."
+    run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ && ./configure --prefix=${install_dir} --with-lto --enable-optimizations"
+  fi
+  # 强制清理旧目标文件：复用同一源码树时（gen 后直接跑 use），make 会认为 .o 已最新
+  # 而跳过重编，导致 use 阶段静默沿用 gen 产物、完全忽略 sample profile 却仍报成功。
+  run_in_target "cd ${source_dir} && make clean >/dev/null 2>&1 || true"
   run_in_target "cd ${source_dir} && make -j \$(nproc)"
   run_in_target "cd ${source_dir} && make install"
-
   log "Python 编译安装完成: ${install_dir}"
 }
 
@@ -338,17 +552,32 @@ compile_pytorch() {
   local profile_dir="$3"
 
   local extra_flags=""
-  case "${stage}" in
-    compile)
-      extra_flags="-flto=thin -fuse-ld=lld"
-      ;;
-    profile_gen)
-      extra_flags="-flto=thin -fuse-ld=lld -fprofile-generate=${profile_dir}"
-      ;;
-    profile_use)
-      extra_flags="-flto=thin -fuse-ld=lld -fprofile-use=${profile_dir}/default.profdata"
-      ;;
-  esac
+  if [[ "${OPTIMIZE}" == "css_pgo" ]]; then
+    local profile_file
+    profile_file="$(css_profile_path)"
+    case "${stage}" in
+      gen)
+        # gen: 伪探针 + 完整 -g（共享库 -gline-tables-only 不够，llvm-profgen 需完整 DWARF）
+        extra_flags="-flto=thin -fuse-ld=lld -fno-omit-frame-pointer -fpseudo-probe-for-profiling -g"
+        ;;
+      use)
+        # use: 去 -g；必须保留 -fpseudo-probe-for-profiling（SampleProfileProbePass 绑定，否则 profile 被忽略）
+        extra_flags="-flto=thin -fuse-ld=lld -fno-omit-frame-pointer -fpseudo-probe-for-profiling -fprofile-sample-use=${profile_file}"
+        ;;
+    esac
+  else
+    case "${stage}" in
+      compile)
+        extra_flags="-flto=thin -fuse-ld=lld"
+        ;;
+      profile_gen)
+        extra_flags="-flto=thin -fuse-ld=lld -fprofile-generate=${profile_dir}"
+        ;;
+      profile_use)
+        extra_flags="-flto=thin -fuse-ld=lld -fprofile-use=${profile_dir}/default.profdata"
+        ;;
+    esac
+  fi
 
   log "编译 PyTorch (${stage})..."
 
@@ -388,23 +617,44 @@ compile_torch_npu() {
     fi
   fi
 
-  local pgo_flag=""
-  case "${stage}" in
-    compile)
-      pgo_flag="--enable_lto"
-      ;;
-    profile_gen)
-      pgo_flag="--enable_lto --enable_pgo=1"
-      ;;
-    profile_use)
-      pgo_flag="--enable_lto --enable_pgo=2"
-      ;;
-  esac
+  if [[ "${OPTIMIZE}" == "css_pgo" ]]; then
+    # CSSPGO(BRBE)：ci/build.sh 不带 --enable_pgo，伪探针/sample-use 经外部 CFLAGS/CXXFLAGS 注入
+    # torch_npu 兼容选项: -O3 -fGNU-compatibility -Wno-non-pod-varargs -D_GLIBCXX_USE_CXX11_ABI=1
+    local css_common="-O3 -fGNU-compatibility -Wno-non-pod-varargs -D_GLIBCXX_USE_CXX11_ABI=1 -fno-omit-frame-pointer -fpseudo-probe-for-profiling"
+    local profile_file
+    profile_file="$(css_profile_path)"
+    local css_flags
+    case "${stage}" in
+      gen)
+        css_flags="${css_common} -g -flto=thin -fuse-ld=lld"
+        ;;
+      use)
+        # use 去 -g，保留 -fpseudo-probe-for-profiling
+        css_flags="${css_common} -fprofile-sample-use=${profile_file} -flto=thin -fuse-ld=lld"
+        ;;
+    esac
+    log "编译 torch_npu CSSPGO (${stage})..."
+    run_in_target "cd ${source_dir} && git clean -dfx"
+    run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ CFLAGS='${css_flags}' CXXFLAGS='${css_flags}' && bash ci/build.sh --python=${PYTHON_VERSION} --enable_lto"
+  else
+    local pgo_flag=""
+    case "${stage}" in
+      compile)
+        pgo_flag="--enable_lto"
+        ;;
+      profile_gen)
+        pgo_flag="--enable_lto --enable_pgo=1"
+        ;;
+      profile_use)
+        pgo_flag="--enable_lto --enable_pgo=2"
+        ;;
+    esac
 
-  log "编译 torch_npu (${stage})..."
+    log "编译 torch_npu (${stage})..."
 
-  run_in_target "cd ${source_dir} && git clean -dfx"
-  run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ && bash ci/build.sh --python=${PYTHON_VERSION} ${pgo_flag}"
+    run_in_target "cd ${source_dir} && git clean -dfx"
+    run_in_target "cd ${source_dir} && export CC=clang CXX=clang++ && bash ci/build.sh --python=${PYTHON_VERSION} ${pgo_flag}"
+  fi
 
   local whl
   whl=$(run_in_target "ls ${source_dir}/dist/*.whl 2>/dev/null | head -1")
@@ -472,8 +722,43 @@ verify_component() {
 
 START_TIME=$(date +%s)
 
+# 参数校验（--check-only 除外，保持旧用法兼容）
+if [[ "${CHECK_ONLY}" != true ]]; then
+  [[ -n "${COMPONENT}" ]] || { usage >&2; fail "--component is required"; }
+  [[ -n "${OPTIMIZE}" ]] || { usage >&2; fail "--optimize is required"; }
+  [[ -n "${STAGE}" ]] || { usage >&2; fail "--stage is required"; }
+  case "${COMPONENT}" in
+    python|pytorch|torch_npu) ;;
+    *) fail "未知组件: ${COMPONENT}（可选 python|pytorch|torch_npu）" ;;
+  esac
+  case "${OPTIMIZE}:${STAGE}" in
+    lto:compile|lto_pgo:compile|lto_pgo:profile_gen|lto_pgo:profile_use) ;;
+    css_pgo:gen|css_pgo:collect|css_pgo:use) ;;
+    *) fail "无效组合: --optimize ${OPTIMIZE} 不支持 --stage ${STAGE}（lto: compile; lto_pgo: compile|profile_gen|profile_use; css_pgo: gen|collect|use）" ;;
+  esac
+fi
+
 # 前置检查
 log "=== 前置检查 ==="
+
+# css_pgo collect 分支：只读采样采集，无需源码与编译环境
+if [[ "${STAGE}" == "collect" && "${CHECK_ONLY}" != true ]]; then
+  if [[ "${DRY_RUN}" != true ]]; then
+    check_llvm_profgen || exit 1
+  else
+    log "dry-run 模式，跳过 llvm-profgen 检查"
+  fi
+  log "=== CSS profile 采集: ${COMPONENT} ==="
+  collect_css_profile || exit 1
+  END_TIME=$(date +%s)
+  log "=== 采集完成 ($((END_TIME - START_TIME))s) ==="
+  output_json "success" \
+    "\"css_profile\":\"$(css_profile_path)\"" \
+    "\"next_stage\":\"use\"" \
+    "\"next_stage_instruction\":\"执行 ak_compile_optimize.sh --component ${COMPONENT} --optimize css_pgo --stage use 使用该 sample profile 重编译\""
+  exit 0
+fi
+
 if [[ "${DRY_RUN}" != true ]]; then
   check_bisheng || exit 1
 else
@@ -487,11 +772,6 @@ if [[ "${CHECK_ONLY}" == true ]]; then
   output_json "success" "\"bisheng\":\"detected\",\"python_version\":\"${PYTHON_VERSION}\""
   exit 0
 fi
-
-# 参数校验
-[[ -n "${COMPONENT}" ]] || { usage >&2; fail "--component is required"; }
-[[ -n "${OPTIMIZE}" ]] || { usage >&2; fail "--optimize is required"; }
-[[ -n "${STAGE}" ]] || { usage >&2; fail "--stage is required"; }
 
 # 源码准备
 if [[ -z "${SOURCE_DIR}" ]]; then
@@ -521,19 +801,28 @@ log "=== 编译执行: ${COMPONENT} ${OPTIMIZE} ${STAGE} ==="
 case "${COMPONENT}" in
   python)
     [[ -n "${INSTALL_DIR}" ]] || fail "Python 编译需要 --install-dir"
+    if [[ "${OPTIMIZE}" == "css_pgo" && "${STAGE}" == "use" ]]; then
+      check_css_profile || exit 1
+    fi
     compile_python "${SOURCE_DIR}" "${INSTALL_DIR}" "${STAGE}"
     ;;
   pytorch)
-    if [[ "${STAGE}" == "profile_use" ]]; then
+    if [[ "${OPTIMIZE}" == "lto_pgo" && "${STAGE}" == "profile_use" ]]; then
       check_profile "${PROFILE_DIR}" || exit 1
       merge_profile "${PROFILE_DIR}" || exit 1
+    fi
+    if [[ "${OPTIMIZE}" == "css_pgo" && "${STAGE}" == "use" ]]; then
+      check_css_profile || exit 1
     fi
     compile_pytorch "${SOURCE_DIR}" "${STAGE}" "${PROFILE_DIR}"
     ;;
   torch_npu)
-    if [[ "${STAGE}" == "profile_use" ]]; then
+    if [[ "${OPTIMIZE}" == "lto_pgo" && "${STAGE}" == "profile_use" ]]; then
       check_profile "${PROFILE_DIR}" || exit 1
       merge_profile "${PROFILE_DIR}" || exit 1
+    fi
+    if [[ "${OPTIMIZE}" == "css_pgo" && "${STAGE}" == "use" ]]; then
+      check_css_profile || exit 1
     fi
     compile_torch_npu "${SOURCE_DIR}" "${STAGE}" "${PROFILE_DIR}"
     ;;
@@ -557,6 +846,10 @@ NEXT_INSTRUCTION=""
 if [[ "${OPTIMIZE}" == "lto_pgo" && "${STAGE}" == "profile_gen" ]]; then
   NEXT_STAGE="profile_use"
   NEXT_INSTRUCTION="请运行模型采集 profile，完成后执行 --stage profile_use"
+fi
+if [[ "${OPTIMIZE}" == "css_pgo" && "${STAGE}" == "gen" ]]; then
+  NEXT_STAGE="collect"
+  NEXT_INSTRUCTION="安装 gen 产物并跑真实负载，执行 --stage collect --pid <pid> --binary <gen产物> 采样，再执行 --stage use"
 fi
 
 log "=== 完成 (${DURATION}s) ==="
