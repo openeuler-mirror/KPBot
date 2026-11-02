@@ -6,7 +6,7 @@
 
 ## 概述
 
-code-optimizer 提供 69 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
+code-optimizer 提供 72 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
 
 - **性能分析**: 热点分析、火焰图解析、Top-down 分析、SPE 分析、调用上下文分析
 - **优化决策**: 意图解析、任务分解、优化策略决策、架构分析

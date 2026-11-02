@@ -1,0 +1,11 @@
+{
+  "skill_name": "kptools-node-profiler",
+  "queries": [
+    { "id": "NPP-01", "prompt": "分析 Node.js 网关进程的 CPU 热点", "should_trigger": true, "note": "core scenario" },
+    { "id": "NPP-02", "prompt": "解析这个 V8 isolate 日志", "should_trigger": true, "note": "parse" },
+    { "id": "NPP-03", "prompt": "用 0x 给 Node 服务生成火焰图", "should_trigger": true, "note": "0x" },
+    { "id": "NPP-04", "prompt": "这个 .cpuprofile 文件怎么看", "should_trigger": true, "note": "cpuprofile guidance" },
+    { "id": "NQ-01", "prompt": "给这个 Python 服务采火焰图", "should_trigger": false, "note": "routes to kptools-py-spy" },
+    { "id": "NQ-02", "prompt": "给 Java 进程采火焰图", "should_trigger": false, "note": "routes to kptools-devkit java-perf" }
+  ]
+}

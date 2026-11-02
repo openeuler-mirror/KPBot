@@ -1,0 +1,20 @@
+{
+  "skill_name": "kptools-ascend-pd-env",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "比一下 P 容器和 D 容器的环境有什么不一样", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "采集 vLLM 推理容器的环境信息", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "两台机器的 CANN 版本是不是一致", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "确认两个容器的 torch_npu 和 vllm 版本有没有漂移", "should_trigger": true },
+    { "id": "EQ-05", "prompt": "P/D 两侧的 HCCL 环境变量对比一下", "should_trigger": true },
+    { "id": "EQ-06", "prompt": "升级前后环境变了哪些东西，我有升级前的采集包", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "把这个容器的环境快照存下来备查", "should_trigger": true },
+    { "id": "EQ-08", "prompt": "两个容器的 cpuset 和 cgroup 配额是不是一样", "should_trigger": true },
+    { "id": "EQ-09", "prompt": "看看 NPU 现在的利用率和温度", "should_trigger": false, "note": "routes to kptools-ascend-smi" },
+    { "id": "EQ-10", "prompt": "采集进程的线程分布和上下文切换", "should_trigger": false, "note": "routes to kptools-proc-collector" },
+    { "id": "EQ-11", "prompt": "HCCN 网卡链路状态怎么查", "should_trigger": false, "note": "routes to kptools-ascend-hccn" },
+    { "id": "EQ-12", "prompt": "分析 vLLM 的 profiling trace 找热点算子", "should_trigger": false, "note": "routes to ascend-vllm-profiler" },
+    { "id": "EQ-13", "prompt": "帮我把这个推理服务调优到更高吞吐", "should_trigger": false, "note": "routes to kpbot-app-tuner" }
+  ]
+}
