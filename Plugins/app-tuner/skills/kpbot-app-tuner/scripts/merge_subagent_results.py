@@ -49,7 +49,7 @@ NPU_TIMING_KEYS = (
 
 
 def _coerce_seconds(value):
-    if value in (None, "", False, True):
+    if value is None or isinstance(value, bool) or value == "":
         return 0.0
     try:
         return float(value)
@@ -135,17 +135,26 @@ def load_result(path):
     except Exception as exc:
         return None, [f"invalid_json:{path.name}:{exc}"]
 
+    if not isinstance(data, dict):
+        return None, [f"invalid_result_root:{path.name}:expected_object"]
+
     if "candidate_actions" not in data and isinstance(data.get("selected_optimization_actions"), list):
         data["candidate_actions"] = data["selected_optimization_actions"]
 
     missing = sorted(REQUIRED_RESULT_FIELDS - set(data))
     errors = [f"missing_result_fields:{path.name}:{','.join(missing)}"] if missing else []
 
-    if data.get("status") not in {"ok", "degraded", "blocked", "failed"}:
+    if not isinstance(data.get("status"), str) or data["status"] not in {"ok", "degraded", "blocked", "failed"}:
         errors.append(f"invalid_status:{path.name}:{data.get('status')}")
+        return None, errors
+
+    if not isinstance(data.get("subskill_name"), str) or not data["subskill_name"].strip():
+        errors.append(f"invalid_subskill_name:{path.name}")
+        return None, errors
 
     if not isinstance(data.get("candidate_actions", []), list):
         errors.append(f"candidate_actions_not_list:{path.name}")
+        return None, errors
 
     for index, action in enumerate(data.get("candidate_actions", [])):
         if not isinstance(action, dict):
@@ -154,6 +163,9 @@ def load_result(path):
         missing_action = sorted(REQUIRED_ACTION_FIELDS - set(action))
         if missing_action:
             errors.append(f"missing_action_fields:{path.name}:{index}:{','.join(missing_action)}")
+        if "action_id" in action and (not isinstance(action["action_id"], str) or not action["action_id"].strip()):
+            errors.append(f"invalid_action_id:{path.name}:{index}")
+            return None, errors
 
     return data, errors
 
@@ -232,11 +244,17 @@ def main():
     if manifest_arg:
         manifest_path = Path(manifest_arg)
         try:
-            candidate_manifest = json.loads(manifest_path.read_text())
+            candidate_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(candidate_manifest, dict):
+                raise ValueError("candidate manifest must be an object")
             bottleneck_classification = candidate_manifest.get("bottleneck_classification", "")
             candidate_skill_list = candidate_manifest.get("candidate_skill_list", candidate_manifest.get("dynamic_route_plan", []))
+            if not isinstance(candidate_skill_list, list) or any(not isinstance(item, dict) for item in candidate_skill_list):
+                raise ValueError("candidate_skill_list must be an object array")
         except Exception as exc:
             gate_errors.append(f"invalid_candidate_manifest:{manifest_path}:{exc}")
+            candidate_manifest = {}
+            candidate_skill_list = []
 
     expected_subskills = [item.strip() for item in args.expected_subskills.split(",") if item.strip()]
     if not expected_subskills:
@@ -326,7 +344,7 @@ def main():
 
     output_pool = Path(args.output_candidate_pool)
     output_pool.parent.mkdir(parents=True, exist_ok=True)
-    output_pool.write_text(json.dumps(candidate_pool, indent=2, ensure_ascii=False) + "\n")
+    output_pool.write_text(json.dumps(candidate_pool, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     output_summary = Path(args.output_summary)
     output_summary.parent.mkdir(parents=True, exist_ok=True)
