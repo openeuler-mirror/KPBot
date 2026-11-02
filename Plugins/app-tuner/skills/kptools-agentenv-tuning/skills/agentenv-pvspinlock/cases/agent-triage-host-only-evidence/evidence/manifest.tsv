@@ -1,0 +1,4 @@
+file	state	exit_code
+environment.txt	available	0
+cpu-pressure.txt	available	0
+target-process.txt	available	0
