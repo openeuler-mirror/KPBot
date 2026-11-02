@@ -1,0 +1,45 @@
+# 用例：agent 级触发率 —— 采集这个 Python 进程的火焰图（目标进程已启动，PID 见环境）
+# 依据 docs/case-spec.md；with/without 唯一变量是 skill 有无；断言 trace 中 skill 被调用。
+
+name: agent-pyspy-trigger
+skill: kptools-py-spy
+tier: agent
+
+image: kpbot/app-tuner-agent-agent-pyspy-trigger:1.0-openeuler24.03
+model: opencode/glm-5.3-flash-free
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: trigger
+  uplift: with 触发 / without 不触发（skill 未接入时不可能触发）
+
+build:
+  context: ../../..
+  dockerfile: skills/kptools-py-spy/cases/agent-pyspy-trigger/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时挂载）
+  - opencode auth.json + 配置目录 ~/.config/opencode（运行时挂载，供应商定义在 config 而非 auth）
+  - 容器可访问模型 API（必要时 --network host）
+
+env_vars:
+  MODEL: opencode/glm-5.3-flash-free
+  SKILL_MODE: with
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: trigger
+    expect: true

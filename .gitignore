@@ -18,3 +18,9 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# SKILL 采集证据产物（运行时生成）
+*-evidence/
+
+# case 运行产物（entrypoint 写入，不入库）
+Plugins/app-tuner/skills/*/cases/*/results/

@@ -1,0 +1,17 @@
+# 用例：OS 配置基线全模式采集（evals OS-E01~E04）
+# 依据 docs/case-spec.md（tier B）。evals ID 映射见各断言注释；entrypoint 宿主机可直接执行。
+
+name: collect-os-baseline
+skill: kptools-os-collector
+tier: B
+image: host-runtime
+entrypoint: ["./entrypoint.sh"]
+
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: sections_ok
+    expect: true
