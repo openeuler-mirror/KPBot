@@ -40,7 +40,7 @@ description: 基于 LLVM MCA 的 ARM64 静态性能瓶颈分析器。对汇编�
 
 ### Rust source 模式
 
-`source_language=rust` 时脚本用 `rustc -O --target aarch64-unknown-linux-gnu -C target-cpu=<model> --emit asm` 编译后提取函数体（`<model>` 由 `uarch` 映射表得到，与 C/C++ 路径共用同一映射）。cargo 项目不必手动抽文件，可直接用 `cargo rustc --release -- --emit asm -C target-cpu=<model>` 让脚本读取编译产物。
+`source_language=rust` 时脚本用 `rustc -O --target aarch64-unknown-linux-gnu -C target-cpu=<model> --emit asm` 编译后提取函数体（`<model>` 由 `uarch` 映射表得到，与 C/C++ 路径共用同一映射）。cargo 项目不必手动抽文件，可直接用 `cargo rustc --release -- --emit asm -C target-cpu=<model>` 让脚本读取编译产物。库形态源码（无 `fn main`，如 `pub mod` 形态）脚本会自动追加 `--crate-type=lib`（规避 `error[E0601]: main function not found`），无需用户手动处理。
 
 ### 函数名匹配（Rust mangled 符号）
 
@@ -55,16 +55,17 @@ Rust 默认 legacy mangling 产物形如 `_ZN4calc3sum17h<hash>E`，末尾 `17h<
 ```bash
 # 1. 单文件 Rust 源码
 python3 <skill_dir>/scripts/mca_analyze.py --uarch hip09 \
-  --source kernel.rs --function dot_f32 --source-language rust
+  --source kernel.rs --function calc::dot --source-language rust
 
-# 2. cargo 项目（先产出汇编再喂给脚本）
+# 2. cargo 项目（先产出汇编再喂给脚本）。
+#    注意：--asm 模式分析整个文件，不做函数级隔离；函数级隔离用 --source/--binary 模式。
 cargo rustc --release -- --emit asm -C target-cpu=hip09
 python3 <skill_dir>/scripts/mca_analyze.py --uarch hip09 \
-  --asm target/release/deps/<crate>.s --function dot_f32
+  --asm target/release/deps/<crate>.s
 
 # 3. 已编译二进制/对象文件（rustc 或 cargo build 产物）
 python3 <skill_dir>/scripts/mca_analyze.py --uarch hip10 \
-  --binary target/release/app --function dot_f32
+  --binary target/release/app --function calc::dot
 ```
 
 ## 微架构支持

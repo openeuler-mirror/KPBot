@@ -48,10 +48,12 @@ cc -O3 -S -march=armv8-a+simd -o /tmp/kernel.s <generated_source.c>
 如果上游给的是 Rust intrinsic 源码（`std::arch::aarch64` 路径）：
 
 ```bash
-rustc -O --target aarch64-unknown-linux-gnu -C target-feature=+neon --emit asm -o /tmp/kernel.s kernel.rs
+rustc -O --edition 2021 --crate-type=lib --target aarch64-unknown-linux-gnu -C target-feature=+neon --emit asm -o /tmp/kernel.s kernel.rs
 ```
 
-Rust 汇编中函数标签是 mangled 符号（`_ZN4calc3dot17h<hash>E`）——`--function` 支持传 `calc::dot` 这样的源码路径名或 `_ZN4calc3dot` mangled 前缀，脚本按剥离 `17h<hash>E` 后缀的规则匹配标签。
+库 crate（无 `fn main`，如 `pub mod` 形态的源码）必须加 `--crate-type=lib`，否则 rustc 报 `error[E0601]: main function not found`；源码含 `use core::arch::...` 时必须加 `--edition 2021`，否则默认 2015 edition 不解析裸 `core` 路径，报 `error[E0433]`。
+
+Rust 汇编中函数标签是 mangled 符号（`_ZN4calc3dot17h<hash>E`）——`--function` 支持传 `calc::dot` 这样的源码路径名或 `_ZN4calc3dot` mangled 前缀，脚本按剥离 `17h<hash>E` 后缀的规则匹配标签。路径名可省略 crate 段：rustc 编译产出的真实标签首段恒为 crate 名（如 `_ZN6kernel4calc3dot17h<hash>E`），脚本按段级尾部对齐匹配——候选段为标签段的尾部即命中，与 llvm-mca-analysis 同语义。
 
 SVE/SME 只做 compile-only 时使用上游已经验证过的目标 flags。不要在当前机器不支持 SVE/SME runtime 时强行运行 benchmark。
 

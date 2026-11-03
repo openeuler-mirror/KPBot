@@ -19,8 +19,8 @@ ab:
   skill_enabled:
     with: true
     without: false
-  metric: analysis_correctness   # 分析类判据：产物 JSON 字段正确性（language=rust+source_kind=rust_intrinsics+pressure_level 合法）
-  uplift: with 臂 skills_invoked 含 register-pressure-analysis 且分析字段正确；without 臂无 skill 引导大概率字段缺失
+  metric: analysis_correctness   # 分析类判据：产物 JSON 契约字段正确性（language=rust+source_kind=rust_intrinsics+pressure_level 合法），两臂同标准评分
+  uplift: with 臂 skills_invoked 含 register-pressure-analysis 且契约字段正确；without 臂不预设字段缺失，由 run_ab 客观对照汇总（分析脚本在镜像 /staging/skill 两臂同在，属公共条件；差异应来自 skill 指引）
 
 build:
   context: ../../../..
