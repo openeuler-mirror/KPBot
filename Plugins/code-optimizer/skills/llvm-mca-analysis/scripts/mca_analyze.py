@@ -277,7 +277,11 @@ def match_rust_label(label, func):
     func 以 _ZN 开头时自身即 mangled 前缀）。比对规则（任一命中即真）：
     - label == 候选；
     - label 剥离 17h<hash>E 后缀后 == 候选（如 _ZN4calc3sum17h...E 剥离后
-      == _ZN4calc3sum，对 --function calc::sum / _ZN4calc3sum 均命中）。
+      == _ZN4calc3sum，对 --function calc::sum / _ZN4calc3sum 均命中）；
+    - 裸名（func 无 "::" 且非 _ZN）：label 段列表末段 == func 即命中
+      （--function dot_f32 命中 _ZN6kernel7example7dot_f3217h...E 的末段）。
+      该分支仅 rust 语言路径可达（c_cpp 裸名走 extract_* 的快路径不进本函数）；
+      同一裸名命中多个标签时由调用方按唯一性守卫报错。
     """
     if not label or not func:
         return False
@@ -289,12 +293,19 @@ def match_rust_label(label, func):
     for cand in candidates:
         if label == cand or stripped == cand:
             return True
-    # 尾部对齐：容忍外层 crate 名段差异。库 crate（如 SKILL.md 用例 1 的
-    # pub mod calc，文件 kernel.rs）编译产出的符号是 _ZN6kernel4calc3dot17h...E，
-    # --function calc::dot 生成的候选 _ZN4calc3dot 缺外层 crate 段无法整串相等。
-    # 把 label 剥 hash 后解析成段，候选段为 label 段的尾部（末 len 段全等）即命中。
+    # 段级解析一次，裸名与尾部对齐两分支共用。
     label_segs = demangle_legacy_segments(label)
     if label_segs:
+        # 裸名支持：func 无 "::" 且非 _ZN 时，label 段列表末段 == 裸名即命中。
+        # 例：--function dot_f32 命中 _ZN6kernel7example7dot_f3217h...E（末段 dot_f32）。
+        # 仅 rust 语言路径会以裸名进入本函数（extract_* 对 c_cpp 裸名走快路径）；
+        # 同一裸名命中多个标签时由调用方按唯一性守卫报错。
+        if "::" not in func and not func.startswith("_ZN") and label_segs[-1] == func:
+            return True
+        # 尾部对齐：容忍外层 crate 名段差异。库 crate（如 SKILL.md 用例 1 的
+        # pub mod calc，文件 kernel.rs）编译产出的符号是 _ZN6kernel4calc3dot17h...E，
+        # --function calc::dot 生成的候选 _ZN4calc3dot 缺外层 crate 段无法整串相等。
+        # 把 label 剥 hash 后解析成段，候选段为 label 段的尾部（末 len 段全等）即命中。
         for cand in candidates:
             if not cand.startswith("_ZN"):
                 continue
@@ -329,6 +340,9 @@ def compile_rust_source_to_asm(source, mcpu, extra_flags):
     if not os.path.isfile(source):
         die("--source 指定的文件不存在: %s" % source)
     rustc_cpu = RUSTC_CPU_MAP.get(mcpu, "native")
+    # edition 2021：NEON 源码的 `use core::arch::aarch64::*` 在默认 2015 edition
+    # 报 E0433（裸 core 路径不解析），必须显式 --edition 2021（与 SKILL.md 的
+    # rustc 手动编译命令一致，见 D2 规则）。
     # 库 crate（无 fn main，如 SKILL.md 用例 1 的 pub mod 形态）需 --crate-type=lib，
     # 否则 rustc 报 E0601 main function not found。
     try:
@@ -339,7 +353,7 @@ def compile_rust_source_to_asm(source, mcpu, extra_flags):
     is_lib = not re.search(r"\bfn\s+main\s*\(", src_text)
     tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".s", delete=False)
     tmp.close()
-    cmd = ["rustc", "-O", "--target=%s" % RUST_TRIPLE,
+    cmd = ["rustc", "-O", "--edition", "2021", "--target=%s" % RUST_TRIPLE,
            "-C", "target-cpu=%s" % rustc_cpu,
            "-C", "target-feature=+neon", "--emit=asm", "-o", tmp.name]
     if is_lib:
@@ -380,7 +394,7 @@ def disasm_binary(binary, mcpu):
     return out, True, ""
 
 
-def extract_function_from_compiler_asm(asm_text, func):
+def extract_function_from_compiler_asm(asm_text, func, language="c_cpp"):
     """从 clang 生成的 .s 中提取函数体。
 
     clang .s 形如：
@@ -397,11 +411,16 @@ def extract_function_from_compiler_asm(asm_text, func):
 
     Rust hash 容忍匹配：标签若是 Rust legacy mangled 符号（_ZN...17h<hash>E），
     剥离 hash 后缀后与 --function 候选比对（calc::sum / _ZN4calc3sum 均可命中）。
-    func 无 "::" 且非 _ZN 开头时为纯 c_cpp 路径，行为与原逻辑一致。
+    裸名支持（仅 language=rust 启用，两道守卫）：
+    - 守卫(i) 仅 rust 语言：c_cpp 裸名仍走下方快路径，行为与原逻辑完全一致；
+    - 守卫(ii) 唯一命中：裸名按 mangled 符号末段比对，命中多个标签时报错列出
+      全部（裸名跨模块/闭包歧义概率高），唯一命中才通过。
     """
     # 找函数标签行：行首 func 名 + 冒号（行尾可能有注释，如 "dot:  // @dot"）
-    # c_cpp 快路径：func 是普通标识符时用原精确正则
-    if "::" not in (func or "") and not (func or "").startswith("_ZN"):
+    is_bare_name = "::" not in (func or "") and not (func or "").startswith("_ZN")
+    # c_cpp 快路径：func 是普通标识符且语言非 rust 时用原精确正则
+    # （裸名要走 rust 段级匹配必须显式 --source-language rust）
+    if is_bare_name and language != "rust":
         label_re = re.compile(r"^\s*%s\s*:" % re.escape(func), re.MULTILINE)
         m = label_re.search(asm_text)
         if not m:
@@ -410,13 +429,29 @@ def extract_function_from_compiler_asm(asm_text, func):
         # Rust 路径：抽出全部候选函数标签（标识符 + ':'），逐一 hash 容忍比对
         label_any_re = re.compile(r"^\s*([A-Za-z_.$][\w.$]*)\s*:", re.MULTILINE)
         m = None
-        for lm in label_any_re.finditer(asm_text):
-            if match_rust_label(lm.group(1), func):
-                m = lm
-                break
-        if m is None:
-            return None, "在编译产物中找不到函数标签 '%s:'（已按剥离 17h<hash>E 后缀的" \
-                         "前缀容忍匹配，含 mangled 形式 _ZN...17h...E）" % func
+        if is_bare_name:
+            # 裸名守卫(ii)：收集全部命中（按标签名去重），唯一才过，多命中报错列出全部
+            hits = {}
+            for lm in label_any_re.finditer(asm_text):
+                if match_rust_label(lm.group(1), func):
+                    hits.setdefault(lm.group(1), lm)
+            if len(hits) > 1:
+                return None, ("裸函数名 '%s' 命中 %d 个标签，无法唯一定位: %s；"
+                              "请改用带模块路径的函数名（如 mod::%s）或 mangled 前缀"
+                              % (func, len(hits), ", ".join(hits), func))
+            m = next(iter(hits.values()), None)
+            if m is None:
+                return None, ("在编译产物中找不到函数 '%s'（裸名按 mangled 符号末段"
+                              "匹配未命中；请改用路径名（如 mod::%s）或 mangled 前缀）"
+                              % (func, func))
+        else:
+            for lm in label_any_re.finditer(asm_text):
+                if match_rust_label(lm.group(1), func):
+                    m = lm
+                    break
+            if m is None:
+                return None, "在编译产物中找不到函数标签 '%s:'（已按剥离 17h<hash>E 后缀的" \
+                             "前缀容忍匹配，含 mangled 形式 _ZN...17h...E）" % func
     start = m.end()
     # 找函数结束边界
     end_re = re.compile(r"^\s*\.cfi_endproc\b", re.MULTILINE)
@@ -443,7 +478,7 @@ def extract_function_from_compiler_asm(asm_text, func):
     return "\n".join(cleaned), ""
 
 
-def extract_function_from_objdump(disasm_text, func):
+def extract_function_from_objdump(disasm_text, func, language="c_cpp"):
     """从 llvm-objdump -d 输出中提取函数指令。
 
     形如：
@@ -457,12 +492,15 @@ def extract_function_from_objdump(disasm_text, func):
 
     Rust hash 容忍匹配：<label> 里的符号若是 _ZN...17h<hash>E 形状，剥离
     hash 后缀后与 --function 候选比对（binary 来自另一趟编译也能对齐）。
+    裸名支持仅 language=rust 启用（守卫同 extract_function_from_compiler_asm：
+    c_cpp 裸名走快路径行为不变；rust 裸名须唯一命中，多命中报错列出全部）。
     """
     lines = disasm_text.splitlines()
     # 找函数头：<func>:  或  <addr> <func>:
     header_idx = None
-    # c_cpp 快路径：func 是普通标识符时用原精确匹配
-    if "::" not in (func or "") and not (func or "").startswith("_ZN"):
+    is_bare_name = "::" not in (func or "") and not (func or "").startswith("_ZN")
+    # c_cpp 快路径：func 是普通标识符且语言非 rust 时用原精确匹配
+    if is_bare_name and language != "rust":
         for i, line in enumerate(lines):
             if re.search(r"<%s>:" % re.escape(func), line):
                 header_idx = i
@@ -470,13 +508,27 @@ def extract_function_from_objdump(disasm_text, func):
     else:
         # Rust 路径：抽出 <label>: 头行里的符号名，hash 容忍比对
         sym_re = re.compile(r"<([A-Za-z_.$][\w.$]*)>:")
-        for i, line in enumerate(lines):
-            for sm in sym_re.finditer(line):
-                if match_rust_label(sm.group(1), func):
-                    header_idx = i
+        if is_bare_name:
+            # 裸名守卫(ii)：收集全部命中（按符号名去重），唯一才过
+            hits = {}
+            for i, line in enumerate(lines):
+                for sm in sym_re.finditer(line):
+                    if match_rust_label(sm.group(1), func):
+                        hits.setdefault(sm.group(1), i)
+            if len(hits) > 1:
+                return None, ("裸函数名 '%s' 命中 %d 个符号，无法唯一定位: %s；"
+                              "请改用带模块路径的函数名（如 mod::%s）或 mangled 前缀"
+                              % (func, len(hits), ", ".join(hits), func))
+            if hits:
+                header_idx = next(iter(hits.values()))
+        else:
+            for i, line in enumerate(lines):
+                for sm in sym_re.finditer(line):
+                    if match_rust_label(sm.group(1), func):
+                        header_idx = i
+                        break
+                if header_idx is not None:
                     break
-            if header_idx is not None:
-                break
     if header_idx is None:
         return None, "在反汇编结果中找不到函数 '<%s>:'" % func
     instrs = []
@@ -518,7 +570,8 @@ def get_assembly(args, mcpu):
                 args.source, mcpu, args.cflags)
             if not ok:
                 die("源码编译失败:\n%s" % err)
-        body, err = extract_function_from_compiler_asm(asm, args.function)
+        body, err = extract_function_from_compiler_asm(
+            asm, args.function, getattr(args, "source_language", "c_cpp"))
         if err:
             die(err)
         return body, {"mode": "source", "source": args.source,
@@ -528,7 +581,8 @@ def get_assembly(args, mcpu):
         text, ok, err = disasm_binary(args.binary, mcpu)
         if not ok:
             die("反汇编失败:\n%s" % err)
-        body, err = extract_function_from_objdump(text, args.function)
+        body, err = extract_function_from_objdump(
+            text, args.function, getattr(args, "source_language", "c_cpp"))
         if err:
             die(err)
         return body, {"mode": "binary", "source": args.binary,

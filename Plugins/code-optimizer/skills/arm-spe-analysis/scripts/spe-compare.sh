@@ -30,6 +30,9 @@ spe-compare.sh — ARM SPE 前后对比
   -m, --metric METRIC  对比指标: l1_miss, llc_miss, branch_mispred, all（默认 all）
   -f, --format FORMAT  输出格式: text, json（默认 text）
   --by-function        函数级对比（Rust mangled 符号按去 hash 规范化对齐）
+                       函数级判定口径跟随 -m：l1_miss/llc_miss/branch_mispred 按对应
+                       指标列判定；all（含未指定）任一指标恶化判 REGRESSED、全部不变
+                       判 NO CHANGE、否则 IMPROVED
   -h, --help           帮助
 
 示例:
@@ -215,20 +218,77 @@ function_intersection() {
         <(echo "$after_tbl" | awk "{print \$1}" | sort -u)
 }
 
+# 单指标方向：after-before 百分点差（%.1f，与表列同单位）。
+# 负=improved，正=regressed，0=nochange。
+_fn_metric_direction() {
+    local b="$1" a="$2" diff
+    diff=$(echo "$a $b" | awk '{printf "%.1f", $1-$2}')
+    if [ "$diff" != "0.0" ]; then
+        if [ "$(echo "$diff" | awk '{print ($1 < 0) ? 1 : 0}')" = "1" ]; then
+            echo "improved"
+        else
+            echo "regressed"
+        fi
+    else
+        echo "nochange"
+    fi
+}
+
+# 按 $METRIC 口径给出函数级判定标记（[IMPROVED]/[REGRESSED]/[NO CHANGE]）。
+# 口径贯通：函数级判定与全局表引用同一 METRIC，不再恒按 L1 miss。
+# - l1_miss / llc_miss / branch_mispred：只看对应指标列（百分点差）；
+# - all（含未指定）：任一指标恶化→REGRESSED；全部不变→NO CHANGE；否则 IMPROVED。
+fn_verdict_by_metric() {
+    local b_l1="$1" a_l1="$2" b_llc="$3" a_llc="$4" b_br="$5" a_br="$6"
+    local dir
+    case "$METRIC" in
+        l1_miss)        dir=$(_fn_metric_direction "$b_l1" "$a_l1") ;;
+        llc_miss)       dir=$(_fn_metric_direction "$b_llc" "$a_llc") ;;
+        branch_mispred) dir=$(_fn_metric_direction "$b_br" "$a_br") ;;
+        *)
+            # all：最差方向主导——任一恶化即 REGRESSED，全部不变才 NO CHANGE
+            local worst="nochange" d
+            for d in "$(_fn_metric_direction "$b_l1" "$a_l1")" \
+                     "$(_fn_metric_direction "$b_llc" "$a_llc")" \
+                     "$(_fn_metric_direction "$b_br" "$a_br")"; do
+                if [ "$d" = "regressed" ]; then
+                    worst="regressed"
+                    break
+                fi
+                if [ "$d" = "improved" ]; then
+                    worst="improved"
+                fi
+            done
+            dir=$worst
+            ;;
+    esac
+    case "$dir" in
+        improved)  echo "[IMPROVED]" ;;
+        regressed) echo "[REGRESSED]" ;;
+        *)         echo "[NO CHANGE]" ;;
+    esac
+}
+
 # 函数级 text 对比表 + 单侧清单
 compute_function_diff() {
     local before_tbl="$1"
     local after_tbl="$2"
     local common_fns="$3"
 
+    # 判定列标注所用指标，与全局表口径对齐（-m branch_mispred 即按 BR% 判定）
+    local verdict_col="判定(all:任一恶化=REGRESSED)"
+    case "$METRIC" in
+        l1_miss|llc_miss|branch_mispred) verdict_col="判定(${METRIC})" ;;
+    esac
+
     echo ""
     echo "=== 函数级对比 ==="
     echo ""
     printf "  %-42s  %7s  %7s  %16s  %16s  %16s  %s\n" \
-        "FUNCTION" "CNT_B" "CNT_A" "L1% B→A" "LLC% B→A" "BR% B→A" "判定"
+        "FUNCTION" "CNT_B" "CNT_A" "L1% B→A" "LLC% B→A" "BR% B→A" "$verdict_col"
     echo "  ------------------------------------------------------------------------------------------------------------------"
 
-    local fn b_cnt a_cnt b_l1 a_l1 b_llc a_llc b_br a_br l1_diff verdict
+    local fn b_cnt a_cnt b_l1 a_l1 b_llc a_llc b_br a_br verdict
     while IFS= read -r fn; do
         [ -z "$fn" ] && continue
         b_cnt=0 b_l1=0.0 b_llc=0.0 b_br=0.0
@@ -236,16 +296,8 @@ compute_function_diff() {
         eval "$(echo "$before_tbl" | awk -v fn="$fn" '$1==fn {printf "b_cnt=%d b_l1=%.1f b_llc=%.1f b_br=%.1f", $2, $3, $4, $5; exit}')"
         eval "$(echo "$after_tbl"  | awk -v fn="$fn" '$1==fn {printf "a_cnt=%d a_l1=%.1f a_llc=%.1f a_br=%.1f", $2, $3, $4, $5; exit}')"
 
-        l1_diff=$(echo "$a_l1 $b_l1" | awk '{printf "%.1f", $1-$2}')
-        if [ "$l1_diff" != "0.0" ]; then
-            if [ "$(echo "$l1_diff" | awk '{print ($1 < 0) ? 1 : 0}')" = "1" ]; then
-                verdict="[IMPROVED]"
-            else
-                verdict="[REGRESSED]"
-            fi
-        else
-            verdict="[NO CHANGE]"
-        fi
+        # 判定口径贯通：跟随 -m 选指标列，不再恒按 L1 miss
+        verdict=$(fn_verdict_by_metric "$b_l1" "$a_l1" "$b_llc" "$a_llc" "$b_br" "$a_br")
 
         printf "  %-42s  %7s  %7s  %7s→%-7s  %7s→%-7s  %7s→%-7s  %s\n" \
             "$fn" "$b_cnt" "$a_cnt" "$b_l1" "$a_l1" "$b_llc" "$a_llc" "$b_br" "$a_br" "$verdict"
@@ -276,7 +328,7 @@ append_function_json() {
     local diff_json="$4"
 
     local fn_entries="" fn_entry
-    local fn b_cnt a_cnt b_l1 a_l1 b_llc a_llc b_br a_br l1_diff verdict first=1
+    local fn b_cnt a_cnt b_l1 a_l1 b_llc a_llc b_br a_br verdict first=1
     while IFS= read -r fn; do
         [ -z "$fn" ] && continue
         b_cnt=0 b_l1=0.0 b_llc=0.0 b_br=0.0
@@ -284,16 +336,10 @@ append_function_json() {
         eval "$(echo "$before_tbl" | awk -v fn="$fn" '$1==fn {printf "b_cnt=%d b_l1=%.1f b_llc=%.1f b_br=%.1f", $2, $3, $4, $5; exit}')"
         eval "$(echo "$after_tbl"  | awk -v fn="$fn" '$1==fn {printf "a_cnt=%d a_l1=%.1f a_llc=%.1f a_br=%.1f", $2, $3, $4, $5; exit}')"
 
-        l1_diff=$(echo "$a_l1 $b_l1" | awk '{printf "%.1f", $1-$2}')
-        if [ "$l1_diff" != "0.0" ]; then
-            if [ "$(echo "$l1_diff" | awk '{print ($1 < 0) ? 1 : 0}')" = "1" ]; then
-                verdict="improved"
-            else
-                verdict="regressed"
-            fi
-        else
-            verdict="no_change"
-        fi
+        # 判定口径贯通：与 text 表共用 fn_verdict_by_metric（跟随 -m 选指标列）
+        verdict=$(fn_verdict_by_metric "$b_l1" "$a_l1" "$b_llc" "$a_llc" "$b_br" "$a_br")
+        # 标记形式转 JSON 值：[IMPROVED] -> improved / [NO CHANGE] -> no_change
+        verdict=$(echo "$verdict" | tr -d '[]' | tr 'A-Z ' 'a-z_')
 
         if [ "$first" = 1 ]; then first=0; else fn_entries="$fn_entries,"; fi
         fn_entries="$fn_entries
@@ -303,7 +349,8 @@ append_function_json() {
       \"l1_miss_pct_before\": $b_l1, \"l1_miss_pct_after\": $a_l1,
       \"llc_miss_pct_before\": $b_llc, \"llc_miss_pct_after\": $a_llc,
       \"br_miss_pct_before\": $b_br, \"br_miss_pct_after\": $a_br,
-      \"verdict\": \"$verdict\"
+      \"verdict\": \"$verdict\",
+      \"verdict_metric\": \"$METRIC\"
     }"
     done <<< "$common_fns"
 

@@ -604,6 +604,146 @@ MOCKEOF
     assert_contains "$output" "\"before\"" "回退 JSON 仍保留全局字段"
 }
 
+# mock spe-parse.sh：函数级判定口径（-m 驱动）测试数据。
+# 刻意构造各指标方向相反的函数，验证判定列跟随 -m 而非恒按 L1：
+#   _ZN6kernel3calc3dot  L1 10→50 恶化, LLC 20→10 改善, BR 40→10 改善（两臂异 hash 兼验规范化）
+#   plain_c_fn           L1 60→10 改善, LLC 10→30 恶化, BR 20→30 恶化
+#   improved_fn          三指标全改善；flat_fn 三指标全不变
+setup_mock_byfunction_metric() {
+    rm -rf "$MOCK_DIR"
+    mkdir -p "$MOCK_DIR"
+
+    cat > "$MOCK_DIR/spe-parse.sh" <<'MOCKEOF'
+#!/bin/bash
+DATA=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --summary) SUMMARY=true; shift ;;
+        --by-function) BYFN=true; shift ;;
+        *) DATA="$1"; shift ;;
+    esac
+done
+
+if [[ "$DATA" == *after* ]]; then
+cat <<'EOF'
+=== SPE 采样汇总 ===
+总记录数:      48000
+
+--- Cache 分布 ---
+L1 miss:   2400 (5.0%)
+LLC miss:   480 (1.0%)
+Remote:    48 (0.1%)
+
+--- TLB 分布 ---
+TLB access: 16000 (33.3%)
+TLB miss:   480 (3.0% of TLB)
+
+--- 分支预测 ---
+Branch miss: 400 (100.0% of branches)
+
+=== 按函数聚合 ===
+FUNCTION                                            COUNT     L1_MISS%   LLC_MISS%    BR_MISS%
+_ZN6kernel3calc3dot17hbbbb2222bbbb2222E                10          50.0%       10.0%       10.0%
+plain_c_fn                                             10          10.0%       30.0%       30.0%
+improved_fn                                            10          10.0%        5.0%        5.0%
+flat_fn                                                10          10.0%       10.0%       10.0%
+EOF
+else
+cat <<'EOF'
+=== SPE 采样汇总 ===
+总记录数:      50000
+
+--- Cache 分布 ---
+L1 miss:   5000 (10.0%)
+LLC miss:  1000 (2.0%)
+Remote:    100 (0.2%)
+
+--- TLB 分布 ---
+TLB access: 20000 (40.0%)
+TLB miss:   1000 (5.0% of TLB)
+
+--- 分支预测 ---
+Branch miss: 800 (100.0% of branches)
+
+=== 按函数聚合 ===
+FUNCTION                                            COUNT     L1_MISS%   LLC_MISS%    BR_MISS%
+_ZN6kernel3calc3dot17haaaa1111aaaa1111E                10          10.0%       20.0%       40.0%
+plain_c_fn                                             10          60.0%       10.0%       20.0%
+improved_fn                                            10          50.0%       30.0%       30.0%
+flat_fn                                                10          10.0%       10.0%       10.0%
+EOF
+fi
+MOCKEOF
+
+    chmod +x "$MOCK_DIR/spe-parse.sh"
+    ln -sf "$SCRIPT" "$MOCK_DIR/spe-compare.sh"
+    touch "$MOCK_DIR/before.data" "$MOCK_DIR/after.data"
+}
+
+test_byfunction_metric_branch() {
+    blue "测试: -m branch_mispred --by-function 判定跟随 BR% 而非 L1"
+    setup_mock_byfunction_metric
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" -m branch_mispred --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "判定(branch_mispred)" "表头应标注判定所用指标"
+    local calc_line plain_line
+    calc_line=$(echo "$output" | grep "_ZN6kernel3calc3dot" | head -1)
+    plain_line=$(echo "$output" | grep "plain_c_fn" | head -1)
+    assert_contains "$calc_line" "[IMPROVED]" "calc3dot BR 40.0→10.0 改善应判 IMPROVED（修复前误按 L1 判 REGRESSED）"
+    assert_contains "$plain_line" "[REGRESSED]" "plain_c_fn BR 20.0→30.0 恶化应判 REGRESSED（修复前误按 L1 判 IMPROVED）"
+}
+
+test_byfunction_metric_llc() {
+    blue "测试: -m llc_miss --by-function 判定跟随 LLC%"
+    setup_mock_byfunction_metric
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" -m llc_miss --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "判定(llc_miss)" "表头应标注判定所用指标"
+    local calc_line plain_line
+    calc_line=$(echo "$output" | grep "_ZN6kernel3calc3dot" | head -1)
+    plain_line=$(echo "$output" | grep "plain_c_fn" | head -1)
+    assert_contains "$calc_line" "[IMPROVED]" "calc3dot LLC 20.0→10.0 改善应判 IMPROVED"
+    assert_contains "$plain_line" "[REGRESSED]" "plain_c_fn LLC 10.0→30.0 恶化应判 REGRESSED"
+    # 反向对照：同一数据 -m l1_miss 下两函数判定正好互换（L1 与 LLC/BR 方向相反）
+    local output_l1 calc_l1 plain_l1
+    output_l1=$(bash "$MOCK_DIR/spe-compare.sh" -m l1_miss --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    calc_l1=$(echo "$output_l1" | grep "_ZN6kernel3calc3dot" | head -1)
+    plain_l1=$(echo "$output_l1" | grep "plain_c_fn" | head -1)
+    assert_contains "$calc_l1" "[REGRESSED]" "-m l1_miss 下 calc3dot L1 10.0→50.0 恶化应判 REGRESSED"
+    assert_contains "$plain_l1" "[IMPROVED]" "-m l1_miss 下 plain_c_fn L1 60.0→10.0 改善应判 IMPROVED"
+}
+
+test_byfunction_all_worst_dominates() {
+    blue "测试: 不带 -m（all）时任一指标恶化判 REGRESSED"
+    setup_mock_byfunction_metric
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "判定(all" "表头应标注 all 口径"
+    local calc_line improved_line flat_line
+    calc_line=$(echo "$output" | grep "_ZN6kernel3calc3dot" | head -1)
+    improved_line=$(echo "$output" | grep "improved_fn" | head -1)
+    flat_line=$(echo "$output" | grep "flat_fn" | head -1)
+    assert_contains "$calc_line" "[REGRESSED]" "calc3dot L1 恶化（BR/LLC 改善）在 all 口径应判 REGRESSED（任一恶化主导）"
+    assert_contains "$improved_line" "[IMPROVED]" "三指标全改善应判 IMPROVED"
+    assert_contains "$flat_line" "[NO CHANGE]" "三指标全不变应判 NO CHANGE"
+}
+
+test_byfunction_json_metric_field() {
+    blue "测试: JSON 函数条目含 verdict_metric 且判定跟随 -m"
+    setup_mock_byfunction_metric
+    local output
+    output=$(bash "$MOCK_DIR/spe-compare.sh" -f json -m branch_mispred --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output" "\"verdict_metric\": \"branch_mispred\"" "JSON 函数条目应含 verdict_metric=branch_mispred"
+    local calc_entry
+    calc_entry=$(echo "$output" | grep -A 8 '"name": "_ZN6kernel3calc3dot"')
+    assert_contains "$calc_entry" "\"verdict\": \"improved\"" "calc3dot JSON verdict 应为 improved（BR 口径）"
+    local output_all calc_all
+    output_all=$(bash "$MOCK_DIR/spe-compare.sh" -f json --by-function "$MOCK_DIR/before.data" "$MOCK_DIR/after.data" 2>&1) || true
+    assert_contains "$output_all" "\"verdict_metric\": \"all\"" "不带 -m 时 verdict_metric 应为 all"
+    calc_all=$(echo "$output_all" | grep -A 8 '"name": "_ZN6kernel3calc3dot"')
+    assert_contains "$calc_all" "\"verdict\": \"regressed\"" "all 口径下 calc3dot（L1 恶化）verdict 应为 regressed"
+}
+
 # =============================================================================
 # 测试组: 真实 SPE 环境
 # =============================================================================
@@ -685,6 +825,10 @@ run_all_tests() {
     test_byfunction_json_without_flag
     test_byfunction_fallback
     test_byfunction_fallback_json_empty_functions
+    test_byfunction_metric_branch
+    test_byfunction_metric_llc
+    test_byfunction_all_worst_dominates
+    test_byfunction_json_metric_field
     echo ""
 
     blue "===== 测试组: 真实 SPE 环境 ====="

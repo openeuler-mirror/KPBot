@@ -130,6 +130,44 @@ def rust_mangle_prefix(func: str) -> str | None:
     return "_ZN" + "".join(f"{len(segment)}{segment}" for segment in segments)
 
 
+# Rust legacy mangling: _ZN<seg><seg>...17h<16-hex-hash>E. The hash changes on
+# every recompile, so matching works on the hash-stripped symbol. The two
+# helpers below mirror mca_analyze.py semantics; they are copied on purpose
+# (each skill stays self-contained, no cross-skill imports).
+RUST_HASH_RE: Final[re.Pattern[str]] = re.compile(r"17h[0-9a-f]{16}E$")
+
+
+def strip_rust_hash(sym: str) -> str:
+    """Drop a trailing 17h<hash>E suffix; return the input unchanged otherwise."""
+
+    return RUST_HASH_RE.sub("", sym or "")
+
+
+def demangle_legacy_segments(sym: str) -> list[str]:
+    """Split a legacy mangled symbol (after _ZN, hash stripped) into segments.
+
+    "_ZN6kernel4calc3dot" -> ["kernel", "calc", "dot"]. Returns [] for
+    non-_ZN shapes (plain C labels) and for corrupted segment lengths.
+    """
+
+    s = strip_rust_hash(sym or "")
+    if not s.startswith("_ZN"):
+        return []
+    s = s[3:]
+    segments: list[str] = []
+    while s:
+        m = re.match(r"(\d+)", s)
+        if not m:
+            return []
+        n = int(m.group(1))
+        s = s[m.end():]
+        if n <= 0 or len(s) < n:
+            return []
+        segments.append(s[:n])
+        s = s[n:]
+    return segments
+
+
 def rust_label_matches(stripped_label: str, function: str) -> bool:
     """Check a label against a Rust source path name (legacy mangled symbols)."""
 
@@ -138,10 +176,23 @@ def rust_label_matches(stripped_label: str, function: str) -> bool:
     if function in candidates or f"_{function}" in candidates:
         return True
     mangle_prefix = rust_mangle_prefix(function)
-    if mangle_prefix is None:
-        return False
-    pattern = rf"^{re.escape(mangle_prefix)}(17h[0-9a-f]+E)?$"
-    return any(re.fullmatch(pattern, candidate) for candidate in candidates)
+    if mangle_prefix is not None:
+        pattern = rf"^{re.escape(mangle_prefix)}(17h[0-9a-f]+E)?$"
+        if any(re.fullmatch(pattern, candidate) for candidate in candidates):
+            return True
+    # Segment-level tail alignment: tolerate an outer crate-name segment the
+    # user did not type. A lib crate compiled from kernel.rs produces labels
+    # like _ZN6kernel11microkernel7fma_4x417h<hash>E, while --function
+    # microkernel::fma_4x4 builds the shorter prefix _ZN11microkernel7fma_4x4
+    # that can never equal the whole label. Candidate segments matching the
+    # tail of the label segments is a hit. Plain C labels yield no segments,
+    # so the C-label matching path is unchanged.
+    label_segments = demangle_legacy_segments(label)
+    candidate_segments = demangle_legacy_segments(mangle_prefix) if mangle_prefix else []
+    if candidate_segments and len(candidate_segments) <= len(label_segments):
+        if label_segments[-len(candidate_segments):] == candidate_segments:
+            return True
+    return False
 
 
 def label_matches(line: str, function: str) -> bool:
@@ -177,7 +228,21 @@ def select_lines(lines: list[str], function: str | None) -> tuple[list[tuple[int
             start_index = index
             break
     if start_index is None:
-        return [], f"function label not found: {function}"
+        # No hit: list the global labels we saw (capped at 10, plus a count)
+        # so the caller can self-correct, e.g. spot a missing crate-name
+        # segment in the mangled candidates.
+        available: list[str] = []
+        for _, line in numbered:
+            if looks_like_global_label(line):
+                label = strip_comment(line)[:-1]
+                if label and label not in available:
+                    available.append(label)
+        if len(available) > 10:
+            shown = ", ".join(available[:10]) + f", ... (+{len(available) - 10} more)"
+        else:
+            shown = ", ".join(available)
+        detail = f"; available labels: [{shown}]" if available else ""
+        return [], f"function label not found: {function}{detail}"
 
     selected: list[tuple[int, str]] = []
     for line_number, line in numbered[start_index:]:
