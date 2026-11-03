@@ -1,0 +1,66 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 openeuler-agentenv 完成 AgentENV 构建环境准备与 release 编译
+#
+# 拉取与测试方法（人类可读）：
+#   docker build --network host -f skills/openeuler-agentenv/cases/agent-build-agentenv/Dockerfile \
+#       -t kpbot/app-tuner-agent-agent-build-agentenv:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent，任务范围为 skill 的步骤 0–2 与编译完成判据（安装/编译验证）：
+#   获取源码 → 国内镜像配置（rustup / crates.io）→ openEuler 构建依赖 →
+#   cargo build --release 产出 server / uvm-ublk / uvm-ublk-daemon 三个二进制。
+#   不涉及 KVM / Firecracker 运行时（容器无 /dev/kvm，tier-C 真机项不适用）；
+#   因此不设 src/ 与 bench/ fixture——待编译源即上游 AgentENV 仓库，
+#   正确性判据为二进制存在且可执行。
+#   with/without 唯一变量是 skill 与 prompt 是否提及 skill。
+#   镜像构建与运行均需出网（dnf 源 / github / rsproxy），推荐 --network host；
+#   release 编译需约 30GB 磁盘，单条件端到端约 20–60 分钟。
+
+name: agent-build-agentenv
+skill: openeuler-agentenv
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/app-tuner-agent-agent-build-agentenv:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection          # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载
+
+ab:
+  conditions: [with, without]      # 同一任务两条件对照
+  skill_enabled:
+    with: true                     # 运行时把 /staging/skill 接入 .opencode/skills/
+    without: false                 # 不接入任何 skill，仅靠模型自身
+  metric: build_ok                 # 核心对比指标：三个 release 二进制是否产出（0/1）
+  uplift: build_ok_with - build_ok_without
+
+build:
+  context: ../../../..                         # 指向 Plugins/app-tuner/
+  dockerfile: skills/openeuler-agentenv/cases/agent-build-agentenv/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - x86_64 / aarch64 主机（纯构建，无 ISA / KVM 依赖）
+  - opencode 二进制（只读挂载）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载）
+  - 容器可访问 dnf 源 / github.com / rsproxy.cn 及模型 API（需 --network host）
+  - 磁盘余量 ≥ 30GB（Rust 工具链 + release target），单条件耗时约 20–60 分钟
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: repo_present
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: build_ok
+    expect: 1
