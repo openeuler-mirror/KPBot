@@ -12,7 +12,11 @@
   step1 [0, 10ms]     设备忙闲各半: computing 纯 3.5ms + communication 1.5ms(不重叠) + free 5ms
   step2 [10, 20ms]    host bound:    computing 0.5ms + free 9.5ms, 无通信
 """
-import argparse, json, os
+import argparse, json, os, sys
+
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, 'reconfigure'):
+        _s.reconfigure(encoding='utf-8', errors='replace')
 
 ZERO_US = 1_000_000.000
 # pids 按 SKILL.md 规范按内容识别（build_index 从 meta 动态判定，不依赖具体值）
@@ -90,9 +94,9 @@ def main():
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     trace = json.dumps({"traceEvents": build_events()}, ensure_ascii=False, separators=(', ', ': '))
-    with open(os.path.join(args.out_dir, 'trace_view.json'), 'w') as f:
+    with open(os.path.join(args.out_dir, 'trace_view.json'), 'w', encoding='utf-8') as f:
         f.write(trace)
-    with open(os.path.join(args.out_dir, 'ground_truth.json'), 'w') as f:
+    with open(os.path.join(args.out_dir, 'ground_truth.json'), 'w', encoding='utf-8') as f:
         json.dump(GROUND_TRUTH, f, ensure_ascii=False, indent=2)
     print(f"trace_view.json ({len(trace)} bytes) + ground_truth.json -> {args.out_dir}/")
 
