@@ -31,8 +31,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# WORKDIR 会未转义拼入 bash -c 的磁盘检查命令（df ... ${WORKDIR}），
-# 必须先过字符白名单，否则 ;|&`$ 等元字符构成命令注入
+# WORKDIR 未转义拼入 bash -c 磁盘检查命令（df ... ${WORKDIR}），先过字符白名单防命令注入
 if [[ -z "${WORKDIR}" || ! "${WORKDIR}" =~ ^[A-Za-z0-9_./@=+-]+$ ]]; then
   echo "ERROR: --workdir 含空格/引号/;|&\$\` 等元字符或为空（仅允许 [A-Za-z0-9_./@=+-]）: ${WORKDIR}" >&2
   exit 1

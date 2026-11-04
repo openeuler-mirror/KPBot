@@ -115,7 +115,6 @@ log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
-# 拼入 bash -c 的用户参数必须先过白名单，防命令注入
 validate_uint() { # <参数名> <值>
   [[ "${2:-}" =~ ^[0-9]+$ ]] || fail "参数 ${1} 须为非负整数，收到: ${2:-}"
 }
@@ -148,8 +147,7 @@ run_in_target() {
 #   ② auto：用 `-mcpu=native -###` 看编译器把本机解析成什么
 #        - 解析出真实 CPU 名（非 generic）→ 用 -mcpu=native
 #        - 解析为 generic / 无法解析 → 不添加 -mcpu（等于编译器默认），并打印可选名单
-#   实测依据（BiSheng 4.2 / Kunpeng part 0xd06）：native→generic；generic 微基准反而最快，
-#   强行指定 hip09/hip10c/hip11/tsv110 均变慢 17%~191%，因此"解析不到就不加"是正确默认。
+#        （实测数据与决策记录见 references/csspgo-brbe-playbook.md）
 mcpu_flag() {
   if [[ -n "${_MCPU_FLAG_CACHE+x}" ]]; then
     printf '%s' "${_MCPU_FLAG_CACHE}"
@@ -259,8 +257,6 @@ check_css_profile() {
 EOF
     return 1
   fi
-  # 有效 profile 按函数归属判定（文本 profile 顶层 "name:total:entry" 行），
-  # 不按文件大小 —— 小二进制/小组件的有效 profile 可远小于 10KB。
   local size=0 func_count=0
   if [[ "${DRY_RUN}" != true ]]; then
     size=$(run_in_target "stat -c %s ${profile_file} 2>/dev/null || echo 0")
@@ -312,8 +308,7 @@ collect_css_profile() {
   local perf_script="${PROFILE_DIR}/css_perf_${perf_tag}.script"
 
   if [[ -n "${COLLECT_CMD}" ]]; then
-    log "离线包裹采样: perf record -- ${COLLECT_CMD}"
-    log "采样二进制: ${BINARY_PATH}（perf 随命令结束，--duration 不适用）"
+    log "离线包裹采样: perf record -- ${COLLECT_CMD} | 二进制: ${BINARY_PATH}（perf 随命令结束，--duration 不适用）"
   else
     log "目标进程: PID=${PID}, 采样二进制: ${BINARY_PATH}, 时长: ${COLLECT_DURATION}s"
   fi
@@ -342,7 +337,6 @@ collect_css_profile() {
   log "perf record（BRBE 分支采样，帧指针调用栈）..."
   local record_rc=0
   if [[ -n "${COLLECT_CMD}" ]]; then
-    # 离线模式：perf 包裹用户命令，命令执行期间采样，命令结束即停止
     if ! run_in_target "perf record -g --call-graph fp -e cycles:u -j any,u -o ${perf_data} -- ${COLLECT_CMD}"; then
       record_rc=1
     fi
@@ -910,7 +904,6 @@ log "=== 编译执行: ${COMPONENT} ${OPTIMIZE} ${STAGE} ==="
 
 case "${COMPONENT}" in
   python)
-    [[ -n "${INSTALL_DIR}" ]] || fail "Python 编译需要 --install-dir"
     if [[ "${OPTIMIZE}" == "css_pgo" && "${STAGE}" == "use" ]]; then
       check_css_profile || exit 1
     fi

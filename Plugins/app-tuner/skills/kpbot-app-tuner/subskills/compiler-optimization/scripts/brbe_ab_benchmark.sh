@@ -97,8 +97,7 @@ if [[ "${MODE}" == "run" ]]; then
 
   extract_value() { # <logfile>
     local line val
-    # grep 未命中返回 1，set -euo pipefail + 管道会让赋值失败→脚本静默退出，
-    # 下游 "第 N 轮未提取到指标" 诊断分支将永远不可达；必须 || true 兜底
+    # grep 未命中返回 1，set -euo pipefail 下赋值失败会静默退出、诊断分支不可达，须 || true 兜底
     line=$(grep -iE "${METRIC_REGEX}" "$1" | head -1 || true)
     if [[ -z "${line}" ]]; then
       echo ""
