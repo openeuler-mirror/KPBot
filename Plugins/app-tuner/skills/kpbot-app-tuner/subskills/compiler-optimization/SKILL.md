@@ -290,8 +290,10 @@ BRBE（Branch Record Buffer Extension）是 ARM 硬件分支记录扩展；CSSPG
 ```
 # gen：伪探针 + 完整 -g 构建（产物含 DWARF，供 llvm-profgen 枚举函数）
 ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage gen --source-dir <dir>
-# collect：对运行中的 gen 版进程采样（只读，不需源码/编译环境）
+# collect：附加采样运行中的 gen 版进程（只读，不需源码/编译环境）
 ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage collect --pid <pid> --binary <gen产物.so> [--duration 90] [--page-size 65536]
+# collect 离线模式：短生命周期命令用 perf 包裹执行（命令执行期间采样，--duration 不适用）
+ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage collect --cmd "<命令>" --binary <gen产物.so>
 # use：用 sample profile 重编译（去 -g，必须保留 -fpseudo-probe-for-profiling）
 ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage use --source-dir <dir>
 ```
@@ -320,7 +322,10 @@ vLLM 包含 C++/CUDA 扩展算子（attention、layernorm、activation、rotary 
 
 - **算子内联**：vLLM-Ascend 的 C++ 适配层调用 torch_npu op，跨层内联能减少 dispatch 开销。
 - **LTO**：vLLM-Ascend 的 .so 用 `-flto=thin` 编译，与 PyTorch/torch_npu 一致。
-- **目标架构参数**：aarch64 + SVE，`-mcpu=klein -march=armv8.6-a+sve2+bf16`。
+- **目标架构参数**：aarch64 + SVE，`-mcpu=native -march=armv8.6-a+sve2+bf16`。
+  说明：`-mcpu` 一律交给编译器自适应（不写死型号）。脚本 `--mcpu auto`（默认）用 `-mcpu=native -###` 看编译器解析结果，
+  **只有解析出具体型号才采用；解析为 generic 则不添加**（实测本机 generic 最快，显式 hip09/hip10c/hip11/tsv110 均更慢）。
+  `-march` 是显式特性集，与 `-mcpu` 同时出现时以两者交集为准，需实测确认无冲突。
 - **PGO**：理论上可用 PyTorch/torch_npu 同一份 profdata 覆盖 vLLM-Ascend 算子路径。
 
 ### 编译命令（vLLM-Ascend，理论路径）
@@ -328,8 +333,8 @@ vLLM 包含 C++/CUDA 扩展算子（attention、layernorm、activation、rotary 
 ```
 export CC=clang
 export CXX=clang++
-export CMAKE_C_FLAGS="-flto=thin -fuse-ld=lld -mcpu=klein -march=armv8.6-a+sve2+bf16"
-export CMAKE_CXX_FLAGS="-flto=thin -fuse-ld=lld -mcpu=klein -march=armv8.6-a+sve2+bf16"
+export CMAKE_C_FLAGS="-flto=thin -fuse-ld=lld -mcpu=native -march=armv8.6-a+sve2+bf16"
+export CMAKE_CXX_FLAGS="-flto=thin -fuse-ld=lld -mcpu=native -march=armv8.6-a+sve2+bf16"
 # 若做 PGO:
 # export CMAKE_C_FLAGS="${CMAKE_C_FLAGS} -fprofile-use=/tmp/profile/default.profdata"
 # export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -fprofile-use=/tmp/profile/default.profdata"

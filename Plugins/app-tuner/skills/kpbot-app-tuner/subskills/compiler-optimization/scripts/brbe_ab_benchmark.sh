@@ -86,6 +86,8 @@ if [[ "${MODE}" == "run" ]]; then
   [[ -n "${CMD}" ]]   || fail "--mode run 需要 --cmd"
   [[ "${ROUNDS}" =~ ^[1-9][0-9]*$ ]] || fail "--rounds 须为正整数"
   [[ "${WARMUP}" =~ ^[0-9]+$ ]] || fail "--warmup 须为非负整数"
+  # LABEL 拼入 ${OUT_DIR}/${LABEL} 产物路径，须按文件名白名单校验（禁 / 与 ..，防路径逃逸）
+  [[ "${LABEL}" =~ ^[A-Za-z0-9_.-]+$ ]] || fail "--label 含非法字符（仅允许 [A-Za-z0-9_.-]，禁止 / 与空格，防路径逃逸）"
 
   mkdir -p "${OUT_DIR}"
   LOG_PREFIX="${OUT_DIR}/${LABEL}"
@@ -95,12 +97,14 @@ if [[ "${MODE}" == "run" ]]; then
 
   extract_value() { # <logfile>
     local line val
-    line=$(grep -iE "${METRIC_REGEX}" "$1" | head -1)
+    # grep 未命中返回 1，set -euo pipefail + 管道会让赋值失败→脚本静默退出，
+    # 下游 "第 N 轮未提取到指标" 诊断分支将永远不可达；必须 || true 兜底
+    line=$(grep -iE "${METRIC_REGEX}" "$1" | head -1 || true)
     if [[ -z "${line}" ]]; then
       echo ""
       return
     fi
-    val=$(echo "${line}" | grep -oE "${VALUE_REGEX}" | head -1)
+    val=$(echo "${line}" | grep -oE "${VALUE_REGEX}" | head -1 || true)
     echo "${val}"
   }
 

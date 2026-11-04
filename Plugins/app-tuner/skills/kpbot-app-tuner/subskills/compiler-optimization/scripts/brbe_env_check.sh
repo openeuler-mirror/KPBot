@@ -31,6 +31,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# WORKDIR 会未转义拼入 bash -c 的磁盘检查命令（df ... ${WORKDIR}），
+# 必须先过字符白名单，否则 ;|&`$ 等元字符构成命令注入
+if [[ -z "${WORKDIR}" || ! "${WORKDIR}" =~ ^[A-Za-z0-9_./@=+-]+$ ]]; then
+  echo "ERROR: --workdir 含空格/引号/;|&\$\` 等元字符或为空（仅允许 [A-Za-z0-9_./@=+-]）: ${WORKDIR}" >&2
+  exit 1
+fi
+
 run_t() {
   if [[ -n "${CONTAINER}" ]]; then
     docker exec "${CONTAINER}" bash -c "$1" 2>/dev/null
@@ -116,7 +123,7 @@ if [[ -n "${PERF_BIN}" ]]; then
   BRBE_REAL=$(run_t '
     bash -c "while :; do :; done" >/dev/null 2>&1 & wp=$!
     sleep 0.3
-    perf record -g --call-graph fp -e cycles:u -j any,u -F 4000 -o /tmp/brbe_env_probe_$$.data -p $wp -- sleep 3 >/dev/null 2>&1
+    perf record -g --call-graph fp -e cycles:u -j any,u -o /tmp/brbe_env_probe_$$.data -p $wp -- sleep 3 >/dev/null 2>&1
     kill $wp 2>/dev/null; wait $wp 2>/dev/null
     perf script -F brstack -i /tmp/brbe_env_probe_$$.data 2>/dev/null | grep -cE "0x[1-9a-f][0-9a-f]+/0x[1-9a-f][0-9a-f]+"
     rm -f /tmp/brbe_env_probe_$$.data

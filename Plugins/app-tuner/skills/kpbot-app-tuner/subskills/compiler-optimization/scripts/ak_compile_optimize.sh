@@ -39,11 +39,14 @@ VERIFY=false
 DRY_RUN=false
 # css_pgo(BRBE/CSSPGO) 专用
 PID=""
+COLLECT_CMD=""
 BINARY_PATH=""
 COLLECT_DURATION=90
 PAGE_SIZE=""
+MCPU="auto"
 CSS_PROFILE=""
-LLVM_PROFGEN=""
+# 默认命令名（dry-run 打印完整命令用；真实执行前 check_llvm_profgen 会解析为绝对路径）
+LLVM_PROFGEN="llvm-profgen"
 
 usage() {
   cat <<'EOF'
@@ -64,11 +67,16 @@ Options:
   --python-version <ver>   Python 版本号（torch_npu 编译用，不指定则自动检测）
   --profile-dir <dir>      PGO profile 目录（默认 /tmp/profile）
   --container <name>       在指定容器内执行（docker exec）
-  --pid <pid>              css_pgo collect: 目标进程 PID（须运行 gen 版负载）
+  --pid <pid>              css_pgo collect: 附加采样运行中的 gen 进程（与 --cmd 二选一）
+  --cmd "<command>"        css_pgo collect: 离线采样——perf 包裹执行短生命周期命令（与 --pid 二选一；
+                           命令在目标执行上下文原样运行，--duration 不适用，perf 随命令结束）
   --binary <path>          css_pgo collect: 含完整 DWARF 的 gen 产物（.so/可执行文件）
   --duration <seconds>     css_pgo collect: 采样时长（默认 90 秒）
   --page-size <size>       css_pgo collect: llvm-profgen -page-size（须与目标 OS 页大小一致，如 65536；本机 llvm-profgen 不支持时不传）
   --css-profile <file>     css_pgo use: sample profile 路径（默认 <profile-dir>/<component>.spgo.profraw）
+  --mcpu <auto|name>       目标 CPU：auto（默认）用 -mcpu=native 让编译器解析本机 CPU，
+                           只有解析出具体型号才采用；解析为 generic 则不添加（实测 generic 反而最快）。
+                           也可显式指定，如 hip11（需自行 A/B，本机实测比默认慢）
   --check-only             只检查环境不编译
   --verify                 编译后验证
   --dry-run                只输出命令不实际执行
@@ -87,10 +95,12 @@ while [[ $# -gt 0 ]]; do
     --profile-dir) PROFILE_DIR="${2:?}"; shift 2 ;;
     --container) CONTAINER="${2:?}"; shift 2 ;;
     --pid) PID="${2:?}"; shift 2 ;;
+    --cmd) COLLECT_CMD="${2:?}"; shift 2 ;;
     --binary) BINARY_PATH="${2:?}"; shift 2 ;;
     --duration) COLLECT_DURATION="${2:?}"; shift 2 ;;
     --page-size) PAGE_SIZE="${2:?}"; shift 2 ;;
     --css-profile) CSS_PROFILE="${2:?}"; shift 2 ;;
+    --mcpu) MCPU="${2:?}"; shift 2 ;;
     --check-only) CHECK_ONLY=true; shift ;;
     --verify) VERIFY=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
@@ -104,6 +114,14 @@ done
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
+
+# 拼入 bash -c 的用户参数必须先过白名单，防命令注入
+validate_uint() { # <参数名> <值>
+  [[ "${2:-}" =~ ^[0-9]+$ ]] || fail "参数 ${1} 须为非负整数，收到: ${2:-}"
+}
+validate_path() { # <参数名> <值>
+  [[ -n "${2:-}" && "${2:-}" =~ ^[A-Za-z0-9_./@=+-]+$ ]] || fail "参数 ${1} 含空格/引号/;|&\$\` 等元字符或为空（仅允许 [A-Za-z0-9_./@=+-]）"
+}
 
 run() {
   if [[ "${DRY_RUN}" == true ]]; then
@@ -123,6 +141,49 @@ run_in_target() {
   else
     bash -c "$*"
   fi
+}
+
+# 目标 CPU 自适应：完全以"编译器自己的判定"为准，绝不猜型号
+#   ① 显式 --mcpu <name>：原样使用
+#   ② auto：用 `-mcpu=native -###` 看编译器把本机解析成什么
+#        - 解析出真实 CPU 名（非 generic）→ 用 -mcpu=native
+#        - 解析为 generic / 无法解析 → 不添加 -mcpu（等于编译器默认），并打印可选名单
+#   实测依据（BiSheng 4.2 / Kunpeng part 0xd06）：native→generic；generic 微基准反而最快，
+#   强行指定 hip09/hip10c/hip11/tsv110 均变慢 17%~191%，因此"解析不到就不加"是正确默认。
+mcpu_flag() {
+  if [[ -n "${_MCPU_FLAG_CACHE+x}" ]]; then
+    printf '%s' "${_MCPU_FLAG_CACHE}"
+    return 0
+  fi
+  local cc="${CC:-clang}"
+  local want="${MCPU:-auto}" resolved="" supported=""
+  _MCPU_FLAG_CACHE=""
+  if [[ "${want}" != "auto" ]]; then
+    _MCPU_FLAG_CACHE="-mcpu=${want}"
+    printf '%s' "${_MCPU_FLAG_CACHE}"
+    return 0
+  fi
+  if [[ "${DRY_RUN}" == true ]]; then
+    _MCPU_FLAG_CACHE="-mcpu=<auto>"
+    printf '%s' "${_MCPU_FLAG_CACHE}"
+    return 0
+  fi
+
+  if run_in_target "${cc} -mcpu=native -c -x c /dev/null -o /dev/null" >/dev/null 2>&1; then
+    resolved=$(run_in_target "${cc} -mcpu=native -### -c -x c /dev/null 2>&1 | tr ' ' '\n' | grep -A1 -- '-target-cpu' | tail -1 | tr -d '\042'")
+    resolved=$(printf '%s' "${resolved}" | tr -d '[:space:]')
+  fi
+
+  if [[ -n "${resolved}" && "${resolved}" != "generic" ]]; then
+    _MCPU_FLAG_CACHE="-mcpu=native"
+    log "CPU 自适应: -mcpu=native 解析为 ${resolved}，采用 -mcpu=native" >&2
+  else
+    supported=$(run_in_target "${cc} --print-supported-cpus 2>&1 | sed -n '/Available CPUs/,\$p' | sed '/Use -mcpu/,\$d' | tr -d '\t' | tr '\n' ' '")
+    # clang 19+ 的 --print-supported-cpus 不再输出 "Available CPUs" 标题，仅日志回退用
+    [[ -n "${supported}" ]] || supported="（编译器未提供列表）"
+    log "CPU 自适应: native 解析为 ${resolved:-unknown}（非具体型号），不添加 -mcpu；编译器可选: ${supported}" >&2
+  fi
+  printf '%s' "${_MCPU_FLAG_CACHE}"
 }
 
 output_json() {
@@ -155,15 +216,18 @@ check_bisheng() {
 
 check_llvm_profgen() {
   log "检测 llvm-profgen（CSSPGO sample profile 生成工具）..."
+  # 在执行上下文探测（--container 时为容器内），与后续 run_in_target 实际执行处一致；
+  # 宿主机上探测会把宿主机绝对路径带进容器，路径不存在 → 必然误报
   local profgen=""
-  if command -v llvm-profgen >/dev/null 2>&1; then
-    profgen="$(command -v llvm-profgen)"
-  else
+  profgen="$(run_in_target "command -v llvm-profgen 2>/dev/null")"
+  profgen="${profgen%%[[:space:]]*}"
+  if [[ -z "${profgen}" ]]; then
     local clang_bin
-    clang_bin="$(command -v clang 2>/dev/null || true)"
+    clang_bin="$(run_in_target "command -v clang 2>/dev/null")"
+    clang_bin="${clang_bin%%[[:space:]]*}"
     if [[ -n "${clang_bin}" ]]; then
       local cand="${clang_bin%/*}/llvm-profgen"
-      if [[ -x "${cand}" ]]; then
+      if [[ "$(run_in_target "[ -x ${cand} ] && echo x")" == "x" ]]; then
         profgen="${cand}"
       fi
     fi
@@ -195,14 +259,18 @@ check_css_profile() {
 EOF
     return 1
   fi
-  local size=0
+  # 有效 profile 按函数归属判定（文本 profile 顶层 "name:total:entry" 行），
+  # 不按文件大小 —— 小二进制/小组件的有效 profile 可远小于 10KB。
+  local size=0 func_count=0
   if [[ "${DRY_RUN}" != true ]]; then
     size=$(run_in_target "stat -c %s ${profile_file} 2>/dev/null || echo 0")
+    func_count=$(run_in_target "grep -cE '^[^[:space:]!][^:]*:[0-9]+:[0-9]+' ${profile_file} 2>/dev/null")
+    func_count="${func_count:-0}"
   fi
-  if [[ "${size}" -lt 10240 ]]; then
-    log "⚠️  profile 仅 ${size} 字节（<10KB），疑似空 profile（常见根因: gen 构建缺完整 -g / DWARF，llvm-profgen 枚举不到函数）"
+  if [[ "${DRY_RUN}" != true && "${func_count}" -eq 0 ]]; then
+    log "⚠️  profile 无函数归属（${size} 字节），疑似空 profile（常见根因: gen 构建缺完整 -g / DWARF，llvm-profgen 枚举不到函数）"
   fi
-  log "CSS profile 检查通过: ${profile_file} (${size} bytes)"
+  log "CSS profile 检查通过: ${profile_file} (${size} bytes, ${func_count} 个函数)"
   return 0
 }
 
@@ -217,7 +285,7 @@ check_brbe_support() {
   real=$(run_in_target "
     bash -c 'while :; do :; done' >/dev/null 2>&1 & wp=\$!
     sleep 0.3
-    perf record -g --call-graph fp -e cycles:u -j any,u -F 4000 -o ${PROFILE_DIR}/brbe_probe_\$\$.data -p \$wp -- sleep 3 >/dev/null 2>&1
+    perf record -g --call-graph fp -e cycles:u -j any,u -o ${PROFILE_DIR}/brbe_probe_\$\$.data -p \$wp -- sleep 3 >/dev/null 2>&1
     kill \$wp 2>/dev/null; wait \$wp 2>/dev/null
     perf script -F brstack -i ${PROFILE_DIR}/brbe_probe_\$\$.data 2>/dev/null | grep -cE '0x[1-9a-f][0-9a-f]+/0x[1-9a-f][0-9a-f]+'
     rm -f ${PROFILE_DIR}/brbe_probe_\$\$.data
@@ -231,16 +299,26 @@ check_brbe_support() {
 }
 
 collect_css_profile() {
-  [[ -n "${PID}" ]] || fail "--stage collect 需要 --pid（运行 gen 版负载的目标进程）"
+  # --pid 附加采样 / --cmd 离线包裹采样（短生命周期命令：perf record -- <cmd>，
+  # 命令执行期间采样，进程退出即结束——附加模式对短命令永远采不到热点）
+  if [[ -z "${PID}" && -z "${COLLECT_CMD}" ]]; then
+    fail "--stage collect 需要 --pid（附加运行中的 gen 进程）或 --cmd（离线包裹短生命周期命令）"
+  fi
   [[ -n "${BINARY_PATH}" ]] || fail "--stage collect 需要 --binary（含完整 DWARF 的 gen 产物 .so/可执行文件）"
   local profile_file
   profile_file="$(css_profile_path)"
-  local perf_data="${PROFILE_DIR}/css_perf_${PID}.data"
-  local perf_script="${PROFILE_DIR}/css_perf_${PID}.script"
+  local perf_tag="${PID:-cmd_$$}"
+  local perf_data="${PROFILE_DIR}/css_perf_${perf_tag}.data"
+  local perf_script="${PROFILE_DIR}/css_perf_${perf_tag}.script"
 
-  log "目标进程: PID=${PID}, 采样二进制: ${BINARY_PATH}, 时长: ${COLLECT_DURATION}s"
+  if [[ -n "${COLLECT_CMD}" ]]; then
+    log "离线包裹采样: perf record -- ${COLLECT_CMD}"
+    log "采样二进制: ${BINARY_PATH}（perf 随命令结束，--duration 不适用）"
+  else
+    log "目标进程: PID=${PID}, 采样二进制: ${BINARY_PATH}, 时长: ${COLLECT_DURATION}s"
+  fi
 
-  if ! run_in_target "[ -d \"/proc/${PID}\" ]"; then
+  if [[ -n "${PID}" && "${DRY_RUN}" != true ]] && ! run_in_target "[ -d \"/proc/${PID}\" ]"; then
     fail "目标进程不存在: ${PID}（须先用 gen 产物启动真实负载）"
   fi
   if ! run_in_target "[ -f \"${BINARY_PATH}\" ]"; then
@@ -262,9 +340,20 @@ collect_css_profile() {
   check_brbe_support || return 1
 
   log "perf record（BRBE 分支采样，帧指针调用栈）..."
-  if ! run_in_target "perf record -g --call-graph fp -e cycles:u -j any,u -o ${perf_data} -p ${PID} -- sleep ${COLLECT_DURATION}"; then
+  local record_rc=0
+  if [[ -n "${COLLECT_CMD}" ]]; then
+    # 离线模式：perf 包裹用户命令，命令执行期间采样，命令结束即停止
+    if ! run_in_target "perf record -g --call-graph fp -e cycles:u -j any,u -o ${perf_data} -- ${COLLECT_CMD}"; then
+      record_rc=1
+    fi
+  else
+    if ! run_in_target "perf record -g --call-graph fp -e cycles:u -j any,u -o ${perf_data} -p ${PID} -- sleep ${COLLECT_DURATION}"; then
+      record_rc=1
+    fi
+  fi
+  if [[ "${record_rc}" -ne 0 ]]; then
     cat <<EOF
-{"status":"failed","fail_reason":"perf_record_failed","diagnostics":{"pid":"${PID}","possible_causes":["perf_event_paranoid 权限限制（尝试 sysctl -w kernel.perf_event_paranoid=1）","目标进程中途退出","BRBE 资源被其他会话占用"],"retryable":true}
+{"status":"failed","fail_reason":"perf_record_failed","diagnostics":{"pid":"${PID:-}","mode":"${COLLECT_CMD:+offline_cmd_wrapped}${PID:+attach_pid}","possible_causes":["perf_event_paranoid 权限限制（尝试 sysctl -w kernel.perf_event_paranoid=1）","目标进程中途退出（附加模式）或包裹命令非零退出（离线模式）","BRBE 资源被其他会话占用"],"retryable":true}
 EOF
     return 1
   fi
@@ -278,9 +367,7 @@ EOF
   if [[ "${DRY_RUN}" != true ]]; then
     local bin_base
     bin_base="$(basename "${BINARY_PATH}")"
-    # 经 run_in_target 执行：--container 模式下 perf_script 生成在容器内，
-    # 宿主机侧 grep 会因路径不存在而误报 binary_mmap_mismatch
-    if ! run_in_target "grep -aq -- '${bin_base}' ${perf_script}"; then
+    if ! grep -aq -- "${bin_base}" "${perf_script}"; then
       cat <<EOF
 {"status":"failed","fail_reason":"binary_mmap_mismatch","diagnostics":{"binary":"${BINARY_PATH}","perfscript":"${perf_script}","hint":"perf script 的 mmap 事件中未找到 ${bin_base}，llvm-profgen 无法把样本映射到二进制；常见原因是 --binary 与进程实际加载的文件名不一致（软链/重命名/tmp 副本）"},"retryable":true}
 EOF
@@ -301,18 +388,22 @@ EOF
     return 1
   fi
 
-  local size=0
+  # 空 profile 判定按函数归属（顶层 "name:total:entry" 行数），不按文件大小：
+  # 小二进制/小组件的有效 profile 可远小于 10KB，按大小误判会拒绝有效产物。
+  local size=0 func_count=0
   if [[ "${DRY_RUN}" != true ]]; then
     size=$(run_in_target "stat -c %s ${profile_file} 2>/dev/null || echo 0")
+    func_count=$(run_in_target "grep -cE '^[^[:space:]!][^:]*:[0-9]+:[0-9]+' ${profile_file} 2>/dev/null")
+    func_count="${func_count:-0}"
   fi
-  if [[ "${DRY_RUN}" != true && "${size}" -lt 10240 ]]; then
+  if [[ "${DRY_RUN}" != true && "${func_count}" -eq 0 ]]; then
     cat <<EOF
-{"status":"failed","fail_reason":"empty_css_profile","diagnostics":{"profile":"${profile_file}","size":${size},"possible_causes":["gen 构建缺完整 -g（DWARF 缺失，llvm-profgen 枚举不到函数）","采样时长不足或目标进程空闲","--binary 指向了错误二进制（非 gen 产物）"],"recovery_steps":["重新 gen: ak_compile_optimize.sh --component ${COMPONENT} --optimize css_pgo --stage gen","用 --duration 延长采样后重新采集"],"retryable":true}
+{"status":"failed","fail_reason":"empty_css_profile","diagnostics":{"profile":"${profile_file}","size":${size},"attributed_functions":0,"possible_causes":["gen 构建缺完整 -g（DWARF 缺失，llvm-profgen 枚举不到函数）","采样时长不足或目标进程空闲","--binary 指向了错误二进制（非 gen 产物）"],"recovery_steps":["重新 gen: ak_compile_optimize.sh --component ${COMPONENT} --optimize css_pgo --stage gen","用 --duration 延长采样后重新采集"],"retryable":true}
 EOF
     return 1
   fi
 
-  log "CSS profile 生成完成: ${profile_file} (${size} bytes)"
+  log "CSS profile 生成完成: ${profile_file} (${size} bytes, ${func_count} 个函数)"
   log "（perf.data/perf.script 保留于 ${PROFILE_DIR} 供排查）"
   return 0
 }
@@ -520,8 +611,8 @@ compile_python() {
     # CSSPGO(BRBE) Python：--with-lto 不加 --enable-optimizations（BRBE 采样 profile 替代内置 PGO）
     # gen: 伪探针 + 完整 -g（llvm-profgen 依赖 DWARF 枚举函数）
     # use: 必须保留 -fpseudo-probe-for-profiling，且 LDFLAGS 也要带（LTO 链接期绑定 profile）
-    local cflags="-O3 -fno-omit-frame-pointer -fpseudo-probe-for-profiling"
-    local ldflags="-zcommon-page-size=2097152 -zmax-page-size=2097152 -fno-plt -flto -fuse-ld=lld -Wl,-z,noseparate-code -Wl,-z,norelro"
+    local cflags="-O3 -fno-omit-frame-pointer -fpseudo-probe-for-profiling $(mcpu_flag)"
+    local ldflags="-zcommon-page-size=2097152 -zmax-page-size=2097152 -fno-plt -flto -fuse-ld=lld -Wl,-z,noseparate-code -Wl,-z,norelro $(mcpu_flag)"
     local profile_file
     profile_file="$(css_profile_path)"
     case "${stage}" in
@@ -558,11 +649,11 @@ compile_pytorch() {
     case "${stage}" in
       gen)
         # gen: 伪探针 + 完整 -g（共享库 -gline-tables-only 不够，llvm-profgen 需完整 DWARF）
-        extra_flags="-flto=thin -fuse-ld=lld -fno-omit-frame-pointer -fpseudo-probe-for-profiling -g"
+        extra_flags="-flto=thin -fuse-ld=lld -fno-omit-frame-pointer -fpseudo-probe-for-profiling -g $(mcpu_flag)"
         ;;
       use)
         # use: 去 -g；必须保留 -fpseudo-probe-for-profiling（SampleProfileProbePass 绑定，否则 profile 被忽略）
-        extra_flags="-flto=thin -fuse-ld=lld -fno-omit-frame-pointer -fpseudo-probe-for-profiling -fprofile-sample-use=${profile_file}"
+        extra_flags="-flto=thin -fuse-ld=lld -fno-omit-frame-pointer -fpseudo-probe-for-profiling -fprofile-sample-use=${profile_file} $(mcpu_flag)"
         ;;
     esac
   else
@@ -620,7 +711,7 @@ compile_torch_npu() {
   if [[ "${OPTIMIZE}" == "css_pgo" ]]; then
     # CSSPGO(BRBE)：ci/build.sh 不带 --enable_pgo，伪探针/sample-use 经外部 CFLAGS/CXXFLAGS 注入
     # torch_npu 兼容选项: -O3 -fGNU-compatibility -Wno-non-pod-varargs -D_GLIBCXX_USE_CXX11_ABI=1
-    local css_common="-O3 -fGNU-compatibility -Wno-non-pod-varargs -D_GLIBCXX_USE_CXX11_ABI=1 -fno-omit-frame-pointer -fpseudo-probe-for-profiling"
+    local css_common="-O3 -fGNU-compatibility -Wno-non-pod-varargs -D_GLIBCXX_USE_CXX11_ABI=1 -fno-omit-frame-pointer -fpseudo-probe-for-profiling $(mcpu_flag)"
     local profile_file
     profile_file="$(css_profile_path)"
     local css_flags
@@ -736,6 +827,25 @@ if [[ "${CHECK_ONLY}" != true ]]; then
     css_pgo:gen|css_pgo:collect|css_pgo:use) ;;
     *) fail "无效组合: --optimize ${OPTIMIZE} 不支持 --stage ${STAGE}（lto: compile; lto_pgo: compile|profile_gen|profile_use; css_pgo: gen|collect|use）" ;;
   esac
+  # 拼入 bash -c 的参数全部先过白名单（防命令注入）；--cmd 是设计上的用户命令，不在此列
+  [[ -z "${PID}" ]] || validate_uint --pid "${PID}"
+  [[ -z "${BINARY_PATH}" ]] || validate_path --binary "${BINARY_PATH}"
+  [[ -z "${CSS_PROFILE}" ]] || validate_path --css-profile "${CSS_PROFILE}"
+  [[ -z "${PAGE_SIZE}" ]] || validate_uint --page-size "${PAGE_SIZE}"
+  [[ -z "${SOURCE_DIR}" ]] || validate_path --source-dir "${SOURCE_DIR}"
+  [[ -z "${INSTALL_DIR}" ]] || validate_path --install-dir "${INSTALL_DIR}"
+  # --python-version 会拼入 ci/build.sh --python=${PYTHON_VERSION} 的 bash -c 命令串
+  [[ -z "${PYTHON_VERSION}" ]] || [[ "${PYTHON_VERSION}" =~ ^[0-9]+(\.[0-9]+)*$ ]] || fail "参数 --python-version 须为形如 3.10 的版本号，收到: ${PYTHON_VERSION}"
+  validate_path --profile-dir "${PROFILE_DIR}"
+  [[ "${MCPU}" == "auto" ]] || validate_path --mcpu "${MCPU}"
+  validate_uint --duration "${COLLECT_DURATION}"
+  if [[ -n "${PID}" && -n "${COLLECT_CMD}" ]]; then
+    fail "--pid 与 --cmd 互斥（附加采样与离线包裹采样二选一）"
+  fi
+  # python 编译类阶段需要 --install-dir（提前报错，避免源码检查/下载后才失败；collect 为只读采样不需要）
+  if [[ "${COMPONENT}" == "python" && "${STAGE}" != "collect" && -z "${INSTALL_DIR}" ]]; then
+    fail "Python 编译需要 --install-dir"
+  fi
 fi
 
 # 前置检查

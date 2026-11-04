@@ -65,9 +65,14 @@ torch 是"温热散点 + 虚假自旋热点"：只有插桩全量精确计数才
 ```
 gen     伪探针 + 完整 -g 构建（产物含 DWARF，装进目标环境跑真实负载）
         ak_compile_optimize.sh --component <c> --optimize css_pgo --stage gen [--source-dir <dir>]
-collect 对运行中的 gen 版进程采样（只读；不需要源码/编译环境）
+collect 采样生成 sample profile，两种模式二选一（不需要源码/编译环境）：
+        ① 附加模式：对运行中的 gen 版进程采样（只读）——长驻进程用
         ak_compile_optimize.sh --component <c> --optimize css_pgo --stage collect \
           --pid <pid> --binary <gen产物 .so/可执行文件> [--duration 90] [--page-size 65536]
+        ② 离线模式：perf 包裹执行短生命周期命令（perf record -- <命令>，命令执行期间采样，
+          命令结束即停止；--duration 不适用）——短命令必须用此模式，附加模式来不及命中热点
+        ak_compile_optimize.sh --component <c> --optimize css_pgo --stage collect \
+          --cmd "<命令>" --binary <gen产物 .so/可执行文件>
 use     用 sample profile 重编译（去 -g，保留伪探针）
         ak_compile_optimize.sh --component <c> --optimize css_pgo --stage use [--source-dir <dir>]
 ```
@@ -82,7 +87,10 @@ profile 默认落盘 `<profile-dir>/<component>.spgo.profraw`（`--css-profile` 
 | torch_npu | 外部 CXXFLAGS 注入：`-O3 -fGNU-compatibility -Wno-non-pod-varargs -D_GLIBCXX_USE_CXX11_ABI=1 -fno-omit-frame-pointer -fpseudo-probe-for-profiling -g -flto=thin -fuse-ld=lld`，`ci/build.sh --enable_lto`（不带 `--enable_pgo`） | 同左去 `-g`，加 `-fprofile-sample-use` |
 | Python | `./configure --with-lto CFLAGS="-O3 -fno-omit-frame-pointer -fpseudo-probe-for-profiling -g" LDFLAGS="…-flto -fuse-ld=lld…"`（不加 `--enable-optimizations`） | CFLAGS/LDFLAGS 均加 `-fprofile-sample-use=<profraw>`，**LDFLAGS 也要带 `-fpseudo-probe-for-profiling`** |
 
-通用增强（现场调优参考，非脚本默认）：`-fno-plt -mcpu=hip09+nolse -mno-outline-atomics -Wl,-zcommon-page-size=2097152 -Wl,-zmax-page-size=2097152 -Wl,--no-rosegment -Wl,-z,norelro`；ICP 增强可加 `-Wl,-mllvm,-profile-summary-cutoff-hot-icp=999990`。
+通用增强（现场调优参考，非脚本默认）：`-fno-plt -mcpu=native -mno-outline-atomics -Wl,-zcommon-page-size=2097152 -Wl,-zmax-page-size=2097152 -Wl,--no-rosegment -Wl,-z,norelro`。
+
+`-mcpu` 不写死型号，遵循编译器自身判定：脚本 `--mcpu auto`（默认）用 `-mcpu=native -###` 看编译器把本机解析成什么，**只有解析出具体型号才采用**；解析为 `generic` 就不添加。
+实测（BiSheng 4.2，Kunpeng part 0xd06）：`native` 解析为 `generic`；512³ matmul 微基准 `-O3` 下 generic 616ms，hip09 718ms、hip10c 1205ms、hip11 820ms、tsv110 1792ms——**generic 最快，强行指定反而变慢**，所以"解析不到就不加"是正确默认。需要固定值时用 `--mcpu hip11` 显式覆盖，并自行 A/B。
 
 ## 关键坑（必读）
 
@@ -95,7 +103,7 @@ profile 默认落盘 `<profile-dir>/<component>.spgo.profraw`（`--css-profile` 
 7. **NPU 自旋热点扭曲**：libtorch_npu 的 `ReadQueue` 自旋可达第二名的 33×，纯采样 profile 被扭曲；hot-only 等采集变体实测只挽回 <1%，不值得做。
 8. **Python 侧收益噪声级**：全 BRBE（Python BRBE + torch BRBE）与 CSS-newplan 持平；"Python BRBE + torch 插桩 PGO"与纯 PGO2 并列（+0.05%）。不要为 Python 单独维护 BRBE 版本。
 9. torch_npu 的 clang 严格 const 检查、ABI=1、`new_qtensor` ThinLTO 折叠等坑与插桩 PGO 共通，见 `ak-compiler-playbook.md`。
-10. 采样频率：torch 采集用默认频率 `-- sleep 90`；Python 采集实测用 `-F 4000 -- sleep 120`（脚本未固定 `-F`，需要时手工调）。
+10. 采样频率：**不要指定 `-F`（也不指定 `-m`）**，用 perf 默认采样频率与默认 mmap 页数，避免采样率/缓冲与节点能力不匹配导致 `lost events` 或额外开销；时长用 `-- sleep <秒>` 控制。
 
 ## 有效性门槛与验证
 
@@ -142,7 +150,7 @@ bash scripts/brbe_ab_benchmark.sh --mode compare \
 
 ### profile 与产物门槛
 
-- profile 文件非空（脚本对 <10KB 告警，疑似空 profile/DWARF 缺失）。
+- profile 必须有函数归属（脚本按文本 profile 顶层 `name:total:entry` 行数判定；0 个归属函数 → collect 失败 / use 告警。小二进制/小组件的有效 profile 可远小于 10KB，不按文件大小判定）。
 - `--binary` 必须是进程实际 mmap 的文件名：传软链（如 `python3 -> python3.10`）时，`llvm-profgen` 会报 `No relevant mmap event is matched for python3` / `No samples in perf script` 并产出 0 字节 profile。脚本已自动 `readlink -f` + mmap 名交叉校验（`binary_mmap_mismatch`）。
 - use 阶段若复用 gen 的源码树，必须 `make clean`，否则 `make` 跳过重编、profile 被静默忽略（脚本已内置，但仍推荐 gen/use 分树）。
 - 函数数参考：Python 有效 profile 实测 775 采样函数（241KB）；torch 侧 465 采样函数即可生效，但覆盖仅 ~1.2% 是收益天花板（插桩 80,174 函数）。
