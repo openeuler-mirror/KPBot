@@ -305,11 +305,11 @@ def cmd_report(db, args):
             if p3f >= 20 and sync_ms < 0.5:
                 v = 'host bound(设备提前空闲)'
             elif sync_ms >= 2:
-                v = '设备积压(步尾真排水)'
+                v = '设备积压（步尾同步等设备跑完）'
             else:
                 v = '设备基本跟上'
             if mode == '整图回放':
-                v += '（整图回放步: host 提前完成, 设备在 P3 排空）'
+                v += '（整图回放步：host 提前完成，设备在 P3 继续执行到结束）'
             elif p2f >= 30:
                 v += ' + forward供数不足'
             print(f'step{sid} dur={(s1-s0)/1e6:.3f}ms')

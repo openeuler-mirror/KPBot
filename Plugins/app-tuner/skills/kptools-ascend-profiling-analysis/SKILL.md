@@ -1,12 +1,13 @@
 ---
 name: kptools-ascend-profiling-analysis
 description: |
-  分析 torch_npu/Ascend profiler 的 trace_view.json（LLM/vLLM 推理场景）。
+  分析 torch_npu/Ascend profiler 的有栈 trace（trace_view.json 含 python_function，LLM/vLLM 推理场景）。
   能力：① 任意时间段或任意函数时段的 Computing/Communication/Free 精确占比
   ② 函数定位、消歧与跨层调用链重建 ③ host bound 归因分析
   ④ 版本源码对照解读（vllm-src 子 skill）。
   当用户提供 profiling 数据、询问某函数/时间段占比、free 过高原因、host bound、
   卡间通信等待时使用。
+  无栈 trace（无 python_function / 无 ProfilerStep#N）请使用 kptools-ascend-profiling-analysis-nostack。
 ---
 
 # Ascend Profiling Trace 分析
@@ -76,7 +77,7 @@ description: |
 
 - **P2 模型前向锚点铁律**：优先 `model_runner_v1.py: _model_forward`（eager / FX eager / **整图回放步都存在**）。模型级 `qwen3_5.py(626): forward` 只在非回放步存在——**整图回放步没有模型级 forward python 帧**（回放不进 python），用旧锚点会误回退到 `_execute_model_orig`（窗口混入 P1）。`_model_forward` 与模型级 forward 在 eager 步几乎重合（~30µs）
 - **执行模式三分**（P2 语义判别，源码依据见 vllm-src/knowledge）：
-  - **整图回放**：窗口内有 `torch_npu/npu/graphs.py(638): replay` → 纯（均匀）decode 步：每请求恰好 `uniform_decode_query_len`（无 spec=1，有 spec=1+draft数）个 token 且全部 prefill 完（spec decode 下还要求 is_all_decode）→ FULL 模式。host 仅 ~3ms 下发 + `_update_full_graph_params_if_needed`（update_stream 上 graph_task_update_begin/end ×N 更新 KV 地址等）；设备异步执行整图，P3 期间排空，步尾同步长（真排水）。**图捕获发生在 profiler 启动前（引擎初始化 dummy run），trace 不可见**
+  - **整图回放**：窗口内有 `torch_npu/npu/graphs.py(638): replay` → 纯（均匀）decode 步：每请求恰好 `uniform_decode_query_len`（无 spec=1，有 spec=1+draft数）个 token 且全部 prefill 完（spec decode 下还要求 is_all_decode）→ FULL 模式。host 仅 ~3ms 下发 + `_update_full_graph_params_if_needed`（update_stream 上 graph_task_update_begin/end ×N 更新 KV 地址等）；设备异步执行整图，P3 期间继续执行到结束，步尾同步长（设备还有任务没跑完）。**图捕获发生在 profiler 启动前（引擎初始化 dummy run），trace 不可见**
   - **FX eager**：窗口内有 `fx_run_eagerly`（torch_npu/dynamo/npugraph_ex/.../acl_graph.py:895）→ torch.compile FX 图**逐算子 eager 执行，不是回放**；批内含 prefill 请求的步专属（混合批或纯 prefill，非均匀 decode）。所有步的 `self.model` 都是 ACLGraphWrapper（`vllm_ascend/compilation/acl_graph.py(138): __call__` 每步必现）：模式不匹配时直接内联执行 runnable（其时长=整段 forward），模式匹配时 replay
   - MTP draft 三轮 forward 在所有步都走 FX eager（不走整图回放）
 - **批成分判定（混合批 vs 纯 decode，2026-09-29 实测；2026-10-16 修正 decode 口径）**：vLLM v1 是 continuous batching，**一个 step 的批可同时含 prefill 与 decode（混合批），不是二选一**。从 trace 判定：① 批内请求数 = `update_req_spec_token_ids` 调用数（源码 gpu_model_runner：存量请求循环与新请求循环各调一次）；② **decode = 批内 − 新增 add_request**（存量请求，**带不带 draft 都是 decode**——旧表把"decode（带 draft）"当 decode 列，无 spec decode 模型恒 0，与"新增 prefill=0"并列会被读成"批内没有请求"，8B 需求方反馈实测教训）；③ 其中带draft = 慢路径（≥6µs，写 token_ids_cpu）计数，**前提 trace 全程含 `propose_draft` 帧**（无 = 该模型无 spec decode，恒 0；step0 首次调用 warmup 可超阈值是假阳性）；④ 新增 prefill = `add_request` 数，**必须限定 `gpu_input_batch.py%: add_request`**（logits processor `builtin.py(191): add_request` 同名重名陷阱，27B 实测会×2）；⑤ prefill 存在性通用信号 = `split_decodes_and_prefills`（vllm-ascend attention/utils.py:337，各注意力后端 build 必调）：纯 decode 早退 ~20µs **无 cpu_op 子算子**，含 prefill 走张量分析 130µs+ 且有子算子（8B/27B 实测）——new=0 但有 prefill = chunked prefill 续算步，勿判纯 decode；⑥ `_execute_mm_encoder` 真跑（ms 级）= 有新图像请求，µs 级 = 空调用。报告表格列：批内请求 | decode | 其中带draft | 新增 prefill | 视觉编码 | 批类型
@@ -179,7 +180,7 @@ _model_forward (6.06ms)
 ```
 
 - 触发条件（源码）：`uniform_decode`（每请求恰好 `uniform_decode_query_len`=1+draft数 个 token 且全 prefill 完；spec decode 下还要求 is_all_decode）→ FULL 模式 → batch_descriptor 命中捕获图
-- 回放步形态：设备在 P2~P3 异步执行整图（P3 窗口 computing 90%+），步尾同步 = 真排水（本例 59ms）；步长由设备执行决定，是典型的 device bound 步
+- 回放步形态：设备在 P2~P3 异步执行整图（P3 窗口 computing 90%+），步尾同步 = 设备还有任务没跑完，host 在等它（本例 59ms）；步长由设备执行决定，是典型的 device bound 步
 - 算子计数仍可印证层结构（cpu_op/设备内核照常记录），只是 python 层拍平到 replay 一帧
 
 ## P3 采样与收尾标准节结构（Qwen3.5-VL + MTP spec decode 实测 step1+step3 校准；无 spec decode 模型无 draft 段）
@@ -209,7 +210,7 @@ P3-B 采样+draft（sample_tokens = _sample_tokens_orig + end_step，P3 主体 9
 P3-C end_step: _should_profile → npu/utils.py(62): synchronize（设备级同步）→ perf_counter
 ```
 
-- **end_step 的 synchronize 时长 = host/device bound 指示器**：设备积压大则同步长（step1: 12.3ms，同步期间设备 Computing 91%——真排水）；host 供数不足则瞬时返回（step3: 0.09ms，设备早已空闲）
+- **end_step 的 synchronize 时长 = host/device bound 指示器**：设备积压大则同步长（step1: 12.3ms，同步期间设备 Computing 91%——设备确实还有任务在跑）；host 供数不足则瞬时返回（step3: 0.09ms，设备早已空闲）
 - draft 循环的 host 间隙（embed/attention build/shallow_copy/D2H）在小 batch step 造成 ~47% free；大 prefill step 几乎 0 free（step1 _propose 窗口 free 0.5%）
 - 每轮 MTP forward ~3.2~3.7ms 是 draft 段最大子项；MTP compute_logits ~0.35~0.39ms（lm_head gemm + all_gather）
 - **详细版报告节划分（2026-09-28 已验收）**：P3-A logits与输出回传 / P3-B 内分 B1 拒绝采样（设备满负荷 ~95% computing）、B2 draft 草拟（host 间隙致 ~43% free）、B3 aux 流收尾（~61% free）/ P3-C 步收尾；报告沿 M2 详细版格式（节标题四分类 + 实例级流程树 + µs 聚合）
@@ -243,7 +244,9 @@ P3-C end_step: _should_profile → npu/utils.py(62): synchronize（设备级同�
 解读: 一句话（设备忙/闲、host 是否阻塞、是否符合该函数语义）
 ```
 
-## 无栈数据工作流（降级模式）
+## 无栈数据工作流（历史参考；新入口见 `kptools-ascend-profiling-analysis-nostack`）
+
+> 无栈 trace 的 step 识别与后续分析已拆分到 `kptools-ascend-profiling-analysis-nostack` skill；以下内容仅作有栈 skill 内部 fallback 参考。
 
 trace 无 python_function 事件时，以下路径仍可用（**已在真实 without-stack 数据全流程复验，2026-09-28**）：
 
@@ -253,7 +256,7 @@ trace 无 python_function 事件时，以下路径仍可用（**已在真实 wit
 
 ## HTML 报告约定（report_html.py，2026-09-28 校准；2026-09-29 修订×2）
 
-**结构**：单文件 HTML——**首页**（**hero 横幅 = 整窗总述**：大字号标题行（步数+总时长+一句判定）+ Free/Computing/Comm 大数字 + 整窗大条（mbar big）+ 图例，必须醒目、不能写成普通 kv 注释行；阶段总表：每步一行 = 三阶段耗时+四分类+P2 执行模式、end_sync、判定色标，末行合计；**批成分表**：每步批内请求数/decode（=批内−新增，带不带 draft 都算）/其中带draft/新增prefill/视觉编码/批类型（混合批/纯decode/纯prefill/含prefill续算，取证方法见消歧节"批成分判定"）；NPU Free 时间去向表）+ **每 step 一页**（① 阶段总览框：P1/P2/P3 耗时+四分类着色表+小条图例 ② 阶段火焰图 ③ P1/P3 锚点切节树 ④ P2 骨架+执行模式文案+图内算子计数表+代表实例）。莫兰迪配色，四分类四色（Computing 深钢蓝 #4A78A0 / Comm 陶土 / 未重叠 灰玫瑰 / Free 浅鼠尾草绿 #A6BE9E）——Computing 与 Free 必须高对比（深vs浅+蓝vs绿，2026-09-29 需求方反馈低对比看不清）。
+**结构**：单文件 HTML——**首页**（**Computing vs Free 重点框**：只比较 Computing 与 Free，显示占整步和占 Computing+Free 两种口径，Communication 不在此框内；每个 step 页顶部也有同样用途的“本步重点”框；**hero 横幅 = 整窗总述**：大字号标题行（步数+总时长+一句判定）+ Free/Computing/Comm 大数字 + 整窗大条（mbar big）+ 图例，必须醒目、不能写成普通 kv 注释行；阶段总表：每步一行 = 三阶段耗时+四分类+P2 执行模式、end_sync、判定色标，末行合计；**批成分表**：每步批内请求数/decode（=批内−新增，带不带 draft 都算）/其中带draft/新增prefill/视觉编码/批类型（混合批/纯decode/纯prefill/含prefill续算，取证方法见消歧节"批成分判定"）；NPU Free 时间去向表）+ **每 step 一页**（① 阶段总览框：P1/P2/P3 耗时+四分类着色表+小条图例 ② 阶段火焰图（同名/包装层折叠，如 `qwen3_5_mtp_forward` 与 `qwen3_5_mtp.py: forward`） ③ P1/P3 锚点切节树 ④ P2 骨架+执行模式文案+图内算子计数表）。莫兰迪配色，四分类四色（Computing 深钢蓝 #4A78A0 / Comm 陶土 / 未重叠 灰玫瑰 / Free 浅鼠尾草绿 #A6BE9E）——Computing 与 Free 必须高对比（深vs浅+蓝vs绿，2026-09-29 需求方反馈低对比看不清）。
 
 **四分类口径**：Free = 窗口 − (Computing ∪ Communication)（补集，OA 缺口计入）；任何节/表格 Computing+未重叠+Free=100%，页面 note 必须写明。
 
@@ -274,8 +277,8 @@ trace 无 python_function 事件时，以下路径仍可用（**已在真实 wit
 - **显示**：裸函数名（无路径、无行号；仅同名泛型函数如 `forward/load/put` 保留最短文件名前缀），每行 `函数 + 时长 + 功能注释`（`COMMENTS` 表，与验收报告行尾注释一致）；µs 叶子聚合
 - **P2 节**：标题带锚点+执行模式（`_model_forward` 锚点优先；模式由窗口内 `): replay`/`fx_run_eagerly` 判别），正文用模式对应文案（P2_MODE_TEXT）；整图回放步的 verdict 不加"forward供数不足"后缀（P2 host 窗口极短，free 语义不同）
 - **设备算子计数表的下发时延列**（2026-11-03 增补）：`下发时延avg(µs)` = 侧车 `api_detail.csv`（优先）/`api_statistic.csv` 中对应 aclnn API 的平均耗时——内核名 `aclnn<Op>_...` → API `aclnn<Op>`（launch 段，不含 GetWorkspaceSize tiling 段）；匹配变体依次尝试 `aclnn<Op>` → `aclnnInner<Op>`（8B 实测 `FusedInferAttentionScore` 内核对 `aclnnInnerFusedInferAttentionScore`，n=144 严格对应）；无 aclnn 前缀的融合算子按 `aclnn<内核名>` 匹配。**无命中时三态显示**（2026-11-03 二次增补）：侧车 `kernel_details.csv` 的 `OP State` 入索引（kernel_state 表，static/dynamic/mixed 归并）——`static` 内核（编入 acl 静态图，host 逐次零下发）显示 **`回放`**；dynamic/triton/`OP State=N/A` 内核显示 `—`（triton 与自定义 op 走 `aclrtLaunchKernelWithHostArgs` 泛化路径，无逐算子命名 API）；无任何侧车时整列 `—`。**`—` ≠ 数据缺失，= "该内核本采集无逐次 host 下发记录"**（8B 实测：同一 AddRmsNormBias 在 nomal 采集为 static→`回放`，在 eager 采集为 dynamic→17.5µs，kernel_details.csv OP State 逐条佐证）。实测命中率：nomal 回放步 13/20、eager 步 16/20；27B（无栈+侧车）18/20。meta.api_source 记录侧车文件名。**整图下发行**（2026-11-03 三次增补）：`mode=graph_replay` 时表尾追加一行 `aclmdlRIExecuteAsync（整图下发，覆盖N种回放内核）`——次数/合计ms/单次µs 取 step 窗口内该 API 事件实测值，下发时延avg 取 api_stat 全程均值（8B nomal 实测 step0：1 次 1.591ms，avg 417.0µs）；eager/FX eager 模式不追加
-- **P2 火焰图特例**：骨架只留 `qwen3_5.forward → qwen3_next.forward → npu_fx_compiler → acl_graph(→fx_run_eagerly) → <string>: forward`；编译中间层与其下 GDN/attention 层循环内部**不进火焰图**（层细节在算子计数表+代表实例；代表实例 = python+cpu_op **双层重建**，可见 `aten::slice/view`、`_C_ascend::npu_causal_conv1d_custom`、`aclnn*` 等）
-- **模型结构图（P2 框尾，2026-10-14 增补）**：从主执行流（内核数最多的 stream）设备内核 ts 时序推导——attention 类内核作层锚点分段（无 attention 时取段长最均匀的锚点），重复单元（众数段+锚点）旋转至 QKV 开头，头部=首层前缀、尾部=末层后缀（线性展开，允许与循环重复）；角色标注 QKV/O/MLP-up/MLP-down/Attention/Norm/Act/KV写 按位置推断。**整图回放步取整个 step 窗口**（设备异步执行，P2 host 窗口只截到部分内核），eager/FX eager 取 forward 窗口。无侧车（kernel_details.csv）时这是唯一能看到模型结构的入口
+- **P2 火焰图特例**：骨架只留 `qwen3_5.forward → qwen3_next.forward → npu_fx_compiler → acl_graph(→fx_run_eagerly) → <string>: forward`；编译中间层与其下 GDN/attention 层循环内部**不进火焰图**（层细节在算子计数表）
+- **模型结构图（P2 框尾，2026-10-14 增补；2026-11-05 聚类化）**：从主执行流（内核数最多的 stream）设备内核 ts 时序推导。先找层核心（`FusedGdnGating`/`FusedInferAttentionScore`/`MLA`/`Sparse`），再取每层前缀（GDN 的 `CausalConv1d`、Attention 的 QKV GEMM）切层；按算子签名（GDN/Attention/MoE/压缩/GEMM/Norm 等计数）聚类，**不同层类型分别输出 `×N`**，不再把压缩/非压缩、GDN/Attention 层塞进同一个模板。角色标注 QKV/O/MLP-up/MLP-down/Attention/GDN/MoE Gate/Expert GEMM/压缩/Norm/Act/KV写。**MTP/DSpark 等外置模型**按 `python_function` 中的 `propose_draft`/`_run_merged_draft`/`mtp`/`dspark` 窗口单独输出模型结构。**整图回放步取整个 step 窗口**；eager/FX eager 从 P2 起点取到 step 末尾并剥离 sampling 尾部。无侧车（kernel_details.csv）时这是唯一能看到模型结构的入口
 - **交互**：点帧放大子树/点上层帧回退/重置按钮；顶部**固定概览条**不受缩放影响、点击跳阶段、带视口指示器
 - P1 节切分锚点：`synchronize_input_prep/_update_states/_prepare_inputs/_build_attention_metadata/_preprocess`；P3：`sample_tokens/_sample/propose_draft_token_ids/end_step`；P2 窗口 = `_model_forward`（缺失时才退化 `_execute_model_orig` 并标注）
 
