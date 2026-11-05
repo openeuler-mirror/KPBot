@@ -8,6 +8,14 @@ import shutil
 import subprocess
 import sys
 
+try:
+    import matplotlib
+    import numpy
+except ImportError:
+    HAS_MATPLOTLIB = False
+else:
+    HAS_MATPLOTLIB = True
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'Plugins/code-optimizer/skills/benchmark-visualization/scripts/visualize.py'
 SPEC = importlib.util.spec_from_file_location('visualize', SCRIPT)
@@ -86,6 +94,7 @@ class VisualizationTests(unittest.TestCase):
         self.assertEqual(len(summary), 22)
         self.assertFalse(any(r['series'] == ('v4',) and r['x'] == 16 for r in summary))
 
+    @unittest.skipUnless(HAS_MATPLOTLIB, "Install matplotlib and numpy to run chart rendering tests")
     def test_portable_skill_in_both_install_layouts(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             folder = Path(tmp)
@@ -110,6 +119,7 @@ class VisualizationTests(unittest.TestCase):
             self.assertEqual(records[1]['cycles'], 8)
             self.assertEqual(records[1]['side'], 'candidate')
 
+    @unittest.skipUnless(HAS_MATPLOTLIB, "Install matplotlib and numpy to run chart rendering tests")
     def test_all_chart_types_and_custom_axis(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             folder = Path(tmp)
@@ -141,6 +151,7 @@ class VisualizationTests(unittest.TestCase):
             self.assertEqual(original, (output / 'figures/line.svg').read_bytes())
             self.assertEqual(len(list(output.glob('*summary.json'))), 2)
 
+    @unittest.skipUnless(HAS_MATPLOTLIB, "Install matplotlib and numpy to run chart rendering tests")
     def test_six_revision_scenarios(self):
         """Simulate multi-file inputs, repetitions, labels and same-directory edits."""
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
