@@ -1,5 +1,5 @@
 ---
-name: ascend-vllm-profiler
+name: kptools-ascend-profiling-analysis
 description: |
   分析 torch_npu/Ascend profiler 的 trace_view.json（LLM/vLLM 推理场景）。
   能力：① 任意时间段或任意函数时段的 Computing/Communication/Free 精确占比
@@ -9,7 +9,7 @@ description: |
   卡间通信等待时使用。
 ---
 
-# Ascend vLLM Profiler 分析
+# Ascend Profiling Trace 分析
 
 ## 输入与产物
 

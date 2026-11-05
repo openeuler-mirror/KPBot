@@ -5,7 +5,7 @@
   <out-dir>/trace_view.json   单行 chrome trace（格式A键序: ph,name,pid,tid,ts,dur,cat）
   <out-dir>/ground_truth.json 各问题窗口的四分类占比（%）
 
-事件键序/字段与 ascend-vllm-profiler/scripts/build_index.py 的解析正则严格对齐:
+事件键序/字段与 kptools-ascend-profiling-analysis/scripts/build_index.py 的解析正则严格对齐:
   {"ph": "X", "name": N, "pid": P, "tid": T, "ts": "<us 3位小数字符串>", "dur": <us>, "cat": C}
 
 时间线（us，UI 零点 = 1_000_000.000，即 ProfilerStep#1 起点）:

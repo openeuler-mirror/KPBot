@@ -14,7 +14,7 @@
     { "id": "EQ-09", "prompt": "看看 NPU 现在的利用率和温度", "should_trigger": false, "note": "routes to kptools-ascend-smi" },
     { "id": "EQ-10", "prompt": "采集进程的线程分布和上下文切换", "should_trigger": false, "note": "routes to kptools-proc-collector" },
     { "id": "EQ-11", "prompt": "HCCN 网卡链路状态怎么查", "should_trigger": false, "note": "routes to kptools-ascend-hccn" },
-    { "id": "EQ-12", "prompt": "分析 vLLM 的 profiling trace 找热点算子", "should_trigger": false, "note": "routes to ascend-vllm-profiler" },
+    { "id": "EQ-12", "prompt": "分析 vLLM 的 profiling trace 找热点算子", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis" },
     { "id": "EQ-13", "prompt": "帮我把这个推理服务调优到更高吞吐", "should_trigger": false, "note": "routes to kpbot-app-tuner" }
   ]
 }

@@ -138,7 +138,7 @@ bash scripts/collect.sh vllm-p vllm-d --role P --out ./pd-env-20261024
   `kptools-proc-collector` 覆盖；本 skill 的 `processes` 项只记命令行、可执行文件和环境变量
 - 网络链路（HCCN 网卡配置、链路状态、连通性）由 `kptools-ascend-hccn` 覆盖；
   本 skill 不调用 `hccn_tool`
-- 算子级 profiling 由 `ascend-vllm-profiler` 覆盖，参数调优由 `kpbot-app-tuner` 覆盖；
+- 算子级 profiling 由 `kptools-ascend-profiling-analysis` 覆盖，参数调优由 `kpbot-app-tuner` 覆盖；
   本 skill 只回答两侧环境的差异
 
 ## 错误处理

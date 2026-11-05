@@ -1,7 +1,7 @@
-# 用例：agent 级端到端 —— 容器内用 opencode 调用 ascend-vllm-profiler 分析 NPU 推理 trace
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 kptools-ascend-profiling-analysis 分析 NPU 推理 trace
 #
 # 拉取与测试方法（人类可读）：
-#   docker build --network host -f skills/ascend-vllm-profiler/cases/agent-analyze-vllm-trace/Dockerfile \
+#   docker build --network host -f skills/kptools-ascend-profiling-analysis/cases/agent-analyze-vllm-trace/Dockerfile \
 #       -t kpbot/app-tuner-agent-analyze-vllm-trace:1.0-openeuler24.03 .
 #   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
 #   ./run_ab.sh --save results-ab
@@ -13,7 +13,7 @@
 # with/without 唯一差异是 skill 与 prompt 是否提及 skill。
 
 name: agent-analyze-vllm-trace
-skill: ascend-vllm-profiler
+skill: kptools-ascend-profiling-analysis
 tier: agent
 
 image: kpbot/app-tuner-agent-analyze-vllm-trace:1.0-openeuler24.03
@@ -30,7 +30,7 @@ ab:
 
 build:
   context: ../../../..
-  dockerfile: skills/ascend-vllm-profiler/cases/agent-analyze-vllm-trace/Dockerfile
+  dockerfile: skills/kptools-ascend-profiling-analysis/cases/agent-analyze-vllm-trace/Dockerfile
 
 entrypoint: ["/workspace/entrypoint.sh"]
 

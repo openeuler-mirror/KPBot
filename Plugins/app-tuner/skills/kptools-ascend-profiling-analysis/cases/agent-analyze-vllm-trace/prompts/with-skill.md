@@ -1,4 +1,4 @@
-请使用 ascend-vllm-profiler skill 分析这份 NPU 推理 trace。
+请使用 kptools-ascend-profiling-analysis skill 分析这份 NPU 推理 trace。
 
 要求：
 1. trace 文件：input/trace_view.json（torch_npu profiler 导出的 chrome trace 格式）。

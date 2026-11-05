@@ -8,7 +8,7 @@ SKILL_MODE="${SKILL_MODE:-with}"          # with | without
 
 if [ "${SKILL_MODE}" = "with" ]; then
     mkdir -p .opencode/skills
-    cp -r /staging/skill .opencode/skills/ascend-vllm-profiler
+    cp -r /staging/skill .opencode/skills/kptools-ascend-profiling-analysis
 fi
 
 PROMPT_FILE="prompts/${SKILL_MODE}-skill.md"
