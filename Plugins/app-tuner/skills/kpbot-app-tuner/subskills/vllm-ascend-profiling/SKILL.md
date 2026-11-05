@@ -427,6 +427,55 @@ profiling_runs/
 - 用户只想从已有 `trace_view.json` 出报告时，直接跳到 Stage 3。
 - `profiling_runs/` 下只增不改，不覆盖历史 run。
 
+## 子代理输出契约
+
+被主流程按候选子技能派发时（task package 的 `candidate_skill_list` 含
+`vllm-ascend-profiling`），最终回复必须是单个 JSON 对象，覆盖主 skill 的
+`../../references/subagent-orchestration.md` 的 14 个顶层字段，并回填
+`../../scripts/merge_subagent_results.py` 额外要求的 `subagent_id` /
+`result_path`（下表合计 16 项）。纯人工交互式调用不必输出该契约。
+
+| 字段 | 类型 | 本 skill 的取值 |
+|------|------|----------------|
+| `subskill_name` | string | 固定 `vllm-ascend-profiling` |
+| `current_run_id` | string | 必须与任务包一致 |
+| `current_evidence_status` | string | 必须为 `current`；否则 `status=blocked` 且不产出候选动作 |
+| `status` | string | `ok` / `degraded` / `blocked` / `failed`。Stage 1 的 7 项检查未全部 `pass`、或服务不可达时为 `blocked`；TTFT 数据缺失等非阻断降级为 `degraded` |
+| `confidence` | string | `high` / `medium` / `low` |
+| `analysis_timestamp` | string | ISO 8601 时间戳 |
+| `evidence_sources` | string[] | 现场证据文件路径（`trace_view.rank<N>.json`、`completeness_report*.json`、`metrics.json`、`msprof_summary.json`、`report.html`、Stage 1 输出），必须真实存在于磁盘，不得填写预期路径 |
+| `findings` | object | profiling 结论，结构见下 |
+| `candidate_actions` | array | 环境修复与采集配置候选动作；无实施动作时也必须给出一条 `change_mode=no_change` 的说明性动作，不得为空数组 |
+| `required_evidence` | string[] | 缺失证据；无缺失为空数组 |
+| `fallback_notes` | string[] | 降级说明；无降级为空数组 |
+| `timing` | object | 耗时统计，至少含 `analysis_seconds` |
+| `independent_analysis_confirmation` | string | 固定声明：本分析已独立执行 subskill SKILL.md 完整流程，任务包背景信息未替代现场证据采集和独立判断 |
+| `steps_covered` | array | 覆盖的步骤类别：`env_check`、`trigger_profile`、`analyse_trace`、`collect_data`、`parse_trace`、`check_completeness`、`parse_metrics`、`report`（`generate_report` 或 `build_report`） |
+| `subagent_id` | string | 回填任务包给定值 |
+| `result_path` | string | 回填本结果文件路径 |
+
+`findings` 固定子结构（无数据的子项写 `available: false`，不编造数值）：
+
+- `environment` — Stage 1 `env_check.py` 的 `results`（7 项检查的 `name` /
+  `status` / `fix_hint`）与容器、vllm-ascend 版本、profiler 目录等元数据
+- `profiling` — 采集窗口、rank 数、`*_ascend_pt` 与 trace 产物路径
+- `ttft` — `metrics.json` 的 `ttft_ms` / `ttft_breakdown` 及其口径
+- `completeness` — 每 rank 的 `overall` 与失败项
+- `top_kernels` / `bottleneck_attribution` — Top-N 算子与瓶颈归因（附证据路径）
+
+### candidate_actions 字段
+
+每个元素必须包含 `action_id`、`title`、`category`、`priority`
+（`high`/`medium`/`low`）、`change_mode`（`no_change` / `config_tune` /
+`runtime_param` / `restart_required` / `model_reload` /
+`quantization_change` / `parallelism_reconfigure`）、`requires_root`（布尔）、
+`risk`（`low`/`medium`/`high`）、`implementation_plan`、`validation_plan`、
+`rollback`、`expected_effect`、`expected_gain_metric`、
+`rejection_criteria`、`evidence_refs`。动作只描述**征询式**变更
+（`fix_pythonmalloc.py` / `fix_pythonpath.py` / `fix_vllm_ascend.py`、profiler
+目录与采集窗口配置、重启验证），`change_mode=restart_required` 时 `rollback`
+必须写明恢复原配置与重启验证步骤；采集过程中不得直接改动容器。
+
 ## Reference
 
 - `references/ttft_metrics.md` — TTFT 插桩指标清单：全部插桩行格式、字段含义、

@@ -21,12 +21,16 @@ SUBSKILL_CATALOG = {
     "vllm-ascend-profiling": "candidate-vllm-ascend-profiling",
 }
 
-# vllm-ascend-profiling 的 Stage-1 baseline 契约在派发指令中显式下发，
-# 防止子代理回写 task package 时缺 baseline 数据导致 stage-2 分析退化。
+# vllm-ascend-profiling 的 Stage-1 环境基线在派发指令中显式下发，
+# 防止子代理回写 task package 时缺基线数据导致后续分析退化。
+# 只引用子技能真实产出：env_check.py 的 results（Stage 1 的 7 项检查）
+# 与 Stage 2 采集产物，不引入子技能未定义的字段或阶段。
 VLLM_ASCEND_BASELINE_INSTRUCTION = (
     "For vllm-ascend-profiling task packages, the first returned evidence MUST "
-    "include baseline_basic_info collected via the subskill's env_check.py, "
-    "and any ttft_* keys must be effect-attributed to Stage-1 Phase-5 changes."
+    "include the Stage-1 env_check.py output (all 7 ordered check items in "
+    "'results') recorded under findings.environment, and any ttft_* or "
+    "profiling metrics must carry the Stage-2 collection window plus the "
+    "trace/completeness artifact paths they were derived from."
 )
 
 MAIN_OPTIMIZATION_SUBSKILLS = [
