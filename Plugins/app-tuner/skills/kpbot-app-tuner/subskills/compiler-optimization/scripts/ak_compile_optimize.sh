@@ -359,15 +359,26 @@ EOF
   fi
 
   # 前置校验：perf mmap 事件中必须出现该二进制名，否则 llvm-profgen 会静默产出空 profile
-  # （grep 必须走 run_in_target：perf.script 写在目标上下文，--container 时宿主机路径不存在，
+  # （grep 与文件生成同上下文执行：perf.script 写在目标上下文，--container 时宿主机路径不存在，
   #  宿主机 grep 会恒定误报 binary_mmap_mismatch）
+  # grep 退出码分流：1 = 名不匹配（语义结果）；2/其他 = 文件不存在或目标执行失败（另一类原因，
+  #  单独 fail_reason，避免同一诊断覆盖两类根因）
   if [[ "${DRY_RUN}" != true ]]; then
     local bin_base
     bin_base="$(basename "${BINARY_PATH}")"
-    if ! run_in_target "grep -aq -- ${bin_base} ${perf_script}"; then
-      cat <<EOF
+    local mmap_rc=0
+    # -F 字面匹配：bin_base 是白名单校验后路径的 basename，无注入面；防 ./+ 等被当正则误判
+    run_in_target "grep -aqF -- '${bin_base}' ${perf_script}" || mmap_rc=$?
+    if [[ "${mmap_rc}" -ne 0 ]]; then
+      if [[ "${mmap_rc}" -eq 1 ]]; then
+        cat <<EOF
 {"status":"failed","fail_reason":"binary_mmap_mismatch","diagnostics":{"binary":"${BINARY_PATH}","perfscript":"${perf_script}","hint":"perf script 的 mmap 事件中未找到 ${bin_base}，llvm-profgen 无法把样本映射到二进制；常见原因是 --binary 与进程实际加载的文件名不一致（软链/重命名/tmp 副本）"},"retryable":true}
 EOF
+      else
+        cat <<EOF
+{"status":"failed","fail_reason":"perfscript_missing","diagnostics":{"perfscript":"${perf_script}","hint":"perf script 文件在目标上下文不存在或不可读（grep rc=${mmap_rc}）：与 mmap 名不匹配是两类根因；检查 --profile-dir 在目标上下文可写、perf script 导出是否实际落盘"},"retryable":true}
+EOF
+      fi
       return 1
     fi
   fi
