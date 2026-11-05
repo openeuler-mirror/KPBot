@@ -100,7 +100,7 @@ profile 默认落盘 `<profile-dir>/<component>.spgo.profraw`（`--css-profile` 
 4. `Invalid instructions` 告警可忽略；`--perfdata` 输入为空时改用 `--perfscript`。
 5. **采集必须用 gen 版二进制跑负载**：use 产物（`-fprofile-sample-use`）不再产出采样可用信息，profile 也不匹配；对非 gen 进程采样得到的 profile 无效。
 6. **多进程选对进程**：vLLM v1 的 APIServer/EngineCore/Worker 中 Worker 承担算子计算，`-p` 须指向真正干活的进程。
-7. **NPU 自旋热点扭曲**：libtorch_npu 的 `ReadQueue` 自旋可达第二名的 33×，纯采样 profile 被扭曲；hot-only 等采集变体实测只挽回 <1%，不值得做。
+7. **NPU 自旋热点扭曲**：libtorch_npu 的 `ReadQueue` 自旋可达第二名的 33×，纯采样 profile 被扭曲；采集变体改进无实质收益（见「实测数据锚点」）。
 8. **Python 侧收益噪声级**：全 BRBE（Python BRBE + torch BRBE）与 CSS-newplan 持平；"Python BRBE + torch 插桩 PGO"与纯 PGO2 并列（+0.05%）。不要为 Python 单独维护 BRBE 版本。
 9. torch_npu 的 clang 严格 const 检查、ABI=1、`new_qtensor` ThinLTO 折叠等坑与插桩 PGO 共通，见 `ak-compiler-playbook.md`。
 10. 采样频率：**不要指定 `-F`（也不指定 `-m`）**，用 perf 默认采样频率与默认 mmap 页数，避免采样率/缓冲与节点能力不匹配导致 `lost events` 或额外开销；时长用 `-- sleep <秒>` 控制。

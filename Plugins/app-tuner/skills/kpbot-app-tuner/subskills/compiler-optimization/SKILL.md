@@ -300,8 +300,8 @@ ak_compile_optimize.sh --component pytorch --optimize css_pgo --stage use --sour
 
 - profile 产物：`<profile-dir>/<component>.spgo.profraw`（可用 `--css-profile` 覆盖）。
 - 必读坑（完整清单见 `references/csspgo-brbe-playbook.md`）：共享库必须完整 `-g`（`-gline-tables-only` 不够）；use 阶段必须保留 `-fpseudo-probe-for-profiling`（Python 的 LDFLAGS 也要带，否则 profile 被忽略）；`-page-size` 须与目标 OS 页大小一致；vLLM v1 采集须选对进程（Worker 承担算子计算）。
-- **`--binary` 与 perf mmap 事件名必须一致**：`llvm-profgen` 按 mmap 事件里的文件名匹配二进制。若 `--binary` 传软链（如 `python3 -> python3.10`），basename 与 mmap 名不符会**静默产出 0 字节空 profile**（日志仅提示 `No relevant mmap event ... No samples in perf script`）。collect 阶段现已自动 `readlink -f` 解析真实路径，并在 perf script 导出后交叉校验 mmap 名，不匹配时直接报 `binary_mmap_mismatch` 而非空 profile。
-- **use 阶段必须真正重编**：Python 流程在 gen 与 use 之间复用同一 `--source-dir` 时，`make` 会认为 `.o` 已最新而跳过重编，导致 use 静默沿用 gen 产物、完全忽略 sample profile 却仍报 success。脚本现于 `make` 前执行 `make clean`；即便如此，仍推荐 gen/use 各用一份独立源码树（省去清理时间也避免 configure 残留状态）。
+- **`--binary` 与 perf mmap 事件名必须一致**：`llvm-profgen` 按 mmap 事件里的文件名匹配二进制，传软链（如 `python3 -> python3.10`）会**静默产出 0 字节空 profile**。collect 阶段已自动 `readlink -f` 解析真实路径并交叉校验 mmap 名，不匹配直接报 `binary_mmap_mismatch`。
+- **use 阶段必须真正重编**：复用 gen 的 `--source-dir` 时 `make` 会跳过重编、静默沿用 gen 产物。脚本已强制 `make clean`；仍推荐 gen/use 分树（更快且无 configure 残留）。
 - 实测数据（鲲鹏+昇腾 vLLM，8 配置同窗口对比、决策根因分析）见 `references/csspgo-brbe-playbook.md`。
 
 ## vLLM 算子编译优化
@@ -323,8 +323,7 @@ vLLM 包含 C++/CUDA 扩展算子（attention、layernorm、activation、rotary 
 - **算子内联**：vLLM-Ascend 的 C++ 适配层调用 torch_npu op，跨层内联能减少 dispatch 开销。
 - **LTO**：vLLM-Ascend 的 .so 用 `-flto=thin` 编译，与 PyTorch/torch_npu 一致。
 - **目标架构参数**：aarch64 + SVE，`-mcpu=native -march=armv8.6-a+sve2+bf16`。
-  说明：`-mcpu` 一律交给编译器自适应（不写死型号）。脚本 `--mcpu auto`（默认）用 `-mcpu=native -###` 看编译器解析结果，
-  **只有解析出具体型号才采用；解析为 generic 则不添加**（实测本机 generic 最快，显式 hip09/hip10c/hip11/tsv110 均更慢）。
+  说明：`-mcpu` 交给编译器自适应（脚本 `--mcpu auto` 默认）——`-mcpu=native -###` 解析出具体型号才采用，解析为 `generic` 则不添加；实测依据与候选型号数据见 `references/csspgo-brbe-playbook.md`。
   `-march` 是显式特性集，与 `-mcpu` 同时出现时以两者交集为准，需实测确认无冲突。
 - **PGO**：理论上可用 PyTorch/torch_npu 同一份 profdata 覆盖 vLLM-Ascend 算子路径。
 
