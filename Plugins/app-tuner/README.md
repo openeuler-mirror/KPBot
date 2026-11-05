@@ -56,6 +56,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | `kpbot-app-tuner` | 服务器应用优化编排器 — 环境采集、瓶颈路由、subagent 迭代验证、报告输出 |
 
+### 独立调优 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`vllm-fastokens-segment-cache-migration`](skills/vllm-fastokens-segment-cache-migration/SKILL.md) | 评估 vLLM 切换到官方 fastokens 并启用段缓存的可行性，通过基线组和段缓存开启组验证 token 一致性、并发稳定性、分词性能、内存与回退准备 |
+
 ### 分析型子 skill(subskills,自研)
 
 | 技能 | 描述 |
