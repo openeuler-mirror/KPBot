@@ -112,6 +112,18 @@ python3 scripts/report_html_nostack.py <trace_view.json> --out report.html
 - v1：step 识别 + 每步时间 + HTML 报告（P1/P2/P3、模型结构、近似调用栈、Free 去向）
 - 后续继续完善：更细的 P1 子阶段、与 with-stack 真值的误差评估、版本自适应映射
 
+## 脚本工具
+
+- `scripts/detect_steps.py` — step 边界与每步时间；支持 `--source`、`--json`、`--validate`
+- `scripts/nostack_analysis.py` — P1/P2/P3、模型结构、Free 归因（供报告脚本复用）
+- `scripts/report_html_nostack.py` — HTML 报告生成
+- `assets/report.css` — 报告样式
+
+## 参考资料
+
+- vllm 0.23.0 / vllm-ascend 0.23.0rc1 源码（用于算子/阶段映射；skill 内不重复存储源码）
+- 有栈分析入口：`kptools-ascend-profiling-analysis` skill
+
 ## 开发校验
 
 ```bash

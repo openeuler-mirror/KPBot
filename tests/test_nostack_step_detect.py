@@ -8,13 +8,22 @@ import tempfile
 from pathlib import Path
 import unittest
 
-SCRIPT = (Path(__file__).resolve().parents[1]
-          / "Plugins/app-tuner/skills/kptools-ascend-profiling-analysis-nostack/scripts/detect_steps.py")
+SCRIPT = (
+    Path(__file__).resolve().parents[1]
+    / "Plugins/app-tuner/skills/kptools-ascend-profiling-analysis-nostack/scripts/detect_steps.py"
+)
 
 
 def ev(name, pid, ts_us, dur_us, cat):
-    return {"ph": "X", "name": name, "pid": pid, "tid": pid,
-            "ts": f"{ts_us:.3f}", "dur": dur_us, "cat": cat}
+    return {
+        "ph": "X",
+        "name": name,
+        "pid": pid,
+        "tid": pid,
+        "ts": f"{ts_us:.3f}",
+        "dur": dur_us,
+        "cat": cat,
+    }
 
 
 def write_trace(root, with_sidecar):
@@ -35,10 +44,13 @@ def write_trace(root, with_sidecar):
     if with_sidecar:
         con = sqlite3.connect(root / "ascend_pytorch_profiler_1.db")
         con.execute("CREATE TABLE STEP_TIME(id INTEGER, startNs INTEGER, endNs INTEGER)")
-        con.executemany("INSERT INTO STEP_TIME VALUES(?,?,?)", [
-            (0, 1_000_000, 20_000_000),
-            (1, 20_000_000, 40_000_000),
-        ])
+        con.executemany(
+            "INSERT INTO STEP_TIME VALUES(?,?,?)",
+            [
+                (0, 1_000_000, 20_000_000),
+                (1, 20_000_000, 40_000_000),
+            ],
+        )
         con.commit()
         con.close()
     return path
@@ -48,7 +60,9 @@ class NoStackStepDetectTests(unittest.TestCase):
     def run_detect(self, trace, *args):
         run = subprocess.run(
             [sys.executable, str(SCRIPT), str(trace), "--json", *args],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         self.assertEqual(run.returncode, 0, run.stderr)
         return json.loads(run.stdout)
