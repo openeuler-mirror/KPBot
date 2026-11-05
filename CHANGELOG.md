@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Added
+- app-tuner 新增 `kptools-ascend-profiling-analysis-nostack` skill：无栈 profiling trace 的 step 识别（`STEP_TIME` → `kernel_details` → `step_trace_time` → `communication` → 纯 trace 降级）、每步时间、P1/P2/P3 近似阶段、模型结构与 Free 去向 HTML 报告；附 `detect_steps` 单测与触发评测；分析前主动收集模型/版本/源码/with-stack，缺失时降级并标低置信度。
+- app-tuner 有栈 profiling 报告增强：首页/每步 Computing vs Free 重点框、按层类型聚类的模型结构（GDN/Attention/MoE/压缩层）、MTP/DSpark 外部模型结构，并去除代表实例框与包装层重复帧。
 - code-optimizer 新增 `openzl-compression-tuning` skill：OpenZL 压缩内核调优（熵解码根表/块恒等、循环携带补码移位、编码批次与展开约束、熵 codec 选型、无损正确性门禁、负结果与对抗审核档案），源自 KV Cache BF16 一线优化案例（Encode 2.16x / Decode 3.44x）；附 tier-A 用例 `cases/skill-integrity`（frontmatter/引用链接/方法论不变量/敏感内容看护，见 docs/case-spec.md）
 - code-optimizer 新增 `openzl-bench-protocol` skill：OpenZL 基准测试工程协议（unitBench 场景注册与熵模式、openzl_benchmark 均值口径、KV 数据准备与分布统计、绑核与噪声控制、多机部署复测、topdown TMA 采集），附 `prepare_kvdata.py` / `bench_kv.sh` / `td_loop.sh` 三个脚本与 tier-A 用例 `cases/script-contract`（脚本契约 + mock unitBench 解析 + 分布统计数值回归）
 
