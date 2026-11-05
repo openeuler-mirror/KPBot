@@ -34,6 +34,7 @@ REQUIRED_SUBSKILLS = (
     "os-optimization",
     "other-optimization",
     "performance-library-selection",
+    "vllm-ascend-profiling",
 )
 
 

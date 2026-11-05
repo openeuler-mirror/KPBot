@@ -310,6 +310,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
 | Other 优化 skill | `subskills/other-optimization/SKILL.md` |
 | 非 CPU 瓶颈预筛 | `subskills/io-memory-network-bottleneck-analysis/SKILL.md` |
 | 数据库专项 | `subskills/database-workload-analysis/SKILL.md`，由应用配置 skill 按需引用 |
+| vLLM Ascend NPU profiling | `subskills/vllm-ascend-profiling/SKILL.md`，由加速卡 skill 按需引用（NPU+vLLM 场景 Stage-1 环境诊断/TTFT profiling 采集） |
 
 ## Framework Ownership Boundary
 

@@ -294,7 +294,7 @@ skills/kpbot-app-tuner/   # [唯一主源]
     executor.md                     # 统一执行验证 subagent
   references/                       # 22 个契约与流程文档
   scripts/                          # 22 个工具脚本
-  subskills/                        # 候选列表专项 subskill (12 个)
+  subskills/                        # 候选列表专项 subskill (13 个)
     application-config-optimization/
     accelerator-optimization/
     bios-optimization/
