@@ -324,7 +324,8 @@ collect_css_profile() {
     # （如 python3 -> python3.10），basename 与 mmap 名不一致会静默产出 0 样本空 profile。
     local resolved_binary
     resolved_binary="$(run_in_target "readlink -f ${BINARY_PATH}")"
-    if [[ -n "${resolved_binary}" && -f "${resolved_binary}" && "${resolved_binary}" != "${BINARY_PATH}" ]]; then
+    # 存在性判断同样在目标上下文执行（--container 时宿主机看不到容器内路径）
+    if [[ -n "${resolved_binary}" && "${resolved_binary}" != "${BINARY_PATH}" && "$(run_in_target "[ -f \"${resolved_binary}\" ] && echo x")" == "x" ]]; then
       log "采样二进制为软链，解析为真实路径: ${resolved_binary}"
       BINARY_PATH="${resolved_binary}"
     fi
@@ -358,10 +359,12 @@ EOF
   fi
 
   # 前置校验：perf mmap 事件中必须出现该二进制名，否则 llvm-profgen 会静默产出空 profile
+  # （grep 必须走 run_in_target：perf.script 写在目标上下文，--container 时宿主机路径不存在，
+  #  宿主机 grep 会恒定误报 binary_mmap_mismatch）
   if [[ "${DRY_RUN}" != true ]]; then
     local bin_base
     bin_base="$(basename "${BINARY_PATH}")"
-    if ! grep -aq -- "${bin_base}" "${perf_script}"; then
+    if ! run_in_target "grep -aq -- ${bin_base} ${perf_script}"; then
       cat <<EOF
 {"status":"failed","fail_reason":"binary_mmap_mismatch","diagnostics":{"binary":"${BINARY_PATH}","perfscript":"${perf_script}","hint":"perf script 的 mmap 事件中未找到 ${bin_base}，llvm-profgen 无法把样本映射到二进制；常见原因是 --binary 与进程实际加载的文件名不一致（软链/重命名/tmp 副本）"},"retryable":true}
 EOF
