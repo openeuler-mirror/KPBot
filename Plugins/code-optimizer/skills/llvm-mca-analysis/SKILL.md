@@ -33,7 +33,7 @@ description: 基于 LLVM MCA 的 ARM64 静态性能瓶颈分析器。对汇编�
   - `asm`：用户直接给了汇编文本或 `.s` 文件——这是 MCA 的原生输入，最干净，**分析循环时优先用此模式**（把循环体抽出来）。
   - `source`：给了 C/C++ 或 Rust 源码 + 函数名，脚本按 `source_language` 选择编译器后提取函数体（C/C++ 用 `clang -S --target=aarch64-linux-gnu -mcpu=<model> -O2`；Rust 见下方"Rust source 模式"）。
   - `binary`：给了二进制/目标文件 + 函数名，脚本用 `llvm-objdump -d` 反汇编后提取函数。
-- `source_language`：`c_cpp`（默认）或 `rust`。`source` 模式生效，决定编译器分支。
+- `source_language`：`c_cpp` 或 `rust`，期望值语义：提供时脚本从被分析汇编自动推导实际源语言并与之核验，不一致即报错退出（fail-closed）；缺省时用推导值填输出。推导规则：含 rust legacy mangled 符号 → `rust`，无 rust 符号 → `c_cpp`。提供时在 `source` 模式下决定编译器分支。
 - `function`：`source`/`binary` 模式必填。Rust 场景见下方"函数名匹配（Rust mangled 符号）"。
 - `iterations`：MCA 仿真迭代次数，默认 100。瓶颈分析需要足够迭代才稳定；想更稳可调到 300。
 - `cflags`：`source` 模式透传给编译器的额外参数（如 `-march=armv8.2-a+fp16`、`-I...`）。

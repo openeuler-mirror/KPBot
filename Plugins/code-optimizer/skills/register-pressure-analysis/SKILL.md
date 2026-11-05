@@ -31,8 +31,8 @@ description: 编译到 AArch64 汇编后统计 stack spill/reload、FMA 密度�
 
 - `asm_file`：必须是当前优化产物或编译器生成的 AArch64 汇编文件。
 - `function`：可选。提供后只分析该函数标签范围；缺失时分析整个文件。
-- `source_kind`：用于解释结果，不改变统计口径。`rust_intrinsics` 表示 `std::arch::aarch64`/`core::arch::aarch64` intrinsic 代码编译出的汇编；`rust_asm` 表示 `asm!` 宏块编译出的汇编。
-- `context.language`：可选，标注产物源语言，供 `verify-optimization` 归档。
+- `source_kind`：期望值语义（CLI `--source-kind`）：提供时脚本从被分析汇编自动推导实际来源并与之核验，不一致即报错退出（fail-closed）；缺省时用推导值填输出。不改变统计口径。`rust_intrinsics` 表示 `std::arch::aarch64`/`core::arch::aarch64` intrinsic 代码编译出的汇编；`rust_asm` 表示 `asm!` 宏块编译出的汇编。`c_intrinsics`/`inline_asm` 为 C 侧无文本特征的标签：提供时要求推导结果为 C 家族（无 rust 符号），通过后照记该标签；在 rust 产物上提供即报错。
+- `context.language`：期望值语义（CLI `--language`）：提供时与脚本推导的源语言核验，不一致即报错退出；缺省时用推导值填输出，供 `verify-optimization` 归档。推导规则（两参数共用）：含 rust legacy mangled 符号 → 源语言 `rust`，其中 `# APP`/`# NO_APP` 包裹段 → `rust_asm`、无 `# APP` 段 → `rust_intrinsics`；无 rust 符号 → 源语言 `c_cpp`、来源 `assembly`。
 - `context`：可选，供 `verify-optimization` 把诊断和优化点关联起来。
 
 ## 执行步骤
