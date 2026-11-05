@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "code-optimizer",
-      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel）、VSAG HGraph RaBitQ 并发查询批处理优化和 PyTorch embedding lookup 流水线的并行 unique 自定义算子优化（__gnu_parallel::sort + OpenMP、TORCH_LIBRARY），以及 OpenZL 压缩框架 codec 内核调优（Huffman/FSE 熵编解码、根表快路径、位流批次写入、熵 codec 选型、无损逐字节验证），覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
+      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel）、VSAG HGraph RaBitQ 并发查询批处理优化、PyTorch embedding lookup 流水线的并行 unique 自定义算子优化（__gnu_parallel::sort + OpenMP、TORCH_LIBRARY）和 OpenZL 压缩框架调优（熵 codec 根表/位流优化、熵选型、无损逐字节验证 + unitBench 基准协议），覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构",
       "author": {
         "name": "Kunpeng Acceleration Team"
       },
@@ -19,7 +19,7 @@
       "source": "./Plugins/code-optimizer",
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
-      "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling", "tensorflow", "inference", "graph-optimization", "kernel", "kdnn", "vsag", "rabitq", "hgraph", "vector-search", "batch-search", "openblas", "brgemm", "matmul", "gemm", "packb", "prepack", "blocked-layout", "onnxruntime", "onednn", "openzl", "huffman", "fse", "entropy-coding", "compression", "lossless"]
+      "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling", "tensorflow", "inference", "graph-optimization", "kernel", "kdnn", "vsag", "rabitq", "hgraph", "vector-search", "batch-search", "openblas", "brgemm", "matmul", "gemm", "packb", "prepack", "blocked-layout", "onnxruntime", "onednn", "openzl", "compression", "entropy", "entropy-coding", "huffman", "fse", "lossless", "benchmark"]
     },
     {
       "name": "app-tuner",

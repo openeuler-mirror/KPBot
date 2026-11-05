@@ -1,0 +1,14 @@
+{
+  "skill_name": "kptools-bios-collector",
+  "queries": [
+    { "id": "BQ-01", "prompt": "检查 BIOS 配置和电源模式", "should_trigger": true, "note": "core scenario" },
+    { "id": "BQ-02", "prompt": "看看 SMT 和 Turbo 开没开", "should_trigger": true, "note": "smt/turbo" },
+    { "id": "BQ-03", "prompt": "查一下内存频率和 DDR 通道", "should_trigger": true, "note": "ddr speed" },
+    { "id": "BQ-04", "prompt": "通过 BMC Redfish 读一下 BIOS 设置", "should_trigger": true, "note": "redfish" },
+    { "id": "BQ-05", "prompt": "检查 PCIe ASPM 省电设置", "should_trigger": true, "note": "aspm" },
+    { "id": "BQ-06", "prompt": "确认硬件预取器是否开启", "should_trigger": true, "note": "prefetcher" },
+    { "id": "NQ-01", "prompt": "看看内核参数 vm.swappiness", "should_trigger": false, "note": "routes to kptools-os-collector" },
+    { "id": "NQ-02", "prompt": "采集系统 CPU 利用率", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "NQ-03", "prompt": "检查 THP 透明大页状态", "should_trigger": false, "note": "routes to kptools-os-collector" }
+  ]
+}

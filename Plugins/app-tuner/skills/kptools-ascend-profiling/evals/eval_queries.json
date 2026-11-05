@@ -1,0 +1,13 @@
+{
+  "skill_name": "kptools-ascend-profiling",
+  "queries": [
+    { "id": "AQQ-01", "prompt": "分析 vLLM 服务的 NPU 算子执行时间", "should_trigger": true, "note": "operator profiling" },
+    { "id": "AQQ-02", "prompt": "看看 HCCL allreduce 通信耗时", "should_trigger": true, "note": "HCCL / Communication domain" },
+    { "id": "AQQ-03", "prompt": "训练每个 step 耗时分解一下", "should_trigger": true, "note": "step trace" },
+    { "id": "AQQ-04", "prompt": "采集 CPU-NPU 异构 trace 看流水线", "should_trigger": true, "note": "heterogeneous trace" },
+    { "id": "AQQ-05", "prompt": "用 MS Service Profiler 分析服务框架", "should_trigger": true, "note": "explicit tool" },
+    { "id": "NQ-01", "prompt": "看看 NPU 利用率和 HBM 占用", "should_trigger": false, "note": "routes to kptools-ascend-smi" },
+    { "id": "NQ-02", "prompt": "查一下 NPU 间互联链路状态", "should_trigger": false, "note": "routes to kptools-ascend-hccn" },
+    { "id": "NQ-03", "prompt": "给这个 Python 进程采火焰图", "should_trigger": false, "note": "routes to kptools-py-spy" }
+  ]
+}

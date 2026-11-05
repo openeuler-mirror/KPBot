@@ -1,0 +1,57 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 ascend-vllm-profiler 分析 NPU 推理 trace
+#
+# 拉取与测试方法（人类可读）：
+#   docker build --network host -f skills/ascend-vllm-profiler/cases/agent-analyze-vllm-trace/Dockerfile \
+#       -t kpbot/app-tuner-agent-analyze-vllm-trace:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。输入为确定性合成的 torch_npu trace_view.json（chrome trace，
+# 含 Overlap Analysis 四分类、ProfilerStep#、python_function 栈、AI 内核与 hcom 内核），
+# 考察 agent 能否用 skill 的 build_index/query 工作流精确回答四分类占比问题，
+# 并与 gen_trace.py 同步产出的 ground truth 对照（±0.5pp 容差）。
+# with/without 唯一差异是 skill 与 prompt 是否提及 skill。
+
+name: agent-analyze-vllm-trace
+skill: ascend-vllm-profiler
+tier: agent
+
+image: kpbot/app-tuner-agent-analyze-vllm-trace:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: accuracy
+  uplift: accuracy_with / accuracy_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/ascend-vllm-profiler/cases/agent-analyze-vllm-trace/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时挂载）
+  - opencode auth.json（运行时挂载）
+  - 容器可访问 deepseek API（必要时 --network host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+  TOLERANCE_PP: 0.5            # 每字段占比容差（百分点）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: analysis_correct
+    expect: 1

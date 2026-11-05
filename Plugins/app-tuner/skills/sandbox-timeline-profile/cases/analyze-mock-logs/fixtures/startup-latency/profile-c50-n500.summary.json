@@ -1,0 +1,1 @@
+{"case":"profile-c50-n500","concurrency":2,"requests":2,"bench_exit":0,"successful":2,"errors":0,"success_rate":1,"avg_ms":110,"min_ms":100,"p95_ms":120,"max_ms":120,"total_time_s":0.5,"throughput_qps":4}

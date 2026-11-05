@@ -1,0 +1,35 @@
+# 用例：tier A 纯逻辑 mock —— 用合成组件日志验证 analyze_c50_profile.mjs 的阶段统计正确性
+#
+# 运行方法（人类可读）：
+#   bash Plugins/app-tuner/skills/sandbox-timeline-profile/cases/analyze-mock-logs/run.sh
+#
+# 说明：tier A。不依赖 CubeSandbox 真机——fixtures/ 下是手工合成的
+# cubelet/shim/master delta 日志与 benchmark 报告（2 个实例 sb-001/sb-002，
+# 耗时值已知），驱动 analyze 脚本后对 stage-latency.csv 与 analysis.json
+# 做 17 项断言（阶段存在性、avg 手算值、父子拓扑、CreateContainer 子阶段派生指标）。
+# 阶段 1 数据采集（run_c50_profile.sh）需 CubeSandbox 真机，属 tier C，不在本用例覆盖。
+
+name: analyze-mock-logs
+skill: sandbox-timeline-profile
+tier: A
+
+entrypoint: ["bash", "cases/analyze-mock-logs/run.sh"]
+
+env_requires: []                        # 仅需 node + python3（标准库）
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_passed
+    expect: 17
+
+# tier C（真机采集）待办：run_c50_profile.sh 端到端用例需声明 CubeSandbox
+# 组件运行、cube-bench 二进制、bpftrace 等前置，按 case-spec「真机项可 SKIP」处理。

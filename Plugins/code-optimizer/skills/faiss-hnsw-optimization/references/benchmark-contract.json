@@ -1,0 +1,168 @@
+{
+  "schema_version": "faiss-benchmark-contract.v1",
+  "algorithm": "hnsw",
+  "faiss_version": "<detected-faiss-version>",
+  "note": "定义需记录的字段和可比性规则；实际能力、默认值与正式冻结值从目标源码/索引/测试程序确认，保存到run_dir/manifest.json。可选扩展不存在时记录不适用。",
+  "baseline_id": "<source-patches-build-identity>",
+  "patches": {
+    "note": "记录基线实际包含的补丁及SHA256；未提供或不存在时不预设补丁。"
+  },
+  "source_repo": "<faiss-source-repo>",
+  "sra_test_registration": "hnsw",
+  "sra_test_repo": "<test-adapter-repo-if-used>",
+  "build_target": "make hnsw_test",
+  "contract_version": 2,
+  "index_params": {
+    "k_f": {
+      "kind": "build",
+      "frozen": true,
+      "note": "HNSW M (IndexHNSWFlat(d, k_f, metric) ctor 2nd arg)；逐数据集冻结值记录于本轮 manifest"
+    },
+    "efc": {
+      "kind": "build",
+      "frozen": true,
+      "note": "hnsw.efConstruction；逐数据集冻结值记录于本轮 manifest"
+    },
+    "metric": {
+      "kind": "build",
+      "frozen": true,
+      "note": "L2 or IP；harness 对非 L2 归一化 xb/xq"
+    },
+    "save_or_load": {
+      "kind": "build",
+      "frozen": true,
+      "default": "load",
+      "note": "load 模式 = 从冻结索引集 read_index（不重建、图实例确定、跨库 query-path-only 候选 hits 位级一致）；save 模式 = 每轮重建（多线程 add 非确定性带来 recall 抖动，掩盖 recall 归因）。两种模式的 QPS 不可互相比较（含 BFS permute 布局效应）；比较不得混用 save 与 load 模式；load 模式下 hits 任何差异 = query 路径语义变化，需预先声明，否则 REJECT-class"
+    },
+    "quant_bits": {
+      "kind": "build",
+      "frozen": true,
+      "default": 32,
+      "note": "可选存储精度字段；从实际storage或扩展配置确认，无该字段时记不适用。纯实现对照保持存储精度不变。"
+    },
+    "index_path": {
+      "kind": "build",
+      "frozen": true,
+      "default": null,
+      "note": "load 模式冻结索引集路径：本轮逐数据集记录于 manifest（含各索引文件 sha256，A/B 两臂加载同一文件保证公平；索引文件不得在对照期间被覆盖）"
+    }
+  },
+  "query_params": {
+    "efs": {
+      "kind": "query",
+      "frozen": true,
+      "note": "SearchParametersHNSW.efSearch；逐数据集冻结值记录于本轮 manifest"
+    },
+    "top_k": {
+      "kind": "query",
+      "frozen": true,
+      "default": 10
+    },
+    "num_threads": {
+      "kind": "query",
+      "frozen": true,
+      "default": null,
+      "note": "本轮冻结值记录于 manifest；须与绑核方案一致"
+    },
+    "batch_mode": {
+      "kind": "query",
+      "frozen": true,
+      "default": false,
+      "note": "记录实际单查询/批量API与并行层次；检查worker/OpenMP是否重复计算或产生数据竞争。"
+    },
+    "batch_size": {
+      "kind": "query",
+      "frozen": true,
+      "default": 100
+    },
+    "nloop": {
+      "kind": "query",
+      "frozen": true,
+      "default": 5
+    }
+  },
+  "scheduling_params": {
+    "pin_threads": {
+      "kind": "scheduling",
+      "frozen": true,
+      "note": "是否逐worker绑定以及实际CPU集合按当前资源方案记录，不预设线程数量或CPU编号。"
+    },
+    "worker_omp_team": {
+      "kind": "scheduling",
+      "frozen": true,
+      "note": "每 worker 线程 omp_set_num_threads(1)；索引构建（add）使用 numactl mask 下的默认 OMP team"
+    }
+  },
+  "environment_params": {
+    "affinity": {
+      "kind": "environment",
+      "frozen": true,
+      "default": null,
+      "note": "绑核方案由本轮环境冻结：numactl/taskset 完整命令写入 run_dir/manifest.json；test.sh 与任何单独逐数据集运行都必须使用同一绑核"
+    },
+    "compiler": {
+      "kind": "environment",
+      "frozen": true,
+      "note": "编译器版本与 ccache 包装一并记录于 manifest"
+    },
+    "openmp": {
+      "kind": "environment",
+      "frozen": true
+    },
+    "blas": {
+      "kind": "environment",
+      "frozen": true,
+      "note": "libfaiss 与 harness 各自链接的 BLAS 一并记录；BLAS 不在 HNSW n=1 query 路径上"
+    },
+    "march": {
+      "kind": "environment",
+      "frozen": true,
+      "default": null,
+      "note": "记录目标平台、实际ISA/编译flags和向量长度设置，A/B公共条件一致。"
+    },
+    "krl_env_macro": {
+      "kind": "environment",
+      "frozen": false,
+      "default": null,
+      "note": "兼容字段名：记录实际构建特性宏及可选后端。公共宏保持一致，本次候选涉及的宏可不同；两侧实际值分别记录。不预设后端存在。"
+    },
+    "libfaiss_sha256": {
+      "kind": "identity",
+      "frozen": false,
+      "default": null,
+      "note": "构建产物身份：A/B 两臂分别记录各自构建的 libfaiss.so sha256（两臂身份，不要求一致——candidate 改源码重新编译后哈希通常变化，属正常）；哈希须与各自 manifest 记录的源码/宏/构建配置对应"
+    }
+  },
+  "frozen_field_rules": {
+    "meaning": "所有适用的frozen:true字段在A/B逐项一致；身份与候选宏分别记录，公共条件变化则建立新实验。",
+    "drift_check": "CP2 建立基线与 CP6 正式对照前至少各复核一次冻结字段，复核结果写入 manifest.json / PROFILE-HANDOFF.json",
+    "record": "实际冻结值记录在本次manifest；示例仅演示字段形状。",
+    "baseline_identity": "从当前参考源码、补丁和构建产物确认身份，核对其与manifest一致。",
+    "maturity_gate": "性能结论以本轮 CP6 ABBA 证据判定（CP7）；无证据不得给 accepted/已提升结论",
+    "recall_gate": "load 模式下 query-path-only 候选必须逐数据集复现 baseline hits（位级一致）；任何偏差 = 语义变化（未预先声明即 REJECT-class）",
+    "scope": "不用降低 recall 或调整冻结参数冒充实现收益；recall 门禁见 vector-experiment-methodology"
+  },
+  "representative_frozen_values_example": {
+    "_note": "合成字段示例，不是推荐配置、冻结值或测量结果。",
+    "<dataset-a-angular>": {
+      "metric": "IP",
+      "k_f": 32,
+      "efc": 200,
+      "efs": 64,
+      "top_k": 10,
+      "num_threads": 4,
+      "save_or_load": "load"
+    },
+    "<dataset-b-euclidean>": {
+      "metric": "L2",
+      "k_f": 16,
+      "efc": 200,
+      "efs": 96,
+      "top_k": 10,
+      "num_threads": 4,
+      "save_or_load": "load"
+    }
+  },
+  "qps_metric": "<verified-throughput-field-formula-and-aggregation>",
+  "recall_metric": "Recall@k：按实际ground truth和命中公式记录，k由实验声明。"
+}

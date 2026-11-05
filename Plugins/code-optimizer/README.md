@@ -6,7 +6,7 @@
 
 ## 概述
 
-code-optimizer 提供 50 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
+code-optimizer 提供 72 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
 
 - **性能分析**: 热点分析、火焰图解析、Top-down 分析、SPE 分析、调用上下文分析
 - **优化决策**: 意图解析、任务分解、优化策略决策、架构分析
@@ -14,6 +14,7 @@ code-optimizer 提供 50 个专业技能（skills），覆盖从热点分析到�
 - **平台支持**: Kunpeng-0xd01/0xd03/0xd06 微架构深度优化
 - **ARM 指令**: 完整的 ARM 指令集查询（Base/SVE/NEON/SME，共 1527+ 条指令）
 - **质量保障**: 对抗性审查、优化验证、修复代码
+- **Faiss 向量检索**: IVFPQ、FastScan、HNSW、RaBitQ 与 TurboQuant 的 CP0–CP7 优化工作流，配套构建、基线、采样、SIMD 和 UT/ST 验证
 - **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
 
 ## 诊断反馈流程
@@ -62,7 +63,7 @@ opencode
 ```
 
 安装后 `init.sh` 会自动：
-1. 将 50 个技能软链接到 `.opencode/skills/`
+1. 将适用于 OpenCode 的技能安装到 `.opencode/skills/`
 2. 生成 `AGENTS.md` 系统提示词
 
 验证安装：
@@ -125,6 +126,25 @@ ORT 技能的模型扫描脚本依赖 Python `onnx` 包；A/B 脚本需已有的
 TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运行依赖。
 
 这两个技能可独立调用，尚未接入通用代码优化流水线内部的策略路由。
+
+### Faiss 向量检索 (Vector Search)
+
+完整优化使用 [`faiss-optimize`](skills/faiss-optimize/SKILL.md)，由 `kpbot-code-optimizer` 根据库名与源码指纹路由。
+明确的 Faiss 请求优先进入 Faiss 工作流；仅出现 RaBitQ 等共享算法名时，需要区分目标库。
+
+| 技能 | 职责 |
+|------|------|
+| `faiss-optimize` | CP0–CP7 编排、五角色交接与实验状态管理 |
+| `faiss-source-analysis` / `faiss-algorithm-optimization` | 源码取证、算法路由与候选选择 |
+| `faiss-build` / `faiss-benchmark-baseline` / `faiss-perf-profile` | 构建清单、冻结基线与性能采样 |
+| `faiss-simd-optimization` | 根据实际后端与指令路径选择 SIMD 方案 |
+| `faiss-sra-test` | 使用 sra_test 作为可选测试适配器 |
+| `faiss-ivfpq-optimization` / `faiss-ivfpqfs-optimization` | IVFPQ 与 FastScan 的数据布局、热点和验证 |
+| `faiss-hnsw-optimization` / `faiss-rabitq-optimization` / `faiss-turboquant-optimization` | HNSW、RaBitQ 与 TurboQuant 的算法专项指导 |
+| `vector-experiment-methodology` / `vector-ut-st-validation` | 交错性能对照、正确性验证与报告契约 |
+
+安装沿用现有 `install.sh`，同时注册五个 Faiss 角色。运行产物保存在独立目录；算法、版本、数据和资源限制由当前任务决定。
+入门与安装验证见 [Faiss 集成说明](../../docs/faiss-integration.md)。
 
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |

@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kpbot-faiss-handoff.v1",
+  "title": "KPBot Faiss 角色 Handoff 契约",
+  "description": "Faiss工作流primary与角色间的请求、结果、阻塞和验收交接。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "handoff_type",
+    "produced_by",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kpbot-faiss-handoff.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "handoff_type": {
+      "enum": [
+        "analysis-request",
+        "analysis-result",
+        "baseline-request",
+        "profile-request",
+        "profile-result",
+        "plan-request",
+        "candidate-plan",
+        "implement-request",
+        "implement-result",
+        "abba-request",
+        "abba-result",
+        "review-request",
+        "review-result",
+        "blocker"
+      ]
+    },
+    "produced_by": {
+      "enum": [
+        "primary",
+        "faiss-analyzer",
+        "faiss-profiler",
+        "faiss-candidate-planner",
+        "faiss-implementer",
+        "faiss-reviewer"
+      ]
+    },
+    "intended_for": {
+      "enum": [
+        "primary",
+        "faiss-analyzer",
+        "faiss-profiler",
+        "faiss-candidate-planner",
+        "faiss-implementer",
+        "faiss-reviewer",
+        "user"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "summary"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "本 handoff 的任务/结果摘要"
+        },
+        "fields": {
+          "type": "object",
+          "description": "自由字段（请求参数或结果索引），键名语义由角色契约定义"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "相对 run_dir 的产物路径，禁止绝对路径与 ../"
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "required": [
+        "blocker_type",
+        "description"
+      ],
+      "properties": {
+        "blocker_type": {
+          "enum": [
+            "env",
+            "source",
+            "dataset",
+            "build",
+            "test",
+            "evidence",
+            "authorization"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "suggested_action": {
+          "type": "string"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": [
+        "verdict"
+      ],
+      "properties": {
+        "verdict": {
+          "enum": [
+            "ACCEPT",
+            "ACCEPT_WITH_NOTES",
+            "REJECT",
+            "INCONCLUSIVE",
+            "REWORK"
+          ]
+        },
+        "return_to": {
+          "enum": [
+            "CP3",
+            "CP4",
+            "CP5",
+            "CP6"
+          ],
+          "description": "仅 REWORK 必填：回退目标阶段"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "required_actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "仅 REWORK 必填：可执行修复项"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "handoff_type": {
+            "const": "blocker"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "blocker"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "review": {
+            "properties": {
+              "verdict": {
+                "const": "REWORK"
+              }
+            },
+            "required": [
+              "verdict"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "review": {
+            "required": [
+              "return_to",
+              "reason",
+              "required_actions"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff_type": {
+            "const": "review-result"
+          }
+        },
+        "required": [
+          "handoff_type"
+        ]
+      },
+      "then": {
+        "required": [
+          "review"
+        ]
+      }
+    }
+  ]
+}
