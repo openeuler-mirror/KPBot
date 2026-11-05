@@ -44,6 +44,26 @@
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["openwiki", "wiki", "documentation", "docs", "knowledge", "agent-docs", "sync", "mirror", "gitcode", "gitee", "github", "automation"]
+    },
+    {
+      "name": "kunpeng-knowledge",
+      "description": "通过 WeKnora Wiki 只读检索鲲鹏、ARM、Linux 与应用调优知识，并保留来源依据",
+      "author": {
+        "name": "Kunpeng Acceleration Team"
+      },
+      "category": "documentation",
+      "source": "./Plugins/public/kunpeng-knowledge",
+      "version": "1.0.0",
+      "platforms": [
+        "claude",
+        "opencode"
+      ],
+      "tags": [
+        "kunpeng",
+        "knowledge",
+        "wiki",
+        "weknora"
+      ]
     }
   ]
 }

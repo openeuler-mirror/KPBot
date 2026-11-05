@@ -1,0 +1,13 @@
+{
+  "skill_name": "kunpeng-knowledge",
+  "queries": [
+    {"id": "KQ-01", "prompt": "从知识库查一下 mmap 延迟清零，给出来源", "should_trigger": true},
+    {"id": "KQ-02", "prompt": "在 WeKnora Wiki 找鲲鹏 NUMA 调优资料", "should_trigger": true},
+    {"id": "KQ-03", "prompt": "读取刚才搜索结果中的 Wiki 页面", "should_trigger": true},
+    {"id": "KQ-04", "prompt": "为 app-tuner 从知识库查找 openGauss 调优依据", "should_trigger": true},
+    {"id": "KN-01", "prompt": "采集当前服务器 CPU 利用率", "should_trigger": false},
+    {"id": "KN-02", "prompt": "修改服务器 NUMA 配置并运行性能测试", "should_trigger": false},
+    {"id": "KN-03", "prompt": "往知识库上传或删除文档", "should_trigger": false},
+    {"id": "KN-04", "prompt": "为当前代码仓生成 OpenWiki 文档", "should_trigger": false}
+  ]
+}
