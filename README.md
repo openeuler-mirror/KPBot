@@ -9,6 +9,7 @@
 
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
+- **2026/11/05** — **app-tuner** 新增 `nginx-optimization` SKILL，覆盖鲲鹏平台 nginx 场景的 L1 环境层（IRQ 绑核/多队列）、L2 配置层（http/https × 长/短连接四场景模板）、L3 加速层（KAL OpenSSL/KAE/tcmalloc）分层调优，含火焰图热点对策与压测验证纪律。
 - **2026/10/12** — **code-optimizer** 扩展 5 个知识型 SKILL 的 Rust 支持，覆盖 Rust 热点代码的操作融合、精度变换、特例快路径与性能分析等优化需求。（[!72](https://gitcode.com/openeuler/KPBot/pull/72)）
 - **2026/10/12** — **app-tuner** 新增昇腾 NPU 状态与 HCCN 网络采集 SKILL，并整合鲲鹏 + 昇腾场景的绑核、Host 内存分配、编译打包和应用配置经验，覆盖 vLLM 推理与 torchtitan-npu 训练调优。（[!68](https://gitcode.com/openeuler/KPBot/pull/68)、[!58](https://gitcode.com/openeuler/KPBot/pull/58)、[!56](https://gitcode.com/openeuler/KPBot/pull/56)、[!47](https://gitcode.com/openeuler/KPBot/pull/47)、[!27](https://gitcode.com/openeuler/KPBot/pull/27)）
 - **2026/10/12** — **app-tuner** 新增 nmon、进程与网络采集 SKILL，并扩展 DevKit Java 性能分析，覆盖服务器应用的 CPU、内存、I/O、网络及 Java 热点诊断。（[!60](https://gitcode.com/openeuler/KPBot/pull/60)、[!34](https://gitcode.com/openeuler/KPBot/pull/34)）
