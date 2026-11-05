@@ -126,6 +126,8 @@ for mode in with without; do
         docker cp "${cid}":/workspace/results/trace_summary.json "${SAVE_DIR}/${mode}.trace_summary.json" 2>/dev/null || true
         docker cp "${cid}":/workspace/results/opencode.log "${SAVE_DIR}/${mode}.opencode.log" 2>/dev/null || true
         docker cp "${cid}":/workspace/opt/pressure.json "${SAVE_DIR}/${mode}.pressure.json" 2>/dev/null || true
+        docker cp "${cid}":/workspace/results/reference.json "${SAVE_DIR}/${mode}.reference.json" 2>/dev/null || true
+        docker cp "${cid}":/workspace/results/provenance.json "${SAVE_DIR}/${mode}.provenance.json" 2>/dev/null || true
     fi
 
     docker rm "${cid}" >/dev/null
@@ -137,7 +139,8 @@ python3 - "${TMP}" <<'PY'
 import json, os, sys
 tmp = sys.argv[1]
 keys = ["skill_mode", "exit", "success", "language_rust", "source_kind_rust_intrinsics",
-        "pressure_level_valid", "skills_invoked"]
+        "pressure_level_valid", "function_match", "counts_sane", "match_level",
+        "skills_invoked"]
 rows = []
 for m in ("with", "without"):
     d = {}

@@ -9,9 +9,17 @@
 - 同短路径多候选 first-match（首命中即止）；
 - 匹配失败时错误信息列出候选标签（上限 10 + 计数）。
 
+对应 PR #95 review round 2 修复（language/source_kind 产物推导）：
+- derive_language_and_source_kind：rust 汇编→rust/rust_intrinsics、c 汇编→
+  c_cpp/assembly、含 # APP 包裹段→rust_asm；
+- CLI --language/--source-kind 期望值语义：与推导矛盾即报错退出（fail-closed，
+  报错含 expected/derived 两值）；缺省时推导值填输出字段（语言/来源不再自报）。
+
 fixture fixtures/synth.s 与远端验证用合成汇编同源
 （标签 _ZN6kernel11microkernel7fma_4x417h0123456789abcdefE）。
 """
+import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -175,6 +183,96 @@ def test_c_analysis_unchanged():
         assert "available labels: [c_kernel]" in r2.error_message
 
 
+def test_derive_language_and_source_kind():
+    # 产物推导（PR #95 review-2 修复）：language/source_kind 从汇编文本推导，不再取自报
+    rust_lines = FIXTURE.read_text(encoding="utf-8").splitlines()
+    assert spill.derive_language_and_source_kind(rust_lines) == ("rust", "rust_intrinsics")
+    c_lines = (TEST_DIR / "fixtures" / "c_plain.s").read_text(encoding="utf-8").splitlines()
+    assert spill.derive_language_and_source_kind(c_lines) == ("c_cpp", "assembly")
+    asm_lines = (TEST_DIR / "fixtures" / "rust_inline_asm.s").read_text(encoding="utf-8").splitlines()
+    assert spill.derive_language_and_source_kind(asm_lines) == ("rust", "rust_asm")
+    # # APP 无 # NO_APP 不构成包裹段（半开不算 rust_asm）
+    half_open = [line for line in asm_lines if "# NO_APP" not in line]
+    assert spill.derive_language_and_source_kind(half_open) == ("rust", "rust_intrinsics")
+    # _ZN 前缀但无 17h<16 位十六进制 hash 段（C++ Itanium 嵌套名形态）不算 rust 符号
+    assert spill.derive_language_and_source_kind(["_ZN4calc3sumEi:"]) == ("c_cpp", "assembly")
+    # hash 必须恰为 16 位十六进制（15 位不命中）
+    assert spill.derive_language_and_source_kind(["_ZN4calc3sum17habcd01234567890E:"]) == \
+        ("c_cpp", "assembly")
+    assert spill.derive_language_and_source_kind(["_ZN4calc3sum17habcd0123456789efE:"]) == \
+        ("rust", "rust_intrinsics")
+    # C 的 asm() 内联块同样带 # APP/# NO_APP 标记，但无 rust 符号 → C 家族 assembly
+    c_with_app = list(c_lines[:2]) + ["\t# APP", "\tfadd v0.4s, v0.4s, v1.4s", "\t# NO_APP"] + list(c_lines[2:])
+    assert spill.derive_language_and_source_kind(c_with_app) == ("c_cpp", "assembly")
+
+
+def _run_spill_cli(*extra):
+    cmd = [sys.executable, str(SCRIPTS_DIR / "analyze_assembly_spill.py"),
+           "--asm", str(FIXTURE)] + list(extra)
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+
+
+def test_cli_language_expectation_fail_closed():
+    # CLI 期望值与推导矛盾 → 报错退出（fail-closed，报错含 expected 与 derived 两值）
+    p = _run_spill_cli("--language", "c_cpp")
+    assert p.returncode == 1, (p.returncode, p.stdout, p.stderr)
+    result = json.loads(p.stdout)["register_pressure_result"]
+    assert result["success"] is False
+    assert "expected=c_cpp" in result["error_message"], result["error_message"]
+    assert "derived=rust" in result["error_message"], result["error_message"]
+    # --source-kind 同理（旧自报值 assembly 与推导 rust_intrinsics 矛盾即拒）
+    p = _run_spill_cli("--source-kind", "assembly")
+    assert p.returncode == 1, (p.returncode, p.stdout, p.stderr)
+    result = json.loads(p.stdout)["register_pressure_result"]
+    assert result["success"] is False
+    assert "expected=assembly" in result["error_message"], result["error_message"]
+    assert "derived=rust_intrinsics" in result["error_message"], result["error_message"]
+
+
+def test_cli_derived_values_fill_output():
+    # CLI 缺省 → 推导值入输出字段；期望与推导一致 → cli_verified 溯源
+    p = _run_spill_cli()
+    assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+    result = json.loads(p.stdout)["register_pressure_result"]
+    assert result["language"] == "rust"
+    assert result["source_kind"] == "rust_intrinsics"
+    assert result["language_source"] == "derived"
+    assert result["source_kind_source"] == "derived"
+    # 提供且与推导一致：通过校验并标注 cli_verified
+    p = _run_spill_cli("--language", "rust", "--source-kind", "rust_intrinsics")
+    assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+    result = json.loads(p.stdout)["register_pressure_result"]
+    assert result["language"] == "rust" and result["source_kind"] == "rust_intrinsics"
+    assert result["language_source"] == "cli_verified"
+    assert result["source_kind_source"] == "cli_verified"
+
+
+def test_cli_c_side_source_kind_labels():
+    # C 侧无文本特征标签（家族校验）：C 汇编上 c_intrinsics/inline_asm 通过并照记标签；
+    # rust 汇编上提供即 fail-closed（derived=rust_intrinsics）
+    c_asm = str(TEST_DIR / "fixtures" / "c_plain.s")
+    def run_c(*extra):
+        cmd = [sys.executable, str(SCRIPTS_DIR / "analyze_assembly_spill.py"),
+               "--asm", c_asm] + list(extra)
+        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    p = run_c("--source-kind", "c_intrinsics")
+    assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+    r = json.loads(p.stdout)["register_pressure_result"]
+    assert r["source_kind"] == "c_intrinsics", r
+    assert r["source_kind_source"] == "cli_verified", r
+    assert r["language"] == "c_cpp" and r["success"] is True, r
+    p = run_c("--source-kind", "inline_asm")
+    assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+    r = json.loads(p.stdout)["register_pressure_result"]
+    assert r["source_kind"] == "inline_asm" and r["source_kind_source"] == "cli_verified", r
+    p = _run_spill_cli("--source-kind", "c_intrinsics")
+    assert p.returncode == 1, (p.returncode, p.stdout, p.stderr)
+    r = json.loads(p.stdout)["register_pressure_result"]
+    assert r["success"] is False
+    assert "expected=c_intrinsics" in r["error_message"], r["error_message"]
+    assert "derived=rust_intrinsics" in r["error_message"], r["error_message"]
+
+
 def main():
     groups = [
         test_demangle_helpers,
@@ -186,6 +284,10 @@ def main():
         test_multi_candidate_first_match,
         test_match_failure_lists_candidates,
         test_c_analysis_unchanged,
+        test_derive_language_and_source_kind,
+        test_cli_language_expectation_fail_closed,
+        test_cli_derived_values_fill_output,
+        test_cli_c_side_source_kind_labels,
     ]
     for group in groups:
         run_group(group)

@@ -195,6 +195,43 @@ def rust_label_matches(stripped_label: str, function: str) -> bool:
     return False
 
 
+# Rust legacy mangled symbol shape, used to derive the artifact's language and
+# source kind from the assembly text itself (PR #95 review-2 fix: these output
+# fields must describe the analyzed artifact, not a caller's self-report).
+RUST_SYMBOL_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b_ZN(?:\d+[A-Za-z0-9_.$]+)+17h[0-9a-f]{16}E\b")
+# gcc/clang/rustc wrap inline-asm blocks in "# APP" ... "# NO_APP" markers.
+APP_LINE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*#\s*APP\s*$")
+NO_APP_LINE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*#\s*NO_APP\s*$")
+# C-side source-kind labels with no textual signature of their own: they cannot
+# be told apart from plain assembly by text inspection, so as expectations they
+# are only family-checked (accepted on rust-free artifacts, rejected on rust asm).
+C_SIDE_SOURCE_KINDS: Final[frozenset[str]] = frozenset({"c_intrinsics", "inline_asm"})
+
+
+def derive_language_and_source_kind(lines: list[str]) -> tuple[str, str]:
+    """Derive (language, source_kind) from the analyzed assembly text.
+
+    language: any Rust legacy mangled symbol (_ZN...17h<16-hex>E) -> "rust",
+    otherwise "c_cpp". source_kind: Rust symbols plus a "# APP" / "# NO_APP"
+    wrapped inline-asm section -> "rust_asm"; Rust symbols without such a
+    section -> "rust_intrinsics"; no Rust symbols -> "assembly" (C asm()
+    blocks also carry APP markers, so APP alone must not imply rust_asm).
+    """
+
+    has_rust_symbol = any(RUST_SYMBOL_RE.search(line) for line in lines)
+    has_app_section = (any(APP_LINE_RE.match(line) for line in lines)
+                       and any(NO_APP_LINE_RE.match(line) for line in lines))
+    if has_rust_symbol and has_app_section:
+        source_kind = "rust_asm"
+    elif has_rust_symbol:
+        source_kind = "rust_intrinsics"
+    else:
+        source_kind = "assembly"
+    language = "rust" if has_rust_symbol else "c_cpp"
+    return language, source_kind
+
+
 def label_matches(line: str, function: str) -> bool:
     """Check if a line defines the requested function label."""
 
@@ -399,16 +436,53 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-kind",
         choices=("c_intrinsics", "rust_intrinsics", "rust_asm", "inline_asm", "assembly"),
-        default="assembly",
+        default=None,
+        help="Expected source kind of the analyzed artifact. When provided it is "
+             "verified against the kind derived from the assembly text; a mismatch "
+             "exits with an error naming both values. Omit to use the derived value.",
     )
     parser.add_argument(
         "--language",
         choices=("c_cpp", "rust"),
-        default="c_cpp",
-        help="Source language of the analyzed artifact (for archiving context).",
+        default=None,
+        help="Expected source language of the analyzed artifact. Verified against "
+             "the value derived from the assembly text; a mismatch exits with an "
+             "error naming both values. Omit to use the derived value.",
     )
     parser.add_argument("--max-evidence", type=int, default=20)
     return parser.parse_args()
+
+
+def _expectation_failure(
+    asm_path: Path,
+    flag: str,
+    expected: str,
+    derived: str,
+    language: str,
+    source_kind: str,
+) -> RegisterPressureResult:
+    """Build the fail-closed result for a CLI expectation vs derivation mismatch."""
+
+    return RegisterPressureResult(
+        success=False,
+        asm_file=str(asm_path),
+        function=None,
+        source_kind=source_kind,
+        language=language,
+        spill_store_count=0,
+        spill_reload_count=0,
+        stack_access_count=0,
+        fma_count=0,
+        spill_per_fma=0.0,
+        pressure_level="unknown",
+        evidence=[],
+        recommendation=recommendation_for_level("unknown"),
+        error_message=(
+            "%s expects '%s' but the analyzed assembly derives '%s' "
+            "(expected=%s, derived=%s); omit the flag to use the derived value"
+            % (flag, expected, derived, expected, derived)
+        ),
+    )
 
 
 def main() -> int:
@@ -417,14 +491,46 @@ def main() -> int:
     args = parse_args()
     if args.max_evidence < 0:
         raise SystemExit("--max-evidence must be non-negative")
-    result = analyze_assembly(
-        Path(args.asm).expanduser(),
-        args.function,
-        args.source_kind,
-        args.max_evidence,
-        args.language,
-    )
+    asm_path = Path(args.asm).expanduser()
+
+    # --language / --source-kind are expectations verified against values derived
+    # from the analyzed assembly text (PR #95 review-2 fix). A mismatch is
+    # fail-closed; omitted flags use the derived values in the output fields.
+    language = args.language or "c_cpp"
+    source_kind = args.source_kind or "assembly"
+    language_source = "cli_verified" if args.language else "derived"
+    source_kind_source = "cli_verified" if args.source_kind else "derived"
+    try:
+        asm_text = asm_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        asm_text = None  # analyze_assembly() emits the structured failure below
+    if asm_text is not None:
+        derived_language, derived_kind = derive_language_and_source_kind(asm_text.splitlines())
+        for flag, expected, derived in (
+            ("--language", args.language, derived_language),
+            ("--source-kind", args.source_kind, derived_kind),
+        ):
+            if expected is None or expected == derived:
+                continue
+            # c_intrinsics/inline_asm carry no textual signature: accepted on
+            # C-family (rust-free) artifacts, rejected on rust artifacts.
+            if (flag == "--source-kind" and expected in C_SIDE_SOURCE_KINDS
+                    and derived == "assembly"):
+                continue
+            result = _expectation_failure(
+                asm_path, flag, expected, derived, derived_language, derived_kind)
+            payload = {"register_pressure_result": asdict(result)}
+            payload["register_pressure_result"]["language_source"] = language_source
+            payload["register_pressure_result"]["source_kind_source"] = source_kind_source
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 1
+        language = derived_language
+        source_kind = args.source_kind if args.source_kind else derived_kind
+
+    result = analyze_assembly(asm_path, args.function, source_kind, args.max_evidence, language)
     payload = {"register_pressure_result": asdict(result)}
+    payload["register_pressure_result"]["language_source"] = language_source
+    payload["register_pressure_result"]["source_kind_source"] = source_kind_source
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if result.success else 1
 

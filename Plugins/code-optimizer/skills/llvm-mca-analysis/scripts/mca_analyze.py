@@ -20,6 +20,9 @@ bottleneck 归因（资源压力 vs 数据依赖）和关键依赖序列。
   --binary <file> --function <name>   二进制/目标文件，llvm-objdump -d 反汇编后提取函数
   Rust legacy mangled 符号形如 _ZN4calc3sum17h<hash>E，函数匹配按剥离
   17h<hash>E 后缀后的前缀进行（--function 传 calc::sum 或 _ZN4calc3sum 均可命中）。
+  --source-language 语义：提供时=期望值，与汇编产物推导值（含 _ZN...17h<hash>E
+  符号→rust，否则 c_cpp）不一致即报错退出（fail-closed）；缺省时 input.source_language
+  填推导值（input.language_source 记录 derived/cli_verified 溯源）。
 
 输出：JSON 契约（含可读摘要 summary_text）。--text 仅打印可读摘要。
 """
@@ -318,6 +321,31 @@ def match_rust_label(label, func):
     return False
 
 
+# Rust legacy mangled 符号形状，用于从汇编文本反推源语言（PR #95 review-2 修复：
+# source_language 由被分析产物推导，不再取调用方自报值）。
+RUST_ASM_SYMBOL_RE = re.compile(r"\b_ZN(?:\d+[A-Za-z0-9_.$]+)+17h[0-9a-f]{16}E\b")
+
+
+def derive_source_language(asm_text):
+    """从汇编文本推导源语言：含 rust legacy mangled 符号（_ZN...17h<hash>E）→ rust，否则 c_cpp。"""
+
+    if asm_text and RUST_ASM_SYMBOL_RE.search(asm_text):
+        return "rust"
+    return "c_cpp"
+
+
+def check_source_language(cli_lang, derived, origin):
+    """fail-closed 校验：--source-language 提供值（期望）与汇编推导值不一致即 die。
+
+    报错信息同时给出 expected 与 derived 两个值；cli_lang 为 None（缺省）时直接放行。
+    """
+
+    if cli_lang is not None and cli_lang != derived:
+        die("--source-language 期望 '%s'，但%s推导源语言为 '%s'（expected=%s, derived=%s）。"
+            "请改用推导值，或省略 --source-language 由脚本自动推导并填入输出字段。"
+            % (cli_lang, origin, derived, cli_lang, derived))
+
+
 # rustc 不含 hip10c/hip11/hip12 等 LLVM 调度模型（clang 认、rustc 不认，
 # 传不识别的 cpu 名只会被忽略并告警）。rustc 侧单独映射：
 # - tsv110 rustc 原生支持；其余鲲鹏型号退 native（目标机本机编译=目标 cpu）。
@@ -553,13 +581,25 @@ def extract_function_from_objdump(disasm_text, func, language="c_cpp"):
 
 
 def get_assembly(args, mcpu):
-    """根据输入模式获取干净的汇编文本。返回 (asm_text, input_info)。"""
+    """根据输入模式获取干净的汇编文本。返回 (asm_text, input_info)。
+
+    source_language 语义（PR #95 review-2 修复）：--source-language 提供时=期望值，
+    脚本从被分析汇编文本推导实际值（含 _ZN...17h<hash>E 符号→rust，否则 c_cpp），
+    两者不一致即 die（fail-closed，报错含 expected/derived 两值）；缺省时输出字段
+    input.source_language 填推导值，并附 language_source 溯源（derived/cli_verified）。
+    推导在函数提取前的完整汇编/反汇编文本上进行（提取过程会剥掉符号标签行）。
+    """
+    cli_lang = getattr(args, "source_language", None)
     if args.asm:
         text, src = read_asm_input(args.asm)
+        derived = derive_source_language(text)
+        check_source_language(cli_lang, derived, "--asm 输入文本")
         return text, {"mode": "asm", "source": src, "function": None,
-                      "source_language": None}
+                      "source_language": derived,
+                      "language_source": "cli_verified" if cli_lang else "derived"}
     if args.source:
-        if getattr(args, "source_language", "c_cpp") == "rust":
+        # 编译器仍由 CLI 值决定（缺省 c_cpp 走 clang）；推导校验作用于编译产物全文
+        if (cli_lang or "c_cpp") == "rust":
             asm, ok, err = compile_rust_source_to_asm(
                 args.source, mcpu, args.cflags)
             if not ok:
@@ -570,24 +610,30 @@ def get_assembly(args, mcpu):
                 args.source, mcpu, args.cflags)
             if not ok:
                 die("源码编译失败:\n%s" % err)
+        derived = derive_source_language(asm)
+        check_source_language(cli_lang, derived, "编译产物")
         body, err = extract_function_from_compiler_asm(
-            asm, args.function, getattr(args, "source_language", "c_cpp"))
+            asm, args.function, cli_lang or "c_cpp")
         if err:
             die(err)
         return body, {"mode": "source", "source": args.source,
                       "function": args.function,
-                      "source_language": args.source_language}
+                      "source_language": derived,
+                      "language_source": "cli_verified" if cli_lang else "derived"}
     if args.binary:
         text, ok, err = disasm_binary(args.binary, mcpu)
         if not ok:
             die("反汇编失败:\n%s" % err)
+        derived = derive_source_language(text)
+        check_source_language(cli_lang, derived, "反汇编输出")
         body, err = extract_function_from_objdump(
-            text, args.function, getattr(args, "source_language", "c_cpp"))
+            text, args.function, cli_lang or "c_cpp")
         if err:
             die(err)
         return body, {"mode": "binary", "source": args.binary,
                       "function": args.function,
-                      "source_language": getattr(args, "source_language", None)}
+                      "source_language": derived,
+                      "language_source": "cli_verified" if cli_lang else "derived"}
     die("未指定输入：需提供 --asm / --source+--function / --binary+--function 之一")
 
 
@@ -901,8 +947,10 @@ def main():
                    help="二进制/目标文件（需配合 --function）")
     ap.add_argument("--function", help="目标函数名（--source/--binary 模式必填；Rust 场景支持 "
                      "calc::sum / _ZN4calc3sum 等 hash 容忍匹配）")
-    ap.add_argument("--source-language", choices=("c_cpp", "rust"), default="c_cpp",
-                    help="源码语言（--source 模式选择编译器，默认 c_cpp 用 clang；rust 用 rustc）")
+    ap.add_argument("--source-language", choices=("c_cpp", "rust"), default=None,
+                    help="源码语言期望值（--source 模式兼作编译器选择：rust 用 rustc，"
+                         "缺省走 clang）。提供时与汇编产物推导值核验，不一致即报错退出"
+                         "（fail-closed）；缺省时输出字段填推导值")
     ap.add_argument("--uarch",
                    help="微架构代号: hip08/0xd01, hip09/0xd02, hip10/0xd03, hip11/0xd22, hip12/0xd06")
     ap.add_argument("--iterations", type=int, default=100,

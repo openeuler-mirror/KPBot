@@ -7,10 +7,16 @@
 (ii) 唯一命中才过（同一裸名命中多个标签时报错列出全部）。
 同时回归既有形态：路径名/全路径/mangled 前缀/calc::sum 正控制/objdump 形态。
 
+对应 PR #95 review round 2 修复（source_language 产物推导）：
+- derive_source_language：rust 符号（_ZN...17h<hash>E）→rust，否则 c_cpp；
+- --asm 模式 CLI 契约：缺省 → 推导值填 input.source_language（language_source=
+  derived）；期望与推导一致 → cli_verified；矛盾 → die（报错含 expected/derived）。
+
 本机无 llvm-mca 时 CLI 在 preflight 即退出，此处直接调用 --source/--binary
 模式实际执行的匹配函数（mca_analyze.py 的 match_rust_label /
 extract_function_from_compiler_asm / extract_function_from_objdump，
-get_assembly 已把 source_language 传入 extract_*）。
+get_assembly 已把 source_language 传入 extract_*）。--asm 模式的推导契约
+不触工具链（读文件+推导即返回），同样直接函数级测试。
 """
 import sys
 from pathlib import Path
@@ -22,6 +28,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import mca_analyze as mca  # noqa: E402
 
 FIXTURE = TEST_DIR / "fixtures" / "synth2.s"
+C_FIXTURE = TEST_DIR / "fixtures" / "c_plain.s"
 LABEL2 = "_ZN6kernel7example7dot_f3217h0123456789abcdefE"
 ERR_CCPP_MISS = "在编译产物中找不到函数标签 'dot_f32:'"
 ERR_OBJDUMP_MISS = "在反汇编结果中找不到函数 '<dot_f32>:'"
@@ -213,6 +220,54 @@ def test_rustc_command_flags():
         mca.run_cmd = real_run_cmd
 
 
+def test_derive_source_language():
+    # 产物推导（PR #95 review-2 修复）：source_language 从汇编文本推导，不再取自报
+    assert mca.derive_source_language(read_fixture()) == "rust"
+    assert mca.derive_source_language(C_FIXTURE.read_text(encoding="utf-8")) == "c_cpp"
+    assert mca.derive_source_language("") == "c_cpp"
+    # 17h<hash> 段必须恰为 16 位十六进制；_ZN 前缀无 hash（C++ Itanium 形）不算 rust
+    assert mca.derive_source_language("_ZN4calc3sumEi:\n\tret\n") == "c_cpp"
+    assert mca.derive_source_language("_ZN4calc3sum17habcd0123456789efE:\n\tret\n") == "rust"
+    assert mca.derive_source_language("_ZN4calc3sum17habcd01234567890E:\n\tret\n") == "c_cpp"
+    # .globl 引用行带 mangled 符号同样可推导（真实 rustc 输出形态）
+    assert mca.derive_source_language(
+        "\t.globl _ZN6kernel4calc3dot17h0123456789abcdefE\n") == "rust"
+
+
+def test_source_language_cli_contract_asm_mode():
+    # --asm 模式 CLI 契约：缺省 → 推导值填 input.source_language（language_source=
+    # derived）；期望与推导一致 → cli_verified；矛盾 → die 且报错含 expected/derived
+    import argparse as _argparse
+    import contextlib
+    import io
+
+    def make_args(lang):
+        return _argparse.Namespace(asm=str(FIXTURE), source=None, binary=None,
+                                   function=None, source_language=lang, cflags=[])
+
+    _, info = mca.get_assembly(make_args(None), "tsv110")
+    assert info["source_language"] == "rust"
+    assert info["language_source"] == "derived"
+    _, info = mca.get_assembly(make_args("rust"), "tsv110")
+    assert info["source_language"] == "rust"
+    assert info["language_source"] == "cli_verified"
+    # c 汇编 fixture：推导 c_cpp，缺省与显式期望均通过
+    c_args = _argparse.Namespace(asm=str(C_FIXTURE), source=None, binary=None,
+                                 function=None, source_language=None, cflags=[])
+    _, info = mca.get_assembly(c_args, "tsv110")
+    assert info["source_language"] == "c_cpp" and info["language_source"] == "derived"
+    # 期望与推导矛盾 → die（fail-closed）
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            mca.get_assembly(make_args("c_cpp"), "tsv110")
+        raise AssertionError("expected SystemExit on --source-language mismatch")
+    except SystemExit:
+        pass
+    out = buf.getvalue()
+    assert "expected=c_cpp" in out and "derived=rust" in out, out
+
+
 def main():
     groups = [
         test_guard_rust_only,
@@ -224,6 +279,8 @@ def main():
         test_short_path_tail_alignment_regression,
         test_c_cpp_fast_path_unmangled,
         test_rustc_command_flags,
+        test_derive_source_language,
+        test_source_language_cli_contract_asm_mode,
     ]
     for group in groups:
         run_group(group)

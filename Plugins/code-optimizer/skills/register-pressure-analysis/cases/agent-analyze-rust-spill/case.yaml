@@ -19,7 +19,7 @@ ab:
   skill_enabled:
     with: true
     without: false
-  metric: analysis_correctness   # 分析类判据：产物 JSON 契约字段正确性（language=rust+source_kind=rust_intrinsics+pressure_level 合法），两臂同标准评分
+  metric: analysis_correctness   # 分析类判据：产物 JSON 契约字段正确性（language=rust+source_kind=rust_intrinsics+pressure_level 合法）+ harness 复算交叉核对（function 与 reference 一致、计数非负；pressure_level match_level 作 A/B 读数），两臂同标准评分
   uplift: with 臂 skills_invoked 含 register-pressure-analysis 且契约字段正确；without 臂不预设字段缺失，由 run_ab 客观对照汇总（分析脚本在镜像 /staging/skill 两臂同在，属公共条件；差异应来自 skill 指引）
 
 build:
@@ -59,4 +59,12 @@ assert:
   - type: json_field
     file: results/result.json
     field: pressure_level_valid
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: function_match
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: counts_sane
     expect: true
