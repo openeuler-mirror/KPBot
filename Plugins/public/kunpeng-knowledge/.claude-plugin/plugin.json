@@ -5,5 +5,5 @@
   "author": {"name": "Kunpeng Acceleration Team"},
   "license": "MulanPSL-2.0",
   "keywords": ["kunpeng", "knowledge", "wiki", "weknora"],
-  "platforms": ["claude", "opencode"]
+  "platforms": ["opencode"]
 }

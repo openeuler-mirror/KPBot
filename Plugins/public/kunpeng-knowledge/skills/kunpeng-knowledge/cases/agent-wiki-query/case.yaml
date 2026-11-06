@@ -1,11 +1,11 @@
 name: agent-wiki-query
 skill: kunpeng-knowledge
 tier: agent
-auth: runtime_env
+auth: opencode_oauth
 entrypoint: ["python3", "cases/agent-wiki-query/run.py"]
 env_requires:
   - 已使用 KPBot install.sh 在隔离项目安装 OpenCode skills
-  - OpenCode 1.19.5 或兼容版本
+  - OpenCode 1.19.5 或兼容版本，kpknow 已完成 OAuth 授权
   - Python 3.9+ 和可用的 bash
 env_vars:
   OPENCODE_BIN: opencode
@@ -13,8 +13,6 @@ env_vars:
   MODEL: deepseek/deepseek-flash
   KPBOT_TEST_SCENARIO: lookup # natural 测自然触发，empty 测无命中
   DEEPSEEK_API_KEY: runtime_only
-  WEKNORA_MCP_URL: runtime_only
-  WEKNORA_MCP_TOKEN: runtime_only
 assert:
   - type: exit_code
     expect: 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run against installed KPBot, with model and MCP secrets injected at runtime.
+"""Run against installed KPBot, with kpknow already authorized in OpenCode.
 
 Set OPENCODE_BIN, KPBot_TEST_PROJECT, MODEL and provider credentials in the
 environment. Run only against an isolated project. Results never contain keys.
@@ -24,7 +24,7 @@ def run():
         results = results / scenario
     results.mkdir(exist_ok=True, parents=True)
     secrets = [os.environ.get(name, "") for name in (
-        "DEEPSEEK_API_KEY", "WEKNORA_MCP_TOKEN"
+        "DEEPSEEK_API_KEY",
     )]
 
     def clean(text):
@@ -87,20 +87,14 @@ def run():
         and "kunpeng-knowledge" in json.dumps(part.get("state", {}))
         for part in tools
     )
-    commands = [
-        part.get("state", {}).get("input", {}).get("command", "")
-        for part in tools
-        if part.get("tool") == "bash"
-        and part.get("state", {}).get("status") == "completed"
-        and (
-            "<search_results" in part.get("state", {}).get("output", "")
-            or "<wiki_page" in part.get("state", {}).get("output", "")
-        )
+    completed = [
+        part for part in tools
+        if part.get("state", {}).get("status") == "completed"
     ]
-    search = next((i for i, cmd in enumerate(commands)
-                   if "query.py" in cmd and " search " in cmd), None)
-    read = next((i for i, cmd in enumerate(commands)
-                 if "query.py" in cmd and " read " in cmd), None)
+    search = next((i for i, part in enumerate(completed)
+                   if part.get("tool") == "kpknow_wiki_search"), None)
+    read = next((i for i, part in enumerate(completed)
+                 if part.get("tool") == "kpknow_wiki_read_page"), None)
     observed = search is not None and read is not None and search < read
     errors = any(
         '"type":"error"' in line.replace(" ", "")
@@ -113,7 +107,8 @@ def run():
     zero_hit_observed = any(
         '<search_results count="0"' in
         part.get("state", {}).get("output", "").replace("\\", "")
-        for part in tools
+        for part in completed
+        if part.get("tool") == "kpknow_wiki_search"
     )
     behavior = observed if scenario != "empty" else (
         search is not None and read is None and empty_reported

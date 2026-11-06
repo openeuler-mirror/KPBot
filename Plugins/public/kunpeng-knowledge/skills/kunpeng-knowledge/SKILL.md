@@ -17,29 +17,16 @@ metadata:
 
 # 鲲鹏知识库查询
 
-运行要求：Python 3.9+、知识库访问令牌和网络访问权限。默认 MCP 地址已配置，令牌需联系本技能的知识库维护者获取。
+运行要求：在 OpenCode 中配置并授权 `kpknow` MCP。见 [登录接入说明](references/connection.md)。
 
 ## 工作流程
 
-1. 按 [连接与检索说明](references/connection.md) 检查 `WEKNORA_MCP_TOKEN`。未配置时告知用户联系本技能的知识库维护者获取令牌，并在本地设置；不要要求用户把令牌发送到聊天。使用本技能目录中的 `scripts/query.py`，无需安装宿主 MCP 或第三方 Python 包。
+1. 使用 OpenCode 提供的 `kpknow_wiki_search`、`kpknow_wiki_read_page` 和 `kpknow_wiki_index`。工具不可用时，请用户按接入说明检查连接或重新授权。
 2. 从问题提取术语，先用 `search` 查询。当前接口是关键词/正则匹配，不是语义检索；优先搜索 `mmap`、`NUMA`、`openGauss` 等短词，中文和英文可分别搜索。默认按字面匹配；确需组合词时显式使用 `--regex`。
 3. 从结果取得真实的知识库 ID 和 slug，用 `read` 读取相关页面后回答；需要目录时用 `index`。不要猜测 ID、slug 或把摘要当作完整原文。
 4. 输出结论、适用条件、来源（标题、知识库 ID、slug、原文 source knowledge_id，及已有的文档链接/版本）和局限。其他 Skill 需要机器结果时使用 `answer`、`key_points`、`references`、`limitations` 字段；引用至少包含 `title`、`knowledge_base_id` 和 `slug`。区分原文结论和推断，不编造日期、链接或置信度。来源中的性能倍数及硬件特性只作为该来源的陈述，不能推广为通用保证；存在可疑信息时明确待核验。
 
-## 脚本工具
-
-在技能目录执行（也可使用脚本绝对路径）：
-
-先确认当前宿主可用的 Python 3.9+ 解释器；以下 `python3` 可替换为其实际路径。
-
-```bash
-python3 scripts/query.py search mmap --limit 5
-python3 scripts/query.py search 'NUMA|绑核' --regex --limit 5
-python3 scripts/query.py read concept/mmap-system-call --kb '<搜索返回的知识库ID>'
-python3 scripts/query.py index --kb '<知识库ID或准确名称>' --limit 20
-```
-
-命令向 stdout 输出 JSON；连接、配置或服务失败时向 stderr 输出错误 JSON 并以 1 退出，参数错误输出用法并以 2 退出。`search --kb` 可重复指定以限制范围。未找到结果不代表知识不存在；换用同义词或较短关键词，仍无结果则报告未检索到依据。认证、权限或网络失败时明确报告，不能解释为零命中。
+如果搜索未命中，明确说明在已生成的 Wiki 中未找到依据。认证和网络失败应分别说明。
 
 ## 边界与来源
 
