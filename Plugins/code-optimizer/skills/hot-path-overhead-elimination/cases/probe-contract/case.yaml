@@ -1,0 +1,42 @@
+# 用例：tier A —— hot-path-overhead-elimination 的分析脚本与输出契约
+#
+# 覆盖：
+#   scripts   value_distribution.py：直方图排序、top-1 占比、达到阈值的最小 k、
+#             集中/平坦/单一结果三种推荐分支、JSON shares 输入、数值分箱合并、
+#             缺失输入报错
+#             codegen_overhead_probe.py：直接调用计数与符号解析、stp 栈帧字节、叶子判定、
+#             条件早退识别、blr 间接调用区分；compare 模式的
+#             "被调消失 / 谓词进入调用方" 机械核对与反向失败
+#   skill     SKILL.md 不变量：frontmatter、六族配方齐备、路由正文不含库名、
+#             被引用的脚本与参考资料真实存在
+#   contract  输出对象字段齐备（hot_path_result / guard_completeness /
+#             codegen_expectation / fallback_preserved / error_message）
+#
+# 运行（在技能根目录下）：
+#   bash cases/probe-contract/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑，python3 标准库；无需编译器与外部仓库）。
+
+name: probe-contract
+skill: hot-path-overhead-elimination
+tier: A
+
+entrypoint: ["bash", "cases/probe-contract/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 30
