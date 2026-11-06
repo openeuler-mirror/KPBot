@@ -20,9 +20,9 @@ def run():
     scenario = os.environ.get("KPBOT_TEST_SCENARIO", "lookup")
     if scenario not in ("lookup", "natural", "empty"):
         raise ValueError("KPBOT_TEST_SCENARIO must be lookup, natural or empty")
-    if scenario != "lookup":
-        results = results / scenario
     results.mkdir(exist_ok=True, parents=True)
+    result_path = results / "result.json"
+    result_path.unlink(missing_ok=True)
     secrets = [os.environ.get(name, "") for name in (
         "DEEPSEEK_API_KEY",
     )]
@@ -127,7 +127,7 @@ def run():
         "limitations": "需人工复核回答来源与适用性；本用例不验证 Wiki 知识本身正确性",
     }
     (results / "answer.md").write_text("\n".join(final), encoding="utf-8")
-    (results / "result.json").write_text(
+    result_path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(json.dumps(result, ensure_ascii=False))

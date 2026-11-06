@@ -36,4 +36,6 @@ opencode mcp list
 
 ## 本地 Agent 验收
 
-在隔离项目安装 KPBot 的 OpenCode 技能，配置模型并完成上面的 OAuth 授权，再设置 `OPENCODE_BIN`、`KPBot_TEST_PROJECT` 和 `MODEL`，执行 `python3 cases/agent-wiki-query/run.py`。可用 `KPBOT_TEST_SCENARIO=natural` 测试自然触发，或用 `KPBOT_TEST_SCENARIO=empty` 测试无命中。运行结果保存在用例的 `results/`，由 Git 忽略。
+在隔离项目安装 KPBot 的 OpenCode 技能，配置模型并完成上面的 OAuth 授权，再设置 `OPENCODE_BIN`、`KPBot_TEST_PROJECT`（使用绝对路径）和 `MODEL`。进入 `cases/agent-wiki-query/` 后执行 `python3 run.py`。可用 `KPBOT_TEST_SCENARIO=natural` 测试自然触发，或用 `KPBOT_TEST_SCENARIO=empty` 测试无命中。
+
+入口和断言路径都相对于用例目录。每次运行将当前场景写入 `results/result.json`，由 Git 忽略。`lookup` 和 `natural` 检查搜索后读页，`empty` 检查零命中、未调用读页且回答明确说明无结果。三种场景均通过 `success` 字段报告各自断言的结果。
