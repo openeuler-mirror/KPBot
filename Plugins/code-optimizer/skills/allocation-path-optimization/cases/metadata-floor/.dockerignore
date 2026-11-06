@@ -1,0 +1,4 @@
+# Build artifacts and case results must never be baked into the image: a stale
+# results/result.json inside the image can make a failed run look green.
+build/
+results/
