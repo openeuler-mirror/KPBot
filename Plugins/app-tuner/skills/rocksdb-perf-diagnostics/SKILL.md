@@ -85,7 +85,7 @@ metadata:
 
 ### Phase 3 — 形成优化假设
 
-对每个候选改动写清楚:**改什么、预期哪个指标怎么变、代价是什么、怎么验证**。参数作用与代价见 `references/options-map.md`。
+对每个候选改动写清楚:**改什么、预期哪个指标怎么变、代价是什么、怎么验证**。参数作用与代价见 `references/options-map.md`;已沉淀的可复用手段(命中条件、确切参数、配置写法、生效范围、验证指标)见 `references/optimization-playbook.md`。
 
 选择原则:优先动**与已定位瓶颈直接相关**的参数;优先**可动态修改**的(`SetDBOptions` / `SetOptions`,C++ 与 Java 都有),避免重启;每次只选一个。
 
@@ -144,6 +144,7 @@ metadata:
 - `references/properties-tools.md` — DB properties 清单、EventListener、ThreadStatus、ColumnFamilyMetaData、ldb/sst_dump/db_bench。
 - `references/symptom-to-cause.md` — 症状 → 证据 → 病因 → 优化方向 对照表。
 - `references/options-map.md` — 参数按读/写/空间放大归类 + 代价与副作用。
+- `references/optimization-playbook.md` — 已知优化手段:命中条件、确切参数、配置写法、生效范围、代价、验证指标、源码依据。
 - `references/report-template.md` — 结构化诊断报告模板。
 
 ## 信息来源与置信度

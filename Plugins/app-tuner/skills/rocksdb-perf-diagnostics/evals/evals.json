@@ -46,6 +46,23 @@
         "报告包含结构化章节(如基本信息 / 观测 / 结论 / 变更 / 验证)",
         "没有在未授权情况下对真实数据库执行破坏性操作"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "我们的 RocksDB 是读密集型,key 有 8 字节公共前缀,点查 P99 高。请给出可以尝试的两个优化手段、确切的配置参数与配置写法、对已有 SST/memtable 是否生效、代价与验证指标。不要执行破坏性操作。",
+      "expected_output": "1) SST 用 prefix hash index:prefix_extractor=fixed:8/capped:8 + block_based_table_factory={index_type=kHashSearch;};必须设置 prefix_extractor;只对新 SST 生效,存量需 compaction 重写;读侧用 prefix_same_as_start,避免 total_order_seek。2) memtable prefix bloom:memtable_prefix_bloom_size_ratio>0(<=0.25),可选 memtable_whole_key_filtering=true;只对新 memtable 生效;Java 6.26 未暴露 whole-key。代价:内存/CPU/index 变大;验证:DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS、sst_dump 的 prefix_extractor_name。",
+      "files": [],
+      "expectations": [
+        "提到 prefix_extractor,并给出 fixed:8 或 capped:8 的具体写法",
+        "提到 block_based_table_factory={index_type=kHashSearch;} 或 index_type=kHashSearch",
+        "提到 memtable_prefix_bloom_size_ratio > 0 且不超过 0.25",
+        "提到 memtable_whole_key_filtering(可选),或说明 Java 6.26 未暴露该 memtable whole-key API",
+        "说明 kHashSearch 只对新写入的 SST 生效,已有 SST 需要 compaction/重写",
+        "说明 memtable prefix bloom 只对新 memtable 生效,需要新 memtable 或 flush/重启",
+        "提到读侧需配合前缀 seek(prefix_same_as_start,避免 total_order_seek)",
+        "给出至少两项验证指标(DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS、sst_dump 的 prefix_extractor_name)",
+        "没有建议未经授权的破坏性操作"
+      ]
     }
   ]
 }

@@ -49,10 +49,13 @@
 | `optimize_filters_for_hits` | false | 优化"大多数查找命中"的场景 | 只在命中率极高时有意义 |
 | `cache_index_and_filter_blocks` | 视配置 | index/filter 是否进 block cache | 开启可省内存但可能增加 miss |
 | `max_open_files` | -1 | 打开文件数上限 | -1 = 全开;受限环境需调整 |
-| `prefix_extractor` | 无 | 前缀 bloom / 前缀 seek 优化 | 只对前缀访问模式有效 |
+| `prefix_extractor` | 无 | 前缀 bloom / prefix hash index 的前提;`fixed:N` / `capped:N` | 只对前缀访问模式有效;变更后存量 SST 可能不匹配 |
+| `index_type`(`BlockBasedTableOptions`) | `kBinarySearch` | 设为 `kHashSearch` 用前缀 hash index 加速 SST 查找 | 需 `prefix_extractor`;只对新 SST 生效;index 可能变大 |
+| `memtable_prefix_bloom_size_ratio` | 0(关) | memtable prefix bloom 大小比例(>0 且 <=0.25) | 内存↑;只对新 memtable 生效;需 `prefix_extractor` |
+| `memtable_whole_key_filtering` | false | memtable 整 key bloom,点查降 CPU | 仅 ratio!=0 时生效;RocksJava 6.26 未暴露 |
 | `pin_l0_filter_and_index_blocks_in_cache` | false | L0 filter/index 常驻 | 内存换延迟 |
 
-读密集点的顺序通常是:`block_cache` → bloom/filter → 降层数/文件数(靠 compaction 组)→ 大 value 考虑 BlobDB。
+读密集点的顺序通常是:`block_cache` → bloom/filter → `prefix_extractor` + `index_type=kHashSearch`(SST)/ `memtable_prefix_bloom_size_ratio`(memtable)→ 降层数/文件数(靠 compaction 组)→ 大 value 考虑 BlobDB。具体配置与生效范围见 `references/optimization-playbook.md`。
 
 ## 四、IO / 同步 / 限速
 
