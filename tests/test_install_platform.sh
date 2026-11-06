@@ -102,6 +102,7 @@ check "installs app-tuner skills"             '[ -d "$CLAUDE_SKILLS/kpbot-app-tu
 check "excludes OpenCode-only knowledge skill" '[ ! -e "$CLAUDE_SKILLS/kunpeng-knowledge" ]'
 check "keeps claude-only drive skill"         '[ -d "$CLAUDE_SKILLS/drive-claude-optimize-pipeline" ]'
 check "keeps claude-only batch skill"         '[ -d "$CLAUDE_SKILLS/batch-drive-optimize-pipeline" ]'
+check "keeps claude-only media skill"         '[ -d "$CLAUDE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimize/SKILL.md" ]'
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
@@ -117,6 +118,7 @@ check "installs knowledge skill"              '[ -f "$OPENCODE_SKILLS/kunpeng-kn
 check "includes knowledge connection guide"    '[ -f "$OPENCODE_SKILLS/kunpeng-knowledge/references/connection.md" ]'
 check "excludes claude-only drive skill"      '[ ! -e "$OPENCODE_SKILLS/drive-claude-optimize-pipeline" ]'
 check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-drive-optimize-pipeline" ]'
+check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
 for role in analyzer profiler candidate-planner implementer reviewer; do
