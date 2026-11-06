@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer
-description: 鲲鹏性能优化流水线 - Subagent 编排器，也是场景专项优化的统一路由入口。当用户想要优化 C/C++/Rust 项目性能、分析热点函数、应用向量化、运行完整性能优化流程，或提到 DiskANN Rust/SSD/内存图、Faiss IVFPQ/FastScan/HNSW/RaBitQ/TurboQuant、TF 推理优化、ONNX Runtime attention、llama.cpp、搜推 DAG、VSAG 向量检索、BRGEMM/GEMM、哈希表、embedding lookup 去重等场景优化需求时触发。
+description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表与 embedding lookup 去重等专项优化。
 ---
 
 # 鲲鹏性能优化流水线
@@ -29,21 +29,14 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 2 | ORT attention 优化 | `ort-kdnn-attention-opt` | onnxruntime、ort、attention、kdnn、子图融合 | `onnxruntime/` 源码树；`onnxruntime_providers_*`；Attention 融合 kernel 源文件 |
 | 3 | llama.cpp Embedding 优化 | `kunpeng-llama-cpp-tuning` | llama.cpp、ggml、llm、embedding 推理 | `ggml*.c/.h`、`llama.h`；CMakeLists 含 GGML/LLAMA |
 | 4 | 搜推 DAG 全栈优化 | `sra-dag-tuning` | 搜推、搜索推荐、召回、排序、特征工程、dag | feature/recall/rank 模块、DAG 调度器、sparse 特征处理 |
-| 5 | VSAG 向量检索优化 | `vsag-rabitq-optimization` | vsag、rabitq、hgraph、ann、向量检索 | `vsag/` 源码树；RaBitQ/HGraph 符号；`vsag::` 命名空间 |
+| 5 | VSAG 向量检索优化 | `vsag-rabitq-optimization` | VSAG、VSAG HGraph | `vsag/` 源码树和 `vsag::` 命名空间 |
 | 6 | BRGEMM/GEMM 优化 | `brgemm-optimization` | brgemm、gemm、matmul、onednn、packb、prepack | oneDNN/`dnnl`；BRGEMM kernel；PackB/PrePack/blocked layout 代码 |
 | 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
-| 9 | Faiss 向量检索优化 | `faiss-optimize` | faiss、IndexIVFPQ、ivfpq、IndexIVFPQFastScan、ivfpqfs、pqfs、IndexHNSW、IndexRaBitQ、IndexIVFRaBitQ、TurboQuant | `faiss/IndexIVFPQ.cpp`、`faiss/IndexHNSW.cpp`；`faiss::` 命名空间；CMake 项目为 faiss |
-| 10 | DiskANN 向量检索优化 | `diskann-optimize` | diskann、DiskANN、SSD ANN、disk index | Cargo 工作区含 `diskann`/`diskann-disk`/`diskann-benchmark`；`diskann/` 或 `diskann-disk/` 源码 |
-| 11 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 9 | 向量数据库与向量检索优化 | `vector-search-optimize` | 向量数据库、向量检索、ANN、Faiss、DiskANN、IVFPQ、FastScan、HNSW、RaBitQ、TurboQuant、Vamana | 向量索引或检索服务入口；`faiss/`、`faiss::`、`diskann-disk` 或 `diskann-benchmark` 等库指纹 |
+| 10 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
-Faiss 路由优先级：输入明确指定 Faiss 或 Faiss 索引类时，优先交给 `faiss-optimize`；不得因 RaBitQ、ANN、向量检索等共享关键词转入 VSAG。只有算法名且无库名时，结合源码指纹区分 Faiss/VSAG；无法区分时再询问。用户已明确选择 Faiss 与算法时，视为场景已确认，直接执行接管协议，不重复展示场景菜单。
-
-Faiss 接管：将已知源码路径、算法、测试工具、数据集、外部 run_dir 和用户交互偏好传给 `faiss-optimize`；其 CP0–CP7 接管全部后续阶段，避免与本入口的通用优化流水线重复执行。未指定模式时遵循目标 Skill 的 collaboration 默认值。五个 `faiss-*` 角色由安装器从 `faiss-optimize/agents/` 注册，状态只由主协调者维护。
-
-DiskANN 路由优先级：输入明确指定 DiskANN 或源码指纹为 DiskANN 时，交给 `diskann-optimize`，不因 ANN、PQ、向量检索等共享词转入 Faiss/VSAG。用户已指定 DiskANN 与自动持续优化时，直接接管并继承 auto 模式，不重复展示场景或候选确认菜单。
-
-DiskANN 接管：传递源码版本、Rust/C++、内存/SSD 路径、数据/索引、资源范围、run_dir 和已有授权；`diskann-optimize` 编排 CP0–CP7，调查调用 `diskann-source-analysis`，基线与采样调用 `diskann-benchmark-baseline`，公共实验与 UT/ST 直接复用 `vector-experiment-methodology`、`vector-ut-st-validation`。安装器从 `diskann-optimize/agents/` 注册五角色。
+**向量检索接管**：优化对象已明确落在向量数据库或检索路径时，直接加载 `vector-search-optimize`，传递用户目标、已知库名、源码、基准、数据和已有实验状态。由它识别执行层级，选择 Faiss、DiskANN 专项或通用 CP0–CP7。只有明确指向 VSAG 的专项任务才直达 VSAG 路由。共享算法名先交给通用入口查明实际后端。延续用户给出的资源范围和交互模式。
 
 ### 路由流程
 

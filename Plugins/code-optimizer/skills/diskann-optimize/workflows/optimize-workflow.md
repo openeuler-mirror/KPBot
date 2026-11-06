@@ -1,5 +1,7 @@
 # DiskANN 性能优化工作流
 
+本工作流实现 [通用向量检索 CP0–CP7](../../vector-search-optimize/references/cp0-cp7.md) 的 DiskANN 专项步骤。由通用入口转入时，沿用传入的范围和已有实验状态。
+
 ## CP0：范围和初始化
 
 确认源码/补丁、Rust 或 C++、内存或 SSD、性能目标、测试入口、数据/索引和允许资源。创建独立 run_dir：

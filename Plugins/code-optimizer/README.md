@@ -14,7 +14,7 @@ code-optimizer 提供 72 个专业技能（skills），覆盖从热点分析到�
 - **平台支持**: Kunpeng-0xd01/0xd03/0xd06 微架构深度优化
 - **ARM 指令**: 完整的 ARM 指令集查询（Base/SVE/NEON/SME，共 1527+ 条指令）
 - **质量保障**: 对抗性审查、优化验证、修复代码
-- **Faiss 向量检索**: IVFPQ、FastScan、HNSW、RaBitQ 与 TurboQuant 的 CP0–CP7 优化工作流，配套构建、基线、采样、SIMD 和 UT/ST 验证
+- **向量数据库与向量检索**：通用 CP0–CP7 优化工作流，按实际目标接入 Faiss、DiskANN 专项流程
 - **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
 
 ## 诊断反馈流程
@@ -127,10 +127,13 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 这两个技能可独立调用，尚未接入通用代码优化流水线内部的策略路由。
 
-### Faiss 向量检索 (Vector Search)
+### 向量数据库与向量检索
 
-完整优化使用 [`faiss-optimize`](skills/faiss-optimize/SKILL.md)，由 `kpbot-code-optimizer` 根据库名与源码指纹路由。
-明确的 Faiss 请求优先进入 Faiss 工作流；仅出现 RaBitQ 等共享算法名时，需要区分目标库。
+`kpbot-code-optimizer` 将检索优化任务交给 [`vector-search-optimize`](skills/vector-search-optimize/SKILL.md)。该入口定义一套 [通用 CP0–CP7](skills/vector-search-optimize/references/cp0-cp7.md)，按实际库和执行层级路由。Faiss、DiskANN 复用各自的角色、构建入口和实验状态。其他引擎和数据库服务层可直接使用通用流程。
+
+#### Faiss
+
+Faiss 专项由 [`faiss-optimize`](skills/faiss-optimize/SKILL.md) 编排。
 
 | 技能 | 职责 |
 |------|------|
@@ -145,9 +148,9 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 安装沿用现有 `install.sh`，同时注册五个 Faiss 角色。运行产物保存在独立目录；算法、版本、数据和资源限制由当前任务决定。
 
-### DiskANN 向量检索
+#### DiskANN
 
-当前主 Agent 通过 `kpbot-code-optimizer` 加载 [`diskann-optimize`](skills/diskann-optimize/SKILL.md)，编排基线、候选实现和复验。安装器同时注册五个专业子 Agent。
+DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排基线、候选实现和复验。安装器同时注册五个专业子 Agent。
 
 | 技能 | 职责 |
 |------|------|

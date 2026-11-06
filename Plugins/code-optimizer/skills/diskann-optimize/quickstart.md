@@ -10,7 +10,7 @@ bash install.sh project opencode /path/to/DiskANN
 
 在目标项目中提出任务，例如：
 
-> 使用 diskann-optimize 分析当前检出并完成一次实现优化。实验保存到指定 run_dir，使用已提供的测试工具、数据和资源限制，先建立基线再选候选，完成 UT/ST 和性能复验，交付本地结果。
+> 使用 vector-search-optimize 优化当前 DiskANN 检出。实验保存到指定 run_dir，使用已提供的测试工具、数据和资源限制，先建立基线再选候选，完成 UT/ST 和性能复验，交付本地结果。
 
 初始化使用 workflows/scripts/init_run.py，支持非 Git 发布源码；恢复前运行 validate_state.py。v1 状态先预览 migrate_state_v1_to_v2.py --check，再在完整实验目录中执行 --apply。Wiki 归档按任务要求启用，不是前置条件。
 
