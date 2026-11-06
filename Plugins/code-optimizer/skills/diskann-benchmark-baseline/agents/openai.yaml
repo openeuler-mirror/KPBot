@@ -1,0 +1,4 @@
+interface:
+  display_name: "DiskANN 基线与性能测试"
+  short_description: "冻结实验条件，运行原生性能用例，采集 CPU/I/O 证据并保留原始样本"
+  default_prompt: "使用 $diskann-benchmark-baseline 建立冻结基线，运行性能用例并按需采样。"

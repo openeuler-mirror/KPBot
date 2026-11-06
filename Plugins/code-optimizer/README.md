@@ -144,7 +144,18 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 | `vector-experiment-methodology` / `vector-ut-st-validation` | 交错性能对照、正确性验证与报告契约 |
 
 安装沿用现有 `install.sh`，同时注册五个 Faiss 角色。运行产物保存在独立目录；算法、版本、数据和资源限制由当前任务决定。
-入门与安装验证见 [Faiss 集成说明](../../docs/faiss-integration.md)。
+
+### DiskANN 向量检索
+
+当前主 Agent 通过 `kpbot-code-optimizer` 加载 [`diskann-optimize`](skills/diskann-optimize/SKILL.md)，编排基线、候选实现和复验。安装器同时注册五个专业子 Agent。
+
+| 技能 | 职责 |
+|------|------|
+| [`diskann-optimize`](skills/diskann-optimize/SKILL.md) | CP0–CP7 编排和实验状态管理 |
+| [`diskann-source-analysis`](skills/diskann-source-analysis/SKILL.md) | 确认版本、索引后端、调用链和瓶颈 |
+| [`diskann-benchmark-baseline`](skills/diskann-benchmark-baseline/SKILL.md) | 冻结基线、运行原生基准和采样 |
+
+三个技能复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`。安装和运行方式见 [DiskANN 快速入门](skills/diskann-optimize/quickstart.md)。
 
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |
