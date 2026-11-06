@@ -50,7 +50,28 @@ MODULES = {
 }
 # 由安装工具（pip、uv）写入 dist-info、不属于原始 wheel 的文件
 INSTALLER_FILES = {"RECORD", "INSTALLER", "REQUESTED", "direct_url.json", "uv_cache.json"}
-SECRET_FLAG = re.compile(r"(key|token|secret|passw)", re.I)
+SECRET_FLAGS = frozenset(
+    {
+        "--access-token",
+        "--api-key",
+        "--auth-token",
+        "--bearer-token",
+        "--client-secret",
+        "--credential",
+        "--credentials",
+        "--hf-token",
+        "--password",
+        "--secret",
+        "--token",
+    }
+)
+VLLM_API_SERVER_MODULES = frozenset(
+    {
+        "vllm.entrypoints.api_server",
+        "vllm.entrypoints.openai.api_server",
+    }
+)
+VLLM_CLI_MODULES = frozenset({"vllm", "vllm.entrypoints.cli.main"})
 # vLLM 0.23 服务端以 tokenizer(prompts, add_special_tokens=False, truncation=..., max_length=...)
 # 调用分词器（vllm/utils/async_utils.py）。max_length 取足够大的值，
 # 使调用经过截断参数的处理路径而不发生实际截断。
@@ -91,10 +112,11 @@ def redact_url(text: str) -> str:
 def redact_args(args) -> list:
     out, hide_next = [], False
     for arg in args:
+        flag = arg.split("=", 1)[0].lower()
         if hide_next:
             out.append("[已脱敏]")
             hide_next = False
-        elif arg.startswith("-") and SECRET_FLAG.search(arg):
+        elif flag in SECRET_FLAGS:
             if "=" in arg:
                 out.append(arg.split("=", 1)[0] + "=[已脱敏]")
             else:
@@ -250,6 +272,30 @@ def read_linux_processes() -> dict:
     return processes
 
 
+def is_vllm_service_process(args) -> bool:
+    """Return whether argv identifies a vLLM API service entry point."""
+    if not args:
+        return False
+    executable = Path(args[0]).name
+    if executable == "vllm":
+        return len(args) > 1 and args[1] == "serve"
+    if not re.fullmatch(r"(?:python|pypy)(?:\d+(?:\.\d+)*)?", executable):
+        return False
+    if len(args) < 2:
+        return False
+    if args[1] == "-m" and len(args) > 2:
+        module = args[2]
+        if module in VLLM_API_SERVER_MODULES:
+            return True
+        return module in VLLM_CLI_MODULES and len(args) > 3 and args[3] == "serve"
+    script = Path(args[1])
+    if script.name == "vllm":
+        return len(args) > 2 and args[2] == "serve"
+    return script.parts[-4:] == ("vllm", "entrypoints", "openai", "api_server.py") or (
+        script.parts[-3:] == ("vllm", "entrypoints", "api_server.py")
+    )
+
+
 def scan_processes(pids) -> tuple:
     if not sys.platform.startswith("linux") or not os.path.isdir("/proc"):
         return [], "仅在 Linux 上可读取运行中进程的环境变量与已加载的共享库"
@@ -257,13 +303,12 @@ def scan_processes(pids) -> tuple:
     if pids:
         chosen = set(pids)
     else:
-        # vLLM 的 API 进程与 EngineCore 进程为子进程，命令行未必包含 vllm，
-        # 因此一并纳入其各级子进程
         chosen = {
             pid
             for pid, (args, _) in processes.items()
-            if any("vllm" in arg.lower() for arg in args)
+            if is_vllm_service_process(args)
         }
+        # API 服务的 EngineCore 等子进程未必保留服务入口命令行。
         grew = True
         while grew:
             grew = False

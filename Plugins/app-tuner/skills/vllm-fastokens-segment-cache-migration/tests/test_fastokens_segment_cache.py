@@ -25,6 +25,7 @@ import unittest
 import zipfile
 from array import array
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "fastokens_segment_cache.py"
 _spec = importlib.util.spec_from_file_location("fastokens_segment_cache", SCRIPT)
@@ -38,6 +39,12 @@ class HelperTests(unittest.TestCase):
             "vllm",
             "serve",
             "m",
+            "--tokenizer",
+            "/models/tokenizer",
+            "--tokenizer-mode",
+            "auto",
+            "--tokenizer-revision",
+            "main",
             "--api-key",
             "sk-123",
             "--hf-token=abc",
@@ -47,6 +54,25 @@ class HelperTests(unittest.TestCase):
         for secret in ("sk-123", "abc", "u:p"):
             self.assertNotIn(secret, out)
         self.assertIn("--api-key [已脱敏]", out)
+        self.assertIn("--tokenizer /models/tokenizer", out)
+        self.assertIn("--tokenizer-mode auto", out)
+        self.assertIn("--tokenizer-revision main", out)
+
+    def test_tokenizer_options_survive_both_argument_forms(self):
+        for flag, value in (
+            ("--tokenizer", "/models/x"),
+            ("--tokenizer-mode", "auto"),
+            ("--tokenizer-revision", "main"),
+        ):
+            for args in ([flag, value], [f"{flag}={value}"]):
+                with self.subTest(args=args):
+                    self.assertEqual(tool.redact_args(args), args)
+
+    def test_credential_options_are_redacted_in_both_argument_forms(self):
+        for flag in ("--api-key", "--hf-token", "--access-token", "--secret", "--password"):
+            with self.subTest(flag=flag):
+                self.assertEqual(tool.redact_args([flag, "sk-1"]), [flag, "[已脱敏]"])
+                self.assertEqual(tool.redact_args([f"{flag}=sk-1"]), [f"{flag}=[已脱敏]"])
 
     def test_sessions_stay_on_one_thread_in_order(self):
         requests = [{"session": s} for s in "abcabcab"]
@@ -68,6 +94,83 @@ class HelperTests(unittest.TestCase):
             prefix = current["messages"][: len(previous["messages"])]
             self.assertEqual(prefix, previous["messages"])
             self.assertGreater(len(current["messages"]), len(previous["messages"]))
+
+
+class ProcessDiscoveryTests(unittest.TestCase):
+    def test_recognizes_vllm_service_entry_points(self):
+        accepted = [
+            ["/venv/bin/vllm", "serve", "model"],
+            ["/venv/bin/python", "/venv/bin/vllm", "serve", "model"],
+            ["python", "-m", "vllm.entrypoints.openai.api_server", "--model", "model"],
+            ["python", "-m", "vllm.entrypoints.api_server", "--model", "model"],
+            ["python", "-m", "vllm", "serve", "model"],
+            ["python", "/site-packages/vllm/entrypoints/openai/api_server.py"],
+        ]
+        for args in accepted:
+            with self.subTest(args=args):
+                self.assertTrue(tool.is_vllm_service_process(args))
+
+    def test_rejects_commands_that_only_contain_vllm_text(self):
+        rejected = [
+            [
+                "/Users/demo/Desktop/vllm&vllm-ascend/.venv/bin/python",
+                "/skills/vllm-fastokens-segment-cache-migration/scripts/fastokens_segment_cache.py",
+                "probe",
+            ],
+            ["tail", "-f", "/var/log/vllm.log"],
+            ["tail", "-f", "/opt/vllm/entrypoints/openai/api_server.py"],
+            ["grep", "vllm"],
+            ["python", "worker.py", "--name", "vllm"],
+            ["python", "worker.py", "-m", "vllm.entrypoints.openai.api_server"],
+            ["vllm", "bench", "throughput"],
+            ["vllm", "bench", "--dataset-name", "serve"],
+        ]
+        for args in rejected:
+            with self.subTest(args=args):
+                self.assertFalse(tool.is_vllm_service_process(args))
+
+    def scan_fixture(self, processes, pids=None):
+        def describe(pid, args):
+            return {
+                "pid": pid,
+                "env": {} if pid < 20 else {tool.RUST_VAR: "1", tool.SWITCH_VAR: "1"},
+                "fastokens_loaded": [],
+            }
+
+        with (
+            mock.patch.object(tool.sys, "platform", "linux"),
+            mock.patch.object(tool.os.path, "isdir", return_value=True),
+            mock.patch.object(tool, "read_linux_processes", return_value=processes),
+            mock.patch.object(tool, "describe_process", side_effect=describe),
+        ):
+            rows, note = tool.scan_processes(pids)
+        self.assertIsNone(note)
+        return rows
+
+    def test_scan_excludes_unrelated_processes_from_backend_and_verdict(self):
+        processes = {
+            10: (["/venv/bin/vllm", "serve", "model"], 1),
+            11: (["engine-core"], 10),
+            12: (["worker"], 11),
+            20: (["grep", "vllm"], 1),
+            21: (["unrelated-child"], 20),
+            30: (["python", str(SCRIPT), "_worker"], 1),
+            31: (["tail", "-f", "/opt/vllm/entrypoints/openai/api_server.py"], 1),
+        }
+        info = verdict_info()
+        info["processes"] = self.scan_fixture(processes)
+        self.assertEqual([row["pid"] for row in info["processes"]], [10, 11, 12])
+        backend = tool.effective_backend(info)
+        self.assertIn("HF tokenizers", backend)
+        self.assertNotIn("pid 20", backend)
+        self.assertNotEqual(tool.probe_verdict(info, tool.MIN_VERSION)["decision"], "不支持")
+
+    def test_explicit_pid_still_selects_only_the_requested_process(self):
+        processes = {
+            10: (["vllm", "serve", "model"], 1),
+            11: (["engine-core"], 10),
+        }
+        self.assertEqual([row["pid"] for row in self.scan_fixture(processes, [10])], [10])
 
 
 def make_installed_package(root: Path, editable=False):
