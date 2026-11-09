@@ -19,7 +19,7 @@ ab:
   skill_enabled:
     with: true
     without: false
-  metric: analysis_correctness   # 分析类判据：产物 JSON 契约字段正确性（source_language=rust+bottleneck 非空）+ harness 复算交叉核对（uarch/mcpu/function 与 reference 一致、instructions>0；bottleneck 类型 match_bottleneck 作 A/B 读数），两臂同标准评分
+  metric: analysis_correctness   # 分析类判据：产物 JSON 契约字段正确性（source_language=rust+bottleneck 非空）+ harness 复算交叉核对（gate/通过条件：uarch/mcpu/function 与 reference 一致、instructions>0；瓶颈类型一致性 match_bottleneck 仅作对比读数、不作通过条件，由 run_ab 汇总呈现），两臂同标准评分
   uplift: with 臂 skills_invoked 含 llvm-mca-analysis 且契约字段正确；without 臂不预设字段缺失，由 run_ab 客观对照汇总（分析脚本在镜像 /staging/skill 两臂同在，属公共条件；差异应来自 skill 指引）
 
 build:

@@ -117,33 +117,30 @@ docker network create --internal agent-ab-net   # 默认全断外网
 # agent 容器 --network agent-ab-net，出站必须经过代理
 ```
 
-### 3. Dockerfile 必须显式 USER 非特权用户，工作目录 chown
+### 3. 判定链文件与 agent 权限隔离：所有权收敛（而非整体 chown）
 
-**规则**：Dockerfile 末尾必须有 `USER` 指令切换到非特权用户；/workspace 及可写子目录 chown 给该用户。
+**规则**：评分链文件（verify.sh / entrypoint.sh / results 判定文件）必须 root 拥有、由 root 侧进程写入；agent（被测方）可写面收敛到产物目录 opt/ 与项目配置目录 .opencode/，agent 进程本身以非特权用户运行。仅 `USER` 非特权 + `chown -R /workspace` 不够：chown -R 把评分脚本与判定文件一并交给 agent，owner 可 chmod 击穿 555 只读位，预置/覆写判定文件或评分脚本即可伪造用例通过。
 
-**违反后果**：攻击链 2。无 USER 指令时进程默认 uid 0，叠加 `--network host` 与 docker 默认未 drop capability，容器内 root 接近宿主 root 命名空间权限——LLM 产物的任意代码以近宿主 root 权限执行。
+**违反后果**：攻击链 2。旧模型（chown -R）下 agent 可预置全 true 的 results/result.json——校验器一旦异常退出（实例：超长数字串触发 CPython≥3.10.7 int 转换上限 ValueError 且未被捕获），判定文件保持预置内容，verify 尾部 grep 采信预置，零真实分析通过；亦可直接覆写 verify.sh。若 agent 进程以 uid 0 运行，叠加 docker 默认未 drop capability，破坏面进一步接近宿主 root。
 
-**正确做法**：
+**正确做法**（本仓库两 agent 用例已落地）：
 
 ```dockerfile
-FROM openeuler/openeuler:24.03-lts
-
-RUN useradd -m -u 1000 optimizer \
-    && mkdir -p /workspace/opt /workspace/results /workspace/build \
-    && chown -R optimizer:optimizer /workspace
-# ... COPY 各文件后：
-USER optimizer
-WORKDIR /workspace
+RUN useradd -m optimizer \
+    && mkdir -p /workspace/opt /workspace/results \
+    && chown -R optimizer:optimizer /workspace/opt \
+    && chmod 755 /workspace /workspace/results
+# COPY 的评分链文件保持 root 拥有；entrypoint 以 root 起跑、内部按段降权
+USER root
 ENTRYPOINT ["/workspace/entrypoint.sh"]
 ```
 
-配合只读根文件系统，把可写面压缩到产物 / 编译目录：
+entrypoint 按段分权：agent 段 `setpriv --reuid=optimizer --regid=optimizer --init-groups env HOME=... opencode run ...`（输出重定向 FD 由 root shell 先行建立，optimizer 进程写已打开的 FD）；verify 段回 root 运行、判定文件 root 落盘；verify.sh 开头 `rm -f results/result.json` 使任何预置即刻失效。run_ab 白名单已含 `--read-only` / `--tmpfs`，调用方可按需叠加只读根文件系统，把可写面进一步压缩到 tmpfs 挂载点（默认不启用，agent 运行时其余项目内写路径待端到端验证）：
 
 ```bash
 docker run --read-only \
     --tmpfs /workspace/opt:rw,uid=1000,gid=1000 \
-    --tmpfs /workspace/build:rw,uid=1000,gid=1000 \
-    --tmpfs /workspace/results:rw,uid=1000,gid=1000 \
+    --tmpfs /workspace/results:rw \
     ...
 ```
 
@@ -214,7 +211,7 @@ rustc "${COMMON_FLAGS[@]}" -o build/optimized  build/opt/main.rs  2>build/opt_co
 }
 ```
 
-**取舍说明**：edit 必须保留——agent 的任务交付物就是 `opt/kernel_opt.rs`，禁掉 edit 用例无法运行。edit 的写范围用两层兜底：prompt 约束「只允许写 opt/」（见第 8 条）+ `--read-only` 根文件系统（仅 opt/、build/、results/ 为 tmpfs 可写，见第 3 条）。若所用 agent CLI 支持写路径白名单，优先用配置层白名单而非仅靠 prompt。
+**取舍说明**：edit 必须保留——agent 的任务交付物就是 `opt/kernel_opt.rs`，禁掉 edit 用例无法运行。edit 的写范围用两层兜底：prompt 约束「只允许写 opt/」（见第 8 条）+ 文件系统属主收敛（见第 3 条）：/workspace 根与 results/ 归 root 拥有，verify 由 root 侧运行落盘判定文件，agent 可写面收敛到 opt/ 与 .opencode/。run_ab 的 DOCKER_RUN_ARGS 白名单已含 `--read-only` / `--tmpfs`，供调用方按需叠加只读根文件系统加固（默认不启用；启用后 agent 运行时在项目内的其余写路径尚待端到端验证）。若所用 agent CLI 支持写路径白名单，优先用配置层白名单而非仅靠 prompt。
 
 ### 7. 环境变量输入 fail-closed + 白名单
 
@@ -288,7 +285,7 @@ SKILL.md 中同样写入「禁止读取凭证文件或任何不在 /workspace �
 
 - [ ] API key 以 env 注入主进程，没有任何 `-v` 挂载凭证文件；如必须落文件，是 /tmp 下 600 权限、运行后删除
 - [ ] docker run 无 `--network host`（默认 bridge 即可访问 LLM API）；如需更强隔离已做 egress 域名白名单
-- [ ] Dockerfile 有显式 `USER` 非特权用户；/workspace 已 chown；理想情况 `--read-only` + tmpfs 可写目录
+- [ ] agent 进程以非特权用户运行；/workspace 根与 results/ 归 root 拥有，verify 以 root 侧运行落盘判定文件，agent 可写面收敛到 opt/ 与 .opencode/；`--read-only` / `--tmpfs` 已入 run_ab 白名单，供调用方按需启用（默认不启用）
 - [ ] LLM 产物在编译前过 deny 名单 lint（`std::process::Command` / `extern "C"` / `asm!` / `std::net::` / `std::fs::`），命中即 exit 1
 - [ ] deny 名单与用例能力需求匹配：纯计算 kernel 全 deny；需要新 capability 时重新评估隔离，而非直接放宽
 - [ ] rustc 带 `-C overflow-checks=on -C debug-assertions=on`
