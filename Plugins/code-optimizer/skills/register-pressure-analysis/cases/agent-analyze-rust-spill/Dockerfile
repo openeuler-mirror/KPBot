@@ -3,13 +3,14 @@ FROM openeuler/openeuler:24.03-lts
 WORKDIR /workspace
 
 # Rust 工具链 + python3（spill 分析脚本是纯 python 文本统计，无需 LLVM）
+# util-linux：entrypoint agent 段降权用 setpriv（minroot 基础层不含该包）
 RUN dnf install -y \
         --disablerepo='everything' \
         --disablerepo='source' \
         --disablerepo='debuginfo' \
         --disablerepo='update-source' \
         --setopt=install_weak_deps=0 \
-        rustc cargo python3 gcc binutils findutils coreutils shadow \
+        rustc cargo python3 gcc binutils findutils coreutils shadow util-linux \
     && dnf clean all \
     && rustc --version
 

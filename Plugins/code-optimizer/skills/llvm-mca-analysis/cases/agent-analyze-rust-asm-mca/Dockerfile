@@ -4,13 +4,14 @@ WORKDIR /workspace
 
 # Rust 工具链 + LLVM（mca 分析脚本依赖 llvm-mca/clang）
 # 备选：若 dnf 源内 llvm 包名漂移，改用 llvm-toolset（含 llvm-mca）
+# util-linux：entrypoint agent 段降权用 setpriv（minroot 基础层不含该包）
 RUN dnf install -y \
         --disablerepo='everything' \
         --disablerepo='source' \
         --disablerepo='debuginfo' \
         --disablerepo='update-source' \
         --setopt=install_weak_deps=0 \
-        rustc cargo llvm llvm-devel python3 gcc binutils findutils coreutils shadow \
+        rustc cargo llvm llvm-devel python3 gcc binutils findutils coreutils shadow util-linux \
     && dnf clean all \
     && rustc --version && llvm-mca --version | head -1
 
