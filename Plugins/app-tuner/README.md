@@ -9,7 +9,7 @@
 app-tuner 提供 1 个主编排 skill(`kpbot-app-tuner`)及其内部资源:
 
 - **主 skill**: `skills/kpbot-app-tuner/` — 编排器,负责环境采集→瓶颈识别→动态路由→迭代验证→报告输出
-- **分析型子 skill**(subskills,自研,12 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/其他兜底
+- **分析型子 skill**(subskills,自研,13 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/vLLM-Ascend profiling/其他兜底
 - **质量保障**: 对抗性审查、current_run 门控、subagent 独立上下文执行
 
 ## 安装
@@ -98,7 +98,7 @@ app-tuner/
 │       ├── agents/                    # 平台 agent 配置
 │       ├── references/                # 参考文档(22 个)
 │       ├── scripts/                   # 脚本(22 个)
-│       └── subskills/                 # 自研分析型子 skill(12 个，含 scripts/ 和 references/)
+│       └── subskills/                 # 自研分析型子 skill(13 个，含 scripts/ 和 references/)
 └── opencode/                          # OpenCode 覆盖层(差异文件)
 ```
 
