@@ -26,14 +26,21 @@ COPY skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/prompts/ /workspa
 COPY skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/verify.sh /workspace/verify.sh
 COPY skills/llvm-mca-analysis/cases/agent-analyze-rust-asm-mca/entrypoint.sh /workspace/entrypoint.sh
 
+# P1-d 所有权收敛：仅 /workspace/opt（agent 产物目录）交 optimizer；
+# /workspace 根、results、src/bench/prompts、verify.sh、entrypoint.sh 保持
+# root 拥有——agent 不再能 chmod/覆写 555 判定脚本与预置内容（原 chown -R
+# 连 owner+555 的 chmod 击穿面一并交出）。entrypoint 以 root 起跑：agent 段
+# 内部 setpriv 降权 optimizer，verify 段回 root 落盘判定文件（见 entrypoint.sh）。
 RUN useradd -m optimizer \
     && mkdir -p /workspace/opt /workspace/results \
-    && chown -R optimizer:optimizer /workspace \
+    && chown -R optimizer:optimizer /workspace/opt \
     && chmod +x /workspace/verify.sh /workspace/entrypoint.sh \
     && sha256sum bench/main.rs src/kernel.rs verify.sh entrypoint.sh > /workspace/.pristine.sha256 \
     && chmod 444 bench/main.rs src/kernel.rs /workspace/.pristine.sha256 \
-    && chmod 555 verify.sh entrypoint.sh
+    && chmod 555 verify.sh entrypoint.sh \
+    && chmod 755 /workspace /workspace/results
 
-USER optimizer
+# P1-d：以 root 运行 entrypoint（降权在容器内部按段执行，不再依赖镜像 USER）
+USER root
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]

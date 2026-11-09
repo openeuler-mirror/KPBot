@@ -239,6 +239,12 @@ def demangle_legacy_segments(sym):
     "_ZN6kernel4calc3dot" -> ["kernel", "calc", "dot"]。非 _ZN 形状返回 []。
     段内转义（如 $ 转义 unicode）不展开——比对只要求段名逐字相等。
     """
+    # P1-c 防护①（入口总长上限）：真实 legacy 符号远短于 1024 字符；超长输入
+    # 直接判非法，防超长数字串喂给 int() 触发 CPython>=3.10.7 的 4300 位
+    # 转换上限 ValueError（verify.sh 交叉核对段以本函数归一化 agent 自报
+    # function 字段，恶意构造不得令判定进程带未捕获异常退出）。
+    if not isinstance(sym, str) or len(sym) > 1024:
+        return []
     s = strip_rust_hash(sym or "")
     if not s.startswith("_ZN"):
         return []
@@ -248,6 +254,10 @@ def demangle_legacy_segments(sym):
         m = re.match(r"(\d+)", s)
         if not m:
             return []  # 段长损坏（非纯 legacy 形状）
+        # P1-c 防护②（段长字段位数上限）：真实 Itanium/Rust legacy 段长远小于
+        # 6 位；超 6 位的段长字段必是畸形构造，先于 int() 拦截返回 []。
+        if len(m.group(1)) > 6:
+            return []
         n = int(m.group(1))
         s = s[m.end():]
         if n <= 0 or len(s) < n:

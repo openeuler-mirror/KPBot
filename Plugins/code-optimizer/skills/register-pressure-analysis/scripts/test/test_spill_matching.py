@@ -60,6 +60,23 @@ def test_demangle_helpers():
     assert spill.strip_rust_hash("plain_c_fn") == "plain_c_fn"
 
 
+def test_demangle_guards_p1c():
+    # P1-c 防护回归：恶意/畸形符号不得触发未捕获异常（int() 4300 位上限），一律 []
+    # 毒符号：_ZN + 5000 位数字（review round 3 P1 原始复现形态）
+    assert spill.demangle_legacy_segments("_ZN" + "9" * 5000) == []
+    # 总长超 1024：入口防护①先拦（数字段 <4300 位但整体超长）
+    assert spill.demangle_legacy_segments("_ZN6kernel11microkernel7fma_4x4" + "9" * 2000) == []
+    # 段长字段 >6 位（总长 <1024）：防护②先于 int() 拦
+    assert spill.demangle_legacy_segments("_ZN" + "9" * 7 + "x") == []
+    # 非 str 输入：入口防护①直接判非法
+    assert spill.demangle_legacy_segments(None) == []
+    assert spill.demangle_legacy_segments(12345) == []
+    # 正常 legacy 符号解析不变（含真实 17h<hash>E 形状）
+    assert spill.demangle_legacy_segments("_ZN6kernel4calc3dot17h0123456789abcdefE") == \
+        ["kernel", "calc", "dot"]
+    assert spill.demangle_legacy_segments(LABEL) == ["kernel", "microkernel", "fma_4x4"]
+
+
 def test_short_path_tail_alignment():
     # E1 形态：短路径（缺 crate 段）经段级尾部对齐命中——本修复核心
     assert spill.rust_label_matches(LABEL, "microkernel::fma_4x4") is True
@@ -276,6 +293,7 @@ def test_cli_c_side_source_kind_labels():
 def main():
     groups = [
         test_demangle_helpers,
+        test_demangle_guards_p1c,
         test_short_path_tail_alignment,
         test_full_path_and_mangled_prefix_unchanged,
         test_bare_name_behavior_unchanged,

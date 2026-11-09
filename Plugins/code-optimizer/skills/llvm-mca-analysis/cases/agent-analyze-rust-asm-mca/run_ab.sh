@@ -11,7 +11,8 @@
 #                    —— 整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不做卷挂载
 #   DOCKER_RUN_ARGS  追加给 docker run 的参数（默认为空；白名单:
 #                    --cpus* / --memory* / --pids-limit* / --rm / --name=*
-#                    / --network=bridge，其余一律拒绝）
+#                    / --network=bridge / --read-only / --tmpfs（=/path 或
+#                    "/path[:opts]" 带参两形式），其余一律拒绝）
 #   OPENCODE_SHA256  可选：opencode 二进制 sha256 指纹；设置即强制比对（fail-closed），
 #                    未设置则跳过。指纹经部署侧配置注入（CI env/部署清单）
 # =============================================================================
@@ -80,11 +81,33 @@ if [ -n "${OPENCODE_SHA256:-}" ]; then
 fi
 
 # RUN_ARGS 白名单过滤：仅允许资源限制与安全开关
+# P1-d：新增 --read-only 与 --tmpfs——供调用方按基线启用只读根文件系统 +
+# tmpfs 可写层（可写层须按需覆盖 /tmp、/workspace/opt、/workspace/results、
+# /workspace/build 等），默认不启用。
+# --tmpfs 取值两种形式："--tmpfs=/path[:opts]" 单 token；"--tmpfs /path[:opts]"
+# 双 token（path 为独立 token，仅当前一 token 是 --tmpfs 时收编，其余裸路径拒绝）。
 RUN_ARGS_FILTERED=()
+expect_tmpfs_path=0
 for tok in ${RUN_ARGS}; do
     case "${tok}" in
-        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=bridge)
+        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=bridge|--read-only)
             RUN_ARGS_FILTERED+=("${tok}")
+            ;;
+        --tmpfs)
+            RUN_ARGS_FILTERED+=("${tok}")
+            expect_tmpfs_path=1
+            ;;
+        --tmpfs=/*)
+            RUN_ARGS_FILTERED+=("${tok}")
+            ;;
+        /*)
+            if [ "${expect_tmpfs_path}" = "1" ]; then
+                RUN_ARGS_FILTERED+=("${tok}")
+                expect_tmpfs_path=0
+            else
+                echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}" >&2
+                exit 1
+            fi
             ;;
         *)
             echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}" >&2
@@ -92,6 +115,11 @@ for tok in ${RUN_ARGS}; do
             ;;
     esac
 done
+# fail-closed：悬空 --tmpfs（未跟路径）拒绝执行
+if [ "${expect_tmpfs_path}" = "1" ]; then
+    echo "错误: DOCKER_RUN_ARGS 的 --tmpfs 缺少路径参数" >&2
+    exit 1
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

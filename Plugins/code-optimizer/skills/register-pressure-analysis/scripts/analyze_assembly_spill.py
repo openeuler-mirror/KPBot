@@ -150,6 +150,15 @@ def demangle_legacy_segments(sym: str) -> list[str]:
     non-_ZN shapes (plain C labels) and for corrupted segment lengths.
     """
 
+    # P1-c guard 1 (total-length cap at the entry): real legacy symbols are far
+    # shorter than 1024 chars; anything longer is rejected before parsing so an
+    # overlong digit run can never reach int(), whose 4300-digit conversion
+    # limit on CPython >= 3.10.7 raises ValueError (verify.sh's crosscheck
+    # normalizes the agent-reported function field through this function, and a
+    # hostile construct must not crash the verdict process with an uncaught
+    # exception).
+    if not isinstance(sym, str) or len(sym) > 1024:
+        return []
     s = strip_rust_hash(sym or "")
     if not s.startswith("_ZN"):
         return []
@@ -158,6 +167,11 @@ def demangle_legacy_segments(sym: str) -> list[str]:
     while s:
         m = re.match(r"(\d+)", s)
         if not m:
+            return []
+        # P1-c guard 2 (segment-length digit cap): real Itanium/Rust legacy
+        # segment lengths are far below 6 digits; a longer length field is
+        # necessarily a malformed construct, rejected before int().
+        if len(m.group(1)) > 6:
             return []
         n = int(m.group(1))
         s = s[m.end():]

@@ -50,6 +50,23 @@ def read_fixture():
     return FIXTURE.read_text(encoding="utf-8")
 
 
+def test_demangle_guards_p1c():
+    # P1-c 防护回归：恶意/畸形符号不得触发未捕获异常（int() 4300 位上限），一律 []
+    # 毒符号：_ZN + 5000 位数字（review round 3 P1 原始复现形态）
+    assert mca.demangle_legacy_segments("_ZN" + "9" * 5000) == []
+    # 总长超 1024：入口防护①先拦（数字段 <4300 位但整体超长）
+    assert mca.demangle_legacy_segments("_ZN6kernel4calc3dot" + "9" * 2000) == []
+    # 段长字段 >6 位（总长 <1024）：防护②先于 int() 拦
+    assert mca.demangle_legacy_segments("_ZN" + "9" * 7 + "x") == []
+    # 非 str 输入：入口防护①直接判非法
+    assert mca.demangle_legacy_segments(None) == []
+    assert mca.demangle_legacy_segments(12345) == []
+    # 正常 legacy 符号解析不变（含真实 17h<hash>E 形状）
+    assert mca.demangle_legacy_segments("_ZN6kernel4calc3dot17h0123456789abcdefE") == \
+        ["kernel", "calc", "dot"]
+    assert mca.demangle_legacy_segments(LABEL2) == ["kernel", "example", "dot_f32"]
+
+
 def test_guard_rust_only():
     # 守卫(i)：c_cpp 裸名快路径行为完全不变（含缺省语言参数，T-M2 修复前形态）
     asm = read_fixture()
@@ -270,6 +287,7 @@ def test_source_language_cli_contract_asm_mode():
 
 def main():
     groups = [
+        test_demangle_guards_p1c,
         test_guard_rust_only,
         test_guard_unique_hit,
         test_bare_name_objdump_form,
