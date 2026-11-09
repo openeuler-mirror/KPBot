@@ -9,6 +9,10 @@
 """
 import sqlite3, sys
 
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, 'reconfigure'):
+        _s.reconfigure(encoding='utf-8', errors='replace')
+
 COLLAPSE_SUBSTR = (
     ': _call_impl',
     'torch/_ops.py',
@@ -91,7 +95,7 @@ def main():
         emit(r, 0)
     text = '\n'.join(lines)
     if out:
-        open(out, 'w').write(text + '\n')
+        open(out, 'w', encoding='utf-8').write(text + '\n')
         print(f'共 {len(lines)} 行 → {out}')
     else:
         print(text)

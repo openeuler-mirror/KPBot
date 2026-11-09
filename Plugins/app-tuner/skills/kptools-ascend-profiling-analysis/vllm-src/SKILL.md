@@ -1,7 +1,7 @@
 ---
 name: ascend-vllm-src
 description: |
-  vllm / vllm-ascend 源码解读子 skill（ascend-vllm-profiler 的配套）。
+  vllm / vllm-ascend 源码解读子 skill（kptools-ascend-profiling-analysis 的配套）。
   用途：用户给出版本号 → 定位对应源码 → 结合 profiling trace 中的 python 帧做
   语义解读（函数在做什么、为什么走这条路径、行号映射）。主 skill 负责 trace
   分析，本 skill 负责把 trace 帧映射到源码语义。

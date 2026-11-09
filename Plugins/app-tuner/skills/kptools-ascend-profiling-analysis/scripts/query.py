@@ -13,6 +13,10 @@
 """
 import argparse, json, sqlite3, sys
 
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, 'reconfigure'):
+        _s.reconfigure(encoding='utf-8', errors='replace')
+
 
 def ui(db):
     r = db.execute("SELECT value FROM meta WHERE key='ui_zero'").fetchone()
@@ -207,7 +211,9 @@ def cmd_chain(db, args):
 
 def cls_stats(db, a, b):
     s = b - a
-    tot = {}
+    tot = dict.fromkeys(('computing', 'communication', 'comm_not_overlapped', 'free'), 0)
+    if s <= 0:
+        return tot, 0
     for kind in ('computing', 'communication', 'comm_not_overlapped'):
         rows = db.execute(
             'SELECT start_ns, end_ns FROM classes WHERE kind=? AND end_ns>? AND start_ns<?',
@@ -217,6 +223,11 @@ def cls_stats(db, a, b):
     return tot, s
 
 
+def step_source(db):
+    r = db.execute("SELECT value FROM meta WHERE key='step_source'").fetchone()
+    return r[0] if r else 'profiler_step'
+
+
 def cmd_report(db, args):
     uiz = ui(db)
     steps = db.execute('SELECT id, start_ns, end_ns FROM steps ORDER BY id').fetchall()
@@ -224,7 +235,7 @@ def cmd_report(db, args):
         steps = [s for s in steps if s[0] == args.step]
         if not steps:
             print(f'无 step{args.step}'); return 2
-    print(f'=== report: {len(steps)} steps ===')
+    print(f'=== report: {len(steps)} steps (step 边界来源: {step_source(db)}) ===')
     P = pids(db)
     T = dict(dur=0.0, p1=0.0, p2=0.0, p3=0.0, p2c=0.0, p2f=0.0, p3f=0.0, sync=0.0,
              nw=0.0, ew=0.0, nsqe=0.0)
@@ -274,7 +285,7 @@ def cmd_report(db, args):
         nw = waits.get('NOTIFY_WAIT', 0) / 1e6
         ew = waits.get('EVENT_WAIT', 0) / 1e6
         nsqe = waits.get('NOTIFY_WAIT_SQE', 0) / 1e6
-        p1f = t1['free'] / s1dur * 100
+        p1f = t1['free'] / s1dur * 100 if s1dur > 0 else 0.0
         prep = db.execute(
             "SELECT end_ns-start_ns FROM classes WHERE kind='free' AND start_ns>=? AND start_ns<? "
             'ORDER BY start_ns LIMIT 1', (s0, s1)).fetchone()
@@ -282,9 +293,9 @@ def cmd_report(db, args):
         if w2 and w3:
             t2, sdur2 = cls_stats(db, *w2)
             t3, sdur3 = cls_stats(db, *w3)
-            p2c = t2['computing'] / sdur2 * 100
-            p2f = t2['free'] / sdur2 * 100
-            p3f = t3['free'] / sdur3 * 100
+            p2c = t2['computing'] / sdur2 * 100 if sdur2 > 0 else 0.0
+            p2f = t2['free'] / sdur2 * 100 if sdur2 > 0 else 0.0
+            p3f = t3['free'] / sdur3 * 100 if sdur3 > 0 else 0.0
             mode = ('整图回放' if db.execute(
                 f"SELECT 1 FROM events WHERE pid={P['py']} AND cat='python_function' "
                 "AND name LIKE '%: replay' AND dur_ns>0 AND ts_ns>=? AND ts_ns+dur_ns<=? LIMIT 1",
@@ -294,11 +305,11 @@ def cmd_report(db, args):
             if p3f >= 20 and sync_ms < 0.5:
                 v = 'host bound(设备提前空闲)'
             elif sync_ms >= 2:
-                v = '设备积压(步尾真排水)'
+                v = '设备积压（步尾同步等设备跑完）'
             else:
                 v = '设备基本跟上'
             if mode == '整图回放':
-                v += '（整图回放步: host 提前完成, 设备在 P3 排空）'
+                v += '（整图回放步：host 提前完成，设备在 P3 继续执行到结束）'
             elif p2f >= 30:
                 v += ' + forward供数不足'
             print(f'step{sid} dur={(s1-s0)/1e6:.3f}ms')

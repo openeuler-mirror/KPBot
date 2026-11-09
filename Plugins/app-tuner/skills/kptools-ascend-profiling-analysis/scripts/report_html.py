@@ -15,6 +15,10 @@
 import argparse, html, json, re, sqlite3, sys
 from collections import Counter
 
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, 'reconfigure'):
+        _s.reconfigure(encoding='utf-8', errors='replace')
+
 
 US_GROUP = 0.05
 
@@ -105,6 +109,15 @@ KEY_PATTERNS = (
     'update_graph_params', 'graph_task_update', 'compilation/acl_graph.py(138)',
     'graphs.py(638): replay', 'vocab_parallel_embedding', '_maybe_pad_and_reduce',
     'tensor_model_parallel_all_reduce',
+)
+
+GENERIC_NS = (
+    '/models/',
+    'vllm_ascend/ops/',
+    'vllm_ascend/attention/',
+    'kv_connector',
+    'fla/',
+    '<string>(',
 )
 
 
@@ -242,6 +255,21 @@ def mini_bar(st, dur_ns, big=False):
            f"Free {free * 100:.1f}% ({st['free'] / 1e6:.3f}ms)")
     cls = 'mbar big' if big else 'mbar'
     return f'<span class="{cls}" title="{esc(tip)}">{parts}</span>'
+
+
+def cf_box_html(comp_pct, free_pct, title='Computing vs Free（重点）'):
+    """只比较 Computing 与 Free 的重点框（Communication 不计入）。"""
+    cf = comp_pct + free_pct
+    comp_cf = comp_pct / cf * 100 if cf else 0.0
+    free_cf = free_pct / cf * 100 if cf else 0.0
+    return (f'<div class="hero" style="border-left-color:#4A78A0">'
+            f'<div class="htitle">{esc(title)}</div>'
+            f'<div class="hnums">Computing <b>{comp_cf:.1f}%</b><span class="sep">·</span>'
+            f'Free <b>{free_cf:.1f}%</b>（占 Computing+Free）</div>'
+            f'<div><span class="mbar big"><i style="width:{comp_cf:.2f}%;background:#4A78A0"></i>'
+            f'<i style="width:{free_cf:.2f}%;background:#A6BE9E"></i></span></div>'
+            f'<div class="barleg">占整步：Computing {comp_pct:.1f}% · Free {free_pct:.1f}%；'
+            f'Communication 不在此框内</div></div>')
 
 
 BAR_LEGEND = ('<div class="barleg">行尾小条 = 该函数时段内设备状态<i style="background:'
@@ -429,7 +457,7 @@ P2_MODE_TEXT = {
     'graph_replay': (
         'NPU 整图回放：本步为纯 decode（均匀批：每请求调度 1+draft 数个 token），ACLGraphWrapper 命中引擎初始化时'
         '捕获的 acl graph，host 仅执行 replay 下发（~ms 级）+ 图参数更新（update_stream），'
-        '设备异步执行整图——P3 期间的设备忙主要是本图排空，图捕获发生在 profiler 启动前，trace 不可见。'),
+        '设备异步执行整图——P3 期间的设备忙主要是整图还在执行，图捕获发生在 profiler 启动前，trace 不可见。'),
     'fx_eager': (
         'torch.compile FX 图 eager 执行：本步批内含 prefill 请求（混合批或纯 prefill，非均匀 decode），cudagraph 模式不匹配，'
         'ACLGraphWrapper 直接执行 runnable，FX 图经 torch_npu fx_run_eagerly 逐算子下发（非整图回放），'
@@ -472,32 +500,51 @@ def p1_sections(db, s0, w1_end, w2_start):
 
 
 def p3_sections(db, w3_start, s1):
-    st = longest(db, ': sample_tokens', w3_start, s1, exclude=('_sample_tokens',))
-    st_ts = st[0] if st else None
     sto = longest(db, '_sample_tokens_orig', w3_start, s1)
-    samp = after(db, ': _sample', w3_start, s1, exclude=('_sample_tokens',)) if sto else None
+    st = longest(db, ': sample_tokens', w3_start, s1, exclude=('_sample_tokens_orig',))
+    stt = longest(db, ': _sample_tokens', w3_start, s1, exclude=('_sample_tokens_orig',))
+    body = sto or st or stt
+    samp = after(db, ': _sample', w3_start, s1, exclude=('_sample_tokens',))
     prop = longest(db, ': propose_draft_token_ids', w3_start, s1)
     es = longest(db, ': end_step', w3_start, s1)
     secs = []
-    a1 = sto[0] if sto else (st_ts or w3_start)
+    a1 = body[0] if body else min((x[0] for x in (samp, prop, es) if x), default=w3_start)
     if a1 > w3_start:
         secs.append(('P3-A', 'logits与输出回传', w3_start, a1))
-    if sto:
+    if body:
         if samp and prop and prop[0] > samp[0]:
             secs.append(('P3-B1', '拒绝采样', samp[0], prop[0]))
             secs.append(('P3-B2', 'draft草拟', prop[0], prop[0] + prop[1]))
-            b3_end = sto[0] + sto[1]
+            b3_end = body[0] + body[1]
             if b3_end > prop[0] + prop[1]:
                 secs.append(('P3-B3', 'aux流收尾', prop[0] + prop[1], b3_end))
         else:
-            secs.append(('P3-B', '采样', samp[0] if samp else sto[0], sto[0] + sto[1]))
+            secs.append(('P3-B', '采样', samp[0] if samp else body[0], body[0] + body[1]))
+    elif samp and prop and prop[0] > samp[0]:
+        secs.append(('P3-B1', '拒绝采样', samp[0], prop[0]))
+        secs.append(('P3-B2', 'draft草拟', prop[0], prop[0] + prop[1]))
+    elif samp:
+        secs.append(('P3-B', '采样', samp[0], samp[0] + samp[1]))
     if es:
         secs.append(('P3-C', '步收尾', es[0], es[0] + es[1]))
-    return [s for s in secs if s[3] > s[2]]
+    out, cur = [], w3_start
+    for key, name, a, b in sorted(secs, key=lambda s: s[2]):
+        if a - cur > 500000:
+            out.append(('P3-X', '未细分区间', cur, a))
+        out.append((key, name, a, b))
+        cur = max(cur, b)
+    if s1 - cur > 500000:
+        out.append(('P3-X', '未细分区间', cur, s1))
+    return [s for s in out if s[3] > s[2]]
 
 
 def op_counts(db, a, b):
-    """设备算子计数 (pid=device_pid 的 AI 内核按 name 聚合, 排除 hcom/通信协调内核/协调流)."""
+    """设备算子计数 (pid=device_pid 的 AI 内核按 name 聚合, 排除 hcom/通信协调内核/协调流).
+
+    附带 host 下发时延: 内核名 aclnn<Op>_... → 侧车 api_stat 的 aclnn<Op> API 平均耗时;
+    无 aclnn 前缀的融合算子(AddRmsNormBias/SwiGlu 等)按 aclnn<内核名> 匹配;
+    triton 内核无 ACL API, 显示 —. 需要侧车 api_detail.csv/api_statistic.csv.
+    """
     P = pids(db)
     r = db.execute("SELECT value FROM meta WHERE key='coord_streams'").fetchone()
     coord = json.loads(r[0]) if r and r[0] else []
@@ -505,11 +552,30 @@ def op_counts(db, a, b):
     rows = db.execute(
         f"SELECT name, COUNT(*), SUM(dur_ns) FROM events "
         f"WHERE pid={P['dev']} AND cat IN ('AI_CORE','AI_VECTOR_CORE','MIX_AIC','MIX_AIV','AI_CPU') "
-        f"AND dur_ns>0 AND ts_ns>=? AND ts_ns+dur_ns<=? "
+        f'AND dur_ns>0 AND ts_ns>=? AND ts_ns+dur_ns<=? '
         f"AND name NOT LIKE 'hcom%' AND name NOT LIKE '%AicpuKernel%'"
         + (f' AND tid NOT IN ({ph})' if coord else '') +
         ' GROUP BY name ORDER BY 2 DESC LIMIT 20', (a, b, *coord)).fetchall()
-    return rows
+    try:
+        api_map = dict(db.execute('SELECT api, avg_us FROM api_stat'))
+    except sqlite3.OperationalError:
+        api_map = {}
+    try:
+        kstate = dict(db.execute('SELECT name, state FROM kernel_state'))
+    except sqlite3.OperationalError:
+        kstate = {}
+    out = []
+    for name, cnt, dur in rows:
+        if name.startswith('aclnn'):
+            op = name[5:].split('_')[0]
+            cand = ['aclnn' + op, 'aclnnInner' + op]
+        else:
+            cand = ['aclnn' + name, 'aclnnInner' + name]
+        avg = next((api_map[c] for c in cand if c in api_map), None)
+        if avg is None and kstate.get(name[:200]) == 'static':
+            avg = 'replay'
+        out.append((name, cnt, dur, avg))
+    return out
 
 
 def _kshort(name):
@@ -552,7 +618,7 @@ def model_structure_html(db, a, b, s0, s1, mode):
     r = db.execute("SELECT value FROM meta WHERE key='coord_streams'").fetchone()
     coord = json.loads(r[0]) if r and r[0] else []
     ph = ','.join('?' * len(coord))
-    w0, w1 = (s0, s1) if mode == 'graph_replay' and s0 is not None else (a, b)
+    w0, w1 = (s0, s1) if mode == 'graph_replay' and s0 is not None else (a, s1 if s1 is not None else b)
     rows = db.execute(
         f"SELECT tid, name FROM events WHERE pid={P['dev']} "
         f"AND cat IN ('AI_CORE','AI_VECTOR_CORE','MIX_AIC','MIX_AIV','AI_CPU') "
@@ -690,6 +756,374 @@ def model_structure_html(db, a, b, s0, s1, mode):
             f'<div class="mstruct">{"".join(parts)}</div><div class="pbnote">{esc(note)}</div>')
 
 
+def _ms_kclass(name):
+    """模型结构用的算子分类（比 _kclass 多 GDN/MoE/压缩/外置模型）。"""
+    ln = name.lower()
+    if any(x in ln for x in ('mtp', 'dspark', 'eagle', 'medusa', '_draft')):
+        return 'external'
+    if any(x in ln for x in ('gdn', 'delta_rule', 'recurrentgatedelta', 'chunkgatedelta',
+                             'fusedgdngating', 'causalconv1d', 'ssm', 'l2norm',
+                             'chunk_', 'recompute_w_u', 'solve_tril', 'merge_16x16',
+                             'indexputimpl', 'chunkfwdo')):
+        return 'gdn'
+    if any(x in ln for x in ('moe', 'gating', 'groupedmatmul', 'routing', 'unpermute')):
+        return 'moe'
+    if any(x in ln for x in ('compress', 'decompress', 'kv_lora', 'lightning', 'nsa')):
+        return 'compress'
+    if any(x in ln for x in ('attention', 'attn', 'mla', 'sparse')):
+        return 'attn'
+    if any(x in ln for x in ('matmul', 'gemm', 'linear')):
+        return 'gemm'
+    if 'norm' in ln:
+        return 'norm'
+    if any(x in ln for x in ('swiglu', 'silu', 'gelu', 'sigmoid')):
+        return 'act'
+    if 'cache' in ln:
+        return 'cache'
+    if 'rope' in ln or 'mrope' in ln:
+        return 'rope'
+    if 'embed' in ln:
+        return 'embed'
+    if any(x in ln for x in ('index', 'slice', 'check')):
+        return 'index'
+    if any(x in ln for x in ('applytopk', 'topp', 'sort', 'softmax', 'argmax', 'sample')):
+        return 'sample'
+    return 'other'
+
+
+def _ms_box(n, lab=''):
+    cls = _ms_kclass(n)
+    css = {'attn': 'ms-attn', 'gdn': 'ms-gdn', 'moe': 'ms-moe', 'compress': 'ms-compress',
+           'gemm': 'ms-gemm', 'norm': 'ms-norm', 'act': 'ms-act', 'cache': 'ms-cache',
+           'rope': 'ms-rope', 'index': 'ms-index', 'external': 'ms-ext'}.get(cls, 'ms-ot')
+    txt = f'{lab}·{_kshort(n)}' if lab else _kshort(n)
+    return f'<span class="msb {css}" title="{esc(n)}">{esc(txt)}</span>'
+
+
+def _ms_is_core(name):
+    ln = name.lower()
+    if 'fusedgdngating' in ln:
+        return True
+    if 'attention' in ln or 'attn' in ln or 'mla' in ln or 'sparse' in ln:
+        return True
+    return False
+
+
+def _ms_unit(rows):
+    if not rows:
+        return [], None
+    main_tid = Counter(r[0] for r in rows).most_common(1)[0][0]
+    unit = []
+    for t, n, _ts in rows:
+        if t != main_tid:
+            continue
+        if not unit or unit[-1] != n:
+            unit.append(n)
+    return unit, main_tid
+
+
+def _ms_is_prefix(name):
+    """层起始前缀：CausalConv1d / split_qkv / GemmaRmsNorm / 非 Add 的 RmsNorm."""
+    ln = name.lower()
+    if 'causalconv1d' in ln:
+        return True
+    if 'split_qkv' in ln:
+        return True
+    if 'gemmarmmsnorm' in ln:
+        return True
+    if 'rmsnorm' in ln and 'add' not in ln:
+        return True
+    if 'qkv' in ln:
+        return True
+    return False
+
+
+def _ms_layer_start(unit, core_idx, prev_idx):
+    """层起点：GDN 层取首个 CausalConv1d；Attention 层取核心前最后一个 GEMM(QKV)。"""
+    if _ms_kclass(unit[core_idx]) == 'gdn':
+        idx = next((j for j in range(prev_idx, core_idx + 1)
+                    if 'causalconv1d' in unit[j].lower()), None)
+        if idx is not None:
+            return idx
+    for j in range(core_idx, prev_idx - 1, -1):
+        if _ms_kclass(unit[j]) == 'gemm':
+            return j
+    return next((j for j in range(prev_idx, core_idx + 1) if _ms_is_prefix(unit[j])), prev_idx)
+
+
+def _ms_segments(unit):
+    cores = [i for i, n in enumerate(unit) if _ms_is_core(n)]
+    if not cores:
+        return [], [], unit, []
+    starts = []
+    for i, c in enumerate(cores):
+        prev = 0 if i == 0 else cores[i - 1] + 1
+        start = _ms_layer_start(unit, c, prev)
+        if starts and start <= starts[-1]:
+            start = prev
+        starts.append(start)
+    head = unit[:starts[0]]
+    segs = []
+    for i, st in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(unit)
+        segs.append(unit[st:end])
+    tail = []
+    if segs:
+        last = segs[-1]
+        cut = next((i for i, n in enumerate(last) if _ms_kclass(n) == 'sample'), None)
+        if cut is not None:
+            tail = last[cut:]
+            last = last[:cut]
+        # 末层之后的 logits/输出头（最后一个 Norm 之后）归到尾部，避免把输出头当成层变体
+        norm_idx = [i for i, n in enumerate(last) if _ms_kclass(n) == 'norm']
+        if norm_idx and norm_idx[-1] + 1 < len(last):
+            tail = last[norm_idx[-1] + 1:] + tail
+            last = last[:norm_idx[-1] + 1]
+        segs[-1] = last
+    return head, segs, tail, [unit[c] for c in cores]
+
+
+def _ms_cluster(segs):
+    groups = []
+    index = {}
+    key_classes = ('attn', 'gdn', 'moe', 'compress', 'gemm', 'norm', 'act', 'cache', 'rope', 'embed')
+    for seg in segs:
+        if not seg:
+            continue
+        cnt = Counter(_ms_kclass(n) for n in seg)
+        low = ' '.join(n.lower() for n in seg)
+        core = next((_ms_kclass(n) for n in seg if _ms_is_core(n)), _ms_kclass(seg[0]))
+        key = (core, bool(cnt.get('moe')), bool(cnt.get('compress')),
+               ('mla' in low), ('sparse' in low),
+               tuple(min(cnt.get(c, 0), 6) for c in key_classes))
+        if key not in index:
+            index[key] = len(groups)
+            groups.append({'count': 0, 'seg': seg, 'key': key, 'cnt': cnt})
+        g = groups[index[key]]
+        g['count'] += 1
+        if len(seg) > len(g['seg']):
+            g['seg'] = seg
+    # 签名过多时用粗粒度签名合并，避免把每层微小差异都单独列出来
+    if len(groups) > 8:
+        coarse = {}
+        for g in groups:
+            core, _ = g['key']
+            cnt = g['cnt']
+            key = (core, bool(cnt.get('moe')), bool(cnt.get('compress')), bool(cnt.get('gdn')),
+                   min(cnt.get('gemm', 0), 8), min(cnt.get('attn', 0), 8))
+            if key not in coarse:
+                coarse[key] = {'count': 0, 'seg': g['seg'], 'key': key, 'cnt': Counter()}
+            c = coarse[key]
+            c['count'] += g['count']
+            c['cnt'].update(cnt)
+            if len(g['seg']) > len(c['seg']):
+                c['seg'] = g['seg']
+        groups = list(coarse.values())
+    groups.sort(key=lambda g: -g['count'])
+    return groups
+
+
+def _ms_cluster_label(g):
+    core = g['key'][0]
+    base = {'gdn': 'GDN 层', 'attn': 'Attention 层'}.get(core, '层')
+    mods = []
+    if g['cnt'].get('moe'):
+        mods.append('MoE')
+    if g['cnt'].get('compress'):
+        mods.append('压缩')
+    if any('mla' in n.lower() for n in g['seg']):
+        mods.append('MLA')
+    if any('sparse' in n.lower() for n in g['seg']):
+        mods.append('稀疏')
+    return base + (f'（{"/".join(mods)}）' if mods else '')
+
+
+def _ms_diff_label(g, dom):
+    if g is dom or g['key'][0] != dom['key'][0]:
+        return ''
+    gn = Counter(g['seg'])
+    dn = Counter(dom['seg'])
+    extra = [n for n in gn if n not in dn]
+    missing = [n for n in dn if n not in gn]
+    parts = []
+    if extra:
+        parts.append('含 ' + ', '.join(_kshort(n) for n in extra[:2]) + (f' +{len(extra)-2}' if len(extra) > 2 else ''))
+    if missing:
+        parts.append('无 ' + ', '.join(_kshort(n) for n in missing[:2]) + (f' +{len(missing)-2}' if len(missing) > 2 else ''))
+    return '；'.join(parts)
+
+
+def _ms_render_seg(seg):
+    boxes = []
+    attn_seen = False
+    gemm_before = 0
+    gemm_after = 0
+    for i, n in enumerate(seg):
+        cls = _ms_kclass(n)
+        lab = ''
+        if i == 0 and cls in ('attn', 'gdn'):
+            lab = 'Attention' if cls == 'attn' else 'GDN'
+        elif cls == 'attn':
+            lab = 'Attention'
+        elif cls == 'moe':
+            ln = n.lower()
+            if 'gating' in ln or 'topk' in ln:
+                lab = 'MoE Gate'
+            elif 'routing' in ln:
+                lab = 'MoE Routing'
+            elif 'unpermute' in ln:
+                lab = 'MoE Unpermute'
+            else:
+                lab = 'Expert GEMM'
+        elif cls == 'compress':
+            lab = '压缩'
+        elif cls == 'norm':
+            ln = n.lower()
+            lab = 'QKVNorm' if any(x in ln for x in ('split_qkv', 'qkv', 'l2norm', 'layer_norm', 'gemma')) else 'Norm'
+        elif cls == 'act':
+            lab = 'Act'
+        elif cls == 'cache':
+            lab = 'KV写'
+        elif cls == 'rope':
+            lab = 'RoPE'
+        elif cls == 'index':
+            lab = 'Index'
+        elif cls == 'gemm':
+            if not attn_seen:
+                gemm_before += 1
+                lab = 'QKV' if gemm_before == 1 else f'GEMM{gemm_before}'
+            else:
+                gemm_after += 1
+                lab = {1: 'O', 2: 'MLP-up', 3: 'MLP-down'}.get(gemm_after, f'GEMM{gemm_after}')
+        boxes.append(_ms_box(n, lab))
+        if cls == 'attn':
+            attn_seen = True
+    return '<i class="msa">→</i>'.join(boxes)
+
+
+def _ms_render_unit(unit, note):
+    head, segs, tail, cores = _ms_segments(unit)
+    groups = _ms_cluster(segs)
+    if not groups:
+        return ''
+    parts = []
+    if head:
+        parts.append('<div class="title-line">头部（首层前缀/Embedding）</div>')
+        parts.append('<div class="mstruct">' + '<i class="msa">→</i>'.join(_ms_box(n) for n in head) + '</div>')
+    dom = groups[0]
+    for g in groups:
+        label = _ms_cluster_label(g)
+        diff = _ms_diff_label(g, dom)
+        if diff:
+            label += '；' + diff
+        parts.append(f'<div class="title-line">{esc(label)} ×{g["count"]}</div>')
+        parts.append('<div class="mstruct"><span class="mslayer">×' + str(g['count']) + '&nbsp;'
+                     + _ms_render_seg(g['seg']) + '</span></div>')
+    if tail:
+        parts.append('<div class="title-line">尾部（采样/收尾）</div>')
+        parts.append('<div class="mstruct">' + '<i class="msa">→</i>'.join(_ms_box(n) for n in tail) + '</div>')
+    parts.append(f'<div class="pbnote">{esc(note)}</div>')
+    return ''.join(parts)
+
+
+def _ms_external_windows(db, s0, s1):
+    if s0 is None or s1 is None:
+        return []
+
+    def query(pattern):
+        try:
+            return db.execute(
+                "SELECT name, ts_ns, ts_ns+dur_ns FROM events WHERE cat='python_function' AND dur_ns>500000 "
+                "AND ts_ns>=? AND ts_ns+dur_ns<=? AND (" + pattern + ") ORDER BY ts_ns",
+                (s0, s1)).fetchall()
+        except sqlite3.OperationalError:
+            return []
+
+    # 优先取具体外置模型 forward / merged draft 窗口，避免把外层 propose_draft 的采样段也算进模型结构
+    rows = query("lower(name) LIKE '%mtp%' OR lower(name) LIKE '%_run_merged_draft%' "
+                 "OR lower(name) LIKE '%dspark%' OR lower(name) LIKE '%eagle%' OR lower(name) LIKE '%medusa%'")
+    rows = [r for r in rows if 'propose_draft' not in r[0].lower()
+            and not any(x in r[0].lower() for x in ('use_eagle', 'is_drafter_moe_model'))]
+    if not rows:
+        rows = query("lower(name) LIKE '%draft%' OR lower(name) LIKE '%mtp%' OR lower(name) LIKE '%dspark%'")
+        rows = [r for r in rows if not any(x in r[0].lower() for x in ('use_eagle', 'is_drafter_moe_model'))]
+    if not rows:
+        return []
+    rows.sort()
+    merged = []
+    for name, a, b in rows:
+        # 连续 MTP 轮次之间通常只有几 ms 间隔，合并成一个外置模型窗口
+        if merged and a - merged[-1][1] < 2_000_000:
+            merged[-1][1] = max(merged[-1][1], b)
+            merged[-1][2].append(name)
+        else:
+            merged.append([a, b, [name]])
+    out = []
+    for a, b, names in merged:
+        if b - a < 1_000_000:
+            continue
+        low = ' '.join(names).lower()
+        if 'dspark' in low:
+            label = 'DSpark'
+        elif 'mtp' in low or 'draft' in low:
+            rounds = sum(1 for n in names if 'mtp.py' in n.lower() and 'forward' in n.lower())
+            label = 'MTP draft' + (f' ×{rounds} 轮' if rounds > 1 else '')
+        else:
+            label = '外部模型'
+        out.append({'a': a, 'b': b, 'label': label, 'names': names,
+                    'rounds': sum(1 for n in names if 'mtp.py' in n.lower() and 'forward' in n.lower())})
+    return out
+
+
+def _ms_query_kernels(db, a, b, dev, coord):
+    ph = ','.join('?' * len(coord))
+    sql = (f"SELECT tid,name,ts_ns FROM events WHERE pid={dev} "
+           "AND cat IN ('AI_CORE','AI_VECTOR_CORE','MIX_AIC','MIX_AIV','AI_CPU') "
+           "AND dur_ns>0 AND ts_ns>=? AND ts_ns+dur_ns<=? "
+           "AND name NOT LIKE 'hcom%' AND name NOT LIKE '%AicpuKernel%'"
+           + (f' AND tid NOT IN ({ph})' if coord else '') + ' ORDER BY ts_ns')
+    return db.execute(sql, (a, b, *coord)).fetchall()
+
+
+def _ms_external_html(db, ext, dev, coord):
+    parts = []
+    for e in ext:
+        rows = _ms_query_kernels(db, e['a'], e['b'], dev, coord)
+        unit, tid = _ms_unit(rows)
+        if len(unit) < 4:
+            continue
+        note = (f'外部模型窗口 {uims(e["a"], ui(db)):.3f}~{uims(e["b"], ui(db)):.3f}ms · '
+                f'{e.get("rounds", 1)} 轮 · 以下为单轮结构 · 主执行流 tid={tid} · 由 python 帧 + 设备内核推导')
+        body = _ms_render_unit(unit, note)
+        if body:
+            parts.append(f'<h3>外部模型：{esc(e["label"])}</h3>' + body)
+    return ''.join(parts)
+
+
+def model_structure_html_v2(db, a, b, s0, s1, mode):
+    """按层类型聚类的模型结构；MTP/DSpark 外置模型单独输出。"""
+    P = pids(db)
+    r = db.execute("SELECT value FROM meta WHERE key='coord_streams'").fetchone()
+    coord = json.loads(r[0]) if r and r[0] else []
+    w0, w1 = (s0, s1) if mode == 'graph_replay' and s0 is not None else (a, s1 if s1 is not None else b)
+    rows = _ms_query_kernels(db, w0, w1, P['dev'], coord)
+    if len(rows) < 8:
+        return ''
+    ext = _ms_external_windows(db, s0, s1)
+    if ext:
+        rows = [r for r in rows if not any(e['a'] <= r[2] < e['b'] for e in ext)]
+    unit, tid = _ms_unit(rows)
+    if len(unit) < 4:
+        return ''
+    note = f'主执行流 tid={tid} · 按内核 ts 顺序 · 层类型按算子签名聚类 · 不是静态模型定义'
+    main = _ms_render_unit(unit, note)
+    if not main:
+        return model_structure_html(db, a, b, s0, s1, mode)
+    out = '<h3>模型结构（由设备内核执行顺序推导，按层类型聚类）</h3>' + main
+    out += _ms_external_html(db, ext, P['dev'], coord)
+    return out
+
+
 def rep_instance(db, pattern, a, b, exclude=()):
     row = longest(db, pattern, a, b, exclude=exclude)
     if not row:
@@ -706,11 +1140,11 @@ def step_verdict(p3f, sync_ms, p2f, mode=None):
     if p3f >= 20 and sync_ms < 0.5:
         v = 'host bound(设备提前空闲)'
     elif sync_ms >= 2:
-        v = '设备积压(步尾真排水)'
+        v = '设备积压（步尾同步等设备跑完）'
     else:
         v = '设备基本跟上'
     if mode == 'graph_replay':
-        return v + '（整图回放步：host 提前完成，设备在 P3 排空）'
+        return v + '（整图回放步：host 提前完成，设备在 P3 继续执行到结束）'
     if p2f is not None and p2f >= 30:
         v += ' + forward供数不足'
     return v
@@ -814,6 +1248,12 @@ tr:nth-child(even) td{background:#FBFAF7}
 .ms-rope{background:#E9E4F0;color:#5E4B75}
 .ms-sample{background:#E6E1EC;color:#5E4B75}
 .ms-embed{background:#E2E8E6;color:#3E5B52}
+.ms-gdn{background:#E7E3F2;color:#5A4B7A;font-weight:600}
+.ms-moe{background:#E4E9F2;color:#3F5B7A;font-weight:600}
+.ms-compress{background:#F0E4D8;color:#7A5A3F;font-weight:600}
+.ms-index{background:#EFE9DF;color:#7D5F42}
+.ms-ext{background:#E8E4EF;color:#5E4B75;font-weight:600}
+.ms-ot{background:#F1EFEA;color:#6B737A}
 .mslayer{border:1.5px dashed #A9B5BE;border-radius:9px;padding:5px 8px;display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center;background:#F4F3EE;font-weight:600;max-width:100%}
 .msa{color:#98A1A8;font-style:normal}
 .pbnote{font-size:11.5px;color:#8B9299;margin:2px 0 8px}
@@ -873,7 +1313,7 @@ def four_badges(db, a, b):
     tot, s = cls_stats(db, a, b)
     parts = []
     for k in ('computing', 'communication', 'comm_not_overlapped', 'free'):
-        parts.append(f'<span class="b {BADGE.get(k, "c-free")}">{k} {tot[k] / s * 100:.1f}%</span>')
+        parts.append(f'<span class="b {BADGE.get(k, "c-free")}">{k} {tot[k] / s * 100 if s > 0 else 0.0:.1f}%</span>')
     return ' '.join(parts), tot
 
 
@@ -889,9 +1329,9 @@ def stage_box_html(db, sid, s0, s1, w1, w2, w3, step_dur):
         tot, dur = cls_stats(db, *w)
         cells = ''
         for k in ('computing', 'communication', 'comm_not_overlapped', 'free'):
-            cells += f'<td>{tot[k] / dur * 100:.1f}%</td>'
+            cells += f'<td>{tot[k] / dur * 100 if dur > 0 else 0.0:.1f}%</td>'
         rows.append(f'<tr><td><b style="color:{STAGE_COLOR[key]}">{key}</b> {label}</td>'
-                    f'<td>{dur / 1e6:.3f}ms</td><td>{dur / 1e6 / step_dur * 100:.1f}%</td>{cells}</tr>')
+                    f'<td>{dur / 1e6:.3f}ms</td><td>{dur / 1e6 / step_dur * 100 if step_dur > 0 else 0.0:.1f}%</td>{cells}</tr>')
     head = ('<tr><th>阶段</th><th>耗时</th><th>占 step</th><th>NPU Computing</th>'
             '<th>Communication</th><th>Comm 未重叠</th><th>Free</th></tr>')
     return (f'<div class="stagebox"><h3>阶段总览 · step{sid} · 全步 {step_dur:.3f}ms</h3>'
@@ -984,7 +1424,8 @@ COMMENTS = (
     (': compute_logits', 'lm_head 投影 + TP 拼接'),
     ('_gather_logits', 'TP all_gather 拼全词表'),
     (': handle_output', '结果回传调度进程'),
-    (': _sample_tokens_orig', '采样与 draft 总入口'),
+    (': sample_tokens', '采样与 draft 总入口'),
+    (': _sample_tokens', '采样与 draft 总入口'),
     (': _sample', '拒绝采样'),
     ('rejection_sampler.py(147)', '拒绝采样主流程'),
     ('AscendSampler', '基础采样'),
@@ -1049,6 +1490,7 @@ MECH_LIFT = ('<built-in function', 'autograd/function.py', 'eval_frame.py',
              'dynamic_func', 'ascend/driver.py', 'fla/utils.py(45): wrapper',
              'chunk.py(227): forward', 'triton/backends/', 'backends/compiler.py',
              'compilation/decorators.py', 'aot_compile.py', 'compilation/caching.py',
+             'patch_qwen3_5.py', 'qwen3_5_mtp_forward',
              ': execution_fn', 'piecewise_backend.py', 'compile_fx.py',
              'aot_autograd.py', 'runtime_wrapper', 'call_func_at_runtime_with_args',
              'runtime_wrappers.py', 'utils.py(106): g', '): kernel',
@@ -1087,15 +1529,19 @@ def bare_fn(n):
     return ' ⇢ '.join(ded)
 
 
-def key_match(name):
-    return any(p in name for p in KEY_PATTERNS)
+def key_match(name, files=()):
+    if any(p in name for p in KEY_PATTERNS):
+        return True
+    if any(p in name for p in GENERIC_NS):
+        return True
+    return name.split('(')[0] in files
 
 
-def filter_keys(nodes):
+def filter_keys(nodes, files=()):
     out = []
     for n, s, e, ch in nodes:
-        fch = filter_keys(ch)
-        if key_match(n) or fch:
+        fch = filter_keys(ch, files)
+        if key_match(n, files) or fch:
             out.append((n, s, e, fch))
     return out
 
@@ -1155,8 +1601,37 @@ def tuples_to_dicts(nodes):
     return out
 
 
+GENERIC_NS = (
+    '/models/',
+    'vllm_ascend/ops/',
+    'vllm_ascend/attention/',
+    'kv_connector',
+    'fla/',
+    '<string>(',
+)
+FWD_FILE_EXCLUDE = ('/torch/', 'torch_npu', '/triton/', '<string')
+
+
+def model_files(db, a, b):
+    """窗口内含 forward 帧的模型/算子源文件 (动态白名单, 新模型免适配).
+
+    vLLM 内置模型在 /models/ 下 (静态 NS 已覆盖); 自定义模型路径任意,
+    通过 "该文件存在 : forward 帧" 动态识别, torch/triton/<string> 除外.
+    """
+    P = pids(db)
+    out = set()
+    for (n,) in db.execute(
+            f"SELECT DISTINCT name FROM events WHERE pid={P['py']} AND cat='python_function' "
+            'AND dur_ns>0 AND ts_ns>=? AND ts_ns+dur_ns<=? AND name LIKE "%: forward"', (a, b)):
+        f = n.split('(')[0]
+        if f and not any(x in f for x in FWD_FILE_EXCLUDE):
+            out.add(f)
+    return out
+
+
 def key_flame_tree(db, a, b, tid, agg=True):
-    tree = merge_same_name(filter_keys(lift_mech(tree_to_tuples(build_tree(db, a, b, tid)))))
+    files = model_files(db, a, b)
+    tree = merge_same_name(filter_keys(lift_mech(tree_to_tuples(build_tree(db, a, b, tid))), files))
     if agg:
         tree = agg_siblings(tree)
     return tuples_to_dicts(tree)
@@ -1194,6 +1669,7 @@ def flame_html(db, sid, s0, s1, w1, w2, w3):
         stages.append(('P3', w3))
     frames = []
     ov = []
+    step_files = model_files(db, s0, s1)
     for key, w in stages:
         a, b = max(w[0], s0), min(w[1], s1)
         sdur = (b - a) / 1e6
@@ -1207,7 +1683,7 @@ def flame_html(db, sid, s0, s1, w1, w2, w3):
         tid = main_tid(db, a, b)
         tree = tree_to_tuples(agg_us(build_tree(db, a, b, tid)))
         tree = lift_mech(tree)
-        tree = filter_keys(tree)
+        tree = filter_keys(tree, step_files)
         tree = merge_same_name(tree)
 
         def walk(nodes, depth):
@@ -1266,7 +1742,7 @@ def flame_html(db, sid, s0, s1, w1, w2, w3):
             f'<div class="note">' + ' '.join(
                 f'<span class="chip" style="background:{STAGE_COLOR[k]}"></span>{k} {((min(w[1], s1) - max(w[0], s0)) / total * 100):.1f}%'
                 for k, w in stages)
-            + f' · 帧数 {len(frames)}（仅校准关键函数，µs 级叶子已聚合）</div></div>'
+            + f' · 帧数 {len(frames)}（校准关键函数+模型命名空间，µs 级叶子已聚合）</div></div>'
             + script)
 
 
@@ -1297,31 +1773,40 @@ def p2_html(db, a, b, uiz, step_dur, fname, s0=None, s1=None):
     mode_label = {'graph_replay': 'NPU 整图回放', 'fx_eager': 'FX 图 eager 逐算子执行',
                   'eager': 'eager'}[mode]
     counts = op_counts(db, s0 if s0 is not None else a, s1 if s1 is not None else b)
+    if mode == 'graph_replay':
+        wa, wb = s0 if s0 is not None else a, s1 if s1 is not None else b
+        rrow = db.execute(
+            "SELECT COUNT(*), SUM(dur_ns) FROM events "
+            "WHERE name LIKE '%aclmdlRIExecuteAsync%' AND dur_ns>0 AND ts_ns>=? AND ts_ns+dur_ns<=?",
+            (wa, wb)).fetchone()
+        if rrow and rrow[0]:
+            try:
+                gavg = db.execute("SELECT avg_us FROM api_stat WHERE api='aclmdlRIExecuteAsync'").fetchone()
+            except sqlite3.OperationalError:
+                gavg = None
+            n_static = sum(1 for _, _, _, avg in counts if avg == 'replay')
+            counts.append((f'aclmdlRIExecuteAsync（整图下发，覆盖{n_static}种回放内核）',
+                           rrow[0], rrow[1] or 0, gavg[0] if gavg else None))
     cnt_rows = ''.join(
         f'<tr><td>{esc(short(n))}</td><td>{c}</td><td>{d / 1e6:.3f}</td>'
-        f'<td>{d / c / 1e3:.1f}</td></tr>'
-        for n, c, d in counts)
-    gdn = rep_instance(db, 'qwen_gdn_attention_core', a, b)
-    attn = rep_instance(db, 'unified_attention_with_output', a, b)
-
-    def rep_html(inst, label):
-        if not inst:
-            return ''
-        name, s, e, tree = inst
-        d = (e - s) / 1e6
-        return (f'<div class="sect"><div class="title-line">代表实例: {esc(bare_fn(name))} · {d:.3f}ms</div>'
-                + render_tree(tree, uiz, WindowClasses(db, s, e)) + '</div>')
-
+        f'<td>{d / c / 1e3:.1f}</td>'
+        + (f'<td>{avg:.1f}</td>' if isinstance(avg, float) else '<td>回放</td>' if avg == 'replay' else '<td>—</td>')
+        + '</tr>'
+        for n, c, d, avg in counts)
     return (f'<div class="sect"><div class="title-line">P2 模型前向 · UI {uims(a,uiz):.3f}~{uims(b,uiz):.3f}ms · {dur:.3f}ms · 占step {dur / step_dur * 100:.1f}% · 锚点: {esc(fname)} · 执行模式: {mode_label}</div>'
             f'<div class="title-line">设备状态: {badges}</div>'
             f'<div class="sem">{esc(P2_MODE_TEXT[mode])}</div>'
             f'<div class="toolbar"><button onclick="xall(this.closest(\'.sect\'),true)">展开全部</button><button onclick="xall(this.closest(\'.sect\'),false)">收起全部</button></div>'
             + render_tree(spine, uiz, wc)
             + (f'<h3>设备算子计数（整个 step 窗口的 Ascend Hardware 内核，印证模型结构；'
-               f'已排除 hcom/通信协调内核。整图回放步设备异步执行，按 step 而非 P2 host 窗口统计）</h3>'
-               f'<table><tr><th>内核</th><th>次数</th><th>合计ms</th><th>单次µs</th></tr>{cnt_rows}</table>' if cnt_rows else '')
-            + model_structure_html(db, a, b, s0, s1, mode)
-            + rep_html(gdn, 'GDN') + rep_html(attn, 'ATTN')
+               f'已排除 hcom/通信协调内核。整图回放步设备异步执行，按 step 而非 P2 host 窗口统计。'
+               f'下发时延avg = 侧车 api_detail.csv/api_statistic.csv 中对应 aclnn API 的平均耗时'
+               f'（内核 aclnn&lt;Op&gt;_… → API aclnn&lt;Op&gt;，变体 aclnnInner&lt;Op&gt;；融合算子按 aclnn&lt;内核名&gt; 匹配）。'
+               f'无命中时：侧车 kernel_details.csv 标记 static 的内核显示 回放（编入 acl 静态图，无逐次 host 下发）；'
+               f'triton/非 acl 路径内核显示 —；无侧车时整列为 —。整图回放步表尾追加'
+               f' aclmdlRIExecuteAsync 行（其下发时延即「回放」内核的整图下发代价））</h3>'
+               f'<table><tr><th>内核</th><th>次数</th><th>合计ms</th><th>单次µs</th><th>下发时延avg(µs)</th></tr>{cnt_rows}</table>' if cnt_rows else '')
+            + model_structure_html_v2(db, a, b, s0, s1, mode)
             + '</div>')
 
 
@@ -1403,13 +1888,16 @@ def build(db, out, only_step):
         sync_ms = sync[0] / 1e6 if sync else 0.0
         step_dur = (s1 - s0) / 1e6
         t1, _ = cls_stats(db, *w1)
-        p1f = t1['free'] / max(w1[1] - w1[0], 1) * 100
+        w1w = w1[1] - w1[0]
+        p1f = t1['free'] / w1w * 100 if w1w > 0 else 0.0
         if w2 and w3:
             t2, _ = cls_stats(db, *w2)
             t3, _ = cls_stats(db, *w3)
-            p2c = t2['computing'] / (w2[1] - w2[0]) * 100
-            p2f = t2['free'] / (w2[1] - w2[0]) * 100
-            p3f = t3['free'] / (w3[1] - w3[0]) * 100
+            w2w = w2[1] - w2[0]
+            w3w = w3[1] - w3[0]
+            p2c = t2['computing'] / w2w * 100 if w2w > 0 else 0.0
+            p2f = t2['free'] / w2w * 100 if w2w > 0 else 0.0
+            p3f = t3['free'] / w3w * 100 if w3w > 0 else 0.0
         else:
             p2c = p2f = p3f = None
         verdict = step_verdict(p3f if p3f is not None else 0, sync_ms, p2f, mode)
@@ -1441,6 +1929,10 @@ def build(db, out, only_step):
         pages.append(sid)
         nav.append(f'<button id="btn-step{sid}" onclick="show(\'step{sid}\')">step{sid}</button>')
         parts = [f'<h1>step{sid} 详细分析 <span class="note">(窗口 {uims(s0,uiz):.3f}~{uims(s1,uiz):.3f}ms · {step_dur:.3f}ms · 判定: {esc(verdict)})</span></h1>']
+        st_step, ssz = cls_stats(db, s0, s1)
+        if ssz > 0:
+            parts.append(cf_box_html(st_step['computing'] / ssz * 100, st_step['free'] / ssz * 100,
+                                'Computing vs Free（本步重点）'))
         parts.append(stage_box_html(db, sid, s0, s1, w1, w2, w3, step_dur))
         parts.append(flame_html(db, sid, s0, s1, w1, w2, w3))
         secs = p1_sections(db, s0, w1[1], w2[0] if w2 else s1)
@@ -1474,6 +1966,7 @@ def build(db, out, only_step):
                 f'<tr>{first}<td>{i}</td><td>{esc(n)}</td><td>{v:.1f}ms</td>'
                 f'<td>{v / tot * 100 if tot else 0:.1f}%</td>'
                 f'<td>{esc(cmt)}</td></tr>')
+    cf_box = ''
     if steps:
         oa, ob = steps[0][1], steps[-1][2]
         otot, osz = cls_stats(db, oa, ob)
@@ -1495,16 +1988,18 @@ def build(db, out, only_step):
                 f'Communication {ocomm:.1f}%（未重叠 {ocno:.1f}%）</div>'
                 f'<div>{mini_bar(otot, osz, big=True)}</div>'
                 + BAR_LEGEND + '</div>')
+        cf_box = cf_box_html(ocomp, ofree)
     else:
         hero = '<div class="hero"><div class="htitle">无 step 数据</div></div>'
     home = f'''<div class="page on" id="home">
 <h1>Profiling 汇总</h1>
+{cf_box}
 {hero}
 <div class="kv">trace: {esc(meta.get("trace", "?"))}</div>
-<div class="kv">分类源: {esc(meta.get("classification_source", "?"))} · 事件数 {meta.get("n_events", "?")} · steps: {len(steps)}</div>
+<div class="kv">分类源: {esc(meta.get("classification_source", "?"))} · 事件数 {meta.get("n_events", "?")} · steps: {len(steps)} (边界来源: {esc(meta.get("step_source", "profiler_step"))})</div>
 <table><tr><th>step</th><th>步长</th><th>推理前准备</th><th>推理</th><th>推理后</th><th>步尾同步</th></tr>
 {''.join(home_rows)}{total_row}</table>
-<div class="note">口径：Free = 窗口 − (Computing ∪ Communication)，OA 未覆盖间隙计入 Free；Computing + 未重叠 + Free = 100%（Communication 与 Computing 可重叠）。步尾同步 = 每步末尾的设备级同步耗时：长 = 设备真排水（积压）；瞬时返回 = 设备早已空闲（host bound）。</div>
+<div class="note">口径：Free = 窗口 − (Computing ∪ Communication)，OA 未覆盖间隙计入 Free；Computing + 未重叠 + Free = 100%（Communication 与 Computing 可重叠）。步尾同步 = 每步末尾的设备级同步耗时：长 = 设备还有任务没跑完，host 在等它执行完；瞬时返回 = 设备早已空闲（host bound）。</div>
 <h3>批成分（vLLM v1 continuous batching：一个 step 的批可同时含 prefill 与 decode，非二选一）</h3>
 <table><tr><th>step</th><th>批内请求</th><th>decode</th><th>其中带draft</th><th>新增 prefill</th><th>视觉编码</th><th>批类型</th></tr>
 {''.join(bc_rows)}</table>
@@ -1518,7 +2013,7 @@ def build(db, out, only_step):
 <nav><button id="btn-home" class="on" onclick="show('home')">首页 · 汇总</button>{''.join(nav)}</nav>
 {home}{''.join(step_pages)}
 <script>{JS}</script></body></html>'''
-    open(out, 'w').write(doc)
+    open(out, 'w', encoding='utf-8').write(doc)
     print(f'HTML 报告 → {out}  ({len(doc) / 1e6:.2f}MB, {len(pages)} steps)')
 
 
