@@ -5,13 +5,20 @@ RUN dnf install -y python3 bash coreutils && dnf clean all
 
 WORKDIR /workspace
 
-COPY skills/rocksdb-perf-diagnostics /staging/skill
+# 只装入运行时 skill 内容：SKILL.md + references/ + scripts/。
+# evals/、cases/ 是测试资产，绝不能被 agent 工作区看到。
+COPY skills/rocksdb-perf-diagnostics/SKILL.md   /staging/skill/SKILL.md
+COPY skills/rocksdb-perf-diagnostics/references /staging/skill/references
+COPY skills/rocksdb-perf-diagnostics/scripts    /staging/skill/scripts
 
-COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/prompts /workspace/prompts
+# 测试脚本/评分逻辑放在 /opt，不放 /workspace，避免 agent 直接读取。
+COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/prompts /opt/prompts
+COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/entrypoint.sh /opt/entrypoint.sh
+COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/verify.sh /opt/verify.sh
+
+# mock 基准是 agent 的输入，保留在 /workspace。
 COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/fixtures /workspace/fixtures
-COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/entrypoint.sh /workspace/entrypoint.sh
-COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/verify.sh /workspace/verify.sh
 
-RUN chmod +x /workspace/entrypoint.sh /workspace/verify.sh /workspace/fixtures/mock_db_bench.sh
+RUN chmod +x /opt/entrypoint.sh /opt/verify.sh /workspace/fixtures/mock_db_bench.sh
 
-CMD ["/workspace/entrypoint.sh"]
+CMD ["/opt/entrypoint.sh"]

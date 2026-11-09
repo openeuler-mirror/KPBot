@@ -5,13 +5,17 @@ RUN dnf install -y python3 bash coreutils && dnf clean all
 
 WORKDIR /workspace
 
-# skill 装入 /staging/skill，entrypoint 在 with 模式下复制到 .opencode/skills/
-COPY skills/rocksdb-perf-diagnostics /staging/skill
+# 只装入运行时 skill 内容：SKILL.md + references/ + scripts/。
+# evals/、cases/ 是测试资产，绝不能被 agent 工作区看到。
+COPY skills/rocksdb-perf-diagnostics/SKILL.md   /staging/skill/SKILL.md
+COPY skills/rocksdb-perf-diagnostics/references /staging/skill/references
+COPY skills/rocksdb-perf-diagnostics/scripts    /staging/skill/scripts
 
-COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/prompts /workspace/prompts
-COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/entrypoint.sh /workspace/entrypoint.sh
-COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/verify.sh /workspace/verify.sh
+# 测试脚本/评分逻辑放在 /opt，不放 /workspace，避免 agent 直接读取。
+COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/prompts /opt/prompts
+COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/entrypoint.sh /opt/entrypoint.sh
+COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/verify.sh /opt/verify.sh
 
-RUN chmod +x /workspace/entrypoint.sh /workspace/verify.sh
+RUN chmod +x /opt/entrypoint.sh /opt/verify.sh
 
-CMD ["/workspace/entrypoint.sh"]
+CMD ["/opt/entrypoint.sh"]

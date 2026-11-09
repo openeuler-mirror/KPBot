@@ -312,7 +312,30 @@ Java case 期望:
 - `report_has_before_after`、`report_has_metrics`、`report_has_conclusion` 均为 true
 - `without` 通常在这些字段上更弱
 
-### 4.6 常见失败
+### 4.6 测试隔离(重要)
+
+A/B 的 with/without 必须只差"有没有 skill",不能让 agent 读到答案或判分脚本。当前实现:
+
+- **运行时 skill 只包含** `SKILL.md`、`references/`、`scripts/`
+- Dockerfile **不 COPY** `evals/`、`cases/`;`verify.sh` / `prompts/` / `entrypoint.sh` 放到 `/opt`,不放在 agent 的 `/workspace`
+- entrypoint 把 skill 复制到 `.opencode/skills/` 后,再 `rm -rf .../evals .../cases` 做双保险
+- `run_ab_subagent.sh` 只复制运行时目录;fixtures 放到 `$OUT/testdata`,两个臂拿到的都是 testdata 路径,不暴露 skill 目录
+- `evals/evals.json`(答案与断言)只由 runner/grader 读取,不进入 agent 工作区
+
+验证:
+
+```bash
+find $OUT/with/.opencode/skills/rocksdb-perf-diagnostics -maxdepth 1
+# 期望只有 SKILL.md、references、scripts
+
+grep -nE "evals|/path/to/skill" $OUT/with/prompt.txt $OUT/without/prompt.txt
+# 期望无输出
+
+docker run --rm --entrypoint bash <image> -lc 'ls -R /staging/skill; ls -R /workspace; ls /opt'
+# 期望 /staging/skill 无 evals/cases,/workspace 无 verify.sh
+```
+
+### 4.7 常见失败
 
 | 现象 | 原因 | 处理 |
 |---|---|---|

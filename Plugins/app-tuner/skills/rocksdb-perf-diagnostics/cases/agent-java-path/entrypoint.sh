@@ -10,9 +10,12 @@ SKILL_MODE="${SKILL_MODE:-with}" # with | without
 if [ "${SKILL_MODE}" = "with" ]; then
     mkdir -p .opencode/skills
     cp -r /staging/skill .opencode/skills/rocksdb-perf-diagnostics
+    # 双保险：即使镜像里误带测试资产，也不让 agent 看到答案。
+    rm -rf .opencode/skills/rocksdb-perf-diagnostics/evals \
+           .opencode/skills/rocksdb-perf-diagnostics/cases
 fi
 
-PROMPT_FILE="prompts/${SKILL_MODE}-skill.md"
+PROMPT_FILE="/opt/prompts/${SKILL_MODE}-skill.md"
 if [ ! -f "${PROMPT_FILE}" ]; then
     SKILL_MODE="${SKILL_MODE}" python3 -c 'import json,os;json.dump({"success":False,"reason":"unknown SKILL_MODE","skill_mode":os.environ["SKILL_MODE"]},open("results/result.json","w"),indent=2)'
     exit 2
@@ -57,7 +60,7 @@ json.dump({"tools_used": tools, "skills_invoked": skills, "tool_calls": calls},
           open("results/trace_summary.json", "w"), ensure_ascii=False, indent=2)
 PY
 
-./verify.sh
+/opt/verify.sh
 verify_rc=$?
 
 if [ -f results/result.json ] && [ -f results/trace_summary.json ]; then

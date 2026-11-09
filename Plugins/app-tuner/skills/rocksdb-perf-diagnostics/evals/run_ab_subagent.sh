@@ -55,25 +55,33 @@ if [[ ! -f "$EVALS_JSON" ]]; then
     exit 2
 fi
 
-# Prepare clean workspaces.
-rm -rf "$OUT/with" "$OUT/without"
-mkdir -p "$OUT/with/.opencode/skills" "$OUT/with/results"
+# Prepare clean workspaces. Only runtime skill content goes into the with arm:
+# SKILL.md + references/ + scripts/. evals/ and cases/ are answer/test assets
+# and must never be copied into an agent workspace.
+rm -rf "$OUT/with" "$OUT/without" "$OUT/testdata"
+mkdir -p "$OUT/with/.opencode/skills/rocksdb-perf-diagnostics" "$OUT/with/results"
 mkdir -p "$OUT/without/.opencode" "$OUT/without/results"
-cp -a "$SKILL_DIR" "$OUT/with/.opencode/skills/rocksdb-perf-diagnostics"
+mkdir -p "$OUT/testdata"
+cp "$SKILL_DIR/SKILL.md" "$OUT/with/.opencode/skills/rocksdb-perf-diagnostics/SKILL.md"
+cp -a "$SKILL_DIR/references" "$OUT/with/.opencode/skills/rocksdb-perf-diagnostics/references"
+cp -a "$SKILL_DIR/scripts" "$OUT/with/.opencode/skills/rocksdb-perf-diagnostics/scripts"
+cp -a "$SKILL_DIR/evals/fixtures/." "$OUT/testdata/"
 
-# Build prompts from evals.json, with absolute fixture/output paths.
-python3 - "$EVALS_JSON" "$EVAL_ID" "$OUT" "$SKILL_DIR" <<'PY'
+# Build prompts from evals.json. Fixtures live in $OUT/testdata, outside the
+# skill directory; neither arm is told the skill directory path.
+python3 - "$EVALS_JSON" "$EVAL_ID" "$OUT" <<'PY'
 import json
 import os
 import sys
 
-evals_json, eval_id, out, skill_dir = sys.argv[1:5]
+evals_json, eval_id, out = sys.argv[1:4]
 data = json.load(open(evals_json, encoding="utf-8"))
 ev = next((e for e in data.get("evals", []) if str(e.get("id")) == str(eval_id)), None)
 if ev is None:
     raise SystemExit(f"eval id {eval_id} not found in {evals_json}")
 
-base = ev["prompt"].replace("evals/fixtures/", os.path.join(skill_dir, "evals", "fixtures") + "/")
+testdata = os.path.join(out, "testdata")
+base = ev["prompt"].replace("evals/fixtures/", testdata + "/")
 
 for mode in ("with", "without"):
     workdir = os.path.join(out, mode)
@@ -84,7 +92,7 @@ for mode in ("with", "without"):
             f"- 工作目录: {workdir}\n"
             "- 可用 skill: `.opencode/skills/rocksdb-perf-diagnostics`"
             "（先读取其 SKILL.md 并严格遵循）\n"
-            f"- fixtures 绝对路径: {os.path.join(skill_dir, 'evals', 'fixtures')}/\n"
+            f"- fixtures 绝对路径: {testdata}/\n"
             f"- 需要写文件时写到: {os.path.join(workdir, 'results')}/\n"
             f"- 使用 mock_db_bench.sh 时设置 MOCK_LOG={os.path.join(workdir, 'results', 'mock_invocations.log')}\n"
         )
@@ -92,7 +100,7 @@ for mode in ("with", "without"):
         prompt += (
             "\n\n---\n执行环境:\n"
             f"- 工作目录: {workdir}\n"
-            f"- fixtures 绝对路径: {os.path.join(skill_dir, 'evals', 'fixtures')}/\n"
+            f"- fixtures 绝对路径: {testdata}/\n"
             f"- 需要写文件时写到: {os.path.join(workdir, 'results')}/\n"
             f"- 使用 mock_db_bench.sh 时设置 MOCK_LOG={os.path.join(workdir, 'results', 'mock_invocations.log')}\n"
         )
