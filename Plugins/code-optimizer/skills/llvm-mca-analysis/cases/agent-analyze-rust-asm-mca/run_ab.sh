@@ -168,7 +168,7 @@ import json, os, sys
 tmp = sys.argv[1]
 keys = ["skill_mode", "exit", "success", "source_language_rust", "bottleneck_present",
         "uarch_match", "mcpu_match", "function_match", "instructions_sane",
-        "match_bottleneck", "skills_invoked"]
+        "match_bottleneck", "skills_invoked", "skill_assembled"]
 rows = []
 for m in ("with", "without"):
     d = {}

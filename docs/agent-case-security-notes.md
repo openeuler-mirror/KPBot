@@ -139,10 +139,14 @@ entrypoint 按段分权：agent 段 `setpriv --reuid=optimizer --regid=optimizer
 
 ```bash
 docker run --read-only \
+    --tmpfs /tmp:rw,size=64m \
     --tmpfs /workspace/opt:rw,uid=1000,gid=1000 \
     --tmpfs /workspace/results:rw \
+    --tmpfs /workspace/.opencode:rw,uid=1000,gid=1000 \
     ...
 ```
+
+`--read-only` 下 agent 侧可写面须显式 tmpfs（`/tmp` 供 auth 临时目录与 HOME、`/workspace/.opencode` 供技能装配与 opencode 项目文件），缺则 entrypoint 装配段 fail-closed `exit 1`。
 
 ### 4. LLM 产物代码必须先过 deny 名单 lint 再编译，fail-closed
 

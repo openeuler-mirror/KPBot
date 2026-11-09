@@ -37,11 +37,19 @@ trap cleanup EXIT
 
 # ---- P1-d skill 装配：两臂都预建 .opencode/skills，统一交 optimizer ----
 # （收敛 opencode 项目内写需求；with 臂拷入技能，without 臂留空目录作对照）
-mkdir -p .opencode/skills
+# ---- R17 round-4 P2 199228675：装配失败必须 fail-closed——
+# 否则 with 臂静默退化为 without 臂（--read-only 未给 .opencode 配 tmpfs 时
+# mkdir/cp/chown 三连失败被静默吞掉），A/B 消融变量被无声破坏；
+# 注：只读卷下判定文件写入本身也可能失败，此时以退出码 1 为准。
+assembly_fail() {
+    R17_REASON="$1" SKILL_MODE="${SKILL_MODE}" python3 -c 'import json,os;json.dump({"success":False,"reason":"skill assembly failed: "+os.environ["R17_REASON"],"skill_mode":os.environ["SKILL_MODE"]},open("results/result.json","w"),indent=2)'
+    exit 1
+}
+mkdir -p .opencode/skills || assembly_fail "mkdir .opencode/skills"
 if [ "${SKILL_MODE}" = "with" ]; then
-    cp -r /staging/skill .opencode/skills/register-pressure-analysis
+    cp -r /staging/skill .opencode/skills/register-pressure-analysis || assembly_fail "cp /staging/skill -> .opencode/skills"
 fi
-chown -R optimizer:optimizer .opencode
+chown -R optimizer:optimizer .opencode || assembly_fail "chown -R optimizer .opencode"
 
 PROMPT_FILE="prompts/${SKILL_MODE}-skill.md"
 if [ ! -f "${PROMPT_FILE}" ]; then
@@ -99,12 +107,14 @@ PY
 
 # 把 skill 调用证据并入 result.json
 if [ -f results/result.json ] && [ -f results/trace_summary.json ]; then
-    python3 - <<'PY'
-import json
+    SKILL_MODE="${SKILL_MODE}" python3 - <<'PY'
+import json, os
 r = json.load(open("results/result.json"))
 t = json.load(open("results/trace_summary.json"))
 r["skills_invoked"] = t.get("skills_invoked", [])
 r["tools_used"] = t.get("tools_used", [])
+if os.environ.get("SKILL_MODE") == "with":
+    r["skill_assembled"] = True
 json.dump(r, open("results/result.json", "w"), ensure_ascii=False, indent=2)
 PY
 fi

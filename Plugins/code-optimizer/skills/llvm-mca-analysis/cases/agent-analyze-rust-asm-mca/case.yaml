@@ -72,3 +72,7 @@ assert:
     file: results/result.json
     field: instructions_sane
     expect: true
+  - type: json_field
+    file: results/result.json
+    field: skill_assembled
+    expect: true
