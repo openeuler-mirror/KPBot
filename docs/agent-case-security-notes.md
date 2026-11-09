@@ -146,7 +146,7 @@ docker run --read-only \
     ...
 ```
 
-`--read-only` 下 agent 侧可写面须显式 tmpfs（`/tmp` 供 auth 临时目录与 HOME、`/workspace/.opencode` 供技能装配与 opencode 项目文件），缺则 entrypoint 装配段 fail-closed `exit 1`。
+`--read-only` 下 agent 侧可写面须显式 tmpfs（`/tmp` 供 auth 临时目录与 HOME、`/workspace/.opencode` 供技能装配与 opencode 项目文件），缺则 entrypoint 装配段 fail-closed `exit 1`。另注：项目级权限配置 `opencode.json` 由 entrypoint 运行时写入 /workspace（root 持有，agent 不可改），在只读根上该写无法落盘（真机实测 EROFS）——因此 `--read-only` 组合当前仅适用于不含 agent 段的复验（判定链/装配验证）；完整 agent 运行不得叠加 `--read-only`（deny 配置静默缺失不可接受），待后续把权限配置预置进镜像后再启用该组合。
 
 ### 4. LLM 产物代码必须先过 deny 名单 lint 再编译，fail-closed
 
