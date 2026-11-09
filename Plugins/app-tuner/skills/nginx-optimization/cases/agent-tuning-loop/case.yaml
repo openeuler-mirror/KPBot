@@ -1,0 +1,61 @@
+# 用例：agent 级端到端 —— 执行一次 nginx 调优循环（mock 压测）
+#
+# 说明：tier agent。使用 mock 压测工具（确定性指标，零副作用），验证 agent 是否严格
+# 遵循 "baseline → 只改一个参数 → 复测 → before/after → 保留/回退" 的循环纪律。
+# with-skill 在容器内接入 nginx-optimization（仅 SKILL.md + references/）；
+# without-skill 不接入任何 skill，任务完全相同。
+#
+# 构建/运行（在 KPBot 插件根目录，需容器可访问模型 API）：
+#   docker build --network host \
+#     -f skills/nginx-optimization/cases/agent-tuning-loop/Dockerfile \
+#     -t kpbot/app-tuner-agent-nginx-tuning-loop:1.0-openeuler24.03 .
+#   ./run_ab.sh --save results-ab
+
+name: agent-tuning-loop
+skill: nginx-optimization
+tier: agent
+
+image: kpbot/app-tuner-agent-nginx-tuning-loop:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: assertion_pass_rate
+  uplift: pass_rate_with / pass_rate_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/nginx-optimization/cases/agent-tuning-loop/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时挂载）
+  - opencode auth.json（运行时挂载）
+  - 容器可访问模型 API（必要时 --network host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+  MOCK_LOG: /workspace/results/mock_invocations.jsonl
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: one_variable
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: skills_invoked
+    op: contains
+    value: nginx-optimization
