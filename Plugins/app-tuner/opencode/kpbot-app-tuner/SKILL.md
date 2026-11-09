@@ -11,6 +11,12 @@ description: 使用该 skill 构建和执行服务器应用优化 Agent 的自�
 
 当前仓库已经沉淀了服务器应用优化能力；本次架构以服务器应用优化为上层框架，CPU 亲和性、网络、性能库、应用配置、BIOS、OS、编译等能力均作为候选优化 skill 列表中的可选 skill 执行。
 
+当用户明确要求 AgentENV 沙箱的 ublk、Pvspinlock、内核 HZ 或 cluster TLBI
+专项适配/调优时，转交独立的 `kptools-agentenv-tuning` 入口。安装后的同级路径为
+`../kptools-agentenv-tuning/SKILL.md`；源码路径为
+`../../skills/kptools-agentenv-tuning/SKILL.md`。携带已有环境证据、测试命令和授权范围，
+由该技能包完成后续流程。普通应用的 OS/亲和性调优仍使用下述通用流程。
+
 ## Startup Banner
 
 本 skill 被触发时，第一步必须执行以下命令，再开始任何其他工作流程：
