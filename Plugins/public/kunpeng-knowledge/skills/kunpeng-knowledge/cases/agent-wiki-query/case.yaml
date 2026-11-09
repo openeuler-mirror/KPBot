@@ -1,0 +1,32 @@
+name: agent-wiki-query
+skill: kunpeng-knowledge
+tier: agent
+auth: opencode_oauth
+# Run the entrypoint and resolve assertion paths from this case directory.
+entrypoint: ["python3", "run.py"]
+env_requires:
+  - 已使用 KPBot install.sh 在隔离项目安装 OpenCode skills
+  - OpenCode 1.19.5 或兼容版本，kpknow 已完成 OAuth 授权
+  - Python 3.9+ 和可用的 bash
+env_vars:
+  OPENCODE_BIN: opencode
+  KPBot_TEST_PROJECT: /path/to/isolated/project
+  MODEL: deepseek/deepseek-flash
+  KPBOT_TEST_SCENARIO: lookup # natural 测自然触发，empty 测无命中
+  DEEPSEEK_API_KEY: runtime_only
+assert:
+  - type: exit_code
+    expect: 0
+  # run.py includes the selected scenario's behavior checks in success.
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: skill_discovered
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: skill_loaded
+    expect: true
