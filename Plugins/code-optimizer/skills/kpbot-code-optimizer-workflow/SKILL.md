@@ -28,7 +28,8 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 | 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
 | 9 | OpenZL 压缩内核优化 | `openzl-compression-tuning` | openzl、压缩、huffman、fse、熵编码、熵解码、codec 内核、压缩内核 | `src/openzl/` 源码树；`ZS_Huf*` / `openzl` 符号；`unitBench` 目录；`addBits` / `lookBits` 位流函数 |
-| 10 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 10 | DPDK 数据面代码优化 | `dpdk-optimization` | dpdk 代码、数据面、转发性能、收发包、热路径、PPS 低、l3fwd、rte_ring、mbuf | `rte_eth_rx_burst`/`rte_` 符号、`RTE_PKTMBUF_HEADROOM`；Makefile/meson 依赖 libdpdk |
+| 11 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 ### 路由流程
 
