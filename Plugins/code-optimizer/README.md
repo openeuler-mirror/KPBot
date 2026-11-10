@@ -95,6 +95,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `analyze-testcase` | 测试用例分析 |
 | `arm-spe-analysis` | ARM SPE (Statistical Profiling Extension) 分析 |
 | `register-pressure-analysis` | 寄存器压力分析 |
+| `hot-library-version-gap` | 热点库版本差距核对(进程实际加载库与版本 vs 已知含优化的版本，只读诊断) |
 
 ### 优化类 (Optimization)
 | 技能 | 描述 |
