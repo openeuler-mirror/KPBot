@@ -1,0 +1,47 @@
+# 用例：tier A —— arch_diff_scan.py 盘点契约与误报看护
+#
+# 覆盖：
+#   scan        对 mock 代码树的 JSON/TSV 输出契约：Rust cfg(target_arch)
+#               （含 cfg! 宏与 any() 嵌套）与 C ifdef/#if defined 计数精确匹配、
+#               keyword 命中、纯文档文件默认排除（--include-docs 打开）、
+#               干净文件零命中、.git 目录跳过、--output UTF-8 落盘、
+#               bad --root 与 --help 退出码
+#   static      python3 -m py_compile 语法检查
+#
+# 运行：
+#   bash skills/cross-arch-regression-audit/cases/scan-contract/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/mock，python3+bash 标准库）。scan 是审计五步法
+#       中的第 2 步工具，本用例只看护"枚举契约"，不判断差异是否值得
+#       优化（那是 SKILL.md 第 3、4 步的 LLM 工作流）。
+
+name: scan-contract
+skill: cross-arch-regression-audit
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: scan_ran
+    op: gte
+    expect: 12
+  - type: json_field
+    file: results/result.json
+    field: scan_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_ran
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0
