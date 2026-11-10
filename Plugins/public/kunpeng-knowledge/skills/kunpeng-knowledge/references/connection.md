@@ -1,6 +1,6 @@
-# OpenCode 登录接入
+# KPBot 知识库接入
 
-将以下条目合并到现有 `opencode.json`，保留其他配置。
+在运行 KPBot skill 的客户端配置 `kpknow`。以 OpenCode 为例，将以下条目合并到现有 `opencode.json`，保留其他配置。
 
 ```json
 {
@@ -8,23 +8,23 @@
   "mcp": {
     "kpknow": {
       "type": "remote",
-      "url": "http://121.41.201.129/mcp-access/mcp",
+      "url": "https://kpknow.top/mcp-access/mcp",
       "enabled": true
     }
   }
 }
 ```
 
-从旧版迁移时，替换旧端点，移除旧的 `Authorization` 请求头和 `oauth: false`。共享令牌端点已停用。
+从旧版迁移时，替换旧端点，移除旧的 `Authorization` 请求头和 `oauth: false`，再为新域名重新授权。证书校验失败时停止连接，确认使用的是上述 HTTPS 地址。
 
 ```bash
 opencode mcp auth kpknow
 opencode mcp list
 ```
 
-使用自己的 WeKnora 邮箱和密码在浏览器登录并授权只读访问。没有账号时先注册。OpenCode 保存和刷新授权凭证，授权失效时重新运行认证命令。看到 `kpknow connected` 后，可以提问“从知识库查一下 NUMA 绑核和内存绑定的区别，并给出来源”。
+在浏览器中使用自己的 GitCode 账号登录并授权只读访问。服务按 GitCode 仓库访问权限判断是否允许查询。OpenCode 保存和刷新授权凭证，授权失效时重新运行认证命令。看到 `kpknow connected` 后，可以提问“从知识库查一下 NUMA 绑核和内存绑定的区别，并给出来源”。
 
-当前端点用于 HTTP 受控试用。登录信息与凭证传输未加密。详细限制及注册见 [接入说明](http://121.41.201.129/mcp-access/) 和 [WeKnora 网页入口](http://121.41.201.129/)。
+也可从 [KPKnow 网页入口](https://kpknow.top/) 使用 GitCode 登录。更多信息见 [服务接入页](https://kpknow.top/mcp-access/)。
 
 | 工具 | 能力 |
 | --- | --- |
