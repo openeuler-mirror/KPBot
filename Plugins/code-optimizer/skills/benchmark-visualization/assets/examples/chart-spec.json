@@ -1,0 +1,141 @@
+{
+  "schema_version": "benchmark-visualization.v1",
+  "input": {
+    "path": "repeated-runs.csv",
+    "format": "csv"
+  },
+  "mapping": {
+    "metrics": [
+      {
+        "name": "time",
+        "column": "elapsed_ms",
+        "unit": "ms",
+        "sample_level": "independent_run"
+      },
+      {
+        "name": "throughput",
+        "column": "qps",
+        "unit": "requests/s",
+        "sample_level": "independent_run"
+      },
+      {
+        "name": "ipc",
+        "column": "ipc",
+        "unit": "instructions/cycle",
+        "sample_level": "independent_run"
+      }
+    ]
+  },
+  "charts": [
+    {
+      "id": "scatter",
+      "type": "scatter",
+      "metric": "time",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: scatter",
+      "aggregate": "median"
+    },
+    {
+      "id": "line",
+      "type": "line",
+      "metric": "throughput",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: line",
+      "aggregate": "median",
+      "spread": "minmax",
+      "show_samples": true,
+      "ylim": [
+        0,
+        45
+      ]
+    },
+    {
+      "id": "point",
+      "type": "point",
+      "metric": "ipc",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: point",
+      "aggregate": "median",
+      "spread": "minmax",
+      "show_samples": true
+    },
+    {
+      "id": "bar",
+      "type": "bar",
+      "metric": "time",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: bar",
+      "aggregate": "median",
+      "spread": "minmax",
+      "show_samples": true
+    },
+    {
+      "id": "box",
+      "type": "box",
+      "metric": "time",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: box"
+    },
+    {
+      "id": "hist",
+      "type": "hist",
+      "metric": "time",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: hist"
+    },
+    {
+      "id": "ecdf",
+      "type": "ecdf",
+      "metric": "time",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: ecdf"
+    },
+    {
+      "id": "heatmap",
+      "type": "heatmap",
+      "metric": "ipc",
+      "x": "threads",
+      "x_type": "numeric",
+      "series": "version",
+      "facet": "machine",
+      "unit_id": "run",
+      "title": "Synthetic example: heatmap",
+      "aggregate": "median"
+    }
+  ],
+  "output": {
+    "directory": "example-output",
+    "formats": [
+      "svg",
+      "png"
+    ]
+  }
+}
