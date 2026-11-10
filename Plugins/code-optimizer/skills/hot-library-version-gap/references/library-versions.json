@@ -1,0 +1,17 @@
+{
+  "schema_version": "kpbot-library-versions.v1",
+  "evidence_policy": "每条证据必须指向可公开访问的上游文档（CHANGES/NEWS/ChangeLog/commit/release note）。本表是初始快照而非全集：未命中时按 SKILL.md 的上游检索方法论查找，找到后带出处扩充本表；找不到输出 unknown，禁止编造。发行版 backport 会使包版本与上游版本脱钩，语义不明时标 unknown。",
+  "maturity_note": "当前仅包含高置信度初始条目；条目数量不代表库生态覆盖面，扩充依赖逐条核实。",
+  "entries": [
+    {
+      "library": "openssl",
+      "match": ["libcrypto.so", "libssl.so"],
+      "arch_scope": ["aarch64"],
+      "min_version": "3.2.0",
+      "improvement": "3.2.0 起包含大量 aarch64 优化（SVE2 相关例程、多个算法的 ARM 汇编实现更新）",
+      "source": "OpenSSL 官方 CHANGES.md 的 3.2.0 章节（Major changes 与 ARM 相关条目）；上游仓库 openssl/openssl CHANGES.md",
+      "confidence": "high",
+      "notes": "soname 仍为 libcrypto.so.3——大版本号相同不代表包含优化，必须用细版本号判断；发行版可能已将部分优化 backport 进 3.0.x/3.1.x 包，需查发行版包 changelog 后再下结论。"
+    }
+  ]
+}
