@@ -1,0 +1,29 @@
+{
+  "min_events": 1000,
+  "window_ms": {
+    "target": 3000,
+    "tolerance": 1500,
+    "comment": "3s collection window; span includes profiler start/stop overhead."
+  },
+  "expect_processes": [
+    "Python",
+    "CANN",
+    "Ascend Hardware",
+    "Overlap Analysis",
+    "Communication"
+  ],
+  "expect_overlap_tracks": [
+    "Computing",
+    "Communication",
+    "Free"
+  ],
+  "expect_categories": [
+    "python_function",
+    "cpu_op",
+    "enqueue",
+    "dequeue"
+  ],
+  "require_node_launch": true,
+  "require_flow_balance": true,
+  "warn_missing_counter": true
+}

@@ -41,3 +41,17 @@ description: 分析 GPU、NPU 或其他计算卡相关瓶颈，检查设备利�
 ## Knowledge Mapping
 
 若证据指向 CPU feed、数据加载、batch、算子 fallback 或 host-device 拷贝，应先在 `../../references/knowledge-technique-routing.md` 中确认是否更适合路由到应用配置、源码/Other、硬件升级或编译优化；本 skill 只负责加速卡路径的专项判断。
+
+## NPU+vLLM 专项引用（vllm-ascend-profiling）
+
+当现场同时满足 NPU 与 vLLM 推理服务时，本 skill 必须引用 `subskills/vllm-ascend-profiling/SKILL.md`（相对本目录即 `../vllm-ascend-profiling/SKILL.md`）执行其完整工作流（Stage-1 环境诊断与 TTFT 分解 profiling），诊断与采集结论回流到本 skill 的 `accelerator_findings`，不得由主 agent 手写替代。
+
+触发条件（任一命中即引用）：
+
+1. 进程/服务证据表明 vLLM（`import vllm`、vLLM server 日志、`vllm_ascend` pip 包或 NPU 上以 python 运行的 vLLM worker）。
+2. TTFT 证据未达标：`TTFT > 目标值`、首 token 延迟劣化、或对比基线存在显著首包时延回退。
+3. TTFT 分解 profiling 显式需求：任务要求 kernel/host/device 各段耗时分解，或现场出现 `trace_view.json` / vLLM profiler 采集需求。
+
+缺席条件：无 vLLM 证据且 TTFT 无信息时，不引用；仅 GPU 场景不引用（本映射针对 Ascend NPU）。
+
+执行顺序：先按本 skill 主 workflow 完成 GPU/NPU 通用瓶颈判断，再对命中触发条件的 vLLM 场景追加引用执行；引用产物（Stage-1 环境诊断结论、TTFT 计时/trace 证据）必须带证据路径回填 `accelerator_findings`。

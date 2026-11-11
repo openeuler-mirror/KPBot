@@ -19,13 +19,14 @@ description: kpbot-app-tuner 的统一高性能库选型入口。基于热点证
 
 分析前需明确输入模式（决定后续采样方式）：
 
-- **在线分析**：用户指定已运行进程 PID → 用 `lsof -p <PID>` 和 `/proc/<PID>/maps` 分析
-- **离线分析**：用户提供启动命令 → 用 `scripts/run_and_profile_offline.sh` 闭环启动+采样。仅执行用户**显式提供**的命令，不自行推断或构造命令
+- **在线分析**：用户指定已运行进程 PID → 用 `scripts/run_and_profile.sh --pid <PID>` 只读采样（不启动也不 kill 目标进程）
+- **离线分析**：用户提供启动命令 → 用 `scripts/run_and_profile.sh <command> [args...]` 闭环启动+采样。仅执行用户**显式提供**的命令，不自行推断或构造命令
 
 输入证据（优先使用本轮 `current_run_id` 的当前证据）：
 
 - `architecture`、`target_pid`、`launch_command`、`perf_available`
 - `current_malloc_conf`、`current_ld_preload`（从 `/proc/<pid>/environ` 获取）
+- `step_trace_csv`（CANN profiler 输出的 `step_trace_time.csv` 路径，本轮现场 hostbound 证据：Free/Computing/Communication 占 Stage 比例——ascend_runtime 门控的消费数据源之一，来自主框架 evidence 或 `outputs/profile_traces/*/ASCEND_PROFILER_OUTPUT/`）
 
 ## 必读 Reference
 
@@ -35,14 +36,13 @@ description: kpbot-app-tuner 的统一高性能库选型入口。基于热点证
 - Ascend NPU 场景经验线索与推荐策略（含 host 侧 malloc 优化、tcmalloc 依赖陷阱、vLLM Caching Allocator 交互）：`references/ascend-playbook.md`
 - 内存分配器选型决策树（场景→分配器决策路径、依据映射、跨场景经验）：`references/allocator-decision-guide.md`
 - 全类别库替换知识库（库画像、最佳场景、验证步骤、Ascend 经验）：`references/optimization_kb.json`
-- 在线 PID 采样参考脚本（在线模式下获取目标 PID 并启动 perf 采样）：`references/scripts/sample_online_pid.sh`
 - 公共依赖、perf/PMU 权限和降级：`../../references/prerequisites.md`
 
 ## 安全与架构红线
 
 1. **只读探测**：体检阶段的探测命令（`cat`, `uname`, `lscpu`, `top`, `lsof`, `ps`, `readelf`, `/proc`、`perf`）只读，禁止任何写入/修改/export 注入/重启/Kill 操作（脚本内部管理自身启动的进程生命周期除外）。变更动作只能以候选动作形式输出，由执行阶段落地。
 2. **无状态脚本依赖**：**不允许脚本和脚本之间存在非文本信息的依赖关系**（例如禁止脚本 A 启动进程返回 PID，再由脚本 B 接收 PID 去监控）。如果需要起一个进程观测，必须在单一脚本内部完成"启动 -> 观测采样 -> 收集结果"的全生命周期闭环，仅通过纯文本（JSON）进行结果交互。
-3. **禁止历史数据替代现场证据**：`ascend-playbook.md` 的"历史实测收益基线"仅作参照叙述，**严禁**用作现场判定或推荐依据。`ascend_runtime` 等 perf 依赖类别必须有本轮 `current_run_id` 的现场 perf 采集成功才能输出结论；现场采集失败、降级或 run_id 不一致时，该类别必须标记为 `blocked`，不得基于历史数据推荐替换库。
+3. **禁止历史数据替代现场证据**：`ascend-playbook.md` 的"历史实测收益基线"仅作参照叙述，**严禁**用作现场判定或推荐依据。`ascend_runtime` 类别的现场证据为**双通道**：本轮 perf 采样（锁竞争信号）与本轮 CANN profiler `step_trace_time.csv`（hostbound 信号：Free 为 Stage 最大分量），两信号构成推荐触发的 **OR 关系**（见 Step 2.1/2.2 门控细则）。前提约束：本轮现场 perf 采集必须成功（`evidence_source=current`）；perf 采集失败、降级或 run_id 不一致时，该类别必须标记为 `blocked`（hostbound 信号不单独解除 blocked），不得基于历史数据推荐替换库。
 
 ## 核心概念
 
@@ -52,11 +52,11 @@ description: kpbot-app-tuner 的统一高性能库选型入口。基于热点证
 
 | 类别 | 候选库 | 静态特征 (lsof/maps) | 动态关键词 (perf 热点) | 当前库 / 默认兜底 | 替换场景 |
 |------|--------|---------------------|-----------------------|-------------------|---------|
-| allocators | jemalloc, tcmalloc | `jemalloc`, `tcmalloc` | `malloc\|jemalloc\|tcmalloc` | glibc malloc / jemalloc / tcmalloc | 内存分配器升级 |
+| allocators | jemalloc, tcmalloc | `jemalloc`, `tcmalloc` | `(malloc\|calloc\|realloc\|free)`（词边界，排除 `poll_freewait` 等子串误匹配） | glibc malloc / jemalloc / tcmalloc | 内存分配器升级 |
 | hash_functions | xxhash | `xxhash` | `xxh64\|xxh32\|xxhash\|XXH` | xxhash / builtin | 哈希函数加速 |
 | compression | zlib, ISA-L, isa-l_crypto | `libz`, `libisal` | `deflate\|inflate\|crc32\|compress` | zlib / ISA-L | 压缩/解压缩加速 |
 | crypto | openssl, GMSSL, isa-l_crypto | `libcrypto`, `libssl` | `AES\|SHA\|MD5\|SM4\|SSL\|EVP_` | openssl / GMSSL | 加密算法硬件加速 |
-| json | sonic-cpp, RapidJSON | `sonic`, `rapidjson` | `json_parse\|sonic_parse\|rapidjson` | sonic-cpp / RapidJSON | JSON 解析加速 |
+| json | sonic-cpp, RapidJSON | `sonic`, `rapidjson` | `json_parse\|sonic_parse\|rapidjson\|scanstring_unicode\|scan_once_unicode` | sonic-cpp / RapidJSON | JSON 解析加速 |
 | memory_operations | libmem, bisheng-stringlib, libco | `libmem`, `libco\.so`, `libstringlib` | `memcpy\|memset\|memcmp` | libmem / bisheng-stringlib / libco / libc | 内存/字符串操作优化（ARM） |
 | pattern_matching | Hyperscan | `hyperscan`, `libhs` | `hyperscan\|regex\|pcre` | Hyperscan / PCRE | 正则匹配加速 |
 | linear_algebra | OpenBLAS, vectorBLAS | `libblas`, `libopenblas` | `gemv\|gemm\|blas\|cblas` | BLAS / OpenBLAS | 矩阵运算加速 |
@@ -64,12 +64,12 @@ description: kpbot-app-tuner 的统一高性能库选型入口。基于热点证
 | math | Libm, VML, SVML, Interp_Spline, autoGEMM | `libm`, `libvml`, `libsvml` | `\bsin\b\|\bcos\b\|\bexp\b\|\blog\b\|vml\|svml` | Libm / VML / SVML | 数学函数向量化 |
 | dnn | oneDNN | — | `conv[0-9]\|pool[0-9]\|relu\|matmul\|dnn` | DNN Framework | 深度学习算子加速 |
 | fft | FFTW | `libfftw3` | `fft\|ifft\|dft` | FFTW | 傅里叶变换加速 |
-| video | X264, X265 | `x264`, `x265` | `encode\|decode\|h26` | X264 / X265 | 视频编解码加速 |
+| video | X264, X265 | `x264`, `x265` | `x264_\|x265_\|h264_\|h265_\|avcodec\|ffmpeg` | X264 / X265 | 视频编解码加速 |
 | serialization | Protobuf | `libprotobuf` | `protobuf\|ParseFromArray\|SerializeToString` | Protobuf | 序列化优化 |
 | sql_acceleration | sparksql_native | `libsparksql_native` | `sparksql\|codegen\|native_sql` | sparksql_native | Spark SQL 加速 |
-| network | KTLS | `ktls` | `tls_tx\|tls_rx\|send\|recv\|tcp_\|udp_` | KTLS / Standard Network | 内核 TLS 加速 |
+| network | KTLS | `ktls` | `tls_tx\|tls_rx\|tcp_sendmsg\|tcp_recvmsg\|udp_sendmsg\|udp_recvmsg\|ssl_write\|ssl_read\|ktls` | KTLS / Standard Network | 内核 TLS 加速 |
 | kv_storage | RocksDB, KAL-rocksdb | `librocksdbjni`, `librocksdb` | `rocksdb::\|DBImpl\|CompactionJob\|MemTable\|BlockBasedTable` | RocksDB | 嵌入式 KV 存储引擎 LD_PRELOAD 加速 |
-| ascend_runtime | tcmalloc_for_cann | `libruntime_v100`, `libtorch_npu`, `libhccl`, `libascendcl` | `__pthread_mutex_lock\|__pthread_rwlock_unlock\|std::_Rb_tree\|std::vector::_M_realloc_insert\|std::_Hashtable` (CANN DSO 内容器操作锁竞争) | glibc malloc（host 侧） | Ascend NPU 训练/推理场景 host 侧 malloc 优化（CANN runtime 锁竞争归因） |
+| ascend_runtime | tcmalloc_for_cann | `libruntime_v100`, `libtorch_npu`, `libhccl`, `libascendcl` | `pthread_mutex_lock\|pthread_mutex_unlock\|pthread_rwlock_unlock\|pthread_rwlock_rdlock\|pthread_rwlock_wrlock\|std::_Rb_tree\|std::vector::_M_realloc_insert\|std::_Hashtable` (CANN DSO 内容器操作锁竞争；锁符号匹配不要求 `__` 前缀，与 detect_all_libraries.sh 口径一致) + **CANN step_trace hostbound 信号**（Free 为 Stage 最大分量，双信号 OR 门控） | glibc malloc（host 侧） | Ascend NPU 训练/推理场景 host 侧 malloc 优化（锁竞争或 hostbound 归因） |
 
 ### 库检测策略
 
@@ -132,106 +132,112 @@ nproc
 
 #### 1.3 进程采样与 perf 热点
 
-**在线采样**
+统一使用闭环采样脚本（离线/在线两模式，输出同构的自包含 JSON 报告：`ps_info` / `libraries` / `environ` / `perf_available` / `perf_degraded` / `hotspots`（self%，Top 100）/ `perf_data` / `perf_callcount_report`）：
 
 ```bash
-# 基础信息采集 — lsof 和 /proc/maps 互为降级：lsof 返回空时用 /proc/maps 补充
+# 短稳态窗口场景（训练类业务推荐）: 稳态监视与采样单脚本闭环, 消除"看到标记再启动采样"的串行延迟
+# 触发条件: 日志稳态正则命中 或 npu-smi AICore 活跃(任一); stdout = JSON 报告路径
+bash scripts/steady_state_watch_and_sample.sh --pid <PID> --log <业务日志> --pattern "step: +2 +loss" [--npu-smi] [--sampling-duration <秒>]
+
+# 在线采样（只读附加已运行进程，不 kill 目标；稳态时机可自行把握时直接用）
+bash scripts/run_and_profile.sh --pid <PID> [--sampling-duration <秒>]
+
+# 离线采样（闭环单脚本：启动 → 采样 → 收集 → 清理，仅打印 JSON 报告绝对路径）
+bash scripts/run_and_profile.sh [--warmup-delay <秒> | --warmup-keyword <关键词>] [--sampling-duration <秒>] <command> [args...]
+
+# 长启动延迟场景（如 Ascend NPU 推理首次图编译需数分钟）：
+bash scripts/run_and_profile.sh --warmup-keyword "Inference time" --sampling-duration 10 <command>
+bash scripts/run_and_profile.sh --warmup-delay 120 --sampling-duration 10 <command>
+```
+
+> 脚本内部：lsof 与 `/proc/<PID>/maps` 互为降级（lsof 返回空时用 /proc/maps 补充）；perf 统一 `-g --call-graph dwarf` 采样，DWARF 损坏时自动降级（IP-only 重采样 → DSO-only），降级信息记录在 `perf_degraded` 字段；`ps_info.cpu_now` 为 0.5s 差分瞬时 CPU%（`cpu` 为 ps 生命周期平均值，长运行进程有误导性）。
+> 若 `needs_authorization: true`，与用户交互请求授权后重试采样。
+> 因禁止跨脚本传递活动进程 PID（红线 #2），离线模式的启动与采样必须在单一脚本内一站式完成。若脚本执行失败（非零退出码），提示"离线分析闭环执行异常"并报告错误。
+> **离线模式目标语义**：脚本采样的是**命令本身**的进程。对 wrapper/launcher 型命令（如 `bash train.sh` 内部再拉起 torchrun/worker），采样目标会是 wrapper 而非实际业务进程——此类场景应改用在线模式（先启动业务，再 `--pid` 附加到实际工作进程）。
+>
+> **短稳态窗口在线采样配方**（有限步数训练类业务实战经验，必读；配方 1-4 已固化为 `scripts/steady_state_watch_and_sample.sh`，优先直接使用脚本，人工配方仅作脚本不可用时的降级）：
+> 1. **编译/预热期预锁目标 PID**：step 1 编译或预热阶段（通常数十秒至数分钟）就完成目标进程识别与锁定（cmdline/environ 特征），不要等稳态再找——稳态窗口可能只有十几秒
+> 2. **日志轮询 5s 间隔** + ANSI 剥离（`sed 's/\x1b\[[0-9;]*m//g'`）；注意**块缓冲落盘延迟**：step 行打印后 10~60s 才写入日志文件（python stdout → 框架 tee → 管道多层缓冲），检测到目标 step 行时实际进度可能已超前
+> 3. **更实时的稳态信号**：`npu-smi info` AICore 利用率由 0→活跃（NPU 场景）、目标进程 CPU 模式切换，可与日志轮询并行
+> 4. 检测到稳态**立即**启动采样（目标识别已前置，无额外开销）
+> 5. 验证场景稳态窗口过短时，与业务方协调加长稳态段（如提高 training steps），避免采样与窗口的固有竞态
+
+**脚本不可用时的内联降级方式**（仅基础静态采集，无闭环 perf）：
+
+```bash
 lsof -p <PID> 2>/dev/null | grep '\.so' | awk '{print $NF}' | sort -u
-ps -p <PID> -o pid=,comm=,%mem=,vsz=,rss= --no-headers 2>/dev/null
+ps -p <PID> -o pid=,comm=,%cpu=,%mem=,vsz=,rss= --no-headers 2>/dev/null
 cat /proc/<PID>/maps 2>/dev/null | grep '\.so' | awk '{print $6}' | grep -oP '[^/]+$' | sort -u
-
-# perf 热点采样（脚本输出 JSON：perf_available / perf_report / perf_data / needs_authorization）
-bash scripts/perf_sampling_online.sh <PID>
+perf record -p <PID> -g --call-graph dwarf -o /tmp/perf_inline.data -- sleep 10
+perf report --stdio -i /tmp/perf_inline.data -F overhead,dso,symbol --no-children | head -40
 ```
-
-> 若 `lsof -p <PID>` 返回空（容器内权限限制），降级使用 `/proc/<PID>/maps` 获取动态库列表，两者输出互补。
-
-如果 `needs_authorization: true`，与用户交互请求授权后重试采样。
-
-**离线采样（闭环单脚本）**
-
-```bash
-# 脚本内部完成 启动->采样->收集->清理 全生命周期，仅打印生成的 JSON 报告文件绝对路径
-bash scripts/run_and_profile_offline.sh <command> [args...]
-```
-
-> 因禁止跨脚本传递活动进程 PID，启动目标程序和执行 perf 采样必须在单一脚本内一站式完成，并以纯文本返回结果。若脚本执行失败（非零退出码），提示"离线分析闭环执行异常"并报告错误。
 
 #### 1.4 全类别热点占比提取
 
-从 Step 1.3 产出的数据中提取**所有 18 类库对应的热点占比**，**不要重复执行 `perf record`**。每个类别按"核心概念"综合检测映射表的动态关键词匹配，存在热点的类别必须进入 Step 2 推荐流程。
-
-**在线模式**（`perf_sampling_online.sh` 输出 `perf_data` 路径，用 `--no-children` 取 self%）：
-
-```bash
-# PERF_DATA 为 Step 1.3 输出的 perf_data 路径（.data 文件）
-# 必须用 --no-children 取 self%，否则 call graph 下百分比会重复累加
-PERF_REPORT=$(perf report --stdio -i "$PERF_DATA" --no-children 2>/dev/null)
-
-# 全类别热点占比提取（关键词来自综合检测映射表"动态关键词"列）
-echo "$PERF_REPORT" | grep -E 'malloc|free|calloc|realloc|__libc_malloc|_int_malloc|tc_malloc|je_malloc' | awk '{sum+=$1} END {print "allocators: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'memcpy|memmove|memset|memcmp' | awk '{sum+=$1} END {print "memory_operations: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'xxh64|xxh32|xxhash|XXH' | awk '{sum+=$1} END {print "hash_functions: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'deflate|inflate|crc32|compress' | awk '{sum+=$1} END {print "compression: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'AES|SHA|MD5|SM4|SSL|EVP_' | awk '{sum+=$1} END {print "crypto: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'json_parse|sonic_parse|rapidjson' | awk '{sum+=$1} END {print "json: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'hyperscan|regex|pcre' | awk '{sum+=$1} END {print "pattern_matching: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'gemv|gemm|blas|cblas' | awk '{sum+=$1} END {print "linear_algebra: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'spmv|spgemm|sparse_blas' | awk '{sum+=$1} END {print "sparse_linear_algebra: " sum "%"}'
-echo "$PERF_REPORT" | grep -E '\bsin\b|\bcos\b|\bexp\b|\blog\b|vml|svml' | awk '{sum+=$1} END {print "math: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'conv[0-9]|pool[0-9]|relu|matmul|dnn' | awk '{sum+=$1} END {print "dnn: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'fft|ifft|dft' | awk '{sum+=$1} END {print "fft: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'encode|decode|h26' | awk '{sum+=$1} END {print "video: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'protobuf|ParseFromArray|SerializeToString' | awk '{sum+=$1} END {print "serialization: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'sparksql|codegen|native_sql' | awk '{sum+=$1} END {print "sql_acceleration: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'tls_tx|tls_rx|tcp_|udp_' | awk '{sum+=$1} END {print "network: " sum "%"}'
-echo "$PERF_REPORT" | grep -E 'rocksdb::|DBImpl|CompactionJob|MemTable|BlockBasedTable' | awk '{sum+=$1} END {print "kv_storage: " sum "%"}'
-echo "$PERF_REPORT" | grep -E '__pthread_mutex_lock|__pthread_rwlock_unlock|std::_Rb_tree|std::vector::_M_realloc_insert|std::_Hashtable' | awk '{sum+=$1} END {print "ascend_runtime: " sum "%"}'
-
-# DSO 热点排名
-echo "$PERF_REPORT" | grep -E '^\s+[0-9]' --sort=dso 2>/dev/null | head -20
-perf report --stdio -i "$PERF_DATA" --no-children --sort=dso 2>/dev/null | grep -E '^\s+[0-9]' | head -20
-```
-
-**离线模式**（脚本 `hotspots` 字段已是解析后的结构化数据，按 `lib`/`symbol` 聚合提取，无需再调 `perf report`）：
+从 Step 1.3 产出的 JSON 报告中提取**所有 18 类库对应的热点占比**，**不要重复执行 `perf record`**（离线/在线报告同构，提取方式统一；`hotspots` 字段已是按 self% 解析的结构化数据）。每个类别按"核心概念"综合检测映射表的动态关键词匹配，存在热点的类别必须进入 Step 2 推荐流程。
 
 ```bash
 # REPORT_JSON 为 Step 1.3 输出的 JSON 报告文件路径
-# 从 hotspots 数组按 symbol 聚合全 18 类别占比
+# 从 hotspots 数组按 symbol 聚合全 18 类别占比 + DSO 维度排名
 python3 -c "
 import json, re
+from collections import defaultdict
 with open('$REPORT_JSON') as f:
     data = json.load(f)
 hotspots = data.get('hotspots', [])
 
 categories = {
-    'allocators': r'malloc|free|calloc|realloc|__libc_malloc|_int_malloc|tc_malloc|je_malloc',
+    'allocators': r'(malloc|calloc|realloc|free)(?![a-z_])',  # 词边界: 排除 poll_freewait 等子串误匹配
     'memory_operations': r'memcpy|memmove|memset|memcmp',
     'hash_functions': r'xxh64|xxh32|xxhash|XXH',
     'compression': r'deflate|inflate|crc32|compress',
     'crypto': r'AES|SHA|MD5|SM4|SSL|EVP_',
-    'json': r'json_parse|sonic_parse|rapidjson',
+    'json': r'json_parse|sonic_parse|rapidjson|scanstring_unicode|scan_once_unicode',
     'pattern_matching': r'hyperscan|regex|pcre',
     'linear_algebra': r'gemv|gemm|blas|cblas',
     'sparse_linear_algebra': r'spmv|spgemm|sparse_blas',
     'math': r'\bsin\b|\bcos\b|\bexp\b|\blog\b|vml|svml',
     'dnn': r'conv[0-9]|pool[0-9]|relu|matmul|dnn',
     'fft': r'fft|ifft|dft',
-    'video': r'encode|decode|h26',
+    'video': r'x264_|x265_|h264_|h265_|avcodec|ffmpeg',
     'serialization': r'protobuf|ParseFromArray|SerializeToString',
     'sql_acceleration': r'sparksql|codegen|native_sql',
-    'network': r'tls_tx|tls_rx|tcp_|udp_',
+    'network': r'tls_tx|tls_rx|tcp_sendmsg|tcp_recvmsg|udp_sendmsg|udp_recvmsg|ssl_write|ssl_read|ktls',
     'kv_storage': r'rocksdb::|DBImpl|CompactionJob|MemTable|BlockBasedTable',
-    'ascend_runtime': r'__pthread_mutex_lock|__pthread_rwlock_unlock|std::_Rb_tree|std::vector::_M_realloc_insert|std::_Hashtable',
+    'ascend_runtime': r'pthread_mutex_lock|pthread_mutex_unlock|pthread_rwlock_unlock|pthread_rwlock_rdlock|pthread_rwlock_wrlock|std::_Rb_tree|std::vector::_M_realloc_insert|std::_Hashtable',  # 锁符号不要求 __ 前缀, 与脚本口径一致
 }
+# 匹配语义与 scripts/detect_all_libraries.sh 的 grep -iE 一致: 大小写不敏感
 for cat, pattern in categories.items():
-    pct = sum(float(h['overhead'].rstrip('%')) for h in hotspots if re.search(pattern, h.get('symbol','')))
+    hits = [h for h in hotspots if re.search(pattern, h.get('symbol',''), re.I)]
+    pct = sum(float(h['overhead'].rstrip('%')) for h in hits)
     if pct >= 0.5:
-        print(f'{cat}: {pct}%')
+        # 内核态符号([kernel.kallsyms])不可被 LD_PRELOAD 拦截, 拆分标注可拦截性
+        k_pct = sum(float(h['overhead'].rstrip('%')) for h in hits if h.get('lib','').startswith('[kernel'))
+        print(f'{cat}: {pct:.2f}% (用户态可拦截 {pct-k_pct:.2f}% / 内核态不可拦截 {k_pct:.2f}%)')
+
+# DSO 热点排名（hotspots 按 lib 聚合）
+dso_pct = defaultdict(float)
+for h in hotspots:
+    dso_pct[h.get('lib','')] += float(h['overhead'].rstrip('%'))
+for lib, pct in sorted(dso_pct.items(), key=lambda x: -x[1])[:20]:
+    if pct >= 0.5:
+        tag = ' [kernel]' if lib.startswith('[kernel') else ''
+        print(f'dso_rank {lib}: {pct:.2f}%{tag}')
 "
 ```
 
+需要更精确的 DSO 排名或调用链/调用频次分析时，基于报告中的路径字段追加：
+
+```bash
+# 精确 DSO 排名（perf_data 路径，--no-children 取 self%）
+perf report --stdio -i "$PERF_DATA" --no-children --sort=dso 2>/dev/null | grep -E '^\s+[0-9]' | head -20
+# malloc 调用频次与调用方（perf_callcount_report 为 -n 调用次数报告路径，可直接读取）
+grep -E 'malloc|free' "$PERF_CALLCOUNT_REPORT" | head -20
+```
+
 > **关键**：任何类别热点占比 ≥ 0.5% 即表示该类别存在性能瓶颈信号，必须进入 Step 2 推荐流程。低于 0.5% 的类别跳过，不输出推荐。不要只关注 malloc/memcpy 而忽略其他类别。
+>
+> **可拦截性判定**：`[kernel.kallsyms]` 内核态符号（如 `[k] memset`、`kmem_cache_free`）不受 LD_PRELOAD 影响，actionability 评估必须以**用户态可拦截占比**为准；内核态占比高时该类别推荐应降级或标注受限。
 
 ### Step 2：库类型识别与推荐
 
@@ -242,12 +248,15 @@ for cat, pattern in categories.items():
 根据 Step 1 输出的依赖文本和 Perf 报告进行综合分析，所有类别的库采用相同的静态与动态匹配策略（依据"核心概念"综合检测映射表）：
 
 ```bash
-# 输入: JSON 报告文件绝对路径；输出: {detected_libraries: [{category, current_lib, detection_method, evidence_sources, evidence_source}]}
-bash scripts/detect_all_libraries.sh <JSON_REPORT_PATH>
+# 输入: JSON 报告文件绝对路径; 可选第二参数: CANN profiler step_trace_time.csv 路径
+# 输出: {detected_libraries: [{category, current_lib, detection_method, evidence_sources, evidence_source}]}
+bash scripts/detect_all_libraries.sh <JSON_REPORT_PATH> [STEP_TRACE_CSV]
 ```
 
 > `current_run_id` 不由脚本输出，由调用方（LLM）在将 `detected_libraries` 注入规则引擎时绑定，用于 ascend_runtime 门控判定。
-
+>
+> **ascend_runtime 双信号 OR 门控**：STEP_TRACE_CSV 提供本轮 CANN profiler 现场 hostbound 证据（**取 CSV 最后一个数据行**——"末步"指 CSV 行序而非业务步号，CANN profiler 步号与训练日志步号可能存在偏移，基线组/处理组对比时按 CSV 行序对齐；该行 **Free 为 Stage 最大分量**——Free>Computing 且 Free>Communication，即 host 侧空隙是主要瓶颈——即命中；不设固定百分比阈值，关注 hostbound 是否为主要瓶颈本身）。ascend_runtime 推荐由两个正交信号**任一命中**触发：① perf 锁竞争符号占比 >5%（直接机制证据）；② CANN step_trace hostbound（Free 为 Stage 最大分量，host 侧空隙主导）。训练负载的分配压力常分散于 pymalloc arena / `operator new` / CANN 容器 realloc 等非锁符号路径，仅凭信号①会系统性低估（A+K 训练实测：锁 0.5% 弱信号下 tcmalloc 步耗时 -10%）。未提供 STEP_TRACE_CSV 时仅用信号①。
+>
 > **ascend_runtime 硬门控**：若 `evidence_source=blocked`，规则引擎不得输出推荐结论（见红线 #3）。
 
 #### 2.2 规则引擎匹配
@@ -267,6 +276,8 @@ FOR each item in detected_libraries:
     IF item.evidence_source != current:
       → cap confidence at experience_only/low  # 非门控类别降级
 ```
+
+**ascend_runtime 门控细则（双信号 OR）**：`evidence_source=current` 的前提下，证据文本中的推荐触发条件为——锁竞争 >5% **或** hostbound（CANN step_trace 末步 Free 为 Stage 最大分量：Free>Computing 且 Free>Communication）任一命中；双命中 → `confidence: high`，单命中 → `confidence: medium`；两者均未命中（信号弱）→ `recommendation: not_recommended`（依据：现场双信号均不支持）。
 
 **核心逻辑**：
 1. 根据识别出的库类别，在知识库 `library_profiles` 中查找该类别的所有优化库。
@@ -289,7 +300,7 @@ FOR each item in detected_libraries:
 | < 0.5% | 无证据 | 该类别不推荐（`not_recommended`） | 跳过 |
 | 无法采集 | 无证据 | 仅按经验给候选清单（`confidence: experience_only`） | 可选 |
 
-> ascend_runtime 类别在"无法采集"时标记 `blocked`（见红线 #3）。
+> ascend_runtime 类别在"无法采集"时标记 `blocked`（见红线 #3）；其推荐分级按双信号独立评估：锁竞争>5% 与 hostbound（Free 为 Stage 最大分量）**双命中 → `high`，单命中 → `medium`**（证据文本中的触发结论优先于本表通用占比分级），均未命中 → `not_recommended`。
 >
 > **关键**：每个类别独立评估，不要求所有类别都达到阈值才推荐。只要某类别热点 ≥ 0.5%，就应给出对应的替换推荐。低于 0.5% 的类别视为噪声，跳过不推荐。
 
@@ -305,7 +316,7 @@ FOR each item in detected_libraries:
 
 验证流程设计基于 Step 2 的证据分级生成，按证据等级决定推荐运行次数（低证据 ≥1 / 中证据 ≥2 / 高证据 ≥3），输出分为方法学与命令清单两部分（分别对应报告 [6] 与 [7]）：
 
-1. **基准对比方法学**（报告 [6]）：基线对照 ≥1 次、单变量原则、加载验证必须用 `/proc/<pid>/maps`、回退确认。
+1. **基准对比方法学**（报告 [6]）：基线对照 ≥1 次、单变量原则、加载验证必须用 `/proc/<pid>/maps`、回退确认、**A/B 同 step 对齐**（基线组与处理组同号 step 逐对比较 step N vs step N、对齐区间两组一致、特殊步两组同号剔除、禁止排序后按位置配对、CANN step_trace 按 CSV 行序对齐——收益只能来自同一 step 在两组的差值，防错位配对如基线 step6 比处理组 step8 造成虚假收益，详见 `references/library-playbook.md` 基准对比方法学第 6 条）。
 2. **验证命令清单**（报告 [7]）：针对每个 `recommended` 库，输出 LD_PRELOAD 接入命令、加载验证命令、压测对比命令和回退命令（从 `references/library-playbook.md` 的安装 SOP 提取）。
 3. **验证产出 JSON 模板**：主框架执行验证后回写结果，结构见 `references/library-playbook.md`。
 
@@ -320,7 +331,7 @@ FOR each item in detected_libraries:
 | 压缩（deflate/inflate） | compression | zlib、ISA-L | 按架构与压缩/速度偏好选 |
 | 加密（AES/SHA/RSA） | crypto | openssl、isa-l_crypto、GMSSL | 通用→openssl；批量 AES→isa-l_crypto；国密合规→GMSSL |
 | 校验（CRC32/Adler32/XXHash） | hash_functions | ISA-L CRC、xxhash | 按 CPU 架构选 |
-| JSON 解析（json_parse/sonic_parse） | json | sonic-cpp、RapidJSON | sonic-cpp 在 aarch64 上性能最优；RapidJSON 跨平台兼容好 |
+| JSON 解析（json_parse/sonic_parse/scanstring） | json | sonic-cpp、RapidJSON | sonic-cpp 在 aarch64 上性能最优；RapidJSON 跨平台兼容好。**注意**：两者均为 C++ 库，仅适用于原生/C++ 负载；Python 等解释型负载的 `_json` C 扩展热点无法通过 LD_PRELOAD 替换，应标 `inconclusive` 并说明原因 |
 | 正则匹配（regex/pcre） | pattern_matching | Hyperscan | 高吞吐正则匹配，aarch64 需确认编译支持 |
 | 矩阵运算（gemv/gemm/cblas） | linear_algebra | OpenBLAS、vectorBLAS | OpenBLAS 通用；vectorBLAS 在鲲鹏上 SVE 优化 |
 | 稀疏矩阵（spmv/spgemm） | sparse_linear_algebra | SparseBLAS | 稀疏矩阵专用 |
@@ -332,7 +343,7 @@ FOR each item in detected_libraries:
 | SQL 加速（sparksql） | sql_acceleration | sparksql_native | Spark SQL 原生加速 |
 | 网络 TLS/TCP（tls/tcp/udp） | network | KTLS | 内核 TLS 卸载 |
 | KV 存储（rocksdb） | kv_storage | RocksDB、KAL-rocksdb | 嵌入式 KV 存储优化 |
-| CANN runtime 锁竞争 | ascend_runtime | tcmalloc_for_cann | Ascend NPU host 侧 malloc 优化（需本轮 perf 证据门控） |
+| CANN runtime 锁竞争 / hostbound 训练 | ascend_runtime | tcmalloc_for_cann | Ascend NPU host 侧 malloc 优化（本轮 perf 锁竞争>5% 或 CANN step_trace Free 为 Stage 最大分量（hostbound 主瓶颈）任一命中即推荐，双信号 OR 门控） |
 
 **替换方式**：始终优先构建期集成（符号绑定可靠），LD_PRELOAD 仅在完全无法重编译时作为 fallback，且必须先确认进程未链接优化分配器。详细安装 SOP、LD_PRELOAD 接入、运行时调优参数（MALLOC_CONF / TCMALLOC_*）见 `references/library-playbook.md`。
 
@@ -379,6 +390,7 @@ FOR each item in detected_libraries:
 | 目标进程 | <PID> / <命令> |
 | 进程运行时长 | <足够 / 过短> |
 | Perf 采样 | <成功 / 失败 / 未尝试> |
+| 采样窗口 step 区间 | <采样时段覆盖的业务 step 范围，如 steps 6-8；无法确定则标注未知并说明> |
 
 ## [3] 进程采样结果
 ### 热点进程
@@ -468,9 +480,9 @@ FOR each item in detected_libraries:
 | `references/library-playbook.md` | 安装 SOP/运行时调参/推荐规则细则/验证方法学 | 操作细节缺失，仅能输出粗粒度方案 |
 | `references/ascend-playbook.md` | Ascend NPU 场景经验线索与推荐策略 | Ascend 场景推荐降级为通用经验 |
 | `../../references/prerequisites.md` | 公共依赖、perf/PMU 权限与降级 | 权限/降级处置无统一基准 |
-| `scripts/detect_all_libraries.sh` | 统一库类型识别（静态+动态） | 库类型识别降级 |
-| `scripts/perf_sampling_online.sh` | 在线进程 perf 采样 | 在线采样降级为内联方式 |
-| `scripts/run_and_profile_offline.sh` | 离线闭环启动与采样 | 离线分析降级为内联方式 |
+| `scripts/run_and_profile.sh` | 统一性能采样（在线 `--pid` 只读附加 / 离线命令闭环启动） | 采样降级为内联方式 |
+| `scripts/steady_state_watch_and_sample.sh` | 短稳态窗口监视+立即采样闭环（日志正则/npu-smi AICore 双信号触发） | 退化为人工配方（预锁 PID + 5s 轮询），存在错失窗口风险 |
+| `scripts/detect_all_libraries.sh` | 统一库类型识别（静态+动态，可选消费 CANN step_trace hostbound 信号） | 库类型识别降级；ascend_runtime 退化为仅锁竞争单信号门控 |
 
 ## Ascend NPU 实战经验与分配器选型（按需加载）
 

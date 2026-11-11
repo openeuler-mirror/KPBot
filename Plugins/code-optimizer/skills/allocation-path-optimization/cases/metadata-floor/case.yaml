@@ -1,0 +1,53 @@
+# 用例：tier B —— 仅元数据对象的分配下限消除
+#
+# 覆盖 allocation-path-optimization 的核心配方 `exact_size_allocation`：
+# 通用分配 helper 对小于 CHAIN_FLOOR(1024 B) 的请求一律提升，而引用型链只需要
+# 链头 + 引用元数据（约 64 B），其内联数据区在创建后立即被外部指针覆盖、永不使用。
+# 优化只在引用型链的创建点按精确尺寸申请，通用 helper 与数据型链保持不变。
+#
+# 断言分三层：
+#   1. 正确性：两版都必须通过 reference/append 模型校验（含 cleanup 次数与长度）；
+#   2. 分配脚注：drain 负载的申请字节必须下降 ≥ 8x（scripts/alloc_probe.c 确定性口径）；
+#   3. 性能：drain ≥ 1.5x、addref ≥ 2x，数据型 append 不得回退超过 10%。
+#
+# 运行（在技能根目录下）：
+#   bash cases/metadata-floor/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier B（需要 cc + binutils）。夹具自包含，不依赖外部仓库与特定分配器。
+
+name: metadata-floor
+skill: allocation-path-optimization
+tier: B
+
+entrypoint: ["bash", "cases/metadata-floor/run.sh"]
+
+# 构建上下文按 docs/case-spec.md 约定指向插件根；直接运行只需技能目录。
+build:
+  context: ../../../..
+  dockerfile: skills/allocation-path-optimization/cases/metadata-floor/Dockerfile
+
+env_vars:
+  REPS: 15
+  ITERS: 200000
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: correctness
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: bytes_reduction
+    op: gte
+    expect: 8.0
+  - type: json_field
+    file: results/result.json
+    field: all_gates_passed
+    expect: true

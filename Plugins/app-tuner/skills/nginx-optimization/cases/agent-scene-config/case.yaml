@@ -1,0 +1,56 @@
+# 用例：agent 级端到端 —— nginx 场景识别与配置决策
+#
+# 说明：tier agent。给定一个具体部署场景（https 短连接网关、4 核 VM、压测环境），
+# 验证 agent 是否按 skill 的场景四要素与决策表产出正确的 nginx.conf 关键决策。
+# with-skill 在容器内接入 nginx-optimization（仅 SKILL.md + references/，不含评分材料）；
+# without-skill 不接入任何 skill，任务完全相同。
+#
+# 构建/运行（在 KPBot 插件根目录，需容器可访问模型 API）：
+#   docker build --network host \
+#     -f skills/nginx-optimization/cases/agent-scene-config/Dockerfile \
+#     -t kpbot/app-tuner-agent-nginx-scene-config:1.0-openeuler24.03 .
+#   ./run_ab.sh --save results-ab
+
+name: agent-scene-config
+skill: nginx-optimization
+tier: agent
+
+image: kpbot/app-tuner-agent-nginx-scene-config:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: assertion_pass_rate
+  uplift: pass_rate_with / pass_rate_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/nginx-optimization/cases/agent-scene-config/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时挂载）
+  - opencode auth.json（运行时挂载）
+  - 容器可访问模型 API（必要时 --network host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: skills_invoked
+    op: contains
+    value: nginx-optimization

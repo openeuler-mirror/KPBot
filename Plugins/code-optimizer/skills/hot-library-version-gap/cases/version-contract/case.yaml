@@ -1,0 +1,49 @@
+# 用例：tier A —— check_library_version.py 核对契约
+#
+# 覆盖：
+#   check     mock 文件系统 + mock maps + mock 证据表下的完整判定矩阵：
+#             gap / no-gap / insufficient-version-detail（soname 仅主版本）/
+#             no-entry（表未命中不编造）；前缀匹配不误伤形近库名；无版本
+#             后缀与 rc 后缀不解析成版本；非 .so 行过滤；--lib 子串过滤；
+#             自定义路径加载（LD_LIBRARY_PATH 场景 realpath 不落全局路径）；
+#             --output 落盘；默认知识库接线；退出码契约
+#   static    python3 -m py_compile 语法检查
+#
+# 运行：
+#   bash skills/hot-library-version-gap/cases/version-contract/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/mock，python3+bash 标准库）。mock 行为对齐
+#       /proc/<pid>/maps 真实格式（地址 权限 偏移 dev inode 路径）。
+#       --pid 在线模式读取 /proc/<PID>/maps，Windows 开发环境无 /proc
+#       无法覆盖；Linux 环境补测（本用例仅验证其参数互斥与退出码）。
+
+name: version-contract
+skill: hot-library-version-gap
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: check_ran
+    op: gte
+    expect: 16
+  - type: json_field
+    file: results/result.json
+    field: check_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_ran
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0

@@ -18,7 +18,20 @@ SUBSKILL_CATALOG = {
     "other-optimization": "candidate-other",
     "io-memory-network-bottleneck-analysis": "candidate-bottleneck-prescreen",
     "database-workload-analysis": "candidate-database-workload",
+    "vllm-ascend-profiling": "candidate-vllm-ascend-profiling",
 }
+
+# vllm-ascend-profiling 的 Stage-1 环境基线在派发指令中显式下发，
+# 防止子代理回写 task package 时缺基线数据导致后续分析退化。
+# 只引用子技能真实产出：env_check.py 的 results（Stage 1 的 7 项检查）
+# 与 Stage 2 采集产物，不引入子技能未定义的字段或阶段。
+VLLM_ASCEND_BASELINE_INSTRUCTION = (
+    "For vllm-ascend-profiling task packages, the first returned evidence MUST "
+    "include the Stage-1 env_check.py output (all 7 ordered check items in "
+    "'results') recorded under findings.environment, and any ttft_* or "
+    "profiling metrics must carry the Stage-2 collection window plus the "
+    "trace/completeness artifact paths they were derived from."
+)
 
 MAIN_OPTIMIZATION_SUBSKILLS = [
     "application-config-optimization",
@@ -339,6 +352,60 @@ def parse_npu_signals(evidence_dir):
     return signals
 
 
+def _walk_ttft_keys(node, depth=0):
+    """在 summary 嵌套结构里找含 ttft 的指标键（最多 3 层）。"""
+    if depth > 3 or not isinstance(node, dict):
+        return None
+    for key, value in node.items():
+        if "ttft" in str(key).lower() and not isinstance(value, (dict, list)):
+            return str(key)
+        found = _walk_ttft_keys(value, depth + 1)
+        if found is not None:
+            return found
+    return None
+
+
+def _vllm_ttft_profiling_signal(summary, summary_path, evidence_dir=""):
+    """检测 NPU+vLLM 的 TTFT/profiling 派发信号（vllm-ascend-profiling）。
+
+    任一命中即返回 (True, reason, 证据路径)：
+      1. detected_signals 显式标记：ttft_high / ttft_profiling_requested
+      2. performance summary 内（≤3 层嵌套）存在 ttft 指标键
+      3. evidence_dir 已有 profiling 采集产物（trace_view.json / msprof / profiler / *ttft*）
+    """
+    if not isinstance(summary, dict):
+        return (False, "", summary_path)
+
+    detected = summary.get("detected_signals", {})
+    if isinstance(detected, dict):
+        if detected.get("ttft_high"):
+            return (True, "performance summary marked ttft_high", summary_path)
+        if detected.get("ttft_profiling_requested"):
+            return (True, "performance summary marked ttft_profiling_requested", summary_path)
+
+    ttft_key = _walk_ttft_keys(summary)
+    if ttft_key is not None:
+        return (
+            True,
+            f"performance summary carries ttft metric '{ttft_key}'; dispatch Stage-1 env diagnosis / TTFT profiling",
+            summary_path,
+        )
+
+    evidence_dir_path = Path(evidence_dir) if evidence_dir else None
+    if evidence_dir_path is not None and evidence_dir_path.is_dir():
+        profiling_patterns = ("trace_view.json", "msprof*", "profiler*", "vllm_profile*", "*ttft*")
+        for pattern in profiling_patterns:
+            hits = sorted(evidence_dir_path.glob(pattern))
+            if hits:
+                return (
+                    True,
+                    f"profile/TTFT artifact present in evidence dir ({hits[0].name}); TTFT decomposition requested",
+                    str(hits[0]),
+                )
+
+    return (False, "", summary_path)
+
+
 def evidence_driven_candidates(summary, summary_path, args):
     candidates = {}
     dso_rank = summary.get("hotspot_dso_rank", [])
@@ -469,6 +536,18 @@ def evidence_driven_candidates(summary, summary_path, args):
                     "npu_hbm_pressure",
                     npu_signals["raw_evidence"][0] if npu_signals["raw_evidence"] else summary_path,
                 )
+
+    # NPU+vLLM 信号路由：vllm-ascend-profiling（Stage-1 环境诊断 / TTFT 分解 profiling）
+    ttft_hit, ttft_reason, ttft_source = _vllm_ttft_profiling_signal(summary, summary_path, evidence_dir)
+    if ttft_hit:
+        add_candidate(
+            candidates,
+            "vllm-ascend-profiling",
+            "high",
+            ttft_reason,
+            "ttft_profiling_requested",
+            ttft_source,
+        )
 
     return list(candidates.values())
 
@@ -756,6 +835,13 @@ def main():
         }
         if subskill_name == "application-config-optimization" and args.database_workload:
             task["nested_subskills"] = ["database-workload-analysis"]
+        elif subskill_name == "accelerator-optimization" and "vllm-ascend-profiling" not in selected_subskills:
+            # NPU+vLLM 场景由 accelerator-optimization 按需引用 Stage-1 诊断；
+            # 证据信号已单独派发时（selected_subskills 命中）不重复下发。
+            task["nested_subskills"] = ["vllm-ascend-profiling"]
+
+        if subskill_name == "vllm-ascend-profiling":
+            task["instructions"] = task["instructions"] + [VLLM_ASCEND_BASELINE_INSTRUCTION]
 
         task_path = output_dir / f"{subskill_name}.json"
         task_path.write_text(json.dumps(task, indent=2, ensure_ascii=False) + "\n")

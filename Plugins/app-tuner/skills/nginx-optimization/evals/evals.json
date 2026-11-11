@@ -1,0 +1,53 @@
+{
+  "skill_name": "nginx-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我们有一台 4 核 VM，上面跑 nginx 做 HTTPS 网关，客户端不用 keepalive（每请求新建连接），压测环境，QPS 上不去。请做场景识别，给出 worker 数、ssl_session_cache、keepalive_requests、reuseport、证书类型、绑核掩码等关键配置决策及理由，并说明压测验证纪律。不要执行任何破坏性操作。",
+      "expected_output": "判定为 https_short（短连接、TLS 启用）；worker_processes = N = 4（短连接不留中断核）；ssl_session_cache off 且 ssl_session_tickets off（短连接会话不复用，缓存纯开销）；keepalive_requests 取短连接量级 2000；listen 443 ssl（短连接不加 reuseport）；ECDSA 证书优先 + TLSv1.2/1.3；worker_cpu_affinity 掩码是二进制字符串（核0=1、核1=10、核2=100、核3=1000）；access_log off；压测 ≥3 轮取均值、波动 >5% 重测、逐层归因。",
+      "files": [],
+      "expectations": [
+        "明确判定连接模式为 https 短连接（https_short），并给出判定依据（Connection: Close / 无 keepalive / listen 带 ssl）",
+        "worker_processes 给出 4（=核数 N），而不是 N-1，且能说明 N-1 是长连接场景规则",
+        "ssl_session_cache 给出 off（短连接会话不复用），且 ssl_session_tickets 也 off",
+        "keepalive_requests 给出短连接量级（2000），而非长连接的 200000",
+        "证书类型选择 ECDSA 并给出理由（ECC 运算量低于 RSA，握手吞吐显著更高）；协议版本 TLSv1.2/1.3",
+        "worker_cpu_affinity 掩码按二进制字符串书写（核0=1、核1=10、核2=100、核3=1000），不写成十六进制递进",
+        "压测验证纪律：≥3 轮取均值、波动 >5% 视为无效重测、只保留有增益的变更",
+        "没有建议 pkill nginx 或 stop 系统服务等破坏性操作（重启用 pidfile 作用域的 nginx -s stop）"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "nginx 做 HTTPS 网关，SSL 握手 QPS 很低，CPU 打满在握手上。请按优先级给出排查与优化路径：先查什么，再上什么加速手段；说明每一步的判定依据。不要执行任何破坏性操作。",
+      "expected_output": "先查证书类型（RSA→换 ECDSA，实测完整握手吞吐差约 5 倍量级）；再查协议版本（TLS1.3 握手 1-RTT）；再查 session 是否复用（短连接 session_cache off、长连接 shared:SSL:1m）；配置层确认 reuseport/multi_accept/绑核；最后才上 L3 加速（KAL OpenSSL 编译链接与 LD_LIBRARY_PATH、KAE/UADK 硬件引擎需鲲鹏加速器、tcmalloc）；每步单独压测验证。",
+      "files": [],
+      "expectations": [
+        "第一优先级是证书类型：RSA 换 ECDSA，并能给出量级依据（完整握手吞吐显著更高）",
+        "提到 TLS 协议版本升级到 1.3（握手 1-RTT 收益）",
+        "区分短/长连接的 session 复用策略：短连接 ssl_session_cache off，长连接 shared:SSL:1m + tickets 策略",
+        "L3 加速按可用性排序：KAL OpenSSL → KAE/UADK（需硬件，无硬件时跳过）→ tcmalloc",
+        "KAL OpenSSL 给出编译期链接与运行期 LD_LIBRARY_PATH 两步，且有 ldd 校验方法",
+        "每一步优化都要求压测验证后才保留（逐层归因，不一次全改）",
+        "没有把 tcmalloc 说成必然有效（或能说明其对 nginx 收益有限/场景相关）",
+        "没有建议未经确认的破坏性操作"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "用 mock 压测工具做一次真实的 nginx 调优循环：先写一份默认 nginx.conf 跑 baseline；然后严格只修改一个关键配置项并复测；最后给出 before/after 对比表和保留/回退结论，写到 report.md。不要一次改多个参数，不要对真实 nginx 做任何操作。",
+      "expected_output": "先执行 baseline 并记录 Requests/sec；只改一个配置项（如 reuseport / access_log off / worker_cpu_affinity / sendfile）后复测；给出 before/after 数值对比；给出保留或回退的结论及依据（增益 <2% 回退等）；报告结构化（场景、变更、数据、结论）。",
+      "files": [],
+      "expectations": [
+        "先跑 baseline 并记录基线指标，baseline 与复测使用同一工具与参数形态",
+        "严格单变量：两轮之间只改一个配置项，并能指出改的是哪一项",
+        "给出 before/after 数值对比表",
+        "给出明确的保留或回退结论，并有效益阈值依据（如 <2% 无增益即回退）",
+        "调用的压测参数写法规范（--key=value 与 --key value 均可，但不混用导致语义不清）",
+        "报告包含场景说明、变更内容、数据、结论的结构化章节",
+        "没有对真实 nginx 或系统服务做操作（mock 工具只读模拟）",
+        "没有一次改多个参数"
+      ]
+    }
+  ]
+}

@@ -93,7 +93,7 @@ aarch64 常见断层：
 ```json
 {
   "action_id": "compiler-001",
-  "action_type": "arch_flags|pgo|lto|compiler_upgrade|source_patch",
+  "action_type": "arch_flags|pgo|css_pgo|lto|compiler_upgrade|source_patch",
   "precondition": ["current_run_id evidence is current"],
   "build_plan": ["commands or build-system edits"],
   "codegen_validation": ["readelf/objdump/perf annotate commands"],
@@ -104,3 +104,5 @@ aarch64 常见断层：
   "risk": ["ABI", "portability", "profile staleness"]
 }
 ```
+
+`css_pgo` 动作 = BRBE/CSSPGO 采样式 PGO（gen → perf+llvm-profgen collect → use），与 `pgo`（插桩）共用该契约；选用条件与差异见 `references/csspgo-brbe-playbook.md`。

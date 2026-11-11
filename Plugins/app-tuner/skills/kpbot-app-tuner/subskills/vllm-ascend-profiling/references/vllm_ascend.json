@@ -1,0 +1,26 @@
+{
+  "repo": "vllm-project/vllm-ascend",
+  "commit": "7d73d9d636d4c967ca507381e9e678618ae07dab",
+  "url": "https://github.com/vllm-project/vllm-ascend/tree/7d73d9d636d4c967ca507381e9e678618ae07dab",
+  "description": "merge vllm_cann to releases/v0.23.0 + TTFT timing patch",
+  "pip_package": "vllm-ascend",
+  "expected_version_substr": "+g7d73d9d63",
+  "patch_dir": "vllm_ascend_patch",
+  "patch_files": {
+    "vllm_ascend/distributed/kv_transfer/kv_pool/ascend_store/kv_transfer.py": {
+      "local": "kv_transfer.py",
+      "replaced_functions": [
+        {"class": "KVCacheStoreSendingThread", "function": "_handle_request"}
+      ],
+      "markers": ["[TTFT] wait_for_save handle_requset total"]
+    },
+    "vllm_ascend/distributed/kv_transfer/kv_pool/ascend_store/pool_worker.py": {
+      "local": "pool_worker.py",
+      "replaced_functions": [
+        {"class": "KVPoolWorker", "function": "start_load_kv"},
+        {"class": "KVPoolWorker", "function": "wait_for_save"}
+      ],
+      "markers": ["start_load_kv cost time", "[TTFT] wait for save end"]
+    }
+  }
+}

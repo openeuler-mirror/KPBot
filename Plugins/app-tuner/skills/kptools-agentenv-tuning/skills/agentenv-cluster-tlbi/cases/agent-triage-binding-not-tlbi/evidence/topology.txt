@@ -1,0 +1,8 @@
+# Synthetic fixture: same cluster_id across sockets is not one broadcast domain.
+/sys/devices/system/cpu/cpu0/topology/physical_package_id=0
+/sys/devices/system/cpu/cpu0/topology/die_id=unknown
+/sys/devices/system/cpu/cpu0/topology/cluster_id=0
+/sys/devices/system/cpu/cpu96/topology/physical_package_id=1
+/sys/devices/system/cpu/cpu96/topology/die_id=unknown
+/sys/devices/system/cpu/cpu96/topology/cluster_id=0
+Note: missing cluster_id is unknown; NUMA/L3 IDs are not TLBI broadcast domains.

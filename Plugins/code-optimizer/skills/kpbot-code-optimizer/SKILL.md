@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer
-description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表与 embedding lookup 去重等专项优化。
+description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表、embedding lookup 去重和 OpenZL 压缩内核等专项优化。
 ---
 
 # 鲲鹏性能优化流水线
@@ -33,8 +33,9 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 6 | BRGEMM/GEMM 优化 | `brgemm-optimization` | brgemm、gemm、matmul、onednn、packb、prepack | oneDNN/`dnnl`；BRGEMM kernel；PackB/PrePack/blocked layout 代码 |
 | 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
-| 9 | 向量数据库与向量检索优化 | `vector-search-optimize` | 向量数据库、向量检索、ANN、Faiss、DiskANN、IVFPQ、FastScan、HNSW、RaBitQ、TurboQuant、Vamana | 向量索引或检索服务入口；`faiss/`、`faiss::`、`diskann-disk` 或 `diskann-benchmark` 等库指纹 |
-| 10 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 9 | OpenZL 压缩内核优化 | `openzl-compression-tuning` | openzl、压缩、huffman、fse、熵编码、熵解码、codec 内核、压缩内核 | `src/openzl/` 源码树；`ZS_Huf*` / `openzl` 符号；`unitBench` 目录；`addBits` / `lookBits` 位流函数 |
+| 10 | 向量数据库与向量检索优化 | `vector-search-optimize` | 向量数据库、向量检索、ANN、Faiss、DiskANN、IVFPQ、FastScan、PQFS、HNSW、RaBitQ、TurboQuant、Vamana | 向量索引或检索服务入口；`faiss/`、`faiss::`、`diskann-disk` 或 `diskann-benchmark` 等库指纹 |
+| 11 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 **向量检索接管**：优化对象已明确落在向量数据库或检索路径时，直接加载 `vector-search-optimize`，传递用户目标、已知库名、源码、基准、数据和已有实验状态。由它识别执行层级，选择 Faiss、DiskANN 专项或通用 CP0–CP7。只有明确指向 VSAG 的专项任务才直达 VSAG 路由。共享算法名先交给通用入口查明实际后端。延续用户给出的资源范围和交互模式。
 

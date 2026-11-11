@@ -1,0 +1,37 @@
+--- a/buffer.c
++++ b/buffer.c
+@@ -192,6 +192,25 @@
+ 	return (chain);
+ }
+ 
++/* Metadata-only chains need exactly the chain header plus the reference
++ * record; the general helper's minimum size is meant for chains that carry
++ * their data inline, which a reference chain never does. */
++static struct evbuffer_chain *
++evbuffer_chain_new_reference(void)
++{
++	struct evbuffer_chain *chain;
++	const size_t size = EVBUFFER_CHAIN_SIZE +
++	    sizeof(struct evbuffer_chain_reference);
++
++	if ((chain = mm_malloc(size)) == NULL)
++		return (NULL);
++
++	memset(chain, 0, EVBUFFER_CHAIN_SIZE);
++	chain->refcnt = 1;
++
++	return (chain);
++}
++
+ static inline void
+ evbuffer_chain_free(struct evbuffer_chain *chain)
+ {
+@@ -2926,7 +2945,7 @@
+ 	struct evbuffer_chain_reference *info;
+ 	int result = -1;
+ 
+-	chain = evbuffer_chain_new(sizeof(struct evbuffer_chain_reference));
++	chain = evbuffer_chain_new_reference();
+ 	if (!chain)
+ 		return (-1);
+ 	chain->flags |= EVBUFFER_REFERENCE | EVBUFFER_IMMUTABLE;
