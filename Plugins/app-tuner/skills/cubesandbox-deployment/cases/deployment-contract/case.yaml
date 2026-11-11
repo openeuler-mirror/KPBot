@@ -1,0 +1,33 @@
+# Tier A: no host installation, Docker daemon, KVM, or external network required.
+# Run from any directory:
+#   bash cases/deployment-contract/run.sh
+
+name: deployment-contract
+skill: cubesandbox-deployment
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: release_ran
+    op: gte
+    expect: 10
+  - type: json_field
+    file: results/result.json
+    field: release_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_ran
+    op: gte
+    expect: 8
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0
