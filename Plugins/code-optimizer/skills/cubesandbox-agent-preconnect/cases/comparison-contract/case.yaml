@@ -1,0 +1,8 @@
+name: cubesandbox-agent-preconnect-comparison-contract
+skill: cubesandbox-agent-preconnect
+tier: A
+entrypoint: ["python3", "cases/comparison-contract/test_compare.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 合成报告测试，不代表 CubeSandbox 目标机或 Agent 端到端验收。
