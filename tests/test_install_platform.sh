@@ -50,6 +50,7 @@ check_vector_install() {
     check "installs DiskANN native performance case" '[ -f "$skill_root/diskann-benchmark-baseline/cases/rust-memory-search/run.py" ]'
     check "installs common vector workflow" '[ -f "$skill_root/vector-search-optimize/SKILL.md" ] && [ -f "$skill_root/vector-search-optimize/references/cp0-cp7.md" ]'
     check "routes vector tasks through the common workflow" 'grep -q "向量检索接管.*vector-search-optimize" "$skill_root/kpbot-code-optimizer/SKILL.md"'
+    check "preserves the OpenZL route alongside vector search" 'grep -Fq openzl-compression-tuning "$skill_root/kpbot-code-optimizer/SKILL.md" && [ -f "$skill_root/openzl-compression-tuning/SKILL.md" ]'
     check "routes to installed Faiss and DiskANN workflows" 'grep -Fq faiss-optimize "$skill_root/vector-search-optimize/SKILL.md" && grep -Fq diskann-optimize "$skill_root/vector-search-optimize/SKILL.md" && [ -f "$skill_root/faiss-optimize/SKILL.md" ]'
     for role in analyzer profiler candidate-planner implementer reviewer; do
         check "registers DiskANN $role as subagent" 'grep -q "^mode: subagent$" "$config_root/agents/diskann-$role.md"'
