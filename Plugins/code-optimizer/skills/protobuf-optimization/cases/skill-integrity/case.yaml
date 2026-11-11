@@ -1,0 +1,21 @@
+# 验证 tier-A 用例：protobuf-optimization 知识卡的完整性契约
+#
+# 验证内容：
+#   skill     SKILL.md 自身格式（frontmatter name/description 与目录一致）
+#   links     SKILL.md 引用的 references/*.md 与 scripts/*.sh 必须在磁盘上存在
+#   invariants 方法论不变量仍在语料中（画像对齐验收/形态前提核对/交替 A/B
+#             协议/DebugString 语义规则/外推铁律/SPE canonical 对齐/period 纪律）
+#   sensitive 敏感内容看护（私网 IP / 凭据 / 个人家目录路径 —— 提交前脱敏防线）
+#
+# 运行（在技能根目录下）：
+#   python3 cases/skill-integrity/checks.py
+#   # 或完整入口：bash cases/skill-integrity/run.sh
+#   # 产出 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier-A，仅依赖 python3 标准库；不需要 protobuf 环境。
+
+name: skill-integrity
+skill: protobuf-optimization
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
