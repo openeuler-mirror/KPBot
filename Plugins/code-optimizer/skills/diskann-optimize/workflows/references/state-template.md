@@ -12,4 +12,4 @@ schema_version 为 vector-opt-run.v2，阶段 0..8 与旧版保持一致。主�
 - 请求 Wiki 时 CP8 只能在终态 CP7 后开始；完成需要本地 receipt、validation_receipt 真实存在，其他目标路径非空。外部同步内容仍需适配器独立验证。
 - results.commit_status 记录 committed/not_authorized/not_applicable；只有已有任务授权才提交和保存 SHA。
 
-每次更新执行 scripts/validate_state.py；正式 schema 检查形状，脚本额外检查磁盘和状态流转。v1 迁移先 --check，确认目录和产物后 --apply；迁移不移动实验或抹去旧档。
+每次更新后，在 `diskann-optimize` 技能目录运行 `python3 workflows/scripts/validate_state.py /path/to/run/state.json`，检查磁盘产物和状态流转。迁移 v1 状态时，先运行 `python3 workflows/scripts/migrate_state_v1_to_v2.py /path/to/run/state.json --check`，确认目录和产物后改用 `--apply`。迁移保留实验目录和旧状态备份。

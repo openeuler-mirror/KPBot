@@ -12,8 +12,8 @@ description: 检查 DiskANN 源码与运行环境，追踪 Rust/C++ 构建或查
 ## 工作流程
 
 1. 固定当前检出或发布版本与源码摘要，识别 Rust/C++、内存图/SSD、量化与真实后端。
-2. 需要环境盘点时按 [环境检查](references/environment-check.md) 执行 `scripts/collect_env.py`；按 [平台检查表](references/kunpeng-checklist.md) 判断依赖，不要求一般调查必须有 Git、AArch64 或 SSD。
-3. 按 [证据协议](references/evidence-protocol.md) 从公开入口追踪参数、所有权、关键循环、序列化和系统调用；`scripts/source_evidence.py` 可生成可复核的符号索引。
+2. 需要环境盘点时，在本技能目录按 [环境检查](references/environment-check.md) 使用 `python3 scripts/collect_env.py`。根据 [平台检查表](references/kunpeng-checklist.md) 判断实际依赖。
+3. 按 [证据协议](references/evidence-protocol.md) 从公开入口追踪参数、所有权、关键循环、序列化和系统调用。可在本技能目录用 `python3 scripts/source_evidence.py /path/to/DiskANN 'search|beam'` 生成符号索引。
 4. 已有 profile 时按 [瓶颈分析](references/bottleneck-diagnosis.md) 和 [归因树](references/diagnosis-tree.md) 关联每查询工作量、CPU、等待、内存与 I/O；缺少采样则交由 diskann-benchmark-baseline 采集。
 5. 输出绑定版本的文件/符号/行号，区分事实、推断和未知；候选写明证据、上限和证伪条件，交给 diskann-optimize 规划与实现。
 

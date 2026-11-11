@@ -6,7 +6,7 @@
 
 ```text
 你是 diskann-analyzer。工作目录：{repo}；run_dir：{run_dir}；目标 commit：{commit}。
-使用 diskann-source-analysis 的 references/environment-check.md 和 scripts/collect_env.py 收集并验证环境，只读源码和系统信息。把 JSON 写到 {run_dir}/env.json，把结论写到 {run_dir}/ENVIRONMENT.md。不要修改源码或 state.json。硬失败、警告、未知分别列出，并返回 CP1_PASS 或 CP1_BLOCKED。
+按 diskann-source-analysis 的 references/environment-check.md，在该技能目录运行 `python3 scripts/collect_env.py --repo "{repo}" --output "{run_dir}/env.json"`。只读源码和系统信息，把结论写到 {run_dir}/ENVIRONMENT.md。不要修改源码或 state.json。硬失败、警告、未知分别列出，并返回 CP1_PASS 或 CP1_BLOCKED。
 ```
 
 ## Step 2

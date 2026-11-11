@@ -4,10 +4,10 @@
 
 ## CP0：范围和初始化
 
-确认源码/补丁、Rust 或 C++、内存或 SSD、性能目标、测试入口、数据/索引和允许资源。创建独立 run_dir：
+确认源码/补丁、Rust 或 C++、内存或 SSD、性能目标、测试入口、数据/索引和允许资源。在 `diskann-optimize` 技能目录运行以下命令创建独立 `run_dir`。
 
 ```bash
-python workflows/scripts/init_run.py --workflow diskann-optimize \
+python3 workflows/scripts/init_run.py --workflow diskann-optimize \
   --run-id exp-example --repo /path/to/DiskANN --run-dir /path/to/runs/exp-example
 ```
 
@@ -47,4 +47,4 @@ Reviewer 按本技能 references/experiment-review.md 与 references/acceptance-
 
 默认 skipped / not_applicable。仅在用户要求且可用适配器与目标明确时启用。预检路径和冲突后，按目标知识库规范同步并保存 receipt 与 validation_receipt；不能覆盖冲突档案。失败记录 blocked/failed 和恢复锚点，明确 CP7 已完成与同步尚未完成的各自状态，继续交付本地报告。
 
-每阶段更新后执行 validate_state.py。子角色只回传 [结构化交接](references/handoff-contract.md)，主协调者写状态。
+每阶段更新后，在 `diskann-optimize` 技能目录运行 `python3 workflows/scripts/validate_state.py /path/to/run/state.json`。子角色只回传 [结构化交接](references/handoff-contract.md)，主协调者写状态。
