@@ -26,7 +26,7 @@ assert:
     file: results/result.json
     field: static_ran
     op: gte
-    expect: 8
+    expect: 15
   - type: json_field
     file: results/result.json
     field: static_failures

@@ -100,6 +100,12 @@ guest kernel 与 PVM 宿主不匹配。
 `CUBE_API_HEALTH_ADDR`、`CUBE_OPS_HEALTH_ADDR`、`CUBE_OPS_UPSTREAM` 和 `WEB_UI_UPSTREAM`，
 避免健康检查与 WebUI 仍访问旧端口；用户显式设置的关联值优先，但必须自行保证一致。
 
+环境文件由 `parse_env.py` 以二进制安全记录解析后交给 Bash 内建 `export`，不使用
+`source/eval`。文件必须为部署用户所有（正式部署为 root）且不可被组/其他用户写入，建议
+`chmod 600`。只接受白名单 `KEY=VALUE`；引号仅由 `shlex` 解析，不允许 `$`、反引号、
+`;`、`&`、`|`, `<`、`>`、控制字符、内部控制变量及任何预检/PVM/quickcheck 绕过开关。
+官方安装器接收同一份解析结果，不会在下载后重新读取可能已变化的原文件。
+
 不要把密码、Token、带凭据代理 URL 写入仓库、聊天记录或命令行历史。环境文件应放在
 技能目录之外并限制权限。Shell 代理与 Docker daemon 代理是两套配置；如 Docker 拉取镜像
 也需要代理，应按用户的 Docker 运维规范另行配置，不要把 shell 代理隐式当成 daemon 配置。

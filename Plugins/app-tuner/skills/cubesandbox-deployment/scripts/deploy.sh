@@ -4,12 +4,26 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DISCOVER_RELEASE="${SCRIPT_DIR}/discover_release.py"
+PARSE_ENV="${SCRIPT_DIR}/parse_env.py"
 LOG_PREFIX="[cubesandbox-deployment]"
 INSTALL_ROOT="/usr/local/services/cubetoolbox"
+readonly SCRIPT_DIR DISCOVER_RELEASE PARSE_ENV LOG_PREFIX INSTALL_ROOT
 ENV_FILE=""
 PREFLIGHT_ONLY=0
 PREFLIGHT_FAILURES=0
 NODE_IP_EXPLICIT=0
+WORK_DIR=""
+PARSED_ENV_FILE=""
+
+cleanup() {
+  if [[ -n "${PARSED_ENV_FILE}" ]]; then
+    rm -f "${PARSED_ENV_FILE}"
+  fi
+  if [[ -n "${WORK_DIR}" ]]; then
+    rm -rf "${WORK_DIR}"
+  fi
+}
+trap cleanup EXIT
 
 log() {
   printf '%s %s\n' "${LOG_PREFIX}" "$*"
@@ -80,14 +94,37 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+for forbidden_switch in ONE_CLICK_SKIP_PRECHECK ONE_CLICK_SKIP_PVM_CHECK; do
+  if [[ "${!forbidden_switch:-0}" != "0" ]]; then
+    die "${forbidden_switch} is forbidden; preflight and PVM consistency checks cannot be bypassed"
+  fi
+done
+if [[ "${ONE_CLICK_RUN_QUICKCHECK:-1}" != "1" ]]; then
+  die "ONE_CLICK_RUN_QUICKCHECK=0 is forbidden; service health verification is mandatory"
+fi
+if [[ "${ONE_CLICK_MODE:-install}" != "install" ]]; then
+  die "ONE_CLICK_MODE is managed by deploy.sh; only fresh install is supported"
+fi
+[[ -z "${ONE_CLICK_PACKAGE_TAR:-}" ]] \
+  || die "ONE_CLICK_PACKAGE_TAR is forbidden; the verified official bundle must be used"
+unset ONE_CLICK_SKIP_PRECHECK ONE_CLICK_SKIP_PVM_CHECK ONE_CLICK_PACKAGE_TAR
+
 if [[ -n "${ENV_FILE}" ]]; then
   [[ -f "${ENV_FILE}" && -r "${ENV_FILE}" ]] || die "environment file is not readable: ${ENV_FILE}"
+  [[ -f "${PARSE_ENV}" ]] || die "missing environment parser: ${PARSE_ENV}"
   ENV_FILE="$(readlink -f "${ENV_FILE}")"
-  log "loading environment overrides from ${ENV_FILE}"
-  set -a
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  set +a
+  log "strictly parsing environment overrides from ${ENV_FILE} (no shell evaluation)"
+  PARSED_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/cubesandbox-env.XXXXXX")"
+  chmod 600 "${PARSED_ENV_FILE}"
+  if ! python3 "${PARSE_ENV}" "${ENV_FILE}" >"${PARSED_ENV_FILE}"; then
+    die "environment file validation failed"
+  fi
+  while IFS= read -r -d '' PARSED_KEY; do
+    if ! IFS= read -r -d '' PARSED_VALUE; then
+      die "environment parser returned an incomplete record"
+    fi
+    export "${PARSED_KEY}=${PARSED_VALUE}"
+  done <"${PARSED_ENV_FILE}"
 fi
 
 CUBE_VERSION="${CUBE_VERSION:-latest}"
@@ -537,7 +574,6 @@ prepare_host() {
 prepare_host
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cubesandbox-deployment.XXXXXX")"
-trap 'rm -rf "${WORK_DIR}"' EXIT
 BUNDLE_ARCHIVE="${WORK_DIR}/bundle.tar.gz"
 
 download_bundle() {
@@ -581,14 +617,13 @@ BUNDLE_DIR="${WORK_DIR}/${ASSET_NAME%.tar.gz}"
 # Pass intentional overrides through the upstream-supported dotenv mechanism.
 # Wrapper-only settings and secrets are not persisted into the runtime config.
 UPSTREAM_ENV_FILE="${WORK_DIR}/upstream-deployment.env"
-CUBE_UPSTREAM_INPUT="${ENV_FILE}" CUBE_UPSTREAM_OUTPUT="${UPSTREAM_ENV_FILE}" \
+CUBE_PARSED_ENV="${PARSED_ENV_FILE}" CUBE_UPSTREAM_OUTPUT="${UPSTREAM_ENV_FILE}" \
 CUBE_RESOLVED_PVM="${CUBE_PVM_ENABLE}" CUBE_RESOLVED_NODE_IP="${CUBE_SANDBOX_NODE_IP:-}" \
 python3 - <<'PY'
 import os
-import re
 import shlex
 
-source = os.environ.get("CUBE_UPSTREAM_INPUT", "")
+parsed_path = os.environ.get("CUBE_PARSED_ENV", "")
 output = os.environ["CUBE_UPSTREAM_OUTPUT"]
 excluded = {
     "CUBE_VERSION", "CUBE_SANDBOX_DOWNLOAD_URL", "CUBE_SANDBOX_SHA256",
@@ -596,17 +631,28 @@ excluded = {
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
     "CUBE_PVM_ENABLE", "CUBE_SANDBOX_NODE_IP", "ONE_CLICK_DEPLOY_ROLE",
     "ONE_CLICK_RUN_QUICKCHECK", "ONE_CLICK_MODE", "ONE_CLICK_ASSUME_YES",
-    "ONE_CLICK_ENV_FILE", "CUBE_API_HEALTH_ADDR", "CUBE_OPS_HEALTH_ADDR",
+    "ONE_CLICK_ENV_FILE", "ONE_CLICK_SKIP_PRECHECK", "ONE_CLICK_SKIP_PVM_CHECK",
+    "ONE_CLICK_ALLOW_DOWNGRADE", "ONE_CLICK_ALLOW_ROLE_CHANGE", "ONE_CLICK_PACKAGE_TAR",
+    "CUBE_API_HEALTH_ADDR", "CUBE_OPS_HEALTH_ADDR",
     "CUBE_OPS_UPSTREAM", "WEB_UI_UPSTREAM",
 }
 lines = []
-if source:
-    with open(source, encoding="utf-8") as handle:
-        for line in handle:
-            match = re.match(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
-            if match and match.group(1) in excluded:
-                continue
-            lines.append(line.rstrip("\n"))
+entries = []
+if parsed_path:
+    with open(parsed_path, "rb") as handle:
+        data = handle.read()
+    if data:
+        fields = data.split(b"\0")
+        if fields[-1] != b"" or (len(fields) - 1) % 2:
+            raise SystemExit("invalid parsed environment record")
+        fields = fields[:-1]
+        entries = [
+            (fields[index].decode("ascii"), fields[index + 1].decode("utf-8"))
+            for index in range(0, len(fields), 2)
+        ]
+for key, value in entries:
+    if key not in excluded:
+        lines.append(key + "=" + shlex.quote(value))
 for key, value in (
     ("CUBE_PVM_ENABLE", os.environ["CUBE_RESOLVED_PVM"]),
     ("CUBE_SANDBOX_NODE_IP", os.environ["CUBE_RESOLVED_NODE_IP"]),
@@ -623,6 +669,10 @@ with open(output, "w", encoding="utf-8") as handle:
     handle.write("\n".join(lines) + "\n")
 os.chmod(output, 0o600)
 PY
+if [[ -n "${PARSED_ENV_FILE}" ]]; then
+  rm -f "${PARSED_ENV_FILE}"
+  PARSED_ENV_FILE=""
+fi
 export ONE_CLICK_ENV_FILE="${UPSTREAM_ENV_FILE}"
 
 ONE_CLICK_MODE="install"
@@ -631,6 +681,8 @@ export ONE_CLICK_ASSUME_YES=1
 export ONE_CLICK_RUN_QUICKCHECK=1
 export ONE_CLICK_DEPLOY_ROLE=control
 export MIRROR
+unset ONE_CLICK_SKIP_PRECHECK ONE_CLICK_SKIP_PVM_CHECK ONE_CLICK_PACKAGE_TAR
+unset ONE_CLICK_ALLOW_DOWNGRADE ONE_CLICK_ALLOW_ROLE_CHANGE
 
 # An administrator not using this wrapper may have installed during download.
 validate_install_root final

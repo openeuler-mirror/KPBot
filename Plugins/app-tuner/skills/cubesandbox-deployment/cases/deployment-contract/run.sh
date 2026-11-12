@@ -33,8 +33,9 @@ rc=$?
 grep -q -- '--preflight-only' "${TMP_DIR}/help.txt" && ! grep -q -- '--upgrade' "${TMP_DIR}/help.txt"
 record_static "help documents read-only preflight and fresh-install-only scope" "$((rc != 0 || $? != 0))"
 
-PYTHONPYCACHEPREFIX="${TMP_DIR}/pycache" python3 -m py_compile "${SKILL_DIR}/scripts/discover_release.py"
-record_static "discover_release.py syntax" "$?"
+PYTHONPYCACHEPREFIX="${TMP_DIR}/pycache" python3 -m py_compile \
+  "${SKILL_DIR}/scripts/discover_release.py" "${SKILL_DIR}/scripts/parse_env.py"
+record_static "discover_release.py and parse_env.py syntax" "$?"
 
 grep -q 'ONE_CLICK_RUN_QUICKCHECK=1' "${SKILL_DIR}/scripts/deploy.sh" \
   && grep -q 'EXPECTED_SHA256' "${SKILL_DIR}/scripts/deploy.sh" \
@@ -65,6 +66,83 @@ grep -q 'check_sandbox_cidr' "${SKILL_DIR}/scripts/deploy.sh" \
   && grep -q 'CUBE_OPS_UPSTREAM' "${SKILL_DIR}/scripts/deploy.sh" \
   && grep -q 'curl-config' "${SKILL_DIR}/scripts/deploy.sh"
 record_static "CIDR, ports, explicit node IP, and credential-safe curl contracts" "$?"
+
+injection_env="${TMP_DIR}/injection.env"
+injection_marker="${TMP_DIR}/injection-must-not-exist"
+printf 'CUBE_SANDBOX_NODE_IP="$(touch %s)"\n' "${injection_marker}" >"${injection_env}"
+chmod 600 "${injection_env}"
+bash "${SKILL_DIR}/scripts/deploy.sh" --env "${injection_env}" --preflight-only \
+  >"${TMP_DIR}/injection.log" 2>&1
+rc=$?
+[[ "${rc}" -ne 0 && ! -e "${injection_marker}" ]] \
+  && grep -q 'shell metacharacters' "${TMP_DIR}/injection.log"
+record_static "dotenv command substitution is rejected without execution" "$?"
+
+internal_env="${TMP_DIR}/internal.env"
+printf 'INSTALL_ROOT=/tmp/other\n' >"${internal_env}"
+chmod 600 "${internal_env}"
+bash "${SKILL_DIR}/scripts/deploy.sh" --env "${internal_env}" --preflight-only \
+  >"${TMP_DIR}/internal.log" 2>&1
+rc=$?
+[[ "${rc}" -ne 0 ]] && grep -q 'not an allowed deployment key' "${TMP_DIR}/internal.log"
+record_static "internal INSTALL_ROOT overrides are rejected" "$?"
+
+bypass_env="${TMP_DIR}/bypass.env"
+printf 'ONE_CLICK_SKIP_PRECHECK=1\n' >"${bypass_env}"
+chmod 600 "${bypass_env}"
+bash "${SKILL_DIR}/scripts/deploy.sh" --env "${bypass_env}" --preflight-only \
+  >"${TMP_DIR}/bypass.log" 2>&1
+rc=$?
+[[ "${rc}" -ne 0 ]] && grep -q 'managed by deploy.sh' "${TMP_DIR}/bypass.log"
+record_static "dotenv precheck bypass is rejected" "$?"
+
+ONE_CLICK_SKIP_PVM_CHECK=1 bash "${SKILL_DIR}/scripts/deploy.sh" --preflight-only \
+  >"${TMP_DIR}/process-bypass.log" 2>&1
+rc=$?
+[[ "${rc}" -ne 0 ]] && grep -q 'cannot be bypassed' "${TMP_DIR}/process-bypass.log"
+record_static "process-environment PVM bypass is rejected" "$?"
+
+ONE_CLICK_RUN_QUICKCHECK=0 bash "${SKILL_DIR}/scripts/deploy.sh" --preflight-only \
+  >"${TMP_DIR}/quickcheck-off.log" 2>&1
+rc=$?
+[[ "${rc}" -ne 0 ]] && grep -q 'health verification is mandatory' "${TMP_DIR}/quickcheck-off.log"
+record_static "disabling quickcheck is rejected" "$?"
+
+valid_env="${TMP_DIR}/valid.env"
+printf '%s\n' \
+  'CUBE_SANDBOX_NODE_IP="192.0.2.10"' \
+  "MIRROR='cn'" \
+  'CUBE_TEMPLATE_ID=' \
+  'DATABASE_URL="mysql://user:pass word@db.internal/cube"' >"${valid_env}"
+chmod 600 "${valid_env}"
+python3 "${SKILL_DIR}/scripts/parse_env.py" "${valid_env}" >"${TMP_DIR}/valid.nul"
+rc=$?
+if [[ "${rc}" -eq 0 ]]; then
+  python3 - "${TMP_DIR}/valid.nul" <<'PY'
+import sys
+with open(sys.argv[1], "rb") as handle:
+    fields = handle.read().split(b"\0")[:-1]
+entries = dict(zip(fields[::2], fields[1::2]))
+expected = {
+    b"CUBE_SANDBOX_NODE_IP": b"192.0.2.10",
+    b"MIRROR": b"cn",
+    b"CUBE_TEMPLATE_ID": b"",
+    b"DATABASE_URL": b"mysql://user:pass word@db.internal/cube",
+}
+raise SystemExit(0 if entries == expected else 1)
+PY
+  rc=$?
+fi
+record_static "valid quoting, spaces, URLs, and empty values round-trip safely" "${rc}"
+
+insecure_env="${TMP_DIR}/insecure.env"
+printf 'MIRROR=cn\n' >"${insecure_env}"
+chmod 666 "${insecure_env}"
+bash "${SKILL_DIR}/scripts/deploy.sh" --env "${insecure_env}" --preflight-only \
+  >"${TMP_DIR}/insecure.log" 2>&1
+rc=$?
+[[ "${rc}" -ne 0 ]] && grep -q 'group/world writable' "${TMP_DIR}/insecure.log"
+record_static "group/world-writable environment files are rejected" "$?"
 
 PYTHONPYCACHEPREFIX="${TMP_DIR}/pycache" python3 - "${SKILL_DIR}/scripts/discover_release.py" >"${TMP_DIR}/release-results.json" <<'PY'
 import importlib.util

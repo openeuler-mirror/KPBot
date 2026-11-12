@@ -66,7 +66,9 @@ bash scripts/deploy.sh --env /secure/path/deployment.env --preflight-only
 
 ### 3. 只询问必要变量
 
-以 `deployment.env.example` 为模板，在用户工作目录或安全临时目录生成环境文件。变量细节见
+以 `deployment.env.example` 为模板，在用户工作目录或安全临时目录生成环境文件并执行
+`chmod 600`。文件由 `parse_env.py` 严格解析，绝不由 Shell `source/eval`；只接受白名单内的
+`KEY=VALUE`，不执行变量展开或命令替换。变量细节见
 [references/deployment.md](references/deployment.md)。按实际预检结果询问：
 
 - **多网卡/多 IP**：让用户确认 `CUBE_SANDBOX_NODE_IP`，不得盲选；
@@ -117,5 +119,8 @@ bash scripts/deploy.sh
   `cube-sandbox-one-click-<version>-<amd64|arm64>.tar.gz`；CN 模式使用同资产 CNB 地址并
   保留 GitHub 回退。API 限流时回退官方 latest 元数据/版本标签，明确警告无 API 摘要；
   严格摘要场景使用用户安全提供的 `GITHUB_TOKEN` 或自定义 URL + SHA-256。
+- `scripts/parse_env.py`：校验文件属主/权限和键白名单，使用 `shlex` 仅解析引号，拒绝 Shell
+  元字符、控制字符、内部变量及预检/quickcheck 绕过项；通过 NUL 记录安全传递值。
 - `deployment.env.example`：全新安装的最小覆盖项，只写明确需要调整的官方键。
-- `cases/deployment-contract/run.sh`：无副作用的双架构资产选择、镜像映射和脚本静态契约测试。
+- `cases/deployment-contract/run.sh`：无副作用的双架构资产选择、镜像映射、脚本静态契约及
+  环境注入/内部变量覆盖/预检绕过行为测试。
