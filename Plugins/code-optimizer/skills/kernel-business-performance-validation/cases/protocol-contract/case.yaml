@@ -1,0 +1,11 @@
+name: protocol-contract
+skill: kernel-business-performance-validation
+tier: A
+entrypoint: ["python3", "skills/kernel-business-performance-validation/cases/protocol-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: skills/kernel-business-performance-validation/cases/protocol-contract/results/result.json
+    field: success
+    expect: true
