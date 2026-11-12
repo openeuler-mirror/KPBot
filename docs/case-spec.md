@@ -112,7 +112,7 @@ assert:
 
 | 文件 | 内容 |
 | --- | --- |
-| `results/result.json` | 最终结论：success / optimized_correct / 耗时 / speedup / skills_invoked / tools_used |
+| `results/result.json` | 最终结论：success / optimized_correct / 耗时 / speedup / skills_invoked / tools_used / skill_assembled（with 臂装配成功标记，entrypoint 合并段写入） |
 | `results/trace.jsonl` | opencode `--format json` 原始事件流（机器可读 trace） |
 | `results/trace_summary.json` | trace 解析摘要：`tools_used` / `skills_invoked` / `tool_calls` |
 | `results/opencode.log` | opencode stderr |

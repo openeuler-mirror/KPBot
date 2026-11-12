@@ -1,0 +1,45 @@
+# 用例：tier A —— analyze_bench_results.py 判读契约
+#
+# 覆盖：
+#   analyze    形态分类契约：quantized-tail / staircase / uniform-lift 三种
+#              mock 负载精确分类；errors/success_rate 警告；多轮聚合
+#              （median/CV/stability）；--dir mtime 排序；--output 落盘；
+#              互斥参数与坏目录退出码
+#   static     python3 -m py_compile 语法检查
+#
+# 运行：
+#   bash skills/cubesandbox-bench-protocol/cases/bench-contract/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/mock，python3+bash 标准库）。mock 数据形态依据
+#       cube-bench v0.7.x 真实 JSON 报告结构（summary/create/raw）。
+
+name: bench-contract
+skill: cubesandbox-bench-protocol
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: analyze_ran
+    op: gte
+    expect: 10
+  - type: json_field
+    file: results/result.json
+    field: analyze_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_ran
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0

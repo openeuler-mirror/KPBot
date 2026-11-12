@@ -9,8 +9,9 @@
 app-tuner 提供 1 个主编排 skill(`kpbot-app-tuner`)及其内部资源:
 
 - **主 skill**: `skills/kpbot-app-tuner/` — 编排器,负责环境采集→瓶颈识别→动态路由→迭代验证→报告输出
-- **分析型子 skill**(subskills,自研,12 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/其他兜底
+- **分析型子 skill**(subskills,自研,13 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/vLLM-Ascend profiling/其他兜底
 - **质量保障**: 对抗性审查、current_run 门控、subagent 独立上下文执行
+- **AgentENV 专项技能包**: `skills/kptools-agentenv-tuning/` — 独立入口及按需安装的专项 Skill，共享环境采集和验证约定。
 
 ## 安装
 
@@ -55,6 +56,20 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | `kpbot-app-tuner` | 服务器应用优化编排器 — 环境采集、瓶颈路由、subagent 迭代验证、报告输出 |
+| `kptools-agentenv-tuning` | AgentENV 沙箱适配与调优入口 — Host/Guest 证据、功能前提、专项路由与验证 |
+
+### AgentENV 专项技能包
+
+专项 Skill 集中放在 `skills/kptools-agentenv-tuning/skills/`；安装器会将实际存在的
+专项暴露为独立入口。
+
+安装、ARM 服务器只读采集和验证范围见 [AgentENV 技能包说明](skills/kptools-agentenv-tuning/README.md)。
+
+### 独立调优 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`vllm-fastokens-segment-cache-migration`](skills/vllm-fastokens-segment-cache-migration/SKILL.md) | 评估 vLLM 切换到官方 fastokens 并启用段缓存的可行性，通过基线组和段缓存开启组验证 token 一致性、并发稳定性、分词性能、内存与回退准备 |
 
 ### 分析型子 skill(subskills,自研)
 
@@ -78,6 +93,13 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
+| `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
+
+### 场景优化类 skill
+
+| 技能 | 描述 |
+|------|------|
+| `nginx-optimization` | Nginx 场景专属调优(http/https × 长/短连接四场景、L1 环境/L2 配置/L3 鲲鹏加速分层、IRQ-worker 布局、KAL OpenSSL/KAE 加速、火焰图热点对策与压测验证纪律)，含 evals 评测集与 agent 级 with/without A/B 用例集(场景决策、调优循环纪律) |
 
 ## 目录结构
 
@@ -92,13 +114,18 @@ app-tuner/
 │   └── ...
 ├── examples/                          # 示例运行产物
 │   └── mysql-test/
-├── skills/                            # 技能目录(扁平)
+├── skills/                            # 技能入口及嵌套技能包
+│   ├── kptools-agentenv-tuning/       # AgentENV 专项技能包
+│   │   ├── SKILL.md                   # 场景入口
+│   │   ├── references/                # 共享证据与验证约定
+│   │   ├── scripts/                   # 只读环境采集
+│   │   └── skills/                    # 可独立调用的专项 Skill
 │   └── kpbot-app-tuner/               # 主 skill
 │       ├── SKILL.md                   # 唯一规范源
 │       ├── agents/                    # 平台 agent 配置
 │       ├── references/                # 参考文档(22 个)
 │       ├── scripts/                   # 脚本(22 个)
-│       └── subskills/                 # 自研分析型子 skill(12 个，含 scripts/ 和 references/)
+│       └── subskills/                 # 自研分析型子 skill(13 个，含 scripts/ 和 references/)
 └── opencode/                          # OpenCode 覆盖层(差异文件)
 ```
 
@@ -121,6 +148,7 @@ app-tuner/
 | 场景 | 告诉 AI | 底层技能 |
 |------|---------|---------|
 | 完整优化流程 | "帮我优化这个服务器应用的性能" | `kpbot-app-tuner` |
+| AgentENV 沙箱 | "检查 AgentENV 的 ublk 或并发恢复性能" | `kptools-agentenv-tuning` |
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
 

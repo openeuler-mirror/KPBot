@@ -172,7 +172,7 @@ Step 0 产出的物理拓扑:
 - `hardware-upgrade-analysis`
 - `other-optimization`
 
-`io-memory-network-bottleneck-analysis` 是前置瓶颈预筛，不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。
+`io-memory-network-bottleneck-analysis` 是前置瓶颈预筛，不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 默认由 `accelerator-optimization` 按需引用（NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling 采集），证据命中下表信号时不进入主覆盖集合，在 `accelerator-optimization` 的执行序列内追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进 `accelerator-optimization` 任务包（证据已单独点名时不重复下发）。
 
 ## 停止规则
 
@@ -199,8 +199,9 @@ AI 推理场景（Ascend NPU + vLLM/PyTorch、NVIDIA GPU + vLLM 等）在通用�
 | malloc 热点 | perf 热点函数含 `malloc`/`free`/`calloc`/`realloc` 且 DSO=glibc | `performance-library-selection` |
 | libtorch_cpu.so 热点 | `hotspot_dso_rank` 含 `libtorch_cpu.so` 且占比 `>= 3%` | `compiler-optimization`（PGO/LTO） |
 | libtorch_npu.so 热点 | `hotspot_dso_rank` 含 `libtorch_npu.so` 且占比 `>= 3%` | `compiler-optimization`（PGO/LTO） |
-| TTFT 高 | `TTFT > 目标值`（首 Token 延迟基线对比） | `application-config-optimization`（OMP/线程数/批量） |
+| TTFT 高 | `TTFT > 目标值`（首 Token 延迟基线对比） | `application-config-optimization`（OMP/线程数/批量） + `vllm-ascend-profiling`（NPU+vLLM：TTFT 分解 profiling 需求，Stage-1 环境诊断） |
 | KV cache 碎片 | OOM 事件或 throughput 抖动 `std/mean > 10%` | `application-config-optimization`（`gc_threshold`/`max_split_size`） |
+| profiling 采集/TTFT 分解显式需求 | 任务要求 TTFT 内部分解（kernel/host/device 各段耗时）或现场存在 `trace_view.json` / vLLM profiler 数据需求 | `vllm-ascend-profiling` |
 
 判定补充说明：
 

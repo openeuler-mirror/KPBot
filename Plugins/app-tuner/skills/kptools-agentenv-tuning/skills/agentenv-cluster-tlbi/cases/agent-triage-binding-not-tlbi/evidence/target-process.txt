@@ -1,0 +1,4 @@
+pid=5150
+Name:	fixture-vmm
+Cpus_allowed_list:	0-15
+Mems_allowed_list:	0

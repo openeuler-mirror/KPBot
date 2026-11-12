@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "trace_view.json",
+  "description": "Normalized torch_npu.profiler chrome trace (array of events), derived from the reference sample trace_view.json.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["ph", "name", "ts"],
+    "properties": {
+      "ph": {
+        "type": "string",
+        "description": "Chrome Trace phase: X complete, B/E begin/end, M metadata, C counter, s/f flow events.",
+        "enum": ["X", "B", "E", "M", "C", "s", "f", "i", "p"]
+      },
+      "name": { "type": "string" },
+      "pid": { "type": ["integer", "string"] },
+      "tid": { "type": ["integer", "string"] },
+      "ts": {
+        "description": "Timestamp in microseconds. torch_npu writes this as a decimal string.",
+        "type": ["number", "string"]
+      },
+      "dur": { "type": "number", "description": "Duration in microseconds (X events)." },
+      "cat": {
+        "type": "string",
+        "description": "Category. Absent on some hardware/metadata events.",
+        "examples": [
+          "python_function",
+          "cpu_op",
+          "enqueue",
+          "dequeue",
+          "async_task_queue",
+          "async_npu",
+          "HostToDevice"
+        ]
+      },
+      "args": { "type": "object" },
+      "id": { "type": ["integer", "string"], "description": "Flow event id (s/f)." },
+      "bp": { "type": "string", "description": "Flow binding point, e.g. 'e'." }
+    }
+  },
+  "x-processes": {
+    "description": "Logical processes discovered via ph=M process_name / process_labels.",
+    "Python": { "label": "CPU", "cats": ["python_function", "cpu_op"] },
+    "CANN": {
+      "label": "CPU",
+      "names": ["Node@launch", "AscendCL@*"],
+      "note": "Node@launch.args.item_id is the kernel name used for Top-N."
+    },
+    "Ascend Hardware": { "label": "NPU 0", "note": "Per-stream hardware tasks (Memcpy, *_SQE, …)." },
+    "AI Core Freq": { "label": "NPU 0", "ph": "C", "args_key": "MHz" },
+    "Communication": {
+      "label": "NPU 0",
+      "note": "HCCL. args carry size(Byte), bandwidth(GB/s), src/dst rank, transport type."
+    },
+    "Overlap Analysis": {
+      "label": "NPU 0",
+      "tracks": ["Computing", "Communication", "Communication(Not Overlapped)", "Free"]
+    }
+  },
+  "x-report-mapping": {
+    "top_kernels": "Node@launch args.item_id + dur",
+    "npu_utilization": "Overlap Analysis tracks",
+    "memory_proxy": "Memcpy / empty_tensor / acl_memcpy_* events (no HBM counter in this format)",
+    "communication": "args.size(Byte) / args.bandwidth(GB/s)",
+    "ttft_tpot": "external tool via parse_metrics.py (not derivable from trace alone)"
+  }
+}

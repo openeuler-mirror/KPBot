@@ -1,0 +1,6 @@
+pid=4242
+Name:	uvm-ublk-daemon
+CapPrm:	0000000000200000
+CapEff:	0000000000200000
+Cpus_allowed_list:	0-191
+Mems_allowed_list:	0-3

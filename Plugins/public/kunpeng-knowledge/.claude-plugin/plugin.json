@@ -1,0 +1,9 @@
+{
+  "name": "kunpeng-knowledge",
+  "version": "1.0.0",
+  "description": "通过 WeKnora Wiki 只读检索鲲鹏、ARM、Linux 与应用调优知识，并保留来源依据",
+  "author": {"name": "Kunpeng Acceleration Team"},
+  "license": "MulanPSL-2.0",
+  "keywords": ["kunpeng", "knowledge", "wiki", "weknora"],
+  "platforms": ["opencode"]
+}

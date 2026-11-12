@@ -452,12 +452,16 @@ Agent 采集当前编译环境后，向用户展示可用优化手段：
 | PyTorch LTO+PGO | 毕昇编译器 + 毕昇版 Python | 是 | 高 | PyTorch |
 | torch_npu LTO | 毕昇编译器 + 毕昇版 PyTorch | 否 | 中 | torch_npu |
 | torch_npu LTO+PGO | 毕昇编译器 + 毕昇版 PyTorch | 是 | 高 | torch_npu |
+| Python BRBE(CSSPGO) | 毕昇 + BRBE 硬件 + llvm-profgen | 是（perf 采样，免插桩） | 高 | Python |
+| PyTorch CSSPGO | 毕昇 + 毕昇版 Python + BRBE 硬件 + llvm-profgen | 是（perf 采样，免插桩） | 高 | PyTorch |
+| torch_npu CSSPGO | 毕昇 + 毕昇版 PyTorch + BRBE 硬件 + llvm-profgen | 是（perf 采样，免插桩） | 高 | torch_npu |
 
 推荐排序规则:
 1. 优先推荐使用难度低、不需跑模型采集的（LTO 优于 LTO+PGO）
 2. 按编译顺序推荐（Python → PyTorch → torch_npu）
 3. PGO 需要跑模型采集 profile，标注为高难度，排在后面
 4. 不可用的手段列在最后，标注限制原因
+5. **CSSPGO(BRBE) 与插桩 PGO 之间默认选插桩 PGO**：torch 侧 BRBE 少约 3~4% 收益（实测 gen→PGO2 +11.0% vs gen→CSS +7.6%），Python 侧两者等价。仅当无法部署插桩版 / 只能对生产进程采样 / 插桩多进程刷盘不可解时推荐 BRBE，完整决策矩阵见 `references/csspgo-brbe-playbook.md`
 
 > Agent 不得自动执行任何编译，必须向用户展示可用清单并等待用户选择。
 
@@ -477,7 +481,7 @@ Agent 采集当前编译环境后，向用户展示可用优化手段：
 ```
 
 > **编译前预检**: 完整编译三个组件需要 10-15GB 磁盘空间，编译前检查可用空间是否充足。
-> 以上流程可用 `scripts/ak_compile_optimize.sh` 自动化（`--component python|pytorch|torch_npu --optimize lto|lto_pgo --stage profile_gen|profile_use|compile`，支持 `--container`/`--source-dir`/`--install-dir`/`--check-only`/`--verify`/`--dry-run`）。
+> 以上流程可用 `scripts/ak_compile_optimize.sh` 自动化（`--component python|pytorch|torch_npu --optimize lto|lto_pgo|css_pgo`；`lto` 用 `--stage compile`，`lto_pgo` 用 `--stage profile_gen|profile_use|compile`，`css_pgo`（BRBE 采样式 PGO）用 `--stage gen|collect|use`，支持 `--container`/`--source-dir`/`--install-dir`/`--pid`/`--binary`/`--page-size`/`--css-profile`/`--check-only`/`--verify`/`--dry-run`）。css_pgo 的 gen/collect/use 三段流程与决策矩阵见 `references/csspgo-brbe-playbook.md`。
 
 ## 验证方法
 

@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: verify-baseline-and-cache-on
+expected_outcome: |
+  两组均通过 vLLM 的分词器加载入口运行，回放数据为合成多轮会话，候选版本经候选安装目录生效；报告两组 token ID 逐条一致、段缓存开启组命中数大于 0；耗时数值注明测量层级与场景，倍数表述为“是原来的 X 倍”或“提升 Y%”；虚拟环境未经修改。
