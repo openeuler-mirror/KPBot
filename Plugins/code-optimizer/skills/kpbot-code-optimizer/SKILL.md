@@ -35,7 +35,8 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
 | 9 | OpenZL 压缩内核优化 | `openzl-compression-tuning` | openzl、压缩、huffman、fse、熵编码、熵解码、codec 内核、压缩内核 | `src/openzl/` 源码树；`ZS_Huf*` / `openzl` 符号；`unitBench` 目录；`addBits` / `lookBits` 位流函数 |
 | 10 | Faiss 向量检索优化 | `faiss-optimize` | faiss、IndexIVFPQ、ivfpq、IndexIVFPQFastScan、ivfpqfs、pqfs、IndexHNSW、IndexRaBitQ、IndexIVFRaBitQ、TurboQuant | `faiss/IndexIVFPQ.cpp`、`faiss/IndexHNSW.cpp`；`faiss::` 命名空间；CMake 项目为 faiss |
-| 11 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 11 | DPDK 数据面代码优化 | `dpdk-optimization` | dpdk 代码、数据面、转发性能、收发包、热路径、PPS 低、l3fwd、rte_ring、mbuf | `rte_eth_rx_burst`/`rte_` 符号、`RTE_PKTMBUF_HEADROOM`；Makefile/meson 依赖 libdpdk |
+| 12 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 Faiss 路由优先级：输入明确指定 Faiss 或 Faiss 索引类时，优先交给 `faiss-optimize`；不得因 RaBitQ、ANN、向量检索等共享关键词转入 VSAG。只有算法名且无库名时，结合源码指纹区分 Faiss/VSAG；无法区分时再询问。用户已明确选择 Faiss 与算法时，视为场景已确认，直接执行接管协议，不重复展示场景菜单。
 

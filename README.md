@@ -1,7 +1,7 @@
 # KPBot
 
 [![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](LICENSE)
-[![Scenarios: 16](https://img.shields.io/badge/Scenarios-16-brightgreen.svg)](#optimization-scenarios)
+[![Scenarios: 18](https://img.shields.io/badge/Scenarios-18-brightgreen.svg)](#optimization-scenarios)
 
 面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code 和 OpenCode 提供专业的性能分析与优化插件。
 
@@ -9,6 +9,8 @@
 
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
+- **2026/11/06** — **code-optimizer** 新增 `dpdk-optimization` SKILL，覆盖 DPDK 数据面热路径代码优化：worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类判定）与分层代码杠杆库（热路径纪律、双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用），接入统一流水线场景路由，配套 app-tuner 的配置层调优。
+- **2026/11/06** — **app-tuner** 新增 `kptools-dpdk-tuning` SKILL，覆盖 DPDK 应用性能调优：现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延），面向鲲鹏 920 + hns3/Hi1822 主场景，不修改业务源码。
 - **2026/11/05** — **app-tuner** 新增 `nginx-optimization` SKILL，覆盖鲲鹏平台 nginx 场景的 L1 环境层（IRQ 绑核/多队列）、L2 配置层（http/https × 长/短连接四场景模板）、L3 加速层（KAL OpenSSL/KAE/tcmalloc）分层调优，含火焰图热点对策与压测验证纪律。
 - **2026/11/05** — **code-optimizer** 新增 `allocation-path-optimization` SKILL：优化分配路径（分配下限与尺寸类通胀审计、仅元数据对象精确申请、短生命周期对象抖动合并、成对释放、分配器与内核回收成本归因），以实测每操作字节/次数与峰值活字节取证、要求所有权与生命周期不变量，附 tier-A 审计契约用例、tier-B 字节口径夹具，以及只应用本 SKILL 补丁的真实 libevent 端到端用例（申请字节按结构下降、drain 达到门槛）。
 - **2026/10/12** — **code-optimizer** 扩展 5 个知识型 SKILL 的 Rust 支持，覆盖 Rust 热点代码的操作融合、精度变换、特例快路径与性能分析等优化需求。（[!72](https://gitcode.com/openeuler/KPBot/pull/72)）
@@ -28,7 +30,7 @@
 
 **app-tuner** 在不修改业务源码的前提下，通过系统与 OS 配置、运行环境、编译参数、性能库替换和应用参数进行调优；**code-optimizer** 通过修改源码优化算法、数据结构、算子和框架执行路径。两者可以围绕同一业务场景协同使用。
 
-当前按下表业务场景去重统计，共覆盖 **16 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
+当前按下表业务场景去重统计，共覆盖 **18 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
 
 <!-- 增删场景时同步更新顶部 Scenarios 徽章及上方场景数。 -->
 
@@ -47,6 +49,8 @@
 | [哈希表与特征 / KV 查表 @ 鲲鹏](Plugins/code-optimizer/skills/hashmap-optimization/SKILL.md) | **code-optimizer**：从查询链路与负载特征出发，区分计算、带宽和延迟瓶颈，通过数据布局与查询实现等改动优化查表热点。 |
 | [MySQL / InnoDB OLTP @ 鲲鹏](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/database-workload-analysis/SKILL.md) | **app-tuner**：结合 sysbench 与数据库内部指标，调优 NUMA/IRQ 亲和性、buffer pool、线程与表缓存、OS 参数及 PGO 编译配置。 |
 | [Spark / Flink 大数据处理 @ ARM](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/bigdata-playbook.md) | **app-tuner**：根据物理机或容器的 CPU、内存配额，调整 executor、TaskManager、并行度、内存与框架参数，并结合性能库选型优化运行环境。 |
+| [DPDK 应用 @ 鲲鹏 / ARM](Plugins/app-tuner/skills/kptools-dpdk-tuning/SKILL.md) | **app-tuner**：DPDK 应用性能调优双模式 — 现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延）；不修改业务源码，改码需求移交 code-optimizer。 |
+| [DPDK 数据面转发代码 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/dpdk-optimization/SKILL.md) | **code-optimizer**：DPDK 业务热路径代码五阶段优化 — 线速预算与基线冻结、worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类）、分层代码杠杆（双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用）与交错 A/B 验证；配置层联动 app-tuner。 |
 | [通用服务器应用与 Java 服务 @ 鲲鹏](Plugins/app-tuner/README.md) | **app-tuner**：使用 DevKit、nmon、进程与网络采集定位 CPU、内存、I/O 和网络瓶颈，调优 BIOS、OS、NUMA、网卡队列、编译参数与性能库。 |
 | [分配路径 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/allocation-path-optimization/SKILL.md) | **code-optimizer**：针对"每操作都在申请/释放"的热点，用每操作申请字节、峰值活字节与分配器对照实验定位成本，把仅元数据对象的分配下限改为精确申请，并识别抖动、成对释放与内核回收（brk/trim/页回收）成本；配分配计数探针做确定性核对。 |
 | [C/C++ 性能库与热点代码 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/kpbot-code-optimizer/SKILL.md) | **code-optimizer**：覆盖 NEON/SVE/SME 向量化、循环展开、分支消除、操作融合、预取、访存布局、精度变换与汇编优化；部分知识型 SKILL 已扩展 Rust 支持。 |
@@ -55,7 +59,7 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、Faiss 向量检索优化、OpenZL 压缩内核与基准调优（74 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、Faiss 向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（77 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
 | **[openwiki-sync](Plugins/public/openwiki-sync/)** | documentation | OpenWiki 代码仓文档生成与同步 — 独立 wiki 仓托管 + commit 级联动更新 + 关联恢复，支持 GitCode/Gitee/GitHub |
 | **[kunpeng-knowledge](Plugins/public/kunpeng-knowledge/skills/kunpeng-knowledge/SKILL.md)** | documentation | 鲲鹏知识库只读查询 — 搜索 Wiki、读取页面并返回来源；在 OpenCode 中通过 WeKnora 账号授权 |
@@ -146,8 +150,8 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 74 个技能
-    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 72 个技能
+    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 77 个技能
+    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 75 个技能
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -220,7 +224,7 @@ bash tests/test_install_platform.sh
 
 ### 可用技能列表
 
-code-optimizer 在 Claude Code 中安装 **74 个** skill，在 OpenCode 中安装 **72 个**（跳过 2 个 claude-only）。
+code-optimizer 在 Claude Code 中安装 **77 个** skill，在 OpenCode 中安装 **75 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -409,7 +413,7 @@ KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (74 skills)
+│   ├── code-optimizer/            # 代码优化插件 (77 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
