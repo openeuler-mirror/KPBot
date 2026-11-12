@@ -16,6 +16,7 @@ code-optimizer 提供 78 个专业技能（skills），覆盖从热点分析到�
 - **质量保障**: 对抗性审查、优化验证、修复代码
 - **Faiss 向量检索**: IVFPQ、FastScan、HNSW、RaBitQ 与 TurboQuant 的 CP0–CP7 优化工作流，配套构建、基线、采样、SIMD 和 UT/ST 验证
 - **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
+- **CubeSandbox Guest 连接优化**: 快照恢复期间有界预连接、monitor 连接复用和 restore runtime 复用，附原理、独立操作手册、历史补丁与创建总时间配对复现工具
 
 ## 诊断反馈流程
 
@@ -100,6 +101,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 ### 优化类 (Optimization)
 | 技能 | 描述 |
 |------|------|
+| [cubesandbox-agent-preconnect](skills/cubesandbox-agent-preconnect/SKILL.md) | CubeSandbox Guest 预连接与连接/runtime 复用；自带实施、回退、验证协议和工具，不依赖其他 skill |
 | `apply-optimization` | 应用优化方案 |
 | `apply-generic-optimization` | 通用优化应用 |
 | `apply-vectorization` | 向量化优化（NEON/SVE） |

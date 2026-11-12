@@ -1,0 +1,106 @@
+diff --git a/CubeShim/shim/src/sandbox/sb.rs b/CubeShim/shim/src/sandbox/sb.rs
+index a6e3505..70bc59f 100644
+--- a/CubeShim/shim/src/sandbox/sb.rs
++++ b/CubeShim/shim/src/sandbox/sb.rs
+@@ -219,11 +219,15 @@ impl SandBox {
+         )
+     }
+ 
+-    async fn connect_agent(&mut self) -> CResult<()> {
+-        let conn = AsyncUtils::connect_agent(&self.id).await?;
++    fn install_agent_conn(&mut self, conn: Client) {
+         let client = agent_ttrpc::AgentServiceClient::new(conn.clone());
+         self.conn = Some(Arc::new(Mutex::new(conn)));
+         self.client = Some(Arc::new(Mutex::new(client)));
++    }
++
++    async fn connect_agent(&mut self) -> CResult<()> {
++        let conn = AsyncUtils::connect_agent(&self.id).await?;
++        self.install_agent_conn(conn);
+ 
+         Ok(())
+     }
+@@ -470,6 +474,27 @@ impl SandBox {
+     }
+ 
+     pub async fn create_sandbox(&mut self) -> CResult<()> {
++        // Issue the guest-agent handshake while the VM snapshot is being
++        // restored. The vsock unix socket only appears once the VMM created its
++        // vsock device and the "CONNECT 1024" handshake completes when the guest
++        // agent is running, so this hides the guest-side round trip behind the
++        // restore tail instead of paying for it afterwards.
++        let preconnect_id = self.id.clone();
++        let mut preconnect = tokio::spawn(async move {
++            let deadline = std::time::Instant::now() + Duration::from_secs(30);
++            loop {
++                match AsyncUtils::connect_agent(&preconnect_id).await {
++                    Ok(conn) => return Ok(conn),
++                    Err(e) => {
++                        if std::time::Instant::now() >= deadline {
++                            return Err(e);
++                        }
++                        sleep(Duration::from_millis(1)).await;
++                    }
++                }
++            }
++        });
++
+         let snapshot = self.start_vm().await?;
+ 
+         //todo: app snapshot
+@@ -479,7 +504,13 @@ impl SandBox {
+             }
+         }
+ 
+-        self.connect_agent().await?;
++        match tokio::time::timeout(Duration::from_secs(10), &mut preconnect).await {
++            Ok(Ok(Ok(conn))) => self.install_agent_conn(conn),
++            _ => {
++                preconnect.abort();
++                self.connect_agent().await?;
++            }
++        }
+ 
+         infof!(self.log, "agent is ready");
+ 
+@@ -564,7 +595,10 @@ impl SandBox {
+         let (tx, mut rx) = channel::<()>(1);
+         let arc_conainers = self.containers.clone();
+         let arc_state = self.state.clone();
+-        let conn = AsyncUtils::connect_agent(&self.id).await?;
++        let conn = match self.conn.as_ref() {
++            Some(conn) => conn.lock().await.clone(),
++            None => AsyncUtils::connect_agent(&self.id).await?,
++        };
+         let client = health_ttrpc::HealthClient::new(conn);
+         let log = self.log.clone();
+         let handle = tokio::spawn(async move {
+diff --git a/hypervisor/vmm/src/device_manager.rs b/hypervisor/vmm/src/device_manager.rs
+index acede5a..1063b68 100644
+--- a/hypervisor/vmm/src/device_manager.rs
++++ b/hypervisor/vmm/src/device_manager.rs
+@@ -4499,11 +4499,19 @@ impl DeviceManager {
+             total_nodes
+         };
+ 
+-        let rt = tokio::runtime::Builder::new_multi_thread()
+-            .worker_threads(work_thread_num)
+-            .enable_all()
+-            .build()
+-            .unwrap();
++        // Build the restore runtime once per process: constructing a
++        // multi-thread runtime for every sandbox restore is measurable work
++        // (and highly variable under concurrent creates) while the runtime
++        // itself is stateless across restores.
++        static RESTORE_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> =
++            std::sync::OnceLock::new();
++        let rt = RESTORE_RUNTIME.get_or_init(|| {
++            tokio::runtime::Builder::new_multi_thread()
++                .worker_threads(work_thread_num)
++                .enable_all()
++                .build()
++                .unwrap()
++        });
+ 
+         rt.block_on(async move {
+             // Process device groups in order to ensure correct restoration sequence
