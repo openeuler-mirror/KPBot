@@ -111,6 +111,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `operation-fusion` | 操作融合 |
 | `prefetch-optimization` | 预取优化 |
 | `memory-access-optimization` | 访存优化 |
+| [cubesandbox-rootfs-shadow-pool](skills/cubesandbox-rootfs-shadow-pool/SKILL.md) | rootfs 后台预派生、rename 领养与目录合并持久化，附混合构建、生命周期、容量和独立复现工具；不依赖其他 skill |
 | `scalar-vector-hybrid` | 标量-向量混合优化 |
 | `source-transform-autovec` | 源码变换辅助自动向量化 |
 | `precision-transform` | 精度变换优化 |
