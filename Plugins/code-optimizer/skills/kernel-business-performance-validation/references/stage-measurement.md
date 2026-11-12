@@ -65,6 +65,8 @@ python3 scripts/analyze_session.py session.json > session-summary.json
 python3 cases/protocol-contract/run.py
 ```
 
+用例结果写入 `cases/protocol-contract/results/result.json`。`case.yaml` 的入口和断言路径均相对用例目录解析，不相对插件根或 skill 根解析。
+
 非法输入退出码为 2，有效输入为 0；空区间也返回 0，需同时检查 `capture_status`。重定向产生的空文件不能当作成功结果。
 
 ## 采集器仍需保证什么

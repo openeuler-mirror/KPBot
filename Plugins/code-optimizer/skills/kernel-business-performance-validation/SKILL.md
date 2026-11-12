@@ -228,6 +228,8 @@ python3 scripts/analyze_session.py session.json > session-summary.json
 python3 cases/protocol-contract/run.py
 ```
 
+用例结果写入 `cases/protocol-contract/results/result.json`。通过 `case.yaml` 执行时，从该 YAML 所在的用例目录运行入口并解析断言路径。
+
 分析工具核对一个已结束会话的起止区间，输出各阶段累计时间、重叠标记和区间并集。它不安装计时器，也不自动汇总多个模式的加速比。
 
 工具对输入的全部阶段求并集，不按阶段名称自动筛选。要得到合计完整解码，另生成只含 BP/RLE 完整区间的分析输入，并保留原始记录。含内外层的总并集只有在确认内层都被对应完整区间包含时，才与完整解码并集相同。

@@ -104,12 +104,15 @@ class ProtocolTests(unittest.TestCase):
         for payload, expected_code in ((sample(), 0), ({}, 2)):
             with self.subTest(expected_code=expected_code):
                 output = io.StringIO()
-                with (
-                    patch("sys.argv", ["analyze_session.py", "input.json"]),
-                    patch("builtins.open", mock_open(read_data=json.dumps(payload))),
-                    contextlib.redirect_stdout(output),
-                    contextlib.redirect_stderr(io.StringIO()),
-                ):
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(
+                        patch("sys.argv", ["analyze_session.py", "input.json"])
+                    )
+                    stack.enter_context(
+                        patch("builtins.open", mock_open(read_data=json.dumps(payload)))
+                    )
+                    stack.enter_context(contextlib.redirect_stdout(output))
+                    stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
                     self.assertEqual(sessions.main(), expected_code)
                 if expected_code == 0:
                     self.assertEqual(
