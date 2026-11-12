@@ -2,6 +2,9 @@
 
 先找症状对应的**证据**,再落到**病因**,最后才谈参数。每一行都给了"验证方法",避免改完不知道有没有效。
 
+> 定位到瓶颈后,先按 `references/candidate-matrix.md` 做"已知手段覆盖表",逐条检查
+> `references/optimization-playbook.md` 中与当前症状相关的手段;不要直接跳到参数。
+
 ## 一、写停顿(write stall)
 
 ### A. L0 文件数触发

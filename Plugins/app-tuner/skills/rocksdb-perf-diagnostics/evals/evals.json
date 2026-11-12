@@ -63,6 +63,21 @@
         "给出至少两项验证指标(DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS、sst_dump 的 prefix_extractor_name)",
         "没有建议未经授权的破坏性操作"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "我们的 RocksDB 读密集型,key 有 8 字节公共前缀,点查 P99 高。请按 skill 的流程给出:1) 已知手段覆盖表(每个相关手段是否适用、证据、决策与理由);2) 选中手段的预期收益、代价与验证指标;3) before/after 收益验证方案与保留/回退判据。不要执行破坏性操作。",
+      "expected_output": "先列出 playbook 中与读路径相关的至少两个手段(SST prefix hash index、memtable prefix bloom),逐条给出适用性、证据、决策与跳过理由;再给出选中手段的预期收益、代价与验证指标;最后给出 before/after 验证方案(同指标、同负载、重复/方差)以及'无收益或无法验证就回退'的判据。",
+      "files": [],
+      "expectations": [
+        "列出至少两个与读路径相关的已知手段(SST prefix hash index、memtable prefix bloom)",
+        "对每个手段给出是否适用,并引用具体证据(如 DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS)",
+        "对跳过的手段给出理由(条件不满足 / 风险过高 / 已有更强手段 / 需授权)",
+        "给出选中手段的预期收益与代价",
+        "给出 before/after 验证方案,包含同一指标、同一负载、重复次数或方差",
+        "明确'收益不超过噪声或无法验证就回退'的判据",
+        "没有建议未经授权的破坏性操作"
+      ]
     }
   ]
 }
