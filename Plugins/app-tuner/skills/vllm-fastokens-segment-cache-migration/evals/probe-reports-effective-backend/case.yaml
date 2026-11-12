@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: probe-reports-effective-backend
+expected_outcome: |
+  使用 vLLM 环境的 Python 解释器完成探测；报告当前生效的分词后端为 HF tokenizers（环境中未安装 fastokens），目标版本取自 PyPI 上 fastokens 的最新发行版，结论为可切换，且切换前应通过加载测试与分词器层对比；运行过程中未向该虚拟环境安装任何包。

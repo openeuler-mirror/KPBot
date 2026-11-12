@@ -1,0 +1,17 @@
+{
+  "repo": "rosinL/vllm",
+  "commit": "5d1d24cd1b5dfeee80356d5b4b08f86e8c1d72ee",
+  "url": "https://github.com/rosinL/vllm/commit/5d1d24cd1b5dfeee80356d5b4b08f86e8c1d72ee",
+  "tarball_url": "https://github.com/rosinL/vllm/archive/5d1d24cd1b5dfeee80356d5b4b08f86e8c1d72ee.tar.gz",
+  "description": "add ttft breakdown",
+  "container_path": "/opt/vllm-ttft-fork",
+  "profile_file": "/etc/profile.d/vllm_ttft_fork.sh",
+  "pip_package": "vllm",
+  "expected_pip_version_prefix": "0.23.0",
+  "known_good_pip_version": "0.23.0+empty",
+  "markers": {
+    "vllm/v1/engine/core.py": "_attach_ttft_breakdown",
+    "vllm/v1/request.py": "ttft_hash_and_local_cache_time",
+    "vllm/renderers/base.py": "[TTFT_DEBUG][Tokenizer]"
+  }
+}

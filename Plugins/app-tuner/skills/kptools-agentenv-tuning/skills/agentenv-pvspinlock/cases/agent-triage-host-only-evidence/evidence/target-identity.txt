@@ -1,0 +1,3 @@
+pid=4242
+exe=unknown: executable identity unavailable; do not substitute another PID
+stat=unknown
