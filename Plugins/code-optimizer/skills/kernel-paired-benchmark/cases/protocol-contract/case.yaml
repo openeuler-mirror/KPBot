@@ -1,0 +1,11 @@
+name: protocol-contract
+skill: kernel-paired-benchmark
+tier: A
+entrypoint: ["python3", "skills/kernel-paired-benchmark/cases/protocol-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: skills/kernel-paired-benchmark/cases/protocol-contract/results/result.json
+    field: success
+    expect: true
