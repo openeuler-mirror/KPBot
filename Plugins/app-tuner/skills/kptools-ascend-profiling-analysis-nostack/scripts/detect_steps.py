@@ -402,9 +402,19 @@ def detect(trace_path, force="auto", min_step_ms=0.0, trailing_min_ms=0.5):
                 steps = trace_steps_list
                 confidence = "approx"
                 notes.append(f"file={name}; 无绝对起点，用 trace sync 对齐")
+            elif trace_steps_list:
+                steps = trace_steps_list
+                confidence = "low"
+                notes.append(
+                    f"file={name}; 步数与 trace 边界不一致"
+                    f"({len(ids)} vs {len(trace_steps_list)})，降级用 trace sync 边界"
+                )
             else:
                 confidence = "low"
-                notes.append(f"file={name}; 步数与 trace 边界不一致，无法定位")
+                notes.append(
+                    f"file={name}; 步数与 trace 边界不一致"
+                    f"({len(ids)} vs 0)，无可用 trace 边界，step 定位失败"
+                )
         else:
             source, notes = "trace", notes + ["communication 不可用，回退 trace"]
 

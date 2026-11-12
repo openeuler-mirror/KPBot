@@ -13,6 +13,8 @@ import bisect
 from collections import Counter, defaultdict
 
 COMM_HINTS = ("hcom", "allreduce", "allgather", "reducescatter", "alltoall", "broadcast")
+OA_CLASS_NAMES = ("Computing", "Communication", "Communication(Not Overlapped)")
+AI_TASK_TYPES = {"AI_CORE", "AI_VECTOR_CORE", "MIX_AIC", "MIX_AIV", "AI_CPU", "DSA_SQE"}
 FWD_HINTS = ("matmul", "attention", "split_qkv", "addrmsnorm", "swiglu", "reshapeandcache")
 SAMPLE_HINTS = ("sort", "applytopk", "softmax", "argmax", "randomuniform")
 P1_KERNEL_HINTS = (
@@ -206,9 +208,8 @@ def phase_windows(step, rows, events=None, host_pid=None):
     }
 
 
-def free_by_phase(steps, events, windows):
-    comp = [(e[0], e[0] + e[1]) for e in events if e[2] == "Computing" and e[1] > 0]
-    comm = [(e[0], e[0] + e[1]) for e in events if e[2] == "Communication" and e[1] > 0]
+def free_by_phase(steps, events, windows, classes=None):
+    comp, comm, _, source = classes or resolve_classes(events)
     free = sorted([(e[0], e[0] + e[1]) for e in events if e[2] == "Free" and e[1] > 0])
     out = {}
     for s in steps:
@@ -218,19 +219,20 @@ def free_by_phase(steps, events, windows):
         phases = {}
         for p, (a, b) in w.items():
             fl = (b - a) - _cover(comp + comm, a, b)
-            n = sum(1 for fs, fe in free if a <= fs < b)
+            if source == "overlap_analysis":
+                n = sum(1 for fs, fe in free if a <= fs < b)
+            else:
+                n = len(_complement(comp + comm, a, b))
             phases[p] = {"free": fl, "n": n, "window": b - a}
         out[s["id"]] = phases
     return out
 
 
-def free_attribution(step_id, rows, events, window, phase):
+def free_attribution(step_id, rows, events, window, phase, classes=None):
     """Free 区间按最近设备内核归到近似函数；返回 top 列表 + host idle 统计。"""
-    # Free = 窗口 − (Computing ∪ Communication)，包含 OA 未覆盖的边缘间隙
-    comp_comm = [
-        (e[0], e[0] + e[1]) for e in events if e[2] in ("Computing", "Communication") and e[1] > 0
-    ]
-    gaps = _complement(comp_comm, window[0], window[1])
+    # Free = 窗口 − (Computing ∪ Communication)，包含分类源未覆盖的边缘间隙
+    comp, comm, _, _ = classes or resolve_classes(events)
+    gaps = _complement(comp + comm, window[0], window[1])
     host = [e for e in events if e[3] in ("cpu_op", "enqueue", "dequeue") and e[1] > 0]
     ks = sorted([r for r in rows if not is_comm(r["name"]) or True], key=lambda r: r["start"])
     ks = [r for r in ks if window[0] <= r["start"] < window[1]]
@@ -572,16 +574,85 @@ def _complement(ivs, a, b):
     return out
 
 
-def oa_classes(steps, events):
-    """在检测出的 step 窗口内用 Overlap Analysis 重算四分类（µs）。
+def _subtract(ivs, cover):
+    """ivs 中不被 cover 覆盖的部分。"""
+    out, cov = [], _union(cover)
+    for s, e in _union(ivs):
+        cur = s
+        for cs, ce in cov:
+            if ce <= cur:
+                continue
+            if cs >= e:
+                break
+            if cs > cur:
+                out.append((cur, min(cs, e)))
+            cur = max(cur, ce)
+            if cur >= e:
+                break
+        if cur < e:
+            out.append((cur, e))
+    return out
 
+
+def _has_oa(events):
+    return any(e[2] in OA_CLASS_NAMES and e[1] > 0 for e in events)
+
+
+def _self_built_classes(events):
+    """无 Overlap Analysis 时按设备任务类型自建四分类区间。
+
+    与 ascend-vllm-profiler/scripts/build_index.py 的自建路径一致：
+    AI 类任务（排除 HCCL 协调 stream）算 Computing，hcom* 内核算 Communication，
+    Communication 中与 Computing 不重叠的部分算 Communication(Not Overlapped)。
+    """
+    ai_by_stream = defaultdict(list)
+    comm = []
+    for ts, dur, name, cat, pid, tid in events:
+        if not dur or dur <= 0:
+            continue
+        if cat in AI_TASK_TYPES:
+            ai_by_stream[tid].append((ts, ts + dur, cat))
+        elif name and name.startswith("hcom"):
+            comm.append((ts, ts + dur))
+    # HCCL 协调 stream：AI 任务 100% 是 AI_CPU 且数量大，属通信机制，不算 Computing
+    coord = {
+        tid
+        for tid, ivs in ai_by_stream.items()
+        if len(ivs) >= 100 and all(t == "AI_CPU" for _, _, t in ivs)
+    }
+    comp = _union(
+        (s, e) for tid, ivs in ai_by_stream.items() if tid not in coord for s, e, _ in ivs
+    )
+    comm = _union(comm)
+    return comp, comm, _subtract(comm, comp), coord
+
+
+def resolve_classes(events):
+    """解析四分类区间，返回 (computing, communication, comm_no, source)。
+
+    优先 CANN Overlap Analysis；缺失时（旧数据/无栈数据）按设备任务类型自建，
+    避免四分类恒为 Computing 0% / Free 100%。source 供报告标注分类来源。
+    """
+    if _has_oa(events):
+        comp = [(e[0], e[0] + e[1]) for e in events if e[2] == "Computing" and e[1] > 0]
+        comm = [(e[0], e[0] + e[1]) for e in events if e[2] == "Communication" and e[1] > 0]
+        cno = [
+            (e[0], e[0] + e[1])
+            for e in events
+            if e[2] == "Communication(Not Overlapped)" and e[1] > 0
+        ]
+        return comp, comm, cno, "overlap_analysis"
+    comp, comm, cno, _ = _self_built_classes(events)
+    return comp, comm, cno, "self_built"
+
+
+def oa_classes(steps, events, classes=None):
+    """在检测出的 step 窗口内重算四分类（µs）。
+
+    OA 可用时用 Overlap Analysis 事件，缺失时回退到设备任务类型自建。
     注意：step_trace_time.csv 的 Free/Stage 可能对应不同窗口，不能直接当本 step 的四分类。
     """
-    comp = [(e[0], e[0] + e[1]) for e in events if e[2] == "Computing" and e[1] > 0]
-    comm = [(e[0], e[0] + e[1]) for e in events if e[2] == "Communication" and e[1] > 0]
-    cno = [
-        (e[0], e[0] + e[1]) for e in events if e[2] == "Communication(Not Overlapped)" and e[1] > 0
-    ]
+    comp, comm, cno, source = classes or resolve_classes(events)
     out = {}
     for s in steps:
         a, b = s["start_ns"], s["end_ns"]
@@ -598,4 +669,4 @@ def oa_classes(steps, events):
             "free": fl / 1000.0,
             "overlap": max(0.0, (ml - nl) / 1000.0),
         }
-    return out
+    return out, source
