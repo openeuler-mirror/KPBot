@@ -1,10 +1,16 @@
-"""Regression for the RUN_ARGS whitelist (see review P1 on PR #102).
+"""Regression for the RUN_ARGS whitelist (see review P1/P2 on PR #102).
 
 Run:  python3 -m unittest discover -s evals -v   (from the skill package root)
 
-The default value must pass the whitelist and reach `docker run` in equals
-form; space-form or non-whitelisted arguments must fail closed before docker
-is ever invoked. Uses a stub docker binary, so no docker daemon is required.
+- The default value must pass the whitelist and reach `docker run` in equals
+  form; space-form or non-whitelisted arguments must fail closed before docker
+  is ever invoked.
+- `--rm` is rejected: containers must survive until `docker cp` evidence
+  collection completes (review P2).
+- If any A/B condition ends without result.json evidence, run_ab.sh must exit
+  non-zero instead of presenting an empty table (review P2).
+
+Uses a stub docker binary, so no docker daemon is required.
 """
 
 import os
@@ -21,6 +27,8 @@ case "$1" in
     run)   echo "docker $*" >> "${STUB_LOG:-/dev/null}"; echo "stub-cid" ;;
     wait)  exit 0 ;;
     inspect) echo "0" ;;
+    cp)    if [ "${STUB_NOCOPY:-0}" = "1" ]; then exit 0; fi
+           printf '{"stub":true}\\n' > "$3" ;;
     *)     exit 0 ;;
 esac
 """
@@ -50,6 +58,7 @@ class RunAbFilterTests(unittest.TestCase):
                    OPENCODE_AUTH=str(self.auth),
                    STUB_LOG=str(self.log))
         env.pop("DOCKER_RUN_ARGS", None)
+        env.pop("STUB_NOCOPY", None)
         if extra_env:
             env.update(extra_env)
         return subprocess.run(["bash", str(RUN_AB)], env=env,
@@ -74,12 +83,24 @@ class RunAbFilterTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("--privileged", proc.stderr)
 
+    def test_rm_rejected_breaks_evidence_chain(self):
+        proc = self.run_ab({"DOCKER_RUN_ARGS": "--rm"})
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("--rm", proc.stderr)
+
     def test_custom_whitelisted_args_forwarded(self):
-        proc = self.run_ab({"DOCKER_RUN_ARGS": "--cpus=4 --rm --network=bridge"})
+        proc = self.run_ab({"DOCKER_RUN_ARGS": "--cpus=4 --network=bridge"})
         self.assertEqual(proc.returncode, 0, proc.stderr)
         log = self.log.read_text(encoding="utf-8")
         self.assertIn("--cpus=4", log)
         self.assertIn("--network=bridge", log)
+        self.assertNotIn("--rm", log)
+
+    def test_missing_evidence_fails_closed(self):
+        proc = self.run_ab({"STUB_NOCOPY": "1"})
+        self.assertEqual(proc.returncode, 1,
+                         "missing result.json evidence must fail closed")
+        self.assertIn("证据不完整", proc.stderr)
 
 
 if __name__ == "__main__":

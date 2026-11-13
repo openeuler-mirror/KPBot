@@ -12,8 +12,10 @@
 #                    —— 整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不做卷挂载
 #   DOCKER_RUN_ARGS  追加给 docker run 的参数（默认 --network=host：本用例需访问
 #                    dnf 源 / github / rsproxy；网络开关一律等号形式。白名单:
-#                    --cpus* / --memory* / --pids-limit* / --rm / --name=*
-#                    / --network=host / --network=bridge，其余一律拒绝）
+#                    --cpus* / --memory* / --pids-limit* / --name=*
+#                    / --network=host / --network=bridge，其余一律拒绝。
+#                    注意：--rm 与 docker cp 取证互斥（容器必须在取证结束前
+#                    存活），已从白名单移除——评审 P2）
 # =============================================================================
 set -uo pipefail
 
@@ -42,7 +44,7 @@ RUN_ARGS="${DOCKER_RUN_ARGS:-${DEFAULT_RUN_ARGS}}"
 RUN_ARGS_FILTERED=()
 for tok in ${RUN_ARGS}; do
     case "${tok}" in
-        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=host|--network=bridge)
+        --cpus*|--memory*|--pids-limit*|--name=*|--network=host|--network=bridge)
             RUN_ARGS_FILTERED+=("${tok}")
             ;;
         *)
@@ -55,7 +57,7 @@ done
 # 自检：默认值本身必须能通过白名单（fail-closed，防止后续改动让二者再度互斥）
 for tok in ${DEFAULT_RUN_ARGS}; do
     case "${tok}" in
-        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=host|--network=bridge) ;;
+        --cpus*|--memory*|--pids-limit*|--name=*|--network=host|--network=bridge) ;;
         *) echo "错误: RUN_ARGS 默认值未通过白名单: ${tok}" >&2; exit 1 ;;
     esac
 done
@@ -148,3 +150,18 @@ print("|-" + "-|-".join("-" * len(k) for k in keys) + "-|")
 for d in rows:
     print("| " + " | ".join(str(d.get(k, "")) for k in keys) + " |")
 PY
+
+# ---- 取证完整性守卫：任一条件的 result.json 缺失即以非 0 退出 ----
+# 容器在取证（docker inspect / docker cp）完成前退出或被删除（含镜像损坏）时，
+# 上面的表格会以空串兜底呈现——不得让这种"无证据运行"以退出码 0 冒充有效
+# A/B 对照（评审 P2）。
+EVIDENCE_FAILED=0
+for mode in with without; do
+    if [ ! -s "${TMP}/${mode}.json" ]; then
+        echo "错误: ${mode}: result.json 缺失或为空，A/B 证据不完整（容器可能在取证前退出或镜像已过期）" >&2
+        EVIDENCE_FAILED=1
+    fi
+done
+if [ "${EVIDENCE_FAILED}" = "1" ]; then
+    exit 1
+fi
