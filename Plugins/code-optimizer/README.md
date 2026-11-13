@@ -104,6 +104,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | [cubesandbox-agent-preconnect](skills/cubesandbox-agent-preconnect/SKILL.md) | CubeSandbox Guest 预连接与连接/runtime 复用；自带实施、回退、验证协议和工具，不依赖其他 skill |
 | `apply-optimization` | 应用优化方案 |
 | `apply-generic-optimization` | 通用优化应用 |
+| [cubesandbox-master-create-path](skills/cubesandbox-master-create-path/SKILL.md) | 模板解析 TTL 缓存、同键查询合并与 best-effort spec 异步落库，附一致性、构建部署和独立复现工具；不依赖其他 skill |
 | `apply-vectorization` | 向量化优化（NEON/SVE） |
 | `asm-optimization` | 汇编级优化 |
 | `branch-elimination` | 分支消除 |
