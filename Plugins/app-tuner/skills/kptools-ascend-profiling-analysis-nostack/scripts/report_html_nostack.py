@@ -241,9 +241,45 @@ def cf_box_html(comp_pct, free_pct, title="Computing vs Free（重点）"):
     )
 
 
-def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_config=None):
+def step_failure_page(trace, result):
+    """无法定位任何 step 时，显式报错而不是输出 0 步的百分比结论。"""
+    css = read_css()
+    notes = " | ".join(result.get("notes") or []) or "无"
+    return (
+        '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
+        "<title>Ascend 无栈 Profiling 报告 · step 定位失败</title>"
+        f"<style>{css}</style></head><body>"
+        '<div class="page on" id="home"><h1>Profiling 汇总</h1>'
+        '<div class="hero" style="border-left-color:#B08968">'
+        '<div class="htitle">step 定位失败</div>'
+        '<div class="hnums">未能从 trace/侧车推导出任何 step 边界，'
+        "不输出 0 步的四分类百分比结论，也不判断设备是否跟上</div></div>"
+        f'<div class="kv">trace: {esc(trace)}</div>'
+        f'<div class="kv">step 识别源: {esc(result.get("source"))} '
+        f'({esc(result.get("confidence"))}, {esc(result.get("scope"))})</div>'
+        f'<div class="note">notes: {esc(notes)}</div>'
+        '<div class="note">排查建议：确认 trace 含设备同步（aclrtSynchronizeDevice / '
+        "SynchronizeStream / SynchronizeEvent）或存在可用的设备活动间隔；也可提供 "
+        "step_trace_time.csv、kernel_details.csv 或 ascend_pytorch_profiler_*.db 的 STEP_TIME "
+        "侧车。communication.json 仅能给出步数，需 trace 边界数量与之一致才能对齐。</div>"
+        "</div></body></html>"
+    )
+
+
+def build(
+    trace,
+    model=None,
+    vllm_version=None,
+    vllm_ascend_version=None,
+    model_config=None,
+    vllm_src=None,
+    vllm_ascend_src=None,
+    with_stack_trace=None,
+):
     result = ds.detect(trace)
     steps = result["steps"]
+    if not steps:
+        return step_failure_page(trace, result)
     base = os.path.dirname(os.path.abspath(trace))
     stt, stt_src = read_step_trace(base)
     kernels = read_kernels(base)
@@ -254,13 +290,15 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
     syncs = end_syncs(steps, events, uiz)
 
     kernel_rows = na.read_kernel_rows(base)
-    oa = na.oa_classes(steps, events)
+    classes = na.resolve_classes(events)
+    class_src = classes[3]
+    oa, oa_src = na.oa_classes(steps, events, classes)
     windows = {}
     for s in steps:
         w = na.phase_windows(s, kernel_rows.get(s["id"], []), events, host_pid)
         if w:
             windows[s["id"]] = w
-    free_stats = na.free_by_phase(steps, events, windows)
+    free_stats = na.free_by_phase(steps, events, windows, classes)
     free_attrs = {}
     calltrees = {}
     models = {}
@@ -268,7 +306,7 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
         sid = s["id"]
         if sid in windows:
             free_attrs[sid] = {
-                p: na.free_attribution(sid, kernel_rows.get(sid, []), events, w, p)
+                p: na.free_attribution(sid, kernel_rows.get(sid, []), events, w, p, classes)
                 for p, w in windows[sid].items()
             }
             calltrees[sid] = na.calltree_html(
@@ -295,14 +333,16 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
     rows = []
     for i, s in enumerate(steps):
         t = stt.get(i, {})
-        oc = oa.get(s["id"])
-        if oc:
-            stage = oc["stage"]
-            comp = oc["comp"]
-            comm_no = oc["comm_no"]
-            comm_tot = oc["comm"]
-            free = oc["free"]
-            overlap = oc["overlap"]
+        # OA 可用时用 OA；OA 缺失时优先用 CANN step_trace_time 的正确四分类，
+        # 连 CSV 也没有才退回设备任务类型自建。
+        if class_src == "overlap_analysis" or not t:
+            oc = oa.get(s["id"], {})
+            stage = oc.get("stage", 0.0)
+            comp = oc.get("comp", 0.0)
+            comm_no = oc.get("comm_no", 0.0)
+            comm_tot = oc.get("comm", 0.0)
+            free = oc.get("free", 0.0)
+            overlap = oc.get("overlap", 0.0)
         else:
             stage = t.get("stage", 0.0)
             comp = t.get("computing", 0.0)
@@ -357,13 +397,13 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
     for r in rows:
         nav += (
             f'<button id="btn-step{r["id"]}" onclick="show(\'step{r["id"]}\')">'
-            f'step{r["id"]}</button>'
+            f"step{r['id']}</button>"
         )
     nav += "</nav>"
 
     hero = (
         f'<div class="hero"><div class="htitle">整份 profiling · {len(rows)} 步 · '
-        f'{sum(r["dur"] for r in rows):.1f}ms —— '
+        f"{sum(r['dur'] for r in rows):.1f}ms —— "
         f'<span class="judge">{esc(overall_judge)}</span></div>'
         f'<div class="hnums">NPU <b>Free {overall["free"]:.1f}%</b>'
         f'<span class="sep">·</span>Computing {overall["comp"]:.1f}%'
@@ -380,6 +420,49 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
     home += (
         f'<div class="kv">模型: {esc(model or "未提供")} · vllm: {esc(vllm_version or "未提供")} · '
         f"vllm-ascend: {esc(vllm_ascend_version or '未提供')}</div>"
+    )
+    if vllm_src or vllm_ascend_src:
+        home += (
+            f'<div class="kv">源码: vllm={esc(vllm_src or "未提供")} · '
+            f"vllm-ascend={esc(vllm_ascend_src or '未提供')}</div>"
+        )
+    if with_stack_trace:
+        home += f'<div class="kv">with-stack 参考: {esc(with_stack_trace)}</div>'
+    missing = []
+    if not model:
+        missing.append("模型")
+    if not vllm_version:
+        missing.append("vllm 版本")
+    if not vllm_ascend_version:
+        missing.append("vllm-ascend 版本")
+    if not vllm_src and not vllm_ascend_src:
+        missing.append("源码路径")
+    if not with_stack_trace:
+        missing.append("with-stack 参考 trace")
+    if missing:
+        home += (
+            f'<div class="note">未提供：{esc("、".join(missing))}；模型结构/阶段/源码函数名为默认 '
+            "0.23.0 参考，mapping_confidence=low，建议补充后用 with-stack 校准。</div>"
+        )
+    elif vllm_version and vllm_version not in ("0.23.0", "0.23.0rc1"):
+        home += (
+            f'<div class="note">vllm 版本 {esc(vllm_version)} 与默认映射 0.23.0 不一致，'
+            "源码函数名/阶段语义需重新校准。</div>"
+        )
+    else:
+        home += '<div class="kv">mapping_confidence: 已提供版本/源码/with-stack（仍需确认版本匹配）</div>'
+    if class_src == "overlap_analysis":
+        class_src_text = "CANN Overlap Analysis 事件"
+        free_src_text = "Overlap Analysis 事件"
+    elif stt:
+        class_src_text = f"{stt_src}（CANN 四分类）"
+        free_src_text = "设备任务类型自建区间"
+    else:
+        class_src_text = "设备任务类型自建（无 Overlap Analysis / step_trace_time）"
+        free_src_text = "设备任务类型自建区间"
+    home += (
+        f'<div class="kv">四分类来源: {esc(class_src_text)} · '
+        f"Free 去向区间: {esc(free_src_text)}</div>"
     )
     home += (
         f'<div class="kv">step 识别: {esc(result["source"])} '
@@ -413,9 +496,10 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
         f"<td>{sum(r['prep'] for r in rows) / 1000:.2f}ms</td><td>—</td><td>—</td></tr></table>"
     )
     home += (
-        '<div class="note">口径：Free = 窗口 − (Computing ∪ Communication)，'
-        "Computing + 未重叠 + Free = 100%；四分类在本报告的 step 窗口内按 Overlap Analysis 重算，"
-        "step_trace_time.csv 的 Free/Stage 可能对应不同窗口，未直接采用；"
+        f'<div class="note">口径：Free = 窗口 − (Computing ∪ Communication)，'
+        "Computing + 未重叠 + Free = 100%；四分类来源见上方"
+        f"（{esc(class_src_text)}），缺失 Overlap Analysis 时按设备任务类型自建，"
+        "避免整窗被误判为 Free；"
         "步尾同步 = 每步末尾设备级同步耗时：长 = 设备还有任务没跑完，host 在等它；短 = 设备早已空闲。</div>"
     )
 
@@ -529,7 +613,7 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
     if api:
         home += (
             '<div class="sect"><h3>Host API Top</h3>'
-            '<table><tr><th>API</th><th>总耗时</th><th>次数</th><th>平均</th></tr>'
+            "<table><tr><th>API</th><th>总耗时</th><th>次数</th><th>平均</th></tr>"
         )
         for a in api[:10]:
             home += (
@@ -541,7 +625,7 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
     if ops:
         home += (
             '<div class="sect"><h3>Host 算子 Top</h3>'
-            '<table><tr><th>算子</th><th>Host 总耗时</th><th>Device 总耗时</th><th>次数</th></tr>'
+            "<table><tr><th>算子</th><th>Host 总耗时</th><th>Device 总耗时</th><th>次数</th></tr>"
         )
         for o in ops[:10]:
             home += (
@@ -564,7 +648,8 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
         page = (
             f'<div class="page" id="step{sid}"><h1>step{sid} 详细分析 '
             f'<span class="note">(窗口 {r["start"]:.3f}~{r["end"]:.3f}ms · '
-            f"{r['dur']:.3f}ms · 判定: {esc(r['judge'])})</span></h1>"
+            f"{r['dur']:.3f}ms · 判定: {esc(r['judge'])} · "
+            f"四分类: {esc(class_src_text)})</span></h1>"
         )
         page += cf_box_html(r["comp_pct"], r["free_pct"], "Computing vs Free（本步重点）")
         page += (
@@ -627,7 +712,7 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
             if comp:
                 page += (
                     '<div class="sect"><h3>计算算子 Top</h3>'
-                    '<table><tr><th>算子</th><th>耗时</th><th>次数</th><th>Wait</th></tr>'
+                    "<table><tr><th>算子</th><th>耗时</th><th>次数</th><th>Wait</th></tr>"
                 )
                 for n, v in comp:
                     page += (
@@ -638,7 +723,7 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
             if commk:
                 page += (
                     '<div class="sect"><h3>通信内核 Top</h3>'
-                    '<table><tr><th>算子</th><th>耗时</th><th>次数</th><th>Wait</th></tr>'
+                    "<table><tr><th>算子</th><th>耗时</th><th>次数</th><th>Wait</th></tr>"
                 )
                 for n, v in commk:
                     page += (
@@ -671,7 +756,7 @@ def build(trace, model=None, vllm_version=None, vllm_ascend_version=None, model_
         f'<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
         f"<title>Ascend 无栈 Profiling 报告</title><style>{css}</style></head><body>"
         f"{nav}{home}{pages}"
-        '<script>function show(id){'
+        "<script>function show(id){"
         'document.querySelectorAll(".page").forEach(p=>p.classList.remove("on"));'
         'document.querySelectorAll("nav button").forEach(b=>b.classList.remove("on"));'
         'document.getElementById(id).classList.add("on");'
@@ -690,10 +775,22 @@ def main():
     ap.add_argument(
         "--model-config", default=None, help="模型 config.json（用于校验 num_hidden_layers）"
     )
+    ap.add_argument("--vllm-src", default=None, help="vllm 源码目录")
+    ap.add_argument("--vllm-ascend-src", default=None, help="vllm-ascend 源码目录")
+    ap.add_argument(
+        "--with-stack-trace", default=None, help="同模型/版本/场景的 with-stack trace（校准参考）"
+    )
     args = ap.parse_args()
     out = args.out or os.path.splitext(args.trace)[0] + "_nostack_report.html"
     data = build(
-        args.trace, args.model, args.vllm_version, args.vllm_ascend_version, args.model_config
+        args.trace,
+        args.model,
+        args.vllm_version,
+        args.vllm_ascend_version,
+        args.model_config,
+        args.vllm_src,
+        args.vllm_ascend_src,
+        args.with_stack_trace,
     )
     open(out, "w", encoding="utf-8").write(data)
     print(f"HTML 报告 → {out} ({len(data) / 1024:.1f}KB)")

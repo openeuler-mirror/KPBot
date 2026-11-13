@@ -1,0 +1,57 @@
+# 用例：tier B —— append-notify 三接口的机制开销消除
+#
+# 覆盖 hot-path-overhead-elimination 的三族配方在真实代码形状上的效果：
+#   absent_consumer_elision  观察者为空时跳过计数与派发（并保持不变量）
+#   dominant_outcome_inline  空观察者谓词内联，重体保留 out-of-line
+#   leaf_entry_split         主导短追加走叶子入口，通用实现 noinline 兜底
+#   constant_width_copy      {5,4,6,2} 长度用编译期常量宽度拷贝
+#   hot_value_first_dispatch 频率最高的 5 字节优先分类
+#
+# 断言分三层：
+#   1. 正确性：两版都必须通过 append/readline/callback 三个模型校验；
+#   2. 性能：至少两个接口达到 1.30x（process CPU time，5 次取中位）；
+#   3. 代码生成：优化产物必须出现 out-of-line 的 mbuf_append_general_ 与
+#      mbuf_notify_slow，基线产物不得出现——对应 codegen_expectation 的机械核对。
+#
+# 运行（在技能根目录下）：
+#   bash cases/append-notify/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier B（需要 C 工具链：cc + objdump）。夹具自包含，不依赖外部仓库。
+
+name: append-notify
+skill: hot-path-overhead-elimination
+tier: B
+
+entrypoint: ["bash", "cases/append-notify/run.sh"]
+
+# 构建上下文按 docs/case-spec.md 约定指向插件根；直接运行只需技能目录。
+build:
+  context: ../../../..
+  dockerfile: skills/hot-path-overhead-elimination/cases/append-notify/Dockerfile
+
+env_vars:
+  REPS: 15
+  ITERS: 200000
+  THRESHOLD: 1.30
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: correctness
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: codegen_expectation
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: interfaces_improved
+    op: gte
+    expect: 2

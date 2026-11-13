@@ -13,7 +13,11 @@
     "application",
     "arm",
     "kunpeng",
-    "aarch64"
+    "aarch64",
+    "dpdk",
+    "network",
+    "pps",
+    "forwarding"
   ],
   "platforms": [
     "claude",

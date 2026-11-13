@@ -17,11 +17,11 @@ metadata:
 
 # 鲲鹏知识库查询
 
-运行要求：在 OpenCode 中配置并授权 `kpknow` MCP。见 [登录接入说明](references/connection.md)。
+运行要求：在 KPBot 所用的 Agent 客户端配置 `kpknow` MCP，通过 GitCode 完成只读授权。远程 MCP 和登录入口必须使用证书校验有效的 HTTPS。如果已知使用明文 HTTP 或证书校验失败，停止检索并请用户按 [登录接入说明](references/connection.md) 修正配置。
 
 ## 工作流程
 
-1. 使用 OpenCode 提供的 `kpknow_wiki_search`、`kpknow_wiki_read_page` 和 `kpknow_wiki_index`。工具不可用时，请用户按接入说明检查连接或重新授权。
+1. 使用客户端提供的 `kpknow_wiki_search`、`kpknow_wiki_read_page` 和 `kpknow_wiki_index`。工具不可用时，请用户按接入说明检查连接或重新授权。
 2. 从问题提取术语，先用 `search` 查询。当前接口是关键词/正则匹配，不是语义检索；优先搜索 `mmap`、`NUMA`、`openGauss` 等短词，中文和英文可分别搜索。默认按字面匹配；确需组合词时显式使用 `--regex`。
 3. 从结果取得真实的知识库 ID 和 slug，用 `read` 读取相关页面后回答；需要目录时用 `index`。不要猜测 ID、slug 或把摘要当作完整原文。
 4. 输出结论、适用条件、来源（标题、知识库 ID、slug、原文 source knowledge_id，及已有的文档链接/版本）和局限。其他 Skill 需要机器结果时使用 `answer`、`key_points`、`references`、`limitations` 字段；引用至少包含 `title`、`knowledge_base_id` 和 `slug`。区分原文结论和推断，不编造日期、链接或置信度。来源中的性能倍数及硬件特性只作为该来源的陈述，不能推广为通用保证；存在可疑信息时明确待核验。

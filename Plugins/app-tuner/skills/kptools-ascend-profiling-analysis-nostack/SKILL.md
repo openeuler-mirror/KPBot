@@ -11,6 +11,25 @@ description: |
 
 # Ascend 无栈 Profiling Step 分析
 
+## 开始前：主动收集信息
+
+开始分析前，先主动向用户一次性确认以下信息，不要等用户主动提供：
+
+1. 模型名称
+2. vllm 版本
+3. vllm-ascend 版本
+4. vllm / vllm-ascend 源码路径
+5. 是否有同模型、同版本、同场景的 with-stack trace（用于校准）
+
+用户提供时：按对应版本源码建立算子映射，并用 with-stack trace 校准阶段、模型结构和 Free 后再出报告。
+
+用户不提供/不知道时：
+
+- 先从 trace 的 `profiler_info_*.json`、trace 路径、运行环境自动探测
+- 仍缺版本/源码时，只保证 step、四分类、Free、通信/API 等版本无关结论
+- 模型结构、阶段和源码函数名标为“默认 0.23.0 参考、未校准”，`mapping_confidence=low`
+- 不把函数名、阶段语义当成确定结论
+
 ## 适用范围
 
 - trace 中 **没有 `python_function`**（`with_stack=false`），因此无法用 Python 帧切 step
@@ -68,8 +87,13 @@ python3 scripts/detect_steps.py <trace_view.json> --json
 ## HTML 报告
 
 ```bash
-python3 scripts/report_html_nostack.py <trace_view.json> --out report.html
+python3 scripts/report_html_nostack.py <trace_view.json> --out report.html \
+  --model <模型名> --vllm-version <版本> --vllm-ascend-version <版本> \
+  --vllm-src <vllm源码目录> --vllm-ascend-src <vllm-ascend源码目录> \
+  --with-stack-trace <同模型/版本/场景的with-stack trace>
 ```
+
+上面前五项信息缺失时，报告会标 `mapping_confidence=low`，模型结构/阶段/函数名按默认 0.23.0 参考，不能当确定结论。
 
 报告结构与有栈 HTML 保持同一套视觉/导航：
 
@@ -78,12 +102,19 @@ python3 scripts/report_html_nostack.py <trace_view.json> --out report.html
 - 无 Python 栈，因此不生成火焰图；P1/P2/P3、模型结构和调用栈均为近似
 - 报告默认按 vllm 0.23.0 / vllm-ascend 0.23.0rc1 的源码结构命名；其他版本需核对源码
 
-### 近似方法
+### 源码辅助的近似方法
 
-- **P1/P2/P3**：由设备内核顺序推导。P1 = step 起点到首个 forward 内核；P2 = 首个 forward 内核到最后一个 logits MatMul；P3 = 其余到 step 结束
-- **模型结构**：取主执行流内核序列，找重复 attention 锚点，按 QKV/O/MLP-up/Act/MLP-down/Norm/KV写 标注
-- **Free 去向**：每个 Free 区间归到最近设备内核（或该阶段内最近的算子），再映射到源码函数；同时检查 host 是否持续有事件
-- **限制**：不能还原真实 Python 调用栈；Free 归因是 operator/phase 级近似，通信只作了解
+详细步骤见 [`references/source-stack-inference.md`](references/source-stack-inference.md)。核心流程：
+
+1. **固定版本**：模型 + vllm/vllm-ascend 版本；用对应源码建立 `算子 → 源码函数` 映射
+2. **切 step**：`detect_steps.py` 按侧车精度降级
+3. **切阶段**：P1 输入准备 → P2 forward → P3 compute_logits/采样/收尾；用 forward 内核、all_gather、采样内核做锚点
+4. **建模型结构**：层核心（GDN/Attention/MLA/Sparse）+ 层前缀（CausalConv1d / QKV GEMM）切层，再按算子签名聚类，分别输出 `×N`
+5. **外置模型**：MTP/DSpark 按 `propose_draft`/`_run_merged_draft`/`mtp`/`dspark` 窗口单独输出单轮结构
+6. **Free 归因**：在 step 窗口内用 Overlap Analysis 重算 Free；每个 Free 区间归到最近设备内核/高层 host 算子，再映射源码函数；检查 host 是否持续有事件
+7. **验证**：先独立重建，再拿同模型/版本/场景的 with-stack trace 对照阶段、层数、Free Top 函数族，迭代修正
+
+**限制**：不能还原真实 Python 调用栈；模型结构和 Free 归因都是 operator/phase 级近似，通信只作了解。
 
 ## 最差情况：只有 trace_view.json
 
@@ -121,6 +152,7 @@ python3 scripts/report_html_nostack.py <trace_view.json> --out report.html
 
 ## 参考资料
 
+- [`references/source-stack-inference.md`](references/source-stack-inference.md) — 源码辅助的近似调用栈与 Free 归因方法
 - vllm 0.23.0 / vllm-ascend 0.23.0rc1 源码（用于算子/阶段映射；skill 内不重复存储源码）
 - 有栈分析入口：`kptools-ascend-profiling-analysis` skill
 

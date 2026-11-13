@@ -6,7 +6,7 @@
 
 ## 概述
 
-code-optimizer 提供 73 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
+code-optimizer 提供 78 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
 
 - **性能分析**: 热点分析、火焰图解析、Top-down 分析、SPE 分析、调用上下文分析
 - **优化决策**: 意图解析、任务分解、优化策略决策、架构分析
@@ -16,6 +16,7 @@ code-optimizer 提供 73 个专业技能（skills），覆盖从热点分析到�
 - **质量保障**: 对抗性审查、优化验证、修复代码
 - **向量数据库与向量检索**：通用 CP0–CP7 优化工作流，按实际目标接入 Faiss、DiskANN 专项流程
 - **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
+- **CubeSandbox Guest 连接优化**: 快照恢复期间有界预连接、monitor 连接复用和 restore runtime 复用，附原理、独立操作手册、历史补丁与创建总时间配对复现工具
 
 ## 诊断反馈流程
 
@@ -100,6 +101,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 ### 优化类 (Optimization)
 | 技能 | 描述 |
 |------|------|
+| [cubesandbox-agent-preconnect](skills/cubesandbox-agent-preconnect/SKILL.md) | CubeSandbox Guest 预连接与连接/runtime 复用；自带实施、回退、验证协议和工具，不依赖其他 skill |
 | `apply-optimization` | 应用优化方案 |
 | `apply-generic-optimization` | 通用优化应用 |
 | `apply-vectorization` | 向量化优化（NEON/SVE） |
