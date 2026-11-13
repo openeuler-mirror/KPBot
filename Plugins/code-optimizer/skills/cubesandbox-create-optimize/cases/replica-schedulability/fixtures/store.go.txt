@@ -1,0 +1,49 @@
+// Copyright (c) 2026 Tencent Inc.
+// SPDX-License-Identifier: Apache-2.0
+// Extracted from TencentCloud/CubeSandbox v0.7.1 (31d911e430fdf8a8879bd062b8e78066c1a8e89d).
+// Surrounding packages are stubbed; the source predicates and singleflight are preserved.
+
+// Closing context for the reference hunk; not executed by the harness.
+func fixtureContext() {
+}
+
+func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
+	replicas, err := ListReplicas(ctx, templateID)
+	if err != nil {
+		return ReplicaStatus{}, err
+	}
+	preferredNodeID = strings.TrimSpace(preferredNodeID)
+	for _, item := range replicas {
+		replica := replicaModelToStatus(item)
+		if !isReplicaSchedulableNow(ctx, replica) {
+			continue
+		}
+		if preferredNodeID == "" || strings.TrimSpace(replica.NodeID) == preferredNodeID {
+			return replica, nil
+		}
+	}
+	return ReplicaStatus{}, ErrTemplateHasNoReadyReplica
+}
+
+func isTemplateReplicaSchedulable(ctx context.Context, templateID, nodeID string) bool {
+	if !isReady() || strings.TrimSpace(templateID) == "" || strings.TrimSpace(nodeID) == "" {
+		return false
+	}
+	replica := models.TemplateReplica{}
+	err := store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+		Where("template_id = ? AND node_id = ?", templateID, nodeID).
+		First(&replica).Error
+	if err != nil {
+		return false
+	}
+	return isReplicaSchedulableNow(ctx, replicaModelToStatus(replica))
+}
+
+func isReplicaSchedulableNow(ctx context.Context, replica ReplicaStatus) bool {
+	_ = ctx
+	return strings.TrimSpace(replica.Status) == ReplicaStatusReady
+}
+
+func isReplicaSchedulable(replica ReplicaStatus) bool {
+	return replica.Status == ReplicaStatusReady
+}

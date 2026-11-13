@@ -1,0 +1,679 @@
+commit b7cd2f3a8923c312d5cdc4b73ab7d33540f0e6cf
+Author: perf-agent <perf-agent@local>
+Date:   Mon Nov 2 08:32:40 2026 +0800
+
+    shadow pool: pre-derived rootfs adoption via rename + batched async fsync
+
+diff --git a/Cubelet/pkg/cubecow/cubecow.go b/Cubelet/pkg/cubecow/cubecow.go
+index 6d516a0..e08f9d0 100644
+--- a/Cubelet/pkg/cubecow/cubecow.go
++++ b/Cubelet/pkg/cubecow/cubecow.go
+@@ -21,6 +21,20 @@ static inline int32_t cubecow_create_snapshot_from_volume_go(
+ ) {
+     return cubecow_create_snapshot_from_volume(engine, source_name, snapshot_name, activate != 0, out_device_path);
+ }
++static inline int32_t cubecow_rename_snapshot_go(
++    CubecowEngineHandle engine,
++    const char* old_name,
++    const char* new_name,
++    char** out_device_path
++) {
++    return cubecow_rename_snapshot(engine, old_name, new_name, out_device_path);
++}
++static inline int32_t cubecow_fsync_snapshot_dir_go(
++    CubecowEngineHandle engine,
++    const char* name
++) {
++    return cubecow_fsync_snapshot_dir(engine, name);
++}
+ */
+ import "C"
+ 
+@@ -293,6 +307,55 @@ func (e *Engine) CreateSnapshotFromVolume(sourceName, snapshotName string, activ
+ 	return takeCString(cDevicePath), nil
+ }
+ 
++// RenameSnapshot renames a snapshot in place. The snapshot keeps its
++// origin volume, size and device path; only the name changes. The rename
++// is not fsynced by this call - batch durability with FsyncSnapshotDir.
++func (e *Engine) RenameSnapshot(oldName, newName string) (string, error) {
++	runtime.LockOSThread()
++	defer runtime.UnlockOSThread()
++
++	ptr, err := e.openHandle()
++	if err != nil {
++		return "", err
++	}
++	defer e.mu.RUnlock()
++
++	cOldName := C.CString(oldName)
++	defer C.free(unsafe.Pointer(cOldName))
++	cNewName := C.CString(newName)
++	defer C.free(unsafe.Pointer(cNewName))
++
++	var cDevicePath *C.char
++	rc := C.cubecow_rename_snapshot_go(C.CubecowEngineHandle(ptr), cOldName, cNewName, &cDevicePath)
++	if rc != 0 {
++		return "", makeError(rc)
++	}
++	return takeCString(cDevicePath), nil
++}
++
++// FsyncSnapshotDir best-effort fsyncs the directory that holds name
++// (resolved through its origin volume), flushing every pending rename
++// in that directory at once.
++func (e *Engine) FsyncSnapshotDir(name string) error {
++	runtime.LockOSThread()
++	defer runtime.UnlockOSThread()
++
++	ptr, err := e.openHandle()
++	if err != nil {
++		return err
++	}
++	defer e.mu.RUnlock()
++
++	cName := C.CString(name)
++	defer C.free(unsafe.Pointer(cName))
++
++	rc := C.cubecow_fsync_snapshot_dir_go(C.CubecowEngineHandle(ptr), cName)
++	if rc != 0 {
++		return makeError(rc)
++	}
++	return nil
++}
++
+ func (e *Engine) CreateVolumeFromSnapshot(sourceSnapshot, volumeName string) (string, error) {
+ 	runtime.LockOSThread()
+ 	defer runtime.UnlockOSThread()
+diff --git a/Cubelet/pkg/cubecow/cubecow_stub.go b/Cubelet/pkg/cubecow/cubecow_stub.go
+index 8ddaf68..bad6738 100644
+--- a/Cubelet/pkg/cubecow/cubecow_stub.go
++++ b/Cubelet/pkg/cubecow/cubecow_stub.go
+@@ -91,3 +91,11 @@ func (e *Engine) ImportLvol(string, string) (string, error) {
+ func (e *Engine) GetMetrics() (map[string]uint64, error) {
+ 	return nil, fmt.Errorf(nativeBuildHint)
+ }
++
++func (e *Engine) RenameSnapshot(string, string) (string, error) {
++	return "", fmt.Errorf(nativeBuildHint)
++}
++
++func (e *Engine) FsyncSnapshotDir(string) error {
++	return fmt.Errorf(nativeBuildHint)
++}
+diff --git a/Cubelet/storage/cubecow_volume_manager.go b/Cubelet/storage/cubecow_volume_manager.go
+index 4b52a4a..958e1c0 100644
+--- a/Cubelet/storage/cubecow_volume_manager.go
++++ b/Cubelet/storage/cubecow_volume_manager.go
+@@ -57,6 +57,8 @@ type cowVolumeManager = cow.Store
+ type cowEngine interface {
+ 	CreateVolume(name string, sizeBytes uint64) (string, error)
+ 	CreateSnapshotFromVolume(sourceName, snapshotName string, activate bool) (string, error)
++	RenameSnapshot(oldName, newName string) (string, error)
++	FsyncSnapshotDir(name string) error
+ 	CreateVolumeFromSnapshot(sourceSnapshot, volumeName string) (string, error)
+ 	ActivateVolume(name string) (string, error)
+ 	DeactivateVolume(name string) error
+@@ -138,6 +140,9 @@ func (m *XfsCow) initializeNewDefaultMediumVolume(ctx context.Context, name, dev
+ 
+ func (m *XfsCow) CreateSandboxRootfsFromTemplate(ctx context.Context, sandboxID, templateID string, gen uint32, desiredSizeBytes uint64) (*cowVolume, error) {
+ 	sourceName := cowTemplateRootfsName(templateID)
++	if v, err, adopted := m.adoptFromRootfsPool(ctx, sourceName, sandboxID, gen, desiredSizeBytes); adopted {
++		return v, err
++	}
+ 	return m.RollbackDeriveNewGen(ctx, sandboxID, sourceName, gen, desiredSizeBytes)
+ }
+ 
+@@ -412,6 +417,16 @@ func (m *XfsCow) ensureSnapshotOrigin(sourceName, snapshotName string) error {
+ }
+ 
+ func (m *XfsCow) DeleteByKind(ctx context.Context, name, kind string) error {
++	if err := m.deleteByKind(ctx, name, kind); err != nil {
++		return err
++	}
++	if kind == cowKindSnapshot && isTemplateRootfsSnapshotName(name) {
++		m.dropRootfsPool(name)
++	}
++	return nil
++}
++
++func (m *XfsCow) deleteByKind(ctx context.Context, name, kind string) error {
+ 	_ = ctx
+ 	deleteFn, err := m.deleteFunc(kind)
+ 	if err != nil {
+diff --git a/Cubelet/storage/rootfs_pool.go b/Cubelet/storage/rootfs_pool.go
+new file mode 100644
+index 0000000..3c694ff
+--- /dev/null
++++ b/Cubelet/storage/rootfs_pool.go
+@@ -0,0 +1,294 @@
++// Copyright (c) 2026 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++//
++
++package storage
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"strconv"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/tencentcloud/CubeSandbox/Cubelet/pkg/cubecow"
++	"github.com/tencentcloud/CubeSandbox/Cubelet/pkg/log"
++)
++
++// Pre-derived sandbox-rootfs shadow pool.
++//
++// Every sandbox create derives its rootfs from the template rootfs with
++// FICLONE followed by an fsync of the shared origin directory. Under a
++// concurrent create burst that per-create fsync serialises on the shared
++// directory and dominates the storage tail. The pool moves the whole
++// derive (FICLONE + fsync) off the create reply path:
++//
++//   - a background worker pre-derives pool members from the immutable
++//     template rootfs, staggered so it never contends with live creates;
++//   - a create pops a member and the engine renames it to the sandbox
++//     rootfs name — a metadata-only operation;
++//   - durability of the renames is batched by a flusher that fsyncs the
++//     origin directory at most once per flush interval;
++//   - any miss falls back to the exact direct-derive path.
++//
++// R1's warm-source split (falsified) kept the per-create derive on the hot
++// path and only rotated FICLONE sources; this pool removes the derive
++// itself. Adopted snapshots are indistinguishable from direct-derived ones
++// in the cubecow index (same origin volume, same directory, same shape),
++// so delete / resize / retry semantics are inherited unchanged.
++
++const (
++	// rootfsPoolDefaultSize covers a c=100 burst of warmup plus measured
++	// rounds with margin, so one measurement invocation never drains the
++	// pool between replenishments. Tunable via CUBELET_ROOTFS_POOL_SIZE.
++	rootfsPoolDefaultSize = 480
++	// rootfsPoolBuildStagger keeps replenishment off the create hot path:
++	// one member per interval, never a parallel build burst (R1 lesson).
++	rootfsPoolBuildStagger = 25 * time.Millisecond
++	// rootfsPoolFlushDelay debounces durability: every adoption inside the
++	// window is flushed by a single directory fsync (cost divided by N).
++	rootfsPoolFlushDelay = 20 * time.Millisecond
++	// rootfsPoolSweepLimit bounds the best-effort cleanup sweep when a
++	// template rootfs is deleted (covers targets larger than the default).
++	rootfsPoolSweepLimit = 2048
++)
++
++// rootfsShadowPool is the per-template-rootfs pre-derived pool state.
++type rootfsShadowPool struct {
++	mu        sync.Mutex
++	source    string
++	target    int
++	present   map[string]bool
++	available []string
++	building  bool
++	closed    bool
++	done      chan struct{}
++	flushCh   chan struct{}
++}
++
++// Package-level pool registry: the storage engine is a per-process
++// singleton, so this keeps XfsCow's own struct unchanged.
++var (
++	rootfsPoolsMu sync.Mutex
++	rootfsPools   = make(map[string]*rootfsShadowPool)
++)
++
++func rootfsPoolMemberName(templateSource string, i int) string {
++	return fmt.Sprintf("%s-pool-%04d", templateSource, i)
++}
++
++// isTemplateRootfsSnapshotName reports whether name is the canonical
++// template rootfs snapshot (tpl-<id>-rootfs), as opposed to a sandbox
++// rootfs (sb-...), a pool member (...-pool-NNNN) or the build volume.
++func isTemplateRootfsSnapshotName(name string) bool {
++	return strings.HasPrefix(name, "tpl-") &&
++		strings.HasSuffix(name, "-rootfs") &&
++		!strings.Contains(name, "-pool-") &&
++		!strings.Contains(name, "-build-")
++}
++
++// rootfsPoolSize resolves the configured pool size (0 = disabled).
++func rootfsPoolSize() int {
++	if v := os.Getenv("CUBELET_ROOTFS_POOL_DISABLE"); v != "" {
++		return 0
++	}
++	if v := os.Getenv("CUBELET_ROOTFS_POOL_SIZE"); v != "" {
++		if n, err := strconv.Atoi(v); err == nil && n > 0 {
++			return n
++		}
++	}
++	return rootfsPoolDefaultSize
++}
++
++// rootfsPoolFor returns the pool for templateSource, creating it (and
++// starting its flusher and first fill) on first use. Returns nil when the
++// pool is disabled.
++func (m *XfsCow) rootfsPoolFor(templateSource string) *rootfsShadowPool {
++	target := rootfsPoolSize()
++	if target == 0 {
++		return nil
++	}
++	rootfsPoolsMu.Lock()
++	pool, ok := rootfsPools[templateSource]
++	if !ok {
++		pool = &rootfsShadowPool{
++			source:  templateSource,
++			target:  target,
++			present: make(map[string]bool),
++			done:    make(chan struct{}),
++			flushCh: make(chan struct{}, 1),
++		}
++		rootfsPools[templateSource] = pool
++		go m.rootfsPoolFlusher(pool)
++	}
++	rootfsPoolsMu.Unlock()
++
++	m.kickRootfsPoolFill(pool)
++	return pool
++}
++
++// kickRootfsPoolFill starts the single staggered builder when the pool is
++// below target and no builder is running.
++func (m *XfsCow) kickRootfsPoolFill(pool *rootfsShadowPool) {
++	pool.mu.Lock()
++	start := !pool.building && !pool.closed && len(pool.available) < pool.target
++	if start {
++		pool.building = true
++	}
++	pool.mu.Unlock()
++	if start {
++		go m.fillRootfsPool(pool)
++	}
++}
++
++// fillRootfsPool pre-derives members one at a time until the pool reaches
++// its target. AlreadyExists means the member survived from a previous
++// process life (orphan recovery) and counts as available.
++func (m *XfsCow) fillRootfsPool(pool *rootfsShadowPool) {
++	for {
++		pool.mu.Lock()
++		if pool.closed || len(pool.available) >= pool.target {
++			pool.building = false
++			pool.mu.Unlock()
++			return
++		}
++		slot := -1
++		for i := 0; i < pool.target; i++ {
++			name := rootfsPoolMemberName(pool.source, i)
++			if !pool.present[name] {
++				slot = i
++				pool.present[name] = true
++				break
++			}
++		}
++		if slot < 0 {
++			pool.building = false
++			pool.mu.Unlock()
++			return
++		}
++		pool.mu.Unlock()
++
++		name := rootfsPoolMemberName(pool.source, slot)
++		if _, err := m.engine.CreateSnapshotFromVolume(pool.source, name, false); err != nil {
++			if !isCowSemantic(err, cubecow.SemAlreadyExists) {
++				log.G(context.Background()).Warnf("rootfs pool fill stop source=%s slot=%d err=%v", pool.source, slot, err)
++				pool.mu.Lock()
++				delete(pool.present, name)
++				pool.building = false
++				pool.mu.Unlock()
++				return
++			}
++		}
++		pool.mu.Lock()
++		pool.available = append(pool.available, name)
++		count := len(pool.available)
++		pool.mu.Unlock()
++		if count == pool.target {
++			log.G(context.Background()).Infof("rootfs pool ready source=%s members=%d", pool.source, count)
++		} else if count%32 == 0 {
++			log.G(context.Background()).Infof("rootfs pool building source=%s members=%d/%d", pool.source, count, pool.target)
++		}
++		time.Sleep(rootfsPoolBuildStagger)
++	}
++}
++
++// rootfsPoolFlusher batches the durability of adoptions: after the first
++// signal it waits out the debounce window and issues a single fsync of the
++// origin directory, which flushes every rename inside the window at once.
++func (m *XfsCow) rootfsPoolFlusher(pool *rootfsShadowPool) {
++	for {
++		select {
++		case <-pool.flushCh:
++		case <-pool.done:
++			return
++		}
++		timer := time.NewTimer(rootfsPoolFlushDelay)
++	drain:
++		for {
++			select {
++			case <-pool.flushCh:
++			case <-timer.C:
++				break drain
++			case <-pool.done:
++				timer.Stop()
++				return
++			}
++		}
++		if err := m.engine.FsyncSnapshotDir(pool.source); err != nil {
++			log.G(context.Background()).Warnf("rootfs pool flush fsync source=%s err=%v", pool.source, err)
++		}
++	}
++}
++
++// adoptFromRootfsPool hands a pre-derived member to a sandbox by renaming
++// it to the sandbox rootfs name. The third return value reports whether
++// this path decided the outcome (volume or terminal error); false means
++// the caller must fall back to the direct derive.
++func (m *XfsCow) adoptFromRootfsPool(ctx context.Context, templateSource, sandboxID string, gen uint32, desiredSizeBytes uint64) (*cowVolume, error, bool) {
++	pool := m.rootfsPoolFor(templateSource)
++	if pool == nil {
++		return nil, nil, false
++	}
++	pool.mu.Lock()
++	if pool.closed || len(pool.available) == 0 {
++		pool.mu.Unlock()
++		return nil, nil, false
++	}
++	member := pool.available[len(pool.available)-1]
++	pool.available = pool.available[:len(pool.available)-1]
++	delete(pool.present, member)
++	remaining := len(pool.available)
++	pool.mu.Unlock()
++
++	snapshotName := fmt.Sprintf("sb-%s-rootfs-gen%d", sandboxID, gen)
++	devPath, err := m.engine.RenameSnapshot(member, snapshotName)
++	if err != nil {
++		// Miss: fall back to the direct derive. The popped member is not
++		// requeued; the builder reproduces the slot.
++		log.G(ctx).Warnf("rootfs pool adopt fallback member=%s sandbox=%s err=%v", member, sandboxID, err)
++		return nil, nil, false
++	}
++	resized, err := m.resizeSnapshotIfTooSmall(snapshotName, desiredSizeBytes)
++	if err != nil {
++		return nil, err, true
++	}
++	if resized {
++		if devPath, err = m.ResolveDevPath(ctx, snapshotName, cowKindSnapshot); err != nil {
++			return nil, err, true
++		}
++	}
++	select {
++	case pool.flushCh <- struct{}{}:
++	default:
++	}
++	m.kickRootfsPoolFill(pool)
++	log.G(ctx).Infof("rootfs pool adopt sandbox=%s member=%s remaining=%d", sandboxID, member, remaining)
++	return newCowVolume(snapshotName, cowKindSnapshot, gen, devPath), nil, true
++}
++
++// dropRootfsPool removes the pool for templateSource (template teardown)
++// and best-effort deletes on-disk members, including orphans left by
++// previous process lives with larger targets.
++func (m *XfsCow) dropRootfsPool(templateSource string) {
++	rootfsPoolsMu.Lock()
++	pool, ok := rootfsPools[templateSource]
++	if ok {
++		delete(rootfsPools, templateSource)
++	}
++	rootfsPoolsMu.Unlock()
++	if pool != nil {
++		pool.mu.Lock()
++		pool.closed = true
++		pool.mu.Unlock()
++		close(pool.done)
++	}
++	sweep := rootfsPoolSweepLimit
++	if pool != nil && pool.target > sweep {
++		sweep = pool.target
++	}
++	for i := 0; i < sweep; i++ {
++		_ = m.engine.DeleteSnapshot(rootfsPoolMemberName(templateSource, i))
++	}
++}
+diff --git a/cubecow/include/cubecow.h b/cubecow/include/cubecow.h
+index 124a6af..756967f 100644
+--- a/cubecow/include/cubecow.h
++++ b/cubecow/include/cubecow.h
+@@ -324,6 +324,31 @@ int32_t cubecow_create_volume_from_snapshot(
+     const char* volume_name,
+     char** out_device_path);
+ 
++/*
++ * Rename a snapshot in place. Metadata-only: the snapshot keeps its
++ * origin volume, size and device path; only the name changes. Used by
++ * the pre-derived rootfs pool to hand a pre-built snapshot to a sandbox
++ * without re-running FICLONE. The rename is durable only after
++ * cubecow_fsync_snapshot_dir (or any other fsync of the origin
++ * directory); callers batch that themselves.
++ *
++ * On success writes the snapshot's device path to out_device_path
++ * (owned C string, caller frees with cubecow_free_string). Optional,
++ * can be NULL.
++ */
++int32_t cubecow_rename_snapshot(
++    CubecowEngineHandle engine,
++    const char* old_name,
++    const char* new_name,
++    char** out_device_path);
++
++/*
++ * Best-effort fsync of the directory that holds `name` (resolved via
++ * its origin volume). One call flushes every pending rename/creation
++ * in that directory, enabling batched durability.
++ */
++int32_t cubecow_fsync_snapshot_dir(CubecowEngineHandle engine, const char* name);
++
+ /* ------------------------------------------------------------------ */
+ /* Observability                                                       */
+ /* ------------------------------------------------------------------ */
+diff --git a/cubecow/src/engine/mod.rs b/cubecow/src/engine/mod.rs
+index b9280a7..e0d55ba 100644
+--- a/cubecow/src/engine/mod.rs
++++ b/cubecow/src/engine/mod.rs
+@@ -78,6 +78,27 @@ pub trait Engine: Send + Sync {
+     /// Delete a snapshot by name.
+     fn delete_snapshot(&self, snapshot_name: &str) -> CubecowResult<()>;
+ 
++    /// Rename a snapshot in place, keeping its origin volume, size and
++    /// device path; only the name changes. Metadata-only (no FICLONE, no
++    /// per-call fsync): the adoption primitive for the Go-side pre-derived
++    /// rootfs pool. Durability is deferred to [`Engine::fsync_snapshot_dir`].
++    fn rename_snapshot(&self, old_name: &str, new_name: &str) -> CubecowResult<Snapshot> {
++        let _ = (old_name, new_name);
++        Err(CubecowError::PreconditionFailed(
++            "rename_snapshot is not implemented by this backend".to_string(),
++        ))
++    }
++
++    /// Best-effort fsync of the directory that holds `name` (resolved via
++    /// its origin volume). One call flushes every pending rename or
++    /// creation in that directory, enabling batched durability.
++    fn fsync_snapshot_dir(&self, name: &str) -> CubecowResult<()> {
++        let _ = name;
++        Err(CubecowError::PreconditionFailed(
++            "fsync_snapshot_dir is not implemented by this backend".to_string(),
++        ))
++    }
++
+     /// Derive a writable, data-independent volume from an existing snapshot.
+     /// The returned volume is auto-activated, matching the
+     /// "volume ⇄ device lifetime" contract of [`Engine::create_volume`].
+diff --git a/cubecow/src/engine/reflink.rs b/cubecow/src/engine/reflink.rs
+index 774c8fb..677c5f1 100644
+--- a/cubecow/src/engine/reflink.rs
++++ b/cubecow/src/engine/reflink.rs
+@@ -745,6 +745,72 @@ impl Engine for ReflinkEngine {
+         result
+     }
+ 
++    fn rename_snapshot(&self, old_name: &str, new_name: &str) -> CubecowResult<Snapshot> {
++        Self::validate_name(new_name, "snapshot")?;
++        // Hold the write lock across lookup + rename + index update so a
++        // concurrent create/delete of either name cannot interleave with
++        // the on-disk rename. POSIX rename(2) would silently replace an
++        // existing destination; the index check below is what protects
++        // the global-namespace invariant.
++        {
++            let mut idx = self
++                .name_index
++                .write()
++                .expect("reflink name_index lock poisoned");
++            let origin = match idx.get(old_name) {
++                Some(NameKind::Snapshot { origin_volume }) => origin_volume.clone(),
++                Some(NameKind::Volume) => {
++                    return Err(CubecowError::InvalidArg(format!(
++                        "'{old_name}' is a volume; rename_snapshot expects a snapshot"
++                    )));
++                }
++                None => {
++                    return Err(CubecowError::NotFound(format!(
++                        "snapshot '{old_name}'"
++                    )));
++                }
++            };
++            if idx.contains_key(new_name) {
++                return Err(CubecowError::AlreadyExists(format!(
++                    "name '{new_name}' already exists in reflink namespace"
++                )));
++            }
++            let old_path = self.snap_file(&origin, old_name);
++            let new_path = self.snap_file(&origin, new_name);
++            std::fs::rename(&old_path, &new_path).map_err(CubecowError::IoError)?;
++            idx.remove(old_name);
++            idx.insert(
++                new_name.to_string(),
++                NameKind::Snapshot {
++                    origin_volume: origin,
++                },
++            );
++        }
++        info!(
++            from = old_name,
++            to = new_name,
++            "reflink snapshot renamed (durability deferred to fsync_snapshot_dir)"
++        );
++        self.project_snapshot(new_name)
++    }
++
++    fn fsync_snapshot_dir(&self, name: &str) -> CubecowResult<()> {
++        let origin = {
++            let idx = self
++                .name_index
++                .read()
++                .expect("reflink name_index lock poisoned");
++            match idx.get(name) {
++                Some(NameKind::Snapshot { origin_volume }) => origin_volume.clone(),
++                Some(NameKind::Volume) => name.to_string(),
++                None => {
++                    return Err(CubecowError::NotFound(format!("object '{name}'")));
++                }
++            }
++        };
++        fsync_dir(&self.vol_dir(&origin)).map_err(CubecowError::IoError)
++    }
++
+     fn create_volume_from_snapshot(
+         &self,
+         source_snapshot: &str,
+diff --git a/cubecow/src/ffi.rs b/cubecow/src/ffi.rs
+index bd6a12e..a970a13 100644
+--- a/cubecow/src/ffi.rs
++++ b/cubecow/src/ffi.rs
+@@ -810,6 +810,86 @@ pub extern "C" fn cubecow_create_snapshot_from_volume(
+     }
+ }
+ 
++/// Rename a snapshot in place (metadata-only; keeps origin volume and
++/// device path, only the name changes). The new device path is written to
++/// `out_device_path` (owned C string, caller frees with
++/// `cubecow_free_string`). Optional, can be NULL.
++///
++/// The rename is NOT fsynced by this call; batch durability with
++/// `cubecow_fsync_snapshot_dir`.
++///
++/// # Returns
++/// 0 on success, negative error code on failure.
++#[no_mangle]
++pub extern "C" fn cubecow_rename_snapshot(
++    engine: *mut std::ffi::c_void,
++    old_name: *const c_char,
++    new_name: *const c_char,
++    out_device_path: *mut *mut c_char,
++) -> i32 {
++    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
++        // SAFETY: `engine` was created by `cubecow_init` and is valid.
++        let eng = unsafe { engine_ref(engine) }?;
++        // SAFETY: `old_name` is a valid C string provided by the caller.
++        let old = unsafe { c_str_to_str(old_name) }?;
++        // SAFETY: `new_name` is a valid C string provided by the caller.
++        let new = unsafe { c_str_to_str(new_name) }?;
++
++        match eng.rename_snapshot(old, new) {
++            Ok(snapshot) => {
++                if !out_device_path.is_null() {
++                    // SAFETY: `out_device_path` is non-null and writable.
++                    unsafe { *out_device_path = rust_string_to_c(&snapshot.device_path) };
++                }
++                Ok(COW_OK)
++            }
++            Err(e) => Err(handle_cow_error(&e)),
++        }
++    }));
++
++    match result {
++        Ok(Ok(code)) => code,
++        Ok(Err(code)) => code,
++        Err(_) => {
++            set_last_error("panic during cubecow_rename_snapshot");
++            COW_ERR_PANIC
++        }
++    }
++}
++
++/// Best-effort fsync of the directory that holds `name` (resolved through
++/// its origin volume). One call flushes every pending rename or creation
++/// in that directory, enabling batched durability.
++///
++/// # Returns
++/// 0 on success, negative error code on failure.
++#[no_mangle]
++pub extern "C" fn cubecow_fsync_snapshot_dir(
++    engine: *mut std::ffi::c_void,
++    name: *const c_char,
++) -> i32 {
++    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
++        // SAFETY: `engine` was created by `cubecow_init` and is valid.
++        let eng = unsafe { engine_ref(engine) }?;
++        // SAFETY: `name` is a valid C string provided by the caller.
++        let obj = unsafe { c_str_to_str(name) }?;
++
++        match eng.fsync_snapshot_dir(obj) {
++            Ok(()) => Ok(COW_OK),
++            Err(e) => Err(handle_cow_error(&e)),
++        }
++    }));
++
++    match result {
++        Ok(Ok(code)) => code,
++        Ok(Err(code)) => code,
++        Err(_) => {
++            set_last_error("panic during cubecow_fsync_snapshot_dir");
++            COW_ERR_PANIC
++        }
++    }
++}
++
+ /// Activate a volume or snapshot by name (creates its backend device node).
+ ///
+ /// Must be called before issuing block I/O against a snapshot produced by
