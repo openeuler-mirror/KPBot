@@ -1,5 +1,5 @@
 ---
-name: openeuler-agentenv
+name: kptools-openeuler-agentenv
 description: 在 openEuler 上安装和排障 AgentENV（kvcache-ai）。在 openEuler 上部署 AgentENV、运行其 benchmark、编译/加载 ublk 内核模块，或遇到这些报错时使用：rustup 下载超时、protoc "timestamp.proto File not found"、ublk add_dev "Permission denied"、overlaybd "CLI::ValidationError"、sandbox 启动 "Connection refused"、benchmark RocksDB 锁冲突。
 ---
 

@@ -3,7 +3,7 @@
 # 构建上下文 = Plugins/app-tuner/（与 docs/case-spec.md 一致）
 # 构建（容器内解析 openeuler 源 / github 需稳定出网时加 --network host）：
 #   docker build --network host \
-#       -f skills/openeuler-agentenv/cases/agent-build-agentenv/Dockerfile \
+#       -f skills/kptools-openeuler-agentenv/cases/agent-build-agentenv/Dockerfile \
 #       -t kpbot/app-tuner-agent-agent-build-agentenv:1.0-openeuler24.03 .
 # A/B 对照：
 #   ./run_ab.sh --save results-ab
@@ -25,13 +25,13 @@ RUN dnf install -y \
     && dnf clean all
 
 # skill 装入 staging；运行时由 entrypoint 按 SKILL_MODE 决定是否接入 .opencode/skills/
-COPY skills/openeuler-agentenv/ /staging/skill/
+COPY skills/kptools-openeuler-agentenv/ /staging/skill/
 RUN rm -rf /staging/skill/cases
 
 # 提示词 + 执行脚本（无 src/bench：待编译源 = 上游 AgentENV 仓库，agent 自行获取）
-COPY skills/openeuler-agentenv/cases/agent-build-agentenv/prompts/ /workspace/prompts/
-COPY skills/openeuler-agentenv/cases/agent-build-agentenv/verify.sh /workspace/verify.sh
-COPY skills/openeuler-agentenv/cases/agent-build-agentenv/entrypoint.sh /workspace/entrypoint.sh
+COPY skills/kptools-openeuler-agentenv/cases/agent-build-agentenv/prompts/ /workspace/prompts/
+COPY skills/kptools-openeuler-agentenv/cases/agent-build-agentenv/verify.sh /workspace/verify.sh
+COPY skills/kptools-openeuler-agentenv/cases/agent-build-agentenv/entrypoint.sh /workspace/entrypoint.sh
 
 RUN mkdir -p /workspace/opt /workspace/results \
     && chmod +x /workspace/verify.sh /workspace/entrypoint.sh

@@ -34,7 +34,7 @@ SKILL_MODE="${SKILL_MODE:-with}"          # with | without
 # with：把 skill 接入运行时 skills 目录；without：不接入任何 skill
 if [ "${SKILL_MODE}" = "with" ]; then
     mkdir -p .opencode/skills
-    cp -r /staging/skill .opencode/skills/openeuler-agentenv
+    cp -r /staging/skill .opencode/skills/kptools-openeuler-agentenv
 fi
 
 PROMPT_FILE="prompts/${SKILL_MODE}-skill.md"

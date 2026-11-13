@@ -1,4 +1,4 @@
-"""Case contract checks for the openeuler-agentenv skill package.
+"""Case contract checks for the kptools-openeuler-agentenv skill package.
 
 Run:  python3 -m unittest discover -s evals -v   (from the skill package root)
 """
@@ -9,7 +9,7 @@ import stat
 import unittest
 from pathlib import Path
 
-PACKAGE = Path(__file__).resolve().parents[1]      # .../skills/openeuler-agentenv
+PACKAGE = Path(__file__).resolve().parents[1]      # .../skills/kptools-openeuler-agentenv
 PLUGIN = PACKAGE.parents[1]                        # .../Plugins/app-tuner
 CASE = PACKAGE / "cases" / "agent-build-agentenv"
 
@@ -34,7 +34,7 @@ class CaseContractTests(unittest.TestCase):
     def test_case_yaml_core_fields(self):
         text = (CASE / "case.yaml").read_text(encoding="utf-8")
         for pattern in (r"(?m)^name:\s*agent-build-agentenv\b",
-                        r"(?m)^skill:\s*openeuler-agentenv\b",
+                        r"(?m)^skill:\s*kptools-openeuler-agentenv\b",
                         r"(?m)^tier:\s*agent\b"):
             self.assertRegex(text, pattern)
         for field in ("success", "repo_present", "build_ok"):
@@ -50,7 +50,7 @@ class CaseContractTests(unittest.TestCase):
     def test_prompt_ab_isolation(self):
         with_text = (CASE / "prompts" / "with-skill.md").read_text(encoding="utf-8")
         without_text = (CASE / "prompts" / "without-skill.md").read_text(encoding="utf-8")
-        prefix = "请使用 openeuler-agentenv skill，"
+        prefix = "请使用 kptools-openeuler-agentenv skill，"
         self.assertTrue(with_text.startswith(prefix),
                         "with-skill prompt must explicitly mention the skill")
         self.assertEqual(with_text[len(prefix):], without_text,

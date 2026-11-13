@@ -1,7 +1,7 @@
-# 用例：agent 级端到端 —— 容器内用 opencode 调用 openeuler-agentenv 完成 AgentENV 构建环境准备与 release 编译
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 kptools-openeuler-agentenv 完成 AgentENV 构建环境准备与 release 编译
 #
 # 拉取与测试方法（人类可读）：
-#   docker build --network host -f skills/openeuler-agentenv/cases/agent-build-agentenv/Dockerfile \
+#   docker build --network host -f skills/kptools-openeuler-agentenv/cases/agent-build-agentenv/Dockerfile \
 #       -t kpbot/app-tuner-agent-agent-build-agentenv:1.0-openeuler24.03 .
 #   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
 #   ./run_ab.sh --save results-ab
@@ -17,7 +17,7 @@
 #   release 编译需约 30GB 磁盘，单条件端到端约 20–60 分钟。
 
 name: agent-build-agentenv
-skill: openeuler-agentenv
+skill: kptools-openeuler-agentenv
 tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
 
 image: kpbot/app-tuner-agent-agent-build-agentenv:1.0-openeuler24.03
@@ -34,7 +34,7 @@ ab:
 
 build:
   context: ../../../..                         # 指向 Plugins/app-tuner/
-  dockerfile: skills/openeuler-agentenv/cases/agent-build-agentenv/Dockerfile
+  dockerfile: skills/kptools-openeuler-agentenv/cases/agent-build-agentenv/Dockerfile
 
 entrypoint: ["/workspace/entrypoint.sh"]
 

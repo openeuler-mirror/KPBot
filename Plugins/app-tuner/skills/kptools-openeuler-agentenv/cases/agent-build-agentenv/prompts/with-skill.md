@@ -1,4 +1,4 @@
-请使用 openeuler-agentenv skill，在这台 openEuler 24.03 机器上完成 AgentENV（kvcache-ai）的构建环境准备与 release 编译。
+请使用 kptools-openeuler-agentenv skill，在这台 openEuler 24.03 机器上完成 AgentENV（kvcache-ai）的构建环境准备与 release 编译。
 
 要求：
 1. 机器上没有 AgentENV 源码，也没有 Rust 工具链；源码自行从 GitHub 获取（kvcache-ai/AgentENV），建议放在 /workspace 下。
