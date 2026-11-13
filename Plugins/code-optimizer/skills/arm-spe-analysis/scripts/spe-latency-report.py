@@ -139,7 +139,9 @@ class SpeCSV(object):
             e = (r.get("event") or "").lower()
             if "l1d-miss" in e or "l1_miss" in e:
                 self.ev["l1d_miss"] += 1
-            if "l1d-access" in e or "l1_access" in e or "l1d" in e:
+            # 只统计 access 类事件；l1d-miss 等 miss 事件不视为 access，
+            # 否则 l1_hit=(access-miss)/access 恒为 0（miss 率模型下命中率本就不可测）
+            if "l1d-access" in e or "l1_access" in e:
                 self.ev["l1d_access"] += 1
             if "llc-miss" in e or "llc_miss" in e or "l3-miss" in e:
                 self.ev["llc_miss"] += 1

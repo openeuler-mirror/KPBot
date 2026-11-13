@@ -79,6 +79,12 @@
 > 前 3 项阈值与 `spe-hotspot.sh` 保持一致；tlb/remote/p99/tail 为深度阶段新增的
 > 参考阈值，可按场景调整（`GRADES` 常量在 `spe-latency-report.py` 顶部）。
 
+**命中率的可测性说明**：`l1_hit` / `llc_hit` 仅在采集到 access 类事件
+（`l1d-access` / `llc-access`）时才会计算并输出；`l1d-miss` 等 miss 事件**不**计入
+access。本 skill 的默认采集方式（`spe-collect.sh -f load` 等）只产生 miss 类事件，
+此时命中率在原理上不可测，门禁表不会输出 l1_hit/llc_hit 行——不要依据"未出现命中率"
+推断命中率偏低，命中率结论必须以包含 access 事件的采集为准。
+
 **加权时延（Σlatency）**：以 `样本数 × 平均时延`（即该 PC 上采样样本的时延总和）
 度量"指令对总时延的贡献"。与纯采样数排名不同，它能暴露"采样不多但每条都很慢"
 的严重指令——这是深度阶段相对 `spe-parse.sh` 的关键增量。
@@ -142,7 +148,8 @@ bash spe-csv.sh --parser "spe-parser --out csv" spe.data > samples.csv
 
 - **无 weight/data_src 的降级**：`perf script -F weight,data_src` 失败（perf/内核
   版本旧）时，`spe-csv.sh` 自动回退基础字段并告警；报告对应章节会标注"无此字段"。
-  此时时延/层级结论不可下。
+  此时时延/层级结论不可下。回退时首次完整字段尝试的输出会被整体丢弃，保证最终
+  CSV 表头唯一，且产出会再经过一次 `--validate` 自检后才交给下游。
 - **事件覆盖**：只采集 load 时无法分析 store；只采集 branch 时无法分析访存层级。
   根因归因需在对应 filter 的采集上做。
 - **采样统计性**：单样本不可过度解读；建议 `--top` 结合分布（P50/P90/P99）看，

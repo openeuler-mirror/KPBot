@@ -58,9 +58,14 @@ warn() { echo "[warn] $*" >&2; }
 err()  { echo "[error] $*" >&2; }
 
 # 用内置 perf 解析器：优先带 weight/data_src/addr，失败回退基础字段
+# 首次尝试写入独立临时文件：perf 不支持扩展字段时该次输出（半截表头）整体丢弃，
+# 回退分支另行输出，保证最终 CSV 表头只出现一次。
 parse_with_perf() {
     local data="$1"
-    if perf script -F "$FULL_FIELDS" -i "$data" 2>/dev/null | python3 "$CONVERTER"; then
+    local full_tmp="$2"
+    if perf script -F "$FULL_FIELDS" -i "$data" 2>/dev/null \
+        | python3 "$CONVERTER" > "$full_tmp" 2>/dev/null; then
+        cat "$full_tmp"
         return 0
     fi
     warn "perf 不支持 weight/data_src/addr 字段，回退为基础字段（时延/数据源将为空）"
@@ -103,7 +108,8 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 CSV_TMP="$(mktemp)"
-trap 'rm -f "$CSV_TMP"' EXIT
+FULL_TMP="$(mktemp)"
+trap 'rm -f "$CSV_TMP" "$FULL_TMP"' EXIT
 
 if [ -n "$PARSER" ]; then
     # 外部开源 spe-parser：约定 stdin=perf script 输出，stdout=标准 CSV
@@ -117,7 +123,12 @@ if [ -n "$PARSER" ]; then
         exit 1
     fi
 else
-    parse_with_perf "$DATA_FILE" > "$CSV_TMP"
+    parse_with_perf "$DATA_FILE" "$FULL_TMP" > "$CSV_TMP"
+    # 产物自检：确保表头唯一、schema 合法（降级/转换任何异常在此暴露）
+    if ! python3 "$CONVERTER" --validate "$CSV_TMP" >/dev/null 2>&1; then
+        err "解析产物不符合标准 CSV schema，请检查 perf 输出与 spe-to-csv.py 兼容性"
+        exit 1
+    fi
 fi
 
 if [ -n "$OUTPUT" ]; then

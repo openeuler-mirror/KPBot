@@ -62,6 +62,17 @@ assert_exit_code() {
     fi
 }
 
+assert_eq() {
+    local expected="$1" actual="$2" message="${3:-AssertEq}"
+    if [ "$actual" = "$expected" ]; then
+        echo "  [PASS] $message"
+        TEST_PASSED=$((TEST_PASSED + 1))
+    else
+        echo "  [FAIL] $message (期望 $expected, 实际 $actual)"
+        TEST_FAILED=$((TEST_FAILED + 1))
+    fi
+}
+
 # =============================================================================
 # 夹具
 # =============================================================================
@@ -156,12 +167,18 @@ test_csv_script() {
     blue "===== 测试组: spe-csv.sh 包装与降级 ====="
     echo ""
     # 用 mock perf（-F 失败 → 基础字段降级）
-    local out ret=0
-    out=$(PATH="$MOCK_BIN:$PATH" bash "$CSV_SCRIPT" "$MOCK_DATA" 2>&1) || ret=$?
+    local deg_csv="$TEST_RESULTS_DIR/degraded.csv"
+    local deg_err="$TEST_RESULTS_DIR/degraded.err"
+    local ret=0
+    PATH="$MOCK_BIN:$PATH" bash "$CSV_SCRIPT" "$MOCK_DATA" > "$deg_csv" 2> "$deg_err" || ret=$?
     assert_exit_code 0 "$ret" "降级路径 exit=0"
-    assert_contains "$out" "comm,pid,tid,cpu,time,period,event,ip,sym,dso,weight,data_src,addr" "降级后 CSV 仍为标准 schema"
-    assert_contains "$out" "回退为基础字段" "降级告警输出"
-    assert_contains "$out" "func_hot+0x10,/usr/lib/libc.so,,," "降级行 weight/data_src/addr 为空"
+    assert_contains "$(cat "$deg_csv")" "comm,pid,tid,cpu,time,period,event,ip,sym,dso,weight,data_src,addr" "降级后 CSV 仍为标准 schema"
+    assert_contains "$(cat "$deg_err")" "回退为基础字段" "降级告警输出"
+    assert_contains "$(cat "$deg_csv")" "func_hot+0x10,/usr/lib/libc.so,,," "降级行 weight/data_src/addr 为空"
+    assert_eq 1 "$(grep -c '^comm,pid,tid,cpu,time,period,event,ip,sym,dso,weight,data_src,addr' "$deg_csv" 2>/dev/null || true)" "降级产物表头只出现一次（P1 回归）"
+    local vout
+    vout=$(run_conv --validate "$deg_csv" 2>&1)
+    assert_contains "$vout" "校验通过" "降级产物通过 schema 校验（P1 回归）"
     echo ""
 
     # 外部 spe-parser 接入（模拟输出合法 CSV）

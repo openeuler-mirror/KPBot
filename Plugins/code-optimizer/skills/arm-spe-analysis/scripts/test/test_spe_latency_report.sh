@@ -38,6 +38,18 @@ assert_contains() {
     fi
 }
 
+assert_not_contains() {
+    local haystack="$1" needle="$2" message="${3:-AssertNotContains}"
+    if [[ "$haystack" != *"$needle"* ]]; then
+        echo "  [PASS] $message"
+        TEST_PASSED=$((TEST_PASSED + 1))
+    else
+        echo "  [FAIL] $message"
+        echo "         不应包含: $needle"
+        TEST_FAILED=$((TEST_FAILED + 1))
+    fi
+}
+
 assert_exit_code() {
     local expected="$1" actual="$2" message="${3:-AssertExitCode}"
     if [ "$actual" -eq "$expected" ]; then
@@ -134,6 +146,29 @@ test_report_sections() {
     assert_contains "$r" "REMOTE" "根因因子含 REMOTE"
     assert_contains "$r" "tlb_miss" "根因因子含 tlb_miss"
     assert_contains "$r" "DRAM | 1" "data_src 分布含 DRAM"
+    assert_not_contains "$r" "L1 命中率" "无 access 事件时不输出 l1_hit 行（P2 回归）"
+    echo ""
+}
+
+test_access_hit_rate() {
+    blue "===== 测试组: 有 access 事件时的命中率（P2） ====="
+    echo ""
+    local csv="$TEST_RESULTS_DIR/access.csv"
+    cat > "$csv" <<'EOF'
+comm,pid,tid,cpu,time,period,event,ip,sym,dso,weight,data_src,addr
+claude,219296,,0,1.0,1000,l1d-access,ffff1000,fn_a,/bin/x,40,L1,0x100
+claude,219296,,0,1.1,1000,l1d-access,ffff1000,fn_a,/bin/x,50,L1,0x104
+claude,219296,,0,1.2,1000,l1d-miss,ffff1000,fn_a,/bin/x,200,L2,0x108
+claude,219296,,0,1.3,1000,llc-access,ffff1000,fn_a,/bin/x,60,L3,0x10c
+claude,219296,,0,1.4,1000,llc-access,ffff1000,fn_a,/bin/x,70,L3,0x10c
+claude,219296,,0,1.5,1000,llc-miss,ffff1000,fn_a,/bin/x,900,6,0x110
+EOF
+    local md="$TEST_RESULTS_DIR/access.md"
+    run_report "$csv" -o "$md" >/dev/null 2>&1
+    local r
+    r=$(cat "$md")
+    assert_contains "$r" "| l1_hit | 50.00% |" "l1d-access=2/l1d-miss=1 → l1_hit=50%（P2 回归）"
+    assert_contains "$r" "| llc_hit | 50.00% |" "llc-access=1/llc-miss=1 → llc_hit=50%（P2 回归）"
     echo ""
 }
 
@@ -225,6 +260,7 @@ run_all_tests() {
 
     setup_fixtures
     test_report_sections
+    test_access_hit_rate
     test_json_output
     test_min_lat
     test_baseline
