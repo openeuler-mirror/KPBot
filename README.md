@@ -59,7 +59,7 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、Faiss 向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（77 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、Faiss 向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（83 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
 | **[openwiki-sync](Plugins/public/openwiki-sync/)** | documentation | OpenWiki 代码仓文档生成与同步 — 独立 wiki 仓托管 + commit 级联动更新 + 关联恢复，支持 GitCode/Gitee/GitHub |
 | **[kunpeng-knowledge](Plugins/public/kunpeng-knowledge/skills/kunpeng-knowledge/SKILL.md)** | documentation | 鲲鹏知识库只读查询 — 搜索 Wiki、读取页面并返回来源；在 OpenCode 中通过 WeKnora 账号授权 |
@@ -150,8 +150,8 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 77 个技能
-    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 75 个技能
+    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 83 个技能
+    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 81 个技能
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -224,7 +224,7 @@ bash tests/test_install_platform.sh
 
 ### 可用技能列表
 
-code-optimizer 在 Claude Code 中安装 **77 个** skill，在 OpenCode 中安装 **75 个**（跳过 2 个 claude-only）。
+code-optimizer 在 Claude Code 中安装 **83 个** skill，在 OpenCode 中安装 **81 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -256,6 +256,12 @@ code-optimizer 在 Claude Code 中安装 **77 个** skill，在 OpenCode 中安�
 - `openzl-compression-tuning` — OpenZL 压缩内核调优（熵 codec 根表/位流优化、熵选型、无损逐字节门禁、归因方法论与负结果档案）
 - `openzl-bench-protocol` — OpenZL unitBench 基准协议（场景注册、KV 数据准备、多机部署复测、topdown 采集，含 3 个脚本）
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
+- `sme-small-m-fused-read` — SME 小 M GEMM 读取融合（ZA 切片整窗载入替代跨行 gather、守卫回退、逐位等价验证）
+- `tuner-degenerate-axis` — 参数化自动调优的退化轴诊断（三形态、耦合检查、补最小台阶、回归验证）
+- `codegen-semantic-path-split` — 生成期语义分支（纯/累加 GEMM 入口拆分、累加器清零、NaN 反向验证）
+- `codegen-openmp-integration` — 生成器接入多线程（线程数生成期固定、团队契约、私有状态、预热）
+- `codegen-interface-threading` — 语义参数贯通七层（配置/生成/符号/CLI/工具/调优/测试、旧入口兼容）
+- `codegen-hw-capability-guard` — 硬件能力探测与拒绝（三级来源、单位精度换算、生成期拒绝、失败形态测试）
 
 **Pipeline/编排类**
 - `kpbot-code-optimizer` — 完整优化 Pipeline（Subagent 编排）
@@ -413,7 +419,7 @@ KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (77 skills)
+│   ├── code-optimizer/            # 代码优化插件 (83 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
