@@ -82,6 +82,18 @@
 | `perf` | AutoFDO 证据路径 | 推荐 | 跳过 AutoFDO 路径，保守建议 LTO 或无 profile 路径 |
 | AutoFDO 工具链 | `create_gcov` / `autofdo` | 推荐 | 不输出可执行 AutoFDO 步骤，只保留建议说明 |
 
+### `microservice-go-syncpool-optimization`
+
+| 工具/输入 | 用途 | 分级 | 缺失时处理 |
+| --- | --- | --- | --- |
+| `go` 工具链与 `$GOROOT` 源码 | 读取 `VERSION`、应用补丁并构建新工具链 | 必需 | 输出 `blocked_go_baseline`，不进入分析 |
+| bootstrap Go 工具链 | 执行 `make.bash` / `make.bat` | 必需 | 输出 `blocked_bootstrap_toolchain` |
+| `git`（源码树） | 记录 tag/commit、校验补丁锚点 | 必需 | 输出 `blocked_go_source` |
+| `patch` / `git apply` | 应用 runtime 补丁 | 必需 | 输出 `blocked_patch_tool` |
+| `pprof`（`go tool pprof`） | CPU/heap 采集与判读 | 推荐 | 降级为 `gctrace` 与 `runtime.MemStats` |
+| 压测客户端与固定负载 | A/B 与内存水位验证 | 推荐 | 标记 `verified=false`，只输出候选动作 |
+| 重编译与重启授权 | 构建工具链、替换二进制 | 必需 | 输出 `blocked_authorization` |
+
 ### `cpu-affinity-optimization`
 
 | 工具/输入 | 用途 | 分级 | 缺失时处理 |

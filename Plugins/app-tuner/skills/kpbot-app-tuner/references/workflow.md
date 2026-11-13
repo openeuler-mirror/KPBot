@@ -316,6 +316,7 @@ OpenCode 与 Claude Code 运行时都必须维护 `current_workflow_state`，并
 - 高热点第三方 `.so` 或外部库热点：加入 `performance-library-selection`。
 - 网络相关热点函数高：加入 `network-optimization`。
 - L1 icache miss 高：加入 `compiler-optimization`，重点分析 PGO/LTO、代码布局、内联和目标架构选项。
+- Go 微服务 GC/sync.Pool 堆内存颠簸：加入 `microservice-go-syncpool-optimization`，按锁定的 Go 基线应用补丁并验证 `poolretain`/`poolprealloc`。
 - 线程切换高且 L3/LLC miss 高：`cpu-affinity-optimization` 已作为强制首位存在；证据触发时追加证据命中理由，未触发时理由为强制基线检查。
 - 数据库/连接池/队列/缓存/锁等待等应用内部状态解释瓶颈：加入 `application-config-optimization`。
 - OS、BIOS、GPU/NPU、硬件规格、Other 等信号命中时，加入对应 skill。
