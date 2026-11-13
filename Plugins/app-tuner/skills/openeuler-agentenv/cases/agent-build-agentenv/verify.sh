@@ -11,9 +11,11 @@
 # 输出：results/result.json（success / skill_mode / repo_present / build_ok /
 #       binaries_found / cargo/rustc 版本 / build_command / elapsed_seconds / reason）
 # 退出码：0 表示全部成立，非 0 表示未成立（供 case.yaml 的 exit_code 断言使用）。
+# 说明：WORKSPACE_DIR 默认 /workspace（容器契约不变）；evals/ 在容器外用该变量
+#       覆盖工作目录以复用同一判定逻辑做回归测试。
 set -uo pipefail
 
-cd /workspace
+cd "${WORKSPACE_DIR:-/workspace}"
 mkdir -p results
 
 SKILL_MODE="${SKILL_MODE:-with}"
