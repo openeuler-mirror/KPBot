@@ -10,10 +10,10 @@
 #   OPENCODE_BIN     opencode 二进制路径（默认 /usr/local/bin/opencode），只读挂载
 #   OPENCODE_AUTH    auth.json 路径（默认 ~/.local/share/opencode/auth.json）
 #                    —— 整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不做卷挂载
-#   DOCKER_RUN_ARGS  追加给 docker run 的参数（默认 --network host：本用例需访问
-#                    dnf 源 / github / rsproxy；白名单: --cpus* / --memory*
-#                    / --pids-limit* / --rm / --name=* / --network=host
-#                    / --network=bridge，其余一律拒绝）
+#   DOCKER_RUN_ARGS  追加给 docker run 的参数（默认 --network=host：本用例需访问
+#                    dnf 源 / github / rsproxy；网络开关一律等号形式。白名单:
+#                    --cpus* / --memory* / --pids-limit* / --rm / --name=*
+#                    / --network=host / --network=bridge，其余一律拒绝）
 # =============================================================================
 set -uo pipefail
 
@@ -30,14 +30,15 @@ done
 
 BIN="${OPENCODE_BIN:-/usr/local/bin/opencode}"
 AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
-RUN_ARGS="${DOCKER_RUN_ARGS:---network host}"
+DEFAULT_RUN_ARGS="--network=host"
+RUN_ARGS="${DOCKER_RUN_ARGS:-${DEFAULT_RUN_ARGS}}"
 
 # fail-closed：opencode 二进制与 auth.json 必须存在（后续整文件 base64 注入，不挂载）
 [ -e "${BIN}" ]  || { echo "错误: opencode 二进制不存在 ${BIN}" >&2; exit 1; }
 [ -e "${AUTH}" ] || { echo "错误: opencode auth.json 不存在 ${AUTH}" >&2; exit 1; }
 
-# RUN_ARGS 白名单过滤：仅允许资源限制与网络开关（本用例默认 --network host，
-# 因 agent 需访问 dnf 源 / github / rsproxy 完成安装与编译）
+# RUN_ARGS 白名单过滤：仅允许资源限制与网络开关（本用例默认 --network=host，
+# 因 agent 需访问 dnf 源 / github / rsproxy 完成安装与编译；网络开关一律等号形式）
 RUN_ARGS_FILTERED=()
 for tok in ${RUN_ARGS}; do
     case "${tok}" in
@@ -45,9 +46,17 @@ for tok in ${RUN_ARGS}; do
             RUN_ARGS_FILTERED+=("${tok}")
             ;;
         *)
-            echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}" >&2
+            echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}（网络开关请用等号形式 --network=host / --network=bridge）" >&2
             exit 1
             ;;
+    esac
+done
+
+# 自检：默认值本身必须能通过白名单（fail-closed，防止后续改动让二者再度互斥）
+for tok in ${DEFAULT_RUN_ARGS}; do
+    case "${tok}" in
+        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=host|--network=bridge) ;;
+        *) echo "错误: RUN_ARGS 默认值未通过白名单: ${tok}" >&2; exit 1 ;;
     esac
 done
 
