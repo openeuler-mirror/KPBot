@@ -67,6 +67,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | `agentenv-pvspinlock` | ARM Guest/Host 半虚拟化锁等待与唤醒优化 |
 | `agentenv-kernel-hz` | 并发恢复场景 HZ 调优及调度延迟验证 |
+| `agentenv-snapshot-fs` | 快照写入路径与文件系统档位调优（ext4 慢路径识别、XFS 迁移） |
 | `agentenv-cluster-tlbi` | cluster 布局与 TLBI 范围控制联合分析 |
 
 安装、ARM 服务器只读采集和验证范围见 [AgentENV 技能包说明](skills/kptools-agentenv-tuning/README.md)。

@@ -67,6 +67,39 @@
         "按实际机制及依赖设计单项与组合对照，不以其他调参替代被测项",
         "组合对照保持共同负载和其余设置不变，结果取自实际测量"
       ]
+    },
+    {
+      "id": 21,
+      "prompt": "AgentENV 快照创建在 Ubuntu 24.04 上偏慢，work_dir 位于 ext4。能否通过 ext4 挂载参数或 journal 调优开启 openEuler 那样的快路径？",
+      "expected_output": "kallsyms 无 ext4_iomap_buffered_write_ops 说明快路径代码未编译进内核，属代码缺失而非配置问题，挂载参数与 journal 调优无法开启；候选动作为 work_dir 迁移 XFS（内核原生 iomap），迁移后以微基准与 folio 构成确认档位，再测端到端收益，未实测 gain_pct 为 null。",
+      "files": [],
+      "expectations": [
+        "不给出挂载参数或 journal 调优开启快路径的建议",
+        "指出 work_dir 所在文件系统决定写入性能档位",
+        "端到端收益未实测时保持 null，不以参考区间代替实测"
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "fsbench pwrite 50MB 在 @16KB 与 @4KB 吞吐几乎相同，这说明什么？提高写入粒度能改善吗？",
+      "expected_output": "两者吞吐接近说明每事件固定开销主导，是经典 buffer_head 慢路径特征；提高粒度只减少事件数而不改变路径，收益有限。正确方向是切换写入路径（work_dir 指向 XFS 等大 folio 文件系统），并以 folio 构成（kpageflags COMPOUND 位）确认。",
+      "files": [],
+      "expectations": [
+        "识别固定开销主导的慢路径特征并解释 @4KB≈@16KB 的成因",
+        "不把提高应用写入粒度当作等价于切换文件系统路径的修复",
+        "用 folio 复合构成作为快路径生效的硬证据"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "把 AgentENV work_dir 换到 tmpfs 是否等价于 XFS 方案？",
+      "expected_output": "tmpfs 也有逐 4KB 页分配开销，批量写实测可能慢于 XFS，且无持久化；仅适用于可接受数据丢失的临时快照。等价性以当前项目实测为准，不能默认成立。",
+      "files": [],
+      "expectations": [
+        "指出 tmpfs 的持久化缺失与批量写开销，不默认等价",
+        "对临时快照场景给出 tmpfs 的适用边界",
+        "结论依赖当前项目 A/B 实测而非引用固定收益"
+      ]
     }
   ]
 }

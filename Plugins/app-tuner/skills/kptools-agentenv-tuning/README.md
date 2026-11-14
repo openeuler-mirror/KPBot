@@ -37,6 +37,9 @@ bash install.sh project opencode /path/to/project
 > 用 agentenv-kernel-hz 判断当前项目是否适合调整内核 HZ。
 > 我有 ublk_ctl_mutex 等待和调度跟踪数据。
 
+> 用 agentenv-snapshot-fs 判断快照创建慢是否为写入路径档位问题，
+> 并给出 work_dir 迁移 XFS 的方案与验证步骤。
+
 专项 Skill 可在实际安装后按其名称独立调用；入口不会把未安装的专项当作可用能力。
 
 ## ARM 服务器上的第一步验证

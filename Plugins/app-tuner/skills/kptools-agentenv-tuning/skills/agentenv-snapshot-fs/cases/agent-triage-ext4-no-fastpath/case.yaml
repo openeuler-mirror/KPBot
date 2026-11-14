@@ -1,0 +1,78 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 agentenv-snapshot-fs 完成 AgentENV 诊断
+#
+# 构建：
+#   docker build --network host -f skills/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/Dockerfile \
+#       -t kpbot/app-tuner-agentenv-snapshotfs-triage:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。任务是诊断而非代码优化：agent 读取合成证据 evidence/
+#（快照慢 + fsbench @4KB≈@16KB 固定开销主导 + kallsyms 无 ext4 iomap 符号 +
+# work_dir 在 ext4），考察能否识别 Ubuntu ext4 快路径为代码缺失（挂载参数
+# 不可开启）、work_dir 所在文件系统决定档位，并给出 XFS 迁移候选动作，
+# 按结果契约写 opt/report.json 且不虚构收益。
+# with/without 唯一差异是 skill 接入与 prompt 是否提及 skill。
+
+name: agent-triage-ext4-no-fastpath
+skill: agentenv-snapshot-fs
+tier: agent
+
+image: kpbot/app-tuner-agentenv-snapshotfs-triage:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount           # auth.json 只读卷挂载至 /run/secrets/，不进镜像/命令行/环境变量
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: checks_score
+  uplift: checks_score_with - checks_score_without
+
+build:
+  context: ../../../../../..
+  dockerfile: skills/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - 任意 Linux 主机（诊断用例，不依赖 ARM/沙箱硬件）
+  - opencode 二进制（运行时只读挂载，路径白名单校验）
+  - opencode auth.json（运行时只读卷挂载至 /run/secrets/opencode-auth.json）
+  - 容器可访问 deepseek API（模型 API 由运行环境代为调用）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: report_schema_ok
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: gain_pct_null
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: status_diagnostic_not_validated
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: ext4_path_missing
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: xfs_or_tier_recommended
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: no_mount_option_fix
+    expect: true

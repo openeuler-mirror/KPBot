@@ -1,0 +1,5 @@
+# Synthetic fixture for case testing; not real benchmark data.
+# fsbench.py pwrite 50MB, 3 rounds, median
+pwrite_50MB_16KB=21.8 ms (2.29 GB/s)
+pwrite_50MB_4KB=21.2 ms (2.36 GB/s)
+note: 16KB throughput ≈ 4KB throughput → per-event fixed cost dominated
