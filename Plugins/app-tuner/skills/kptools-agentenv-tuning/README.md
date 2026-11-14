@@ -103,6 +103,11 @@ AGENTENV_TEST_IMAGE=<镜像名> python3 -B -m unittest discover \
   -s Plugins/app-tuner/skills/kptools-agentenv-tuning/evals -p test_container_security.py -v
 ```
 
+该套件需对每个用例镜像分别执行一次（`AGENTENV_TEST_IMAGE` 指定被测镜像）。
+套件使用固定假 agent 报告驱动各用例的 verify.sh，其 findings 文本须覆盖所有
+用例的必需关键词；新增用例引入新的必需关键词时，需同步扩展
+`evals/test_container_security.py` 的夹具文本，否则套件会对新用例镜像假失败。
+
 用例镜像默认使用原有 openEuler 基础镜像；网络环境需要时可用 Docker 的
 `--build-arg BASE_IMAGE=<兼容镜像>` 指定镜像源。
 
