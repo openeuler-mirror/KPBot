@@ -1,0 +1,5 @@
+file	state	exit_code
+environment.txt	available	0
+kernel-config.txt	unknown	1
+cpu-pressure.txt	available	0
+perf-policy.txt	available	0

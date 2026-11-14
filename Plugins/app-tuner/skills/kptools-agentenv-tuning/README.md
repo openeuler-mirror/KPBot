@@ -34,6 +34,9 @@ bash install.sh project opencode /path/to/project
 > 用 kptools-agentenv-tuning 检查 AgentENV 并发恢复慢的问题。先检查 ARM 服务器环境，
 > 结合我的沙箱测试命令给出可验证的方案。
 
+> 用 agentenv-kernel-hz 判断当前项目是否适合调整内核 HZ。
+> 我有 ublk_ctl_mutex 等待和调度跟踪数据。
+
 专项 Skill 可在实际安装后按其名称独立调用；入口不会把未安装的专项当作可用能力。
 
 ## ARM 服务器上的第一步验证
