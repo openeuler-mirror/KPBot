@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "name": "CubeSandbox PVM 官方博客默认矩阵（2026-06-03）",
+  "template_create": {
+    "description": "基于 Template 创建并立即删除沙箱；rounds 是每个档位的独立外层重复次数",
+    "mode": "create-delete",
+    "warmup": 3,
+    "settle_secs": 3,
+    "cases": [
+      {"concurrency": 1, "requests": 20, "rounds": 1},
+      {"concurrency": 10, "requests": 200, "rounds": 1},
+      {"concurrency": 20, "requests": 300, "rounds": 1}
+    ]
+  },
+  "density": {
+    "description": "分批 create-only 并保持存活，记录 Host 内存；max_live 是硬上限",
+    "max_live": 20,
+    "max_batch": 10,
+    "min_available_mb": 2048,
+    "settle_secs": 2,
+    "batches": [
+      {"concurrency": 1, "requests": 1},
+      {"concurrency": 4, "requests": 4},
+      {"concurrency": 5, "requests": 5},
+      {"concurrency": 10, "requests": 10}
+    ]
+  },
+  "snapshot": {
+    "description": "N 个独立沙箱并发制作 Snapshot；-n 是每档正式测量轮数，脚本另做一次热身",
+    "settle_secs": 1,
+    "cases": [
+      {"concurrency": 1, "rounds": 5},
+      {"concurrency": 5, "rounds": 5},
+      {"concurrency": 10, "rounds": 5}
+    ]
+  },
+  "dirty_page": {
+    "description": "向 /dev/shm 写入指定 MiB 后制作 Snapshot，并从该 Snapshot 恢复",
+    "settle_secs": 0.5,
+    "cases": [
+      {"dirty_mb": 0, "rounds": 3},
+      {"dirty_mb": 10, "rounds": 3},
+      {"dirty_mb": 50, "rounds": 3},
+      {"dirty_mb": 100, "rounds": 3},
+      {"dirty_mb": 200, "rounds": 3},
+      {"dirty_mb": 500, "rounds": 3},
+      {"dirty_mb": 800, "rounds": 3},
+      {"dirty_mb": 1024, "rounds": 3}
+    ]
+  },
+  "snapshot_create": {
+    "description": "基于同一个 Snapshot 并发创建沙箱",
+    "settle_secs": 1,
+    "cases": [
+      {"concurrency": 1, "rounds": 3},
+      {"concurrency": 10, "rounds": 3},
+      {"concurrency": 20, "rounds": 3}
+    ]
+  },
+  "rollback": {
+    "description": "每个沙箱回滚到自己创建的 checkpoint；dirty_mb 为 0 时不额外写脏页",
+    "dirty_mb": 0,
+    "settle_secs": 1,
+    "cases": [
+      {"concurrency": 1, "rounds": 5},
+      {"concurrency": 5, "rounds": 5},
+      {"concurrency": 10, "rounds": 5}
+    ]
+  },
+  "clone": {
+    "description": "从一个运行中的源沙箱并发 Clone；num 是每轮 Clone 总数",
+    "dirty_mb": 0,
+    "settle_secs": 1,
+    "cases": [
+      {"num": 1, "concurrency": 1, "rounds": 5},
+      {"num": 10, "concurrency": 5, "rounds": 3},
+      {"num": 20, "concurrency": 10, "rounds": 3}
+    ]
+  },
+  "pause_resume": {
+    "description": "并发 Pause 后再并发 Resume；当前上游实现可能采用 full-memory-copy",
+    "settle_secs": 2,
+    "cases": [
+      {"concurrency": 1, "rounds": 5},
+      {"concurrency": 10, "rounds": 5}
+    ]
+  }
+}
