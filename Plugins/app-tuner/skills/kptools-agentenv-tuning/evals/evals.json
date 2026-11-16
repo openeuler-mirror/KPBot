@@ -82,12 +82,12 @@
     {
       "id": 22,
       "prompt": "fsbench pwrite 50MB 在 @16KB 与 @4KB 吞吐几乎相同，这说明什么？提高写入粒度能改善吗？",
-      "expected_output": "两者吞吐接近说明每事件固定开销主导，是经典 buffer_head 慢路径特征；提高粒度只减少事件数而不改变路径，收益有限。正确方向是切换写入路径（work_dir 指向 XFS 等大 folio 文件系统），并以 folio 构成（kpageflags COMPOUND 位）确认。",
+      "expected_output": "经典 buffer_head 路径按页处理，16KB 写也会拆成同样数量的 4KB 页；两种粒度吞吐接近说明每页固定开销主导，是慢路径特征。仅提高应用写入粒度不减少页数，收益有限；正确方向是切换写入路径（work_dir 指向 XFS 等大 folio 文件系统），并以 folio 构成（kpageflags COMPOUND 位）作为首要判据确认。",
       "files": [],
       "expectations": [
-        "识别固定开销主导的慢路径特征并解释 @4KB≈@16KB 的成因",
+        "识别每页固定开销主导的慢路径特征，并用页数不变解释 @4KB≈@16KB 的成因",
         "不把提高应用写入粒度当作等价于切换文件系统路径的修复",
-        "用 folio 复合构成作为快路径生效的硬证据"
+        "用 folio 复合构成作为快路径判定的首要证据"
       ]
     },
     {

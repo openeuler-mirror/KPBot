@@ -23,10 +23,13 @@ kallsyms 符号证据、写入微基准与 folio 构成、AgentENV 快照用例�
    iomap 大 folio 缓冲写快路径；不存在表示经典 buffer_head 路径。
    Ubuntu/上游 ext4 该路径未合入、目标代码未编译进内核——是代码缺失，
    没有挂载参数或 journal 调优可以开启，不要给出这类操作建议。
-3. 写入微基准（pwrite 50MB，@4KB 与 @16KB 对照）：两者吞吐接近说明
-   每事件固定开销主导（慢路径特征）；@16KB 显著快于 @4KB 说明字节成本
-   主导（快路径特征）。结合 folio 构成（kpageflags COMPOUND 位）确认：
-   全独立 4K 页 = 慢路径；出现复合 16KB folio = 快路径。
+3. 判据顺序以 folio 构成为首要证据（kpageflags COMPOUND 位）：全独立
+   4K 页 = 慢路径；出现复合 16KB folio = 快路径。写入微基准
+   （pwrite 50MB，@4KB 与 @16KB 对照）作旁证：经典 buffer_head 路径
+   按页处理，16KB 写也会拆成同样数量的 4KB 页，两种粒度吞吐接近说明
+   每页固定开销主导（慢路径特征）；@16KB 显著快于 @4KB 说明 folio
+   粒度摊薄了每字节成本（iomap 大 folio 快路径特征）。据此，仅提高
+   应用写入粒度不减少页数，在慢路径上几乎不带来收益。
 4. 排除非因素后再归因写路径：同盘型号、页大小、ext4 块大小、journal 特性、
    挂载参数、内存带宽——这些对齐时差异才指向内核写路径实现。
 5. 跨机器对比前对齐系统税（如 `CONFIG_RANDOMIZE_KSTACK_OFFSET` 的
