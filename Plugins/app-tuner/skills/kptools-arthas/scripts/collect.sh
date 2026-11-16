@@ -118,6 +118,23 @@ else
     JAR=$(find_jar) || { echo "ERROR: arthas-boot.jar not found. 运行 bash scripts/deploy.sh 安装，或 --jar 指定路径" >&2; exit 2; }
 fi
 
+# jar 执行前完整性校验：标准路径（~/.arthas/ / /opt/arthas/）下的 jar 做官方摘要
+# 硬校验，不匹配即拒绝执行（防被替换后静默 java -jar）；显式 --jar / ARTHAS_BOOT_JAR
+# 指定的非标准路径仅 NOTICE 留痕（操作者自担）。常量与 deploy.sh 同步维护。
+OFFICIAL_SHA256="94e63f4b38dc1c54316ffc1ecb0d8f5b868ade4f285094c351113aeb0113ee19"
+jar_sha() { sha256sum "$1" | awk '{ print $1 }'; }
+is_std_jar() { [ "$1" = "$HOME/.arthas/arthas-boot.jar" ] || [ "$1" = "/opt/arthas/arthas-boot.jar" ]; }
+if is_std_jar "$JAR"; then
+    ACTUAL_JAR_SHA="$(jar_sha "$JAR")"
+    if [ "$ACTUAL_JAR_SHA" != "$OFFICIAL_SHA256" ]; then
+        echo "ERROR: ${JAR} sha256 与官方分发摘要不匹配（got=${ACTUAL_JAR_SHA}），拒绝执行" >&2
+        echo "       处置：删除该文件后重跑 deploy.sh 重新下载，或确认版本后更新脚本内 OFFICIAL_SHA256 常量" >&2
+        exit 2
+    fi
+else
+    echo "NOTICE: 使用显式指定 jar ${JAR}（sha256=$(jar_sha "$JAR")），非标准路径不做官方摘要校验" >&2
+fi
+
 # uid 预检（仅告警，root 不受限）
 if [ -r "/proc/$PID/status" ]; then
     TUID=$(awk '/^Uid:/{print $2}' "/proc/$PID/status" 2>/dev/null || echo "")

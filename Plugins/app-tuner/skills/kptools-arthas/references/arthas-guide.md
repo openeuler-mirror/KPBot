@@ -22,15 +22,14 @@ Arthas 是 Alibaba 开源的 Java 运行时观测工具：attach 运行中的 JV
 bash scripts/deploy.sh
 ```
 
-下载 arthas-boot.jar 到 `~/.arthas/arthas-boot.jar`（来源 `https://arthas.aliyun.com/arthas-boot.jar`，可用 `ARTHAS_BOOT_URL` 覆盖）。
+下载 arthas-boot.jar 到 `~/.arthas/arthas-boot.jar`（官方源 `https://arthas.aliyun.com/arthas-boot.jar`）。下载的可执行产物先校验再 `java -jar` 执行：
 
-下载后执行 sha256 完整性校验（下载的可执行产物先校验再 `java -jar` 执行）：
+- 官方源 URL 与期望 sha256 为脚本内常量（arthas-boot 4.3.5），不可被 `ARTHAS_BOOT_URL` / `ARTHAS_BOOT_SHA256` 环境变量覆盖（调用方多为 agent，可覆盖的期望摘要会使校验退化为自证）
+- 标准路径（`~/.arthas/` / `/opt/arthas/`）下的既有 jar 在 deploy/collect 执行前同样硬校验，不匹配即拒绝执行；显式 `--jar` / `ARTHAS_BOOT_JAR` 指定的非标准路径仅 NOTICE 留痕
+- 上游发布新版本后摘要不再匹配 → 安装/执行失败并提示，属预期 fail-closed 行为；确认升级后同步更新 deploy.sh 与 collect.sh 内的 OFFICIAL_SHA256 常量及 agent 用例 Dockerfile 的摘要常量
+- 完全离线环境：手动放置官方 arthas-boot.jar 到 `~/.arthas/` 或 `/opt/arthas/`（执行前会做摘要校验）
 
-- 默认校验脚本内固定的官方 arthas-boot 4.3.5 摘要常量
-- 覆盖 `ARTHAS_BOOT_URL` 时必须同时提供 `ARTHAS_BOOT_SHA256`（fail-closed，拒绝任意来源免校验执行）
-- 上游发布新版本后默认摘要不再匹配 → 安装失败并提示，属预期 fail-closed 行为；确认升级后同步更新 deploy.sh 与 agent 用例 Dockerfile 内的摘要常量
-
-容器镜像构建（cases/agent-arthas-trigger/Dockerfile）同样固定摘要常量，摘要不匹配直接构建失败。
+容器镜像构建（cases/agent-arthas-trigger/Dockerfile）同用常量（URL/摘要不做 ARG），摘要不匹配直接构建失败。
 
 ### 2.2 首次 attach 的完整包下载
 

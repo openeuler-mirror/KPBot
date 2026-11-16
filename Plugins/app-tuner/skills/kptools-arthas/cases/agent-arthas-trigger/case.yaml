@@ -9,7 +9,7 @@ tier: agent
 
 image: kpbot/app-tuner-agent-agent-arthas-trigger:1.0-openeuler24.03
 model: opencode/glm-5.3-flash-free
-auth: runtime_mount
+auth: env_injection         # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不做 -v 挂载
 
 ab:
   conditions: [with, without]
@@ -27,9 +27,10 @@ entrypoint: ["/workspace/entrypoint.sh"]
 
 env_requires:
   - opencode 二进制（运行时挂载；run_ab.sh fail-closed + realpath 白名单 + ELF 魔数校验）
-  - opencode auth.json + 配置目录 ~/.config/opencode（运行时挂载，run_ab.sh 白名单校验）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不挂载；
+    entrypoint 解码到 agent 隔离 HOME 下 600 权限、运行后即删）
   - 容器默认 bridge 网络访问模型 API（DOCKER_RUN_ARGS 仅白名单参数，--network host 被拒绝）；
-    arthas 完整包已在镜像构建期预热（含 arthas-core.jar 缓存断言）
+    arthas 完整包已在镜像构建期以非 root 用户预热（含 arthas-core.jar 缓存断言）
 
 env_vars:
   MODEL: opencode/glm-5.3-flash-free

@@ -2,14 +2,15 @@
 # =============================================================================
 # A/B 对照运行器（依 docs/case-spec.md §5）：with/without 各跑一次，输出客观对照表。
 # 环境变量处理依 docs/agent-case-security-notes.md 规则 7：
-# fail-closed + realpath 白名单 + BIN 文件类型校验 + DOCKER_RUN_ARGS 白名单。
+# fail-closed + realpath 白名单 + BIN 文件类型校验 + DOCKER_RUN_ARGS 白名单；
+# 凭证注入依规则 1：auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不做 -v 挂载。
 #
 # 用法:
 #   ./run_ab.sh [--save <目录>] [<image>]
 # 环境变量:
-#   OPENCODE_BIN      opencode 二进制路径（默认 /usr/local/bin/opencode）
+#   OPENCODE_BIN      opencode 二进制路径（默认 /usr/local/bin/opencode），只读挂载
 #   OPENCODE_AUTH     auth.json 路径（默认 ~/.local/share/opencode/auth.json）
-#   OPENCODE_CONFIG   opencode 配置目录（默认 ~/.config/opencode）
+#                     —— 整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不挂载
 #   DOCKER_RUN_ARGS   追加给 docker run 的参数（默认为空；白名单:
 #                     --cpus* / --memory* / --pids-limit* / --rm / --name=*
 #                     / --network=bridge / --read-only / --tmpfs=*，
@@ -32,14 +33,11 @@ done
 # (5) 默认值必须是 Linux 真实路径（不得为 Windows 风格 .exe）
 BIN="${OPENCODE_BIN:-/usr/local/bin/opencode}"
 AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
-CFG="${OPENCODE_CONFIG:-$HOME/.config/opencode}"
 RUN_ARGS="${DOCKER_RUN_ARGS:-}"
 
 # (1) fail-closed：路径不存在直接退出，而非警告后继续
-for path in "${BIN}" "${AUTH}"; do
-    [ -e "${path}" ] || { echo "错误: 路径不存在 ${path}" >&2; exit 1; }
-done
-[ -e "${CFG}" ] || { echo "错误: opencode 配置目录不存在 ${CFG}" >&2; exit 1; }
+[ -e "${BIN}" ] || { echo "错误: opencode 二进制不存在 ${BIN}" >&2; exit 1; }
+[ -e "${AUTH}" ] || { echo "错误: opencode auth.json 不存在 ${AUTH}" >&2; exit 1; }
 
 # (2) realpath 解析 + 白名单前缀（拒绝符号链接绕过与任意路径注入 docker -v）
 AUTH="$(realpath -e "${AUTH}")" || exit 1
@@ -48,16 +46,6 @@ case "${AUTH}" in
         ;;
     *)
         echo "错误: opencode auth.json 路径不在白名单内: ${AUTH}" >&2
-        exit 1
-        ;;
-esac
-
-CFG="$(realpath -e "${CFG}")" || exit 1
-case "${CFG}" in
-    "$HOME"/.config/opencode|/etc/opencode)
-        ;;
-    *)
-        echo "错误: opencode 配置目录不在白名单内: ${CFG}" >&2
         exit 1
         ;;
 esac
@@ -97,13 +85,15 @@ done
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# 凭证整文件 base64 经 env 注入（避免多行 JSON 破坏 docker -e，且不做卷挂载）
+AUTH_JSON_B64="$(base64 -w0 "${AUTH}")"
+
 for mode in with without; do
     echo "==> SKILL_MODE=${mode}"
     cid=$(docker run -d ${RUN_ARGS_FILTERED[@]+"${RUN_ARGS_FILTERED[@]}"} \
         -e SKILL_MODE=${mode} -e MODEL="${MODEL:-opencode/glm-5.3-flash-free}" \
+        -e "OPENCODE_AUTH_JSON=${AUTH_JSON_B64}" \
         -v "${BIN}":/usr/local/bin/opencode:ro \
-        -v "${AUTH}":/root/.local/share/opencode/auth.json:ro \
-        -v "${CFG}":/root/.config/opencode:ro \
         "${IMAGE}") || { echo "docker run 失败" >&2; exit 1; }
     docker wait "${cid}" >/dev/null
     docker inspect -f '{{.State.ExitCode}}' "${cid}" > "${TMP}/${mode}.exit"
@@ -116,6 +106,34 @@ for mode in with without; do
     fi
     docker rm "${cid}" >/dev/null
 done
+
+# --save 回拷产物做凭证剔除：避免凭证经日志/结果落盘到宿主（更不可进仓库）
+if [ -n "${SAVE_DIR}" ]; then
+    python3 - "${SAVE_DIR}" "${AUTH_JSON_B64:-}" <<'PY'
+import os, re, sys
+save, blob = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "")
+pat = re.compile(r'("(?:access_token|api[_-]?key|secret|token|password|key)"\s*:\s*")[^"]*(")', re.I)
+skey = re.compile(r'sk-[A-Za-z0-9_\-]{8,}')
+for name in sorted(os.listdir(save)):
+    p = os.path.join(save, name)
+    if not os.path.isfile(p):
+        continue
+    try:
+        s = open(p, encoding="utf-8", errors="ignore").read()
+    except Exception:
+        continue
+    t = s
+    if blob:
+        t = t.replace(blob, "***REDACTED***")
+    t = pat.sub(r'\1***REDACTED***\2', t)
+    t = skey.sub("***REDACTED***", t)
+    if t != s:
+        open(p, "w", encoding="utf-8").write(t)
+        print("[redact] %s: 已剔除凭证串" % name)
+PY
+fi
+
+unset AUTH_JSON_B64
 
 python3 - "${TMP}" <<'PY'
 import json, os, sys
@@ -136,3 +154,17 @@ print("|-" + "-|-".join("-" * len(k) for k in keys) + "-|")
 for d in rows:
     print("| " + " | ".join(str(d.get(k, "")) for k in keys) + " |")
 PY
+
+# ---- 取证完整性守卫：任一条件的 result.json 缺失即以非 0 退出 ----
+# 容器在取证（docker inspect / docker cp）完成前退出或被删除（含镜像损坏）时，
+# 上面的表格会以空串兜底呈现——不得让这种“无证据运行”以退出码 0 冒充有效 A/B 对照。
+EVIDENCE_FAILED=0
+for mode in with without; do
+    if [ ! -s "${TMP}/${mode}.json" ]; then
+        echo "错误: ${mode}: result.json 缺失或为空，A/B 证据不完整（容器可能在取证前退出或镜像已过期）" >&2
+        EVIDENCE_FAILED=1
+    fi
+done
+if [ "${EVIDENCE_FAILED}" = "1" ]; then
+    exit 1
+fi

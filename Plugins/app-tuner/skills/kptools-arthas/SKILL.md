@@ -88,6 +88,7 @@ bash scripts/collect.sh -p <PID> --preset cpu --shutdown
 - attach 权限：须与目标 JVM 同 uid（或 root）；容器内须进入目标进程同一容器（`docker exec`/`kubectl exec`/`nsenter`），不支持跨容器 attach
 - trace/watch/monitor/tt 基于字节码增强，有观测开销：生产必须 `-n` 限次数、精确匹配类/方法、短窗口；采完 `shutdown`
 - `-c` 按 `;` 拆分逐条 attach，单条命令内不要使用含 `;` 的 OGNL 表达式（拆成多次采集）
+- jar 完整性：官方源与 sha256 摘要为脚本内常量（arthas-boot 4.3.5），不做环境覆盖；标准路径（`~/.arthas/` / `/opt/arthas/`）下的 jar 执行前硬校验，不匹配即拒绝（换版本须更新脚本常量）
 - `heapdump --live` 触发 Full GC + STW，仅内存分析取证时使用；dump 文件与堆同量级
 - `vmtool`/部分 ognl 查询需 `options unsafe true`，临时开启、用完恢复
 - JDK 8 的 tools.jar 由 arthas-boot 自动适配；JDK 8-21 为验证范围，更老 JDK 不承诺

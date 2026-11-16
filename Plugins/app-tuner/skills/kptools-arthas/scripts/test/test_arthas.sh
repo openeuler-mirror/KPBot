@@ -103,34 +103,43 @@ assert_contains "$output" "--prewarm" "AT-002: 帮助含 --prewarm（离线预�
 
 if command -v java &>/dev/null && [ -f "$HOME/.arthas/arthas-boot.jar" ]; then
     output=$(bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
-    assert_success $rc "AT-002: 已安装时 deploy 幂等退出 0"
-    assert_contains "$output" "already installed" "AT-002: 报告已安装"
+    HOST_JAR_SHA="$(sha256sum "$HOME/.arthas/arthas-boot.jar" | awk '{print $1}')"
+    if [ "$HOST_JAR_SHA" = "94e63f4b38dc1c54316ffc1ecb0d8f5b868ade4f285094c351113aeb0113ee19" ]; then
+        assert_success $rc "AT-002: 官方版本已安装时 deploy 幂等退出 0"
+        assert_contains "$output" "already installed" "AT-002: 报告已安装"
+        assert_contains "$output" "sha256 verified" "AT-002: 既有 jar 校验通过留痕"
+    else
+        assert_equal 1 $rc "AT-002: 本机 jar 非官方摘要 → 拒绝执行（fail-closed）"
+        assert_contains "$output" "不匹配" "AT-002: 提示摘要不匹配"
+    fi
 else
     skip "AT-002: 本机无 java/arthas，安装路径需网络，跳过幂等检查"
 fi
 
-echo "  AT-002b/c/d: 下载完整性校验（sha256 fail-closed）"
-FAKEHOME="$TEST_RESULTS_DIR/fakehome"; mkdir -p "$FAKEHOME"
-if [ -f /opt/arthas/arthas-boot.jar ]; then
-    skip "AT-002b/c/d: 环境存在 /opt/arthas 系统级安装，跳过下载路径用例"
-elif ! command -v curl >/dev/null 2>&1; then
-    skip "AT-002b/c/d: 无 curl，跳过下载校验用例"
+echo "  AT-002b/c/d: 信任锚与既有 jar 校验（sha256 fail-closed）"
+FAKEHOME="$TEST_RESULTS_DIR/fakehome"; mkdir -p "$FAKEHOME/.arthas"
+echo "  AT-002b: ARTHAS_BOOT_URL / ARTHAS_BOOT_SHA256 覆盖一律拒绝"
+output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file:///nonexistent.jar" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+assert_equal 3 $rc "AT-002b: 设置 ARTHAS_BOOT_URL → 3"
+assert_contains "$output" "不再支持覆盖" "AT-002b: 提示信任锚不可覆盖"
+output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_SHA256="deadbeef" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+assert_equal 3 $rc "AT-002b: 设置 ARTHAS_BOOT_SHA256 → 3"
+
+echo "  AT-002c: 标准路径既有 jar 摘要不匹配 → 拒绝"
+printf 'tampered-jar-bytes' > "$FAKEHOME/.arthas/arthas-boot.jar"
+output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+assert_equal 1 $rc "AT-002c: 既有 jar 非官方摘要 → 1"
+assert_contains "$output" "不匹配" "AT-002c: 提示摘要不匹配"
+
+echo "  AT-002d: 标准路径既有 jar 摘要匹配 → 幂等通过"
+if [ -f "$HOME/.arthas/arthas-boot.jar" ] \
+   && [ "$(sha256sum "$HOME/.arthas/arthas-boot.jar" | awk '{print $1}')" = "94e63f4b38dc1c54316ffc1ecb0d8f5b868ade4f285094c351113aeb0113ee19" ]; then
+    cp "$HOME/.arthas/arthas-boot.jar" "$FAKEHOME/.arthas/arthas-boot.jar"
+    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+    assert_equal 0 $rc "AT-002d: 官方 jar 既有安装 → 0"
+    assert_contains "$output" "sha256 verified" "AT-002d: 报告已校验"
 else
-    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file:///nonexistent.jar" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
-    assert_equal 3 $rc "AT-002b: 覆盖 ARTHAS_BOOT_URL 未配对 SHA256 → 3"
-    assert_contains "$output" "必须同时提供 ARTHAS_BOOT_SHA256" "AT-002b: fail-closed 提示配对摘要"
-
-    printf 'fake-jar-bytes' > "$TEST_RESULTS_DIR/fake-boot.jar"
-    WRONG_SHA="$(printf 'other-content' | sha256sum | awk '{print $1}')"
-    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file://$TEST_RESULTS_DIR/fake-boot.jar" ARTHAS_BOOT_SHA256="$WRONG_SHA" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
-    assert_equal 1 $rc "AT-002c: 摘要不匹配 → 1 且产物删除"
-    [ ! -e "$FAKEHOME/.arthas/arthas-boot.jar" ]
-    assert_success $? "AT-002c: 校验失败产物已清理"
-
-    RIGHT_SHA="$(sha256sum "$TEST_RESULTS_DIR/fake-boot.jar" | awk '{print $1}')"
-    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file://$TEST_RESULTS_DIR/fake-boot.jar" ARTHAS_BOOT_SHA256="$RIGHT_SHA" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
-    assert_equal 0 $rc "AT-002d: 配对摘要匹配 → 0"
-    assert_contains "$output" "sha256 verified" "AT-002d: 报告已校验安装"
+    skip "AT-002d: 本机无官方 4.3.5 jar（需网络下载），跳过"
 fi
 
 # =============================================================================
@@ -230,6 +239,20 @@ else
     kill "$FAKE_JAVA_GLOB" 2>/dev/null; wait "$FAKE_JAVA_GLOB" 2>/dev/null
 fi
 
+echo "  AT-010: collect 标准路径 jar 摘要不匹配 → 拒绝执行"
+if ! command -v java >/dev/null 2>&1; then
+    skip "AT-010: 需 java（jar 校验用例）"
+else
+    FHOME2="$TEST_RESULTS_DIR/fakehome2"; mkdir -p "$FHOME2/.arthas"
+    printf 'tampered-jar' > "$FHOME2/.arthas/arthas-boot.jar"
+    bash -c 'exec -a java sleep 15' & FK2=$!
+    sleep 0.5
+    output=$(HOME="$FHOME2" bash "$SCRIPTS/collect.sh" -p "$FK2" -c "version" 2>&1); rc=$?
+    assert_equal 2 $rc "AT-010: 标准路径 jar 非官方摘要 → 2"
+    assert_contains "$output" "拒绝执行" "AT-010: 提示拒绝执行"
+    kill "$FK2" 2>/dev/null; wait "$FK2" 2>/dev/null
+fi
+
 # =============================================================================
 # 5. 端到端冒烟（AR 组：需 java + javac + arthas-boot.jar + 可联网首次 attach）
 # =============================================================================
@@ -239,6 +262,10 @@ CAN_SMOKE=1
 command -v java >/dev/null 2>&1      || CAN_SMOKE=0
 command -v javac >/dev/null 2>&1     || CAN_SMOKE=0
 [ -f "$HOME/.arthas/arthas-boot.jar" ] || [ -n "${ARTHAS_BOOT_JAR:-}" ] || CAN_SMOKE=0
+# 依赖标准路径 jar 时还须官方摘要匹配，否则 collect 会按设计拒绝执行（非用例失败）
+if [ "$CAN_SMOKE" = "1" ] && [ -f "$HOME/.arthas/arthas-boot.jar" ] && [ -z "${ARTHAS_BOOT_JAR:-}" ]; then
+    [ "$(sha256sum "$HOME/.arthas/arthas-boot.jar" | awk '{print $1}')" = "94e63f4b38dc1c54316ffc1ecb0d8f5b868ade4f285094c351113aeb0113ee19" ] || CAN_SMOKE=0
+fi
 if [ "$CAN_SMOKE" = "1" ]; then
     echo "  AR-001: 批处理采集 + 预设 cpu"
     printf 'public class ArthasSleep { public static void main(String[] a) throws Exception { Thread.sleep(120000L); } }\n' \
