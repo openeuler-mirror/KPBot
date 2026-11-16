@@ -1,0 +1,81 @@
+{
+  "_readme": [
+    "复制到 run_dir 后逐项填写；不要保留尖括号占位符。",
+    "身份字段缺任意一项时，不得开始正式迁移或输出收益结论。",
+    "dirty 必须是布尔值；commit 必须是完整或可解析的 SHA。",
+    "acceptance 中的所有门限必须可从冻结基线复现。"
+  ],
+  "schema_version": "1.0",
+  "migration_id": "<unique-id>",
+  "engine": "<faiss|diskann|other>",
+  "source": {
+    "version": "<source-engine-version>",
+    "commit": "<source-commit>",
+    "dirty": false,
+    "opt_set": {
+      "patches": ["<patch-file-or-id>"],
+      "macros": ["<MACRO_NAME>"],
+      "non_macro_changes": ["<path::symbol>"],
+      "build_changes": ["<cmake-option-or-flag>"]
+    }
+  },
+  "target": {
+    "version": "<target-engine-version>",
+    "commit": "<target-commit>",
+    "dirty": false,
+    "baseline": {
+      "baseline_id": "<frozen-baseline-id>",
+      "commit": "<baseline-commit>",
+      "build_config": "<build-config-ref>"
+    }
+  },
+  "scope": {
+    "algorithms": ["<engine-algorithm-family>"],
+    "paths": ["load", "save"],
+    "metrics": ["L2", "IP"],
+    "dimensions": [128, 960, 1536, 3072],
+    "batch_sizes": [1, 2, 4, 8, 16]
+  },
+  "datasets": {
+    "matrix": ["<dataset-name>"],
+    "ground_truth": "<ground-truth-id>",
+    "query_params": {
+      "k": 10,
+      "nprobe": "<nprobe-or-na>",
+      "efSearch": "<efSearch-or-na>"
+    }
+  },
+  "environment": {
+    "cpu": "<cpu-model>",
+    "isa": "<neon|sve|sve2|scalar>",
+    "threads": 32,
+    "affinity": "<taskset-or-cpuset>",
+    "numa": "<numa-node>",
+    "compiler": "<compiler-and-version>",
+    "march": "<-march-value>",
+    "lto": false,
+    "blas": "<blas-library>",
+    "openmp": "<openmp-runtime>"
+  },
+  "acceptance": {
+    "recall_metric": "recall@10",
+    "recall_floor": ">= frozen baseline per dataset",
+    "performance_metric": "QPS",
+    "noise_floor": "<measured-aa-noise>",
+    "abba_rounds": 2,
+    "per_dataset_floor": "<percent-or-absolute>"
+  },
+  "artifacts": {
+    "run_dir": "<run-dir>",
+    "matrix": "MIGRATION-MATRIX.md",
+    "handoff": "HANDOFF.md",
+    "gate_dirs": [
+      "G0-feature-off",
+      "G1-ut-st",
+      "G2-kernel-bitexact",
+      "G3-topk-dump",
+      "G4-recall",
+      "G5-perf"
+    ]
+  }
+}

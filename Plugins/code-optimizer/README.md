@@ -165,6 +165,11 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 
 三个技能复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`。安装和运行方式见 [DiskANN 快速入门](skills/diskann-optimize/quickstart.md)。
 
+### 向量数据库 (Vector DB)
+| 技能 | 描述 |
+|------|------|
+| `vector-db-optimization-migration` | 向量数据库/检索库跨版本优化迁移（引擎中立流程、Faiss/DiskANN 按需路由、资产分型、分层 patch、G0–G5 等价性门禁、同窗 ABBA） |
+
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |
 |------|------|
