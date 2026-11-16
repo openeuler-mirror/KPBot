@@ -30,6 +30,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pcap  # noqa: E402
+from private_io import prepare_output_dir, private_open
 import report  # noqa: E402
 
 RE_LINE = re.compile(r"\[TTFT_DEBUG\]\[(?P<kind>\w+)\]\s*(?P<body>.*)$")
@@ -216,7 +217,7 @@ def main() -> int:
                     help="纯计算时间用几个进程同时测。并行时进程之间互相挤占，测得的时间略长；要精确数字用 1")
     ap.add_argument("--no-html", action="store_true", help="不生成 join_report.html")
     a = ap.parse_args()
-    os.makedirs(a.out, exist_ok=True)
+    prepare_output_dir(a.out)
     if not a.p_log and not a.d_log:
         sys.exit("至少给一个 --p-log 或 --d-log")
 
@@ -280,7 +281,7 @@ def main() -> int:
                   "pure_bytes", "p_wait_ms", "d_wait_ms", "pure_err", "join_note"]
     base_cols = list(rows[0].keys()) if rows else []
     cols = [c for c in base_cols if c not in extra_cols] + extra_cols
-    with open(os.path.join(a.out, "requests_joined.csv"), "w", newline="", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "requests_joined.csv"), newline="") as f:
         w = csv.DictWriter(f, cols, extrasaction="ignore")
         w.writeheader()
         for r in rows:
@@ -310,7 +311,7 @@ def main() -> int:
     for k, rs in sorted(by_k.items(), key=lambda kv: -len(kv[1])):
         groups.append(dist_row(k, "kind", rs))
     gcols = list(groups[0].keys())
-    with open(os.path.join(a.out, "ttft_breakdown.csv"), "w", newline="", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "ttft_breakdown.csv"), newline="") as f:
         w = csv.DictWriter(f, gcols)
         w.writeheader()
         for g in groups:
@@ -335,13 +336,13 @@ def main() -> int:
                                                        if r.get(f"{side}_wait_ms") is not None and r[f"{side}_tokenize_ms"]], .5),
                                   "pure_mb_s": round(sum(r["pure_bytes"] for r in rs) / 2**20 /
                                                      (sum(r["pure_ms"] for r in rs) / 1000 or 1e-9), 2)})
-        with open(os.path.join(a.out, "tokenize_wait.csv"), "w", newline="", encoding="utf-8") as f:
+        with private_open(os.path.join(a.out, "tokenize_wait.csv"), newline="") as f:
             w = csv.DictWriter(f, ["bucket", "side", "n", "online_tokenize_p50", "online_tokenize_p90", "pure_p50",
                                    "wait_p50", "wait_p90", "wait_share_p50", "pure_mb_s"])
             w.writeheader()
             for x in wait_rows:
                 w.writerow({k: (round(v, 3) if isinstance(v, float) else v) for k, v in x.items()})
-    with open(os.path.join(a.out, "tokenizer_lines.csv"), "w", newline="", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "tokenizer_lines.csv"), newline="") as f:
         w = csv.DictWriter(f, ["side", "file", "line", "ts", "rid", "render_ms", "tokenize_ms", "n", "tokens", "chars"])
         w.writeheader()
         for x in p_lines + d_lines:
@@ -350,7 +351,7 @@ def main() -> int:
                "joined_p": joined_p, "joined_d": joined_d, "joined_tokenizer": joined_tok,
                "tokenizer_lines_have_rid": tokenizer_has_rid, "pure_computed": len(pure),
                "pure_jobs": a.jobs if pure else None}
-    with open(os.path.join(a.out, "join_summary.json"), "w", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "join_summary.json")) as f:
         json.dump(summary, f, ensure_ascii=False, indent=1)
     # 控制台
     print(f"[join] requests.csv {len(rows)} 行，其中 {len(rids)} 行有 request_id；P 日志 {p_n}，D 日志 {d_n}")
@@ -522,7 +523,7 @@ def write_html(path: str, rows: list[dict], ok: list[dict], groups: list[dict], 
     P.append("<p class='foot'>由 prompt_capture/tools/join_vllm_log.py 生成。字段定义见 docs/REFERENCE.md §7.9。</p>")
     doc = (f"<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
            f"<title>分词耗时与 TTFT 对接报告</title><style>{report.CSS}</style></head><body><main>{''.join(P)}</main><script>{report.JS}</script></body></html>")
-    with open(path, "w", encoding="utf-8") as f:
+    with private_open(path) as f:
         f.write(doc)
 
 

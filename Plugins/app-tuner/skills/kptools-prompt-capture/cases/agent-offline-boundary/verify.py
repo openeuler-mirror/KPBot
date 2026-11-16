@@ -8,6 +8,7 @@ from pathlib import Path
 
 def verify(root):
     results = root / "results"
+    (results / "result.json").unlink(missing_ok=True)
     tools, skills = [], []
     trace = results / "trace.jsonl"
     if trace.exists():

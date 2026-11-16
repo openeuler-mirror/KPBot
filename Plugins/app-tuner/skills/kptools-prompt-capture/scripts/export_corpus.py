@@ -23,6 +23,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pcap  # noqa: E402
+from private_io import prepare_output_dir, private_open
 
 REPLAY_HEADERS = ("user-agent", "x-session-id", "x-session-affinity", "x-parent-session-id", "x-title",
                   "http-referer")
@@ -86,8 +87,8 @@ def main() -> int:
     seen: set[str] = set()
     n = nbytes = skipped = 0
     src_count = {"gold": 0, "offline": 0}
-    tmp = a.out + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as out, pcap.Workers(a.jobs, make_renderer, init, tag="export") as w:
+    prepare_output_dir(os.path.dirname(os.path.abspath(a.out)))
+    with private_open(a.out) as out, pcap.Workers(a.jobs, make_renderer, init, tag="export") as w:
         for lines, sc in w.imap(export_lines, jobs()):
             if lines is None:
                 skipped += 1
@@ -106,7 +107,6 @@ def main() -> int:
                     break
             if a.max_mb and nbytes >= a.max_mb * 2**20:
                 break
-    os.replace(tmp, a.out)
     extra = f"（golden {src_count['gold']}，离线渲染 {src_count['offline']}）" if a.format == "rendered" else ""
     print(f"导出 {n} 条、文本 {nbytes / 2**20:.2f} MB -> {a.out}{extra}；候选 {len(cand)}，"
           f"缺内容跳过 {skipped}", file=sys.stderr)

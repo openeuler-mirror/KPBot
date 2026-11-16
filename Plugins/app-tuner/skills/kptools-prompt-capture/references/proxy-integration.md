@@ -84,3 +84,28 @@ python3 -m unittest discover -s <技能目录>/tests -v
 ```
 
 测试使用临时目录和回环临时端口，不安装依赖。`cases/agent-offline-boundary/` 提供符合 KPBot case-spec 的 agent with/without 对照用例；`evals/` 提供 Python proxy 适配与不支持语言场景。agent 用例需要已有的模型工具和运行时凭证，执行前确认模型调用与镜像使用权限。
+
+该 A/B 用例比较相同分析工具条件下的技能指导效果，不比较整个技能包是否可用。两臂均在 `/workspace/tools/` 获得相同的只读脚本和报告资源，并使用相同的两条分析命令；该目录不含 `SKILL.md` 或参考文档。仅 with 安装 `SKILL.md` 和 `references/`，without 不安装技能；两臂均不向 agent 提供评分用例或测试文件。
+
+agent 用例的 `run_ab.sh` 接收预先构建的镜像和新的结果目录：
+
+```bash
+OPENCODE_BIN=<Linux ELF 路径> OPENCODE_AUTH=<auth.json 路径> \
+  bash cases/agent-offline-boundary/run_ab.sh <镜像> <新结果目录>
+```
+
+二进制路径经 realpath 后限于 `/usr/local/bin/opencode`、系统 opencode 包目录及用户的 `.local/bin/`、`.local/share/opencode/`；认证文件限于用户 opencode 配置/数据目录或 `/etc/opencode/auth.json`。不存在、越界、非 ELF 路径均拒绝。设置 `OPENCODE_SHA256` 时必须与指纹一致。附加 Docker 参数仅接受 bridge/none 网络及 CPU、内存、进程数限制。
+
+只挂载单个认证文件至 root 专用的 `/run/secrets/`，不挂载整个宿主配置目录。临时客户端 HOME 在 `/workspace` 外，认证副本权限为 0600，结束时删除。非 root agent 的读文件策略禁止凭证和外部目录，shell 只允许两条固定的分析命令，两臂一致；不支持任意 shell、自定义宿主 provider 配置或外部目录读写。
+
+`docker_security.sh` 集中定义 capability、`no-new-privileges` 和资源限制，运行器与容器回归测试共同使用。保留的 `CHOWN` 供可信 supervisor 设置临时 HOME 和认证副本的归属，agent 进程仍按非 root 用户运行。
+
+复用已有本地 Linux 镜像运行相同权限配置的回归测试：
+
+```bash
+python3 tests/run_container_tests.py --image <已有镜像> --platform <镜像平台>
+```
+
+镜像需已有 Python 3、bash 和 sha256sum。测试不拉取镜像或安装依赖，源码只读挂载，网络关闭，完成或中断后删除本次容器。集成测试以 stub client 验证两臂的真实降权、工具执行、结果收集及评分，不调用模型；不能代替真实模型的 A/B 评测。
+
+agent 仅写 `/workspace/opt`。输入、技能、权限配置、验证器及其校验清单归 root 所有；运行前后校验评分链。可信运行器停止 agent 及其辅助进程后，只接收限定大小、归 agent 所有的普通文件，拒绝符号链接和硬链接，复制到 root 专用结果目录后验证。结果通过 `docker cp` 导出，不将宿主结果目录挂入容器。运行结束或中断时清理本次容器。

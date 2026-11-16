@@ -11,6 +11,7 @@ import collections
 import html
 import math
 import os
+from private_io import private_open
 import time
 
 import pcap
@@ -787,7 +788,7 @@ def write(path: str, rows: list[dict], sessions: list[dict], summ: list[tuple], 
               kpi(pct(ww), "", "词缓存命中率（跨请求）", "经过词缓存的片段中，缓存在请求之间保留时的命中比例", "sim"),
               kpi(pct(wc_), "", "词缓存命中率（仅请求内）", "经过词缓存的片段中，每个请求开始时清空缓存时的命中比例", "sim"),
               kpi(num(S.get(("tokenizer", "bytes_per_token")), 2), "字节", "每个 token 的字节数", "模板后文本的字节数 / token 数", "off"),
-              kpi(pct(S.get(("tokenizer", "incremental_new_token_share"))), "", "需重新处理的 token 占比", "与同线程上一请求的公共前缀之后的 token 数 / 全部 token 数；比较粒度 16 token", "off"),
+              kpi(pct(S.get(("tokenizer", "incremental_new_token_share"))), "", "需重新处理的 token 占比", "公共前缀之后的 token 数 / 有同线程上一请求且 token 可比较的请求的 token 数；比较粒度 16 token", "off"),
               kpi(num(S.get(("tokenizer", "pretokens_ge256b"))), "个", f"长度 ≥{num(args.cache_maxlen)} 字节的片段数", "不经过词缓存，每次出现均执行 BPE", "off")]
         P.append("<div class='kpis wide'>" + "".join(kt) + "</div>")
         if vd is not None and ww is not None:
@@ -867,7 +868,7 @@ def write(path: str, rows: list[dict], sessions: list[dict], summ: list[tuple], 
     P.append("</div><p class='foot'>由 prompt_capture/tools/analyze.py 生成。指标定义见 docs/REFERENCE.md §7。</p>")
     doc = (f"<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
            f"<title>Proxy 请求特征报告</title><style>{CSS}</style></head><body><main>{''.join(P)}</main><script>{JS}</script></body></html>")
-    with open(path, "w", encoding="utf-8") as f:
+    with private_open(path) as f:
         f.write(doc)
 
 

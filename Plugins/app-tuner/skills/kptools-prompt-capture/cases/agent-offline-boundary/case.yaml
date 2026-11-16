@@ -7,13 +7,14 @@ auth: runtime_mount
 ab:
   conditions: [with, without]
   metric: success
-  uplift: report objective results without performance inference
+  uplift: compare skill guidance with identical read-only analysis tools; not whole-package availability
 build:
   context: ../../../..
   dockerfile: skills/kptools-prompt-capture/cases/agent-offline-boundary/Dockerfile
-entrypoint: ["bash", "/workspace/entrypoint.sh"]
+entrypoint: ["bash", "/harness/entrypoint.sh"]
 env_requires:
-  - runtime-mounted opencode binary and read-only config/auth directory
+  - allowlisted Linux opencode ELF binary and a single auth.json file (OPENCODE_AUTH)
+  - built-in model provider; custom host configuration directories are not mounted
   - network access to the selected model API
 env_vars:
   MODEL: opencode/glm-5.3-flash-free

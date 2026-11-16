@@ -26,6 +26,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pcap  # noqa: E402
+from private_io import prepare_output_dir, private_open
 
 LEN_EDGES = [(1, "1"), (2, "2"), (3, "3"), (4, "4"), (8, "5-8"), (16, "9-16"), (32, "17-32"), (63, "33-63"),
              (127, "64-127"), (255, "128-255"), (10**9, ">=256")]
@@ -323,7 +324,7 @@ def main() -> int:
     a = ap.parse_args()
     if a.block % GRAIN:
         sys.exit(f"--block 必须是 {GRAIN} 的倍数")
-    os.makedirs(a.out, exist_ok=True)
+    prepare_output_dir(a.out)
     since, until = parse_time(a.since), parse_time(a.until)
     tk = TokStats(a) if a.tokenizer else None
 
@@ -634,7 +635,7 @@ def fmt(v):
 
 
 def write_csv(path: str, cols: list[str], rows: list[dict]) -> None:
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with private_open(path, newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
         for r in rows:
@@ -664,7 +665,7 @@ def write_outputs(a, rows, role_comp, tk, stats, t_pass1) -> None:
     sessions = build_sessions(rows)
     write_csv(os.path.join(a.out, "sessions.csv"), SESSION_COLS, sessions)
     summ = build_summary(rows, sessions, role_comp, tk, stats, t_pass1)
-    with open(os.path.join(a.out, "summary.csv"), "w", newline="", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "summary.csv"), newline="") as f:
         w = csv.writer(f)
         w.writerow(["section", "metric", "value", "unit", "note"])
         for s in summ:
@@ -906,7 +907,7 @@ def build_summary(rows, sessions, role_comp, tk, stats, t_pass1: float) -> list[
         tn = sum(r.get("tok_new") or 0 for r in tr if r.get("tok_new") is not None)
         tt = sum(r.get("_n_ids") or 0 for r in tr if r.get("tok_new") is not None)
         add("tokenizer", "incremental_new_token_share", round(tn / (tt or 1), 4) if tt else None, "fraction",
-            "相对同线程上一请求新增的 token 数 / 全部 token 数（比较粒度 16 token）；增量分词可减少的分词量上限为 1 减去该值")
+            "公共前缀之后的 token 数 / 有同线程上一请求且 token 可比较的请求的 token 数（比较粒度 16 token）；该范围内可减少的分词量上限为 1 减去该值")
         it = sum(r.get("ideal_cache_tokens") or 0 for r in tr)
         ptt = sum(r.get("prompt_tokens") or 0 for r in tr if r.get("ideal_cache_tokens") is not None)
         ctt = sum(r.get("cached_tokens") or 0 for r in tr if r.get("ideal_cache_tokens") is not None)

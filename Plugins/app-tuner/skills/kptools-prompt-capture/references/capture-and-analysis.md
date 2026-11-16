@@ -68,6 +68,8 @@ $PY "$S/scripts/capturectl.py" --config /data/pc/capture.json status --json
 
 基础分析无需模型，不读取权重。`DATA` 是分段目录（支持参考 FORMAT=1 的 jsonl/gz），`MODEL` 是本地 tokenizer 目录而非请求中的 model 别名。报告产物应写入新的 0700 目录。
 
+分析工具自动以 0700 创建输出目录，以 0600 创建产物。已有目录必须属于当前用户，且不能有组或其他用户权限；不满足时拒绝写入，不修改已有目录权限。已有产物或符号链接不覆盖，应改用新的输出目录。语料导出文件也采用相同限制。
+
 ```bash
 $PY "$S/scripts/analyze.py" DATA --out AN
 $PY "$S/scripts/session_view.py" DATA --out SV --top 3
@@ -92,6 +94,8 @@ $PY "$S/scripts/dump_requests.py" --help
 日志关联要求 TTFT_DEBUG 格式兼容且请求 ID 相同，报告中列出匹配数和总数。未匹配的请求不计算对应内部耗时。本技能不自动部署参考 vLLM 请求 ID 补丁。普通 proxy 未接入 P/D 钩子时，对应时延列为空，标注“未测”。
 
 `--jobs N` 用于并行内容分析，进程数应按空闲 CPU 设置。分词纯计算时间、吞吐和排队估计用于性能比较时使用 `--jobs 1`。离线重放缓存命中率与线上命中率分别标注；proxy 首块响应不一定包含首 token，P 往返包含排队与通信等时间，不是纯 prefill 耗时。
+
+会话报告中，`new_share` 和 `template_lost_share` 的分母为有同线程上一请求、且 token 可比较的请求的 token 总数，首请求不计入。`template_lost_share_total` 的分母为所有有 token 计数请求的 token 总数。HTML 与控制台的“占全部 token”使用后者；这些比例不是服务性能收益。
 
 ## 报告要求
 

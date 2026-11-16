@@ -35,6 +35,14 @@ def cli(*args):
                           capture_output=True, text=True, timeout=15)
 
 
+def wait_worker_count(path, expected, timeout=6):
+    deadline = time.monotonic() + timeout
+    while len(capturectl.active_state(path)["workers"]) != expected:
+        if time.monotonic() >= deadline:
+            raise AssertionError("expected workers did not publish their initial state")
+        time.sleep(0.05)
+
+
 @contextlib.contextmanager
 def mock_process(*args):
     proc = subprocess.Popen([sys.executable, str(ROOT / "tests/mock_proxy.py"), *map(str, args)],
@@ -494,6 +502,7 @@ class EndToEndTests(unittest.TestCase):
             with mock_process("--backend") as (_, backend_port):
                 with mock_process("--backend-port", backend_port, "--capture-config", path) as (_, port1):
                     with mock_process("--backend-port", backend_port, "--capture-config", path) as (_, port2):
+                        wait_worker_count(path, 2)
                         self.assertEqual(capturectl.wait_applied(path, 6), "ok")
                         for port in (port1, port2):
                             self.assertEqual(request(port, session="A")[0], 200)
@@ -521,6 +530,7 @@ class EndToEndTests(unittest.TestCase):
                     expected = [request(baseline_port, stream) for stream in (False, True)]
                 with mock_process("--backend-port", backend_port, "--capture-config", path) as (_, port1):
                     with mock_process("--backend-port", backend_port, "--capture-config", path) as (_, port2):
+                        wait_worker_count(path, 2)
                         self.assertEqual([request(port1, s) for s in (False, True)], expected)
                         config(path, enabled=True, stop_at_unix=time.time() + 30, text_rate=1)
                         self.assertEqual(capturectl.wait_applied(path, 6), "ok")

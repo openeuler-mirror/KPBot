@@ -25,6 +25,7 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import anatomy  # noqa: E402
 import pcap  # noqa: E402
+from private_io import prepare_output_dir, private_open
 
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 
@@ -223,6 +224,7 @@ def fleet_stats(sessions: list[dict]) -> dict:
         "new_share": round(new_sum / new_tot, 4) if new_tot else None, "new_sum": new_sum, "new_tot": new_tot,
         "template_lost": lost, "template_lost_req": n_lost_req,
         "template_lost_share": round(lost / new_tot, 4) if new_tot else None,
+        "template_lost_share_total": round(lost / n_tok_total, 4) if n_tok_total else None,
         "deltas": {k: dist(v) for k, v in deltas.items()},
         "tool_sizes": {k: dist(v) for k, v in sorted(tool_sizes.items(), key=lambda kv: -sum(kv[1]))},
         "call_sizes": {k: dist(v) for k, v in sorted(call_sizes.items(), key=lambda kv: -sum(kv[1]))},
@@ -302,8 +304,10 @@ def write_md(path: str, s: dict, texts: dict[str, str], mode: str) -> None:
               f"思考 {st(oe['reasoning'])}" + ("（客户端未回传思考）" if oe.get("reasoning_sent") is False else "") + f"，工具调用 {st(oe['tool_calls'])}")
         if r.get("msgs"):
             tok_unit = r.get("tok_attr")
-            hdr = "tok | 正文 | 思考 | 调用 | 标记" if tok_unit else "字符 | 正文(字符) | 思考(字符) | 调用(字符) | 标记(字符)"
-            w(f"\n| # | role | tool | {hdr} | 状态 | 预览 |\n|---|---|---|---|---|---|---|---|---|---|")
+            sizes = ["tok", "正文", "思考", "调用", "标记"] if tok_unit else [
+                "字符", "正文(字符)", "思考(字符)", "调用(字符)", "标记(字符)"]
+            columns = ["#", "role", "tool", *sizes, "状态", "预览"]
+            w("\n| " + " | ".join(columns) + " |\n|" + "|".join("---" for _ in columns) + "|")
             for m in r["msgs"]:
                 pv = m["preview"].replace("|", "\\|")[:90]
                 sz = (m["tok"], m["content"], m["reasoning"], m["calls"], m["markup"]) if tok_unit else \
@@ -341,7 +345,7 @@ def write_md(path: str, s: dict, texts: dict[str, str], mode: str) -> None:
             if skipped:
                 w(f"⟦与上一请求的公共前缀 {skipped} 个 token，未列出⟧")
             w("```")
-    with open(path, "w", encoding="utf-8") as f:
+    with private_open(path) as f:
         f.write("\n".join(L) + "\n")
 
 
@@ -410,7 +414,7 @@ def write_html(path: str, payload: dict) -> None:
 <title>会话分析报告</title><style>{css}</style></head><body><div id="app"></div>
 <script id="data" type="application/json">{data}</script>
 <script>{js}</script></body></html>"""
-    with open(path, "w", encoding="utf-8") as f:
+    with private_open(path) as f:
         f.write(doc)
 
 
@@ -453,7 +457,7 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=1,
                     help="并行进程数：每条请求的渲染、分词、片段归属放到子进程，结果与单进程相同（耗时列除外）")
     a = ap.parse_args()
-    os.makedirs(a.out, exist_ok=True)
+    prepare_output_dir(a.out)
     t0 = time.time()
     by = collect_sessions(a.data, a)
     chosen = pick(by, a)
@@ -504,7 +508,7 @@ def main() -> int:
         sessions.append(sd)
         file_id = hashlib.sha256(sid.encode("utf-8", "surrogatepass")).hexdigest()[:24]
         write_md(os.path.join(a.out, f"session_{file_id}.md"), sd, {**texts, **local}, a.md if a.include_text else "none")
-        with open(os.path.join(a.out, f"session_{file_id}.json"), "w", encoding="utf-8") as f:
+        with private_open(os.path.join(a.out, f"session_{file_id}.json")) as f:
             json.dump({"session": {k: v for k, v in sd.items() if k != "reqs"}, "requests": sd["reqs"]}, f,
                       ensure_ascii=False)
         for r in sd["reqs"]:
@@ -530,17 +534,17 @@ def main() -> int:
                 "status", "finish", "out_tok", "out_chars", "out_reasoning", "out_calls", "echo_content", "echo_reasoning",
                 "echo_tool_calls", "compact_for", "tok_src", "tok_attr", "match_vllm", "match_gold", "render_ms", "encode_ms",
                 "tools_changed", "unattributed", "error"]
-    with open(os.path.join(a.out, "session_requests.csv"), "w", newline="", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "session_requests.csv"), newline="") as f:
         w = csv.DictWriter(f, req_cols, extrasaction="ignore")
         w.writeheader()
         w.writerows(req_rows)
     msg_cols = ["session", "req_i", "req_id", "i", "role", "tool", "h", "status", "chars", "src_chars", "tok", "content",
                 "reasoning", "calls", "markup", "content_c", "reasoning_c", "calls_c", "markup_c", "reasoning_dropped", "preview"]
-    with open(os.path.join(a.out, "session_messages.csv"), "w", newline="", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "session_messages.csv"), newline="") as f:
         w = csv.DictWriter(f, msg_cols, extrasaction="ignore")
         w.writeheader()
         w.writerows(msg_rows)
-    with open(os.path.join(a.out, "fleet.json"), "w", encoding="utf-8") as f:
+    with private_open(os.path.join(a.out, "fleet.json")) as f:
         json.dump(fleet, f, ensure_ascii=False, indent=1)
     if not a.no_html:
         payload = {"meta": {"generated": tfmt(time.time()), "data": [os.path.abspath(p) for p in a.data],
@@ -570,9 +574,11 @@ def print_fleet(f: dict) -> None:
         if v:
             print(f"   {anatomy.KIND_LABEL[k]:<12} {v:>12,} {unit}  {v / tot:6.1%}")
     if f.get("new_share") is not None:
-        print(f"   需重新处理的 token 占比 {f['new_share']:.1%}；按消息缓存分词结果可减少的分词量上限 {1 - f['new_share']:.1%}")
+        print(f"   有同线程上一请求且 token 可比较的请求中，需重新处理的 token 占比 {f['new_share']:.1%}；"
+              f"该范围内按消息缓存分词结果可减少的分词量上限 {1 - f['new_share']:.1%}")
     if f.get("template_lost"):
-        print(f"   模板改写历史造成的需重新处理 token：{f['template_lost']:,}（占全部 token 的 {f['template_lost_share']:.1%}，"
+        total_share = f"{f['template_lost_share_total']:.1%}" if f.get("template_lost_share_total") is not None else "未测"
+        print(f"   模板改写历史造成的需重新处理 token：{f['template_lost']:,}（占有计数的全部 token 的 {total_share}，"
               f"占需重新处理 token 的 {f['template_lost'] / (f['new_sum'] or 1):.1%}；{f['template_lost_req']} 个请求）")
     if f.get("cache_hit") is not None:
         print(f"   vLLM 前缀缓存命中率 {f['cache_hit']:.1%}")

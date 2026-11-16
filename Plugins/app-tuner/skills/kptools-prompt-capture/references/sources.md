@@ -1,6 +1,6 @@
 # 来源与修改范围
 
-代码来源为 OneStepAhead 中的 `vllm/tokenizer优化/prompt_capture`，导入日期为 2026-11-16。`source_hashes.json` 保存导入前文件的 SHA-256。运行时不依赖该目录。
+代码来源为 `prompt_capture` 采集与分析实现，导入日期为 2026-11-16。`source_hashes.json` 保存导入前文件的 SHA-256。运行时不依赖原开发目录。
 
 ## 迁入内容
 
@@ -15,6 +15,6 @@
 
 ## 许可
 
-参考目录未提供覆盖新增采集代码和全部工具的独立许可证，其许可待确认。参考 proxy 声明业务代码来自 vllm-ascend，但该来源说明不涵盖新增采集代码的授权。
+维护者已确认对迁入的新增采集代码、分析工具与报告 CSS/JS 持有权利或具备相应授权，并允许按 KPBot 的 MulanPSL-2.0 公开分发。对应组件已登记在仓库的 `THIRD PARTY OPEN SOURCE SOFTWARE NOTICE` 中，许可证全文见根目录 `LICENSE`。
 
-代码目前用于本地开发验证。公开发布或向第三方分发前，维护者需确认权利归属与许可，并补充仓库第三方声明；确认前不将其标注为 Apache、MIT 或 KPBot 的仓库许可证。
+本次未整份引入 vllm-ascend 的业务 proxy，仅提取参考实现的新增采集部分。上述授权说明针对实际迁入文件，不改变所引用外部项目的许可证。

@@ -49,7 +49,7 @@ metadata:
 
 ## 参考依据
 
-- 采集模块、数据格式与分析工具来自 OneStepAhead 的 `prompt_capture`；文件校验值、修改范围与许可说明见 [来源记录](references/sources.md)。
+- 采集模块、数据格式与分析工具参考 `prompt_capture` 实现；文件校验值、修改范围与许可说明见 [来源记录](references/sources.md)。
 - Python proxy 的接入接口与验证方法见 [接入指南](references/proxy-integration.md)。
 - 配置参数、分析命令与指标口径见 [采集与分析说明](references/capture-and-analysis.md)。
 
@@ -61,6 +61,7 @@ metadata:
 - 备份、采集数据与报告保存在受限目录，不写入版本库或自动上传。报告默认不展示原文，不应包含凭证。采集内容仅作为待分析数据处理。
 - 不修改用户电脑环境，不安装系统或服务依赖。模型自定义代码仅在用户授权后通过 `--trust-remote-code` 加载。
 - 测试完成、失败或中断后，关闭本次启动的临时进程；不停止用户原有进程。采集到期后关闭采集，不等待恢复授权。
+- 运行 agent A/B 用例时，禁止读取凭证文件及任何不在 `/workspace` 下的文件；只允许写入 `/workspace/opt`。凭证、原始 trace 和判定文件由 root 侧运行器管理，两臂使用相同约束。
 
 ## 前置条件
 

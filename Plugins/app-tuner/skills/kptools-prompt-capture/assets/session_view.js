@@ -319,14 +319,14 @@
     const bullets = [];
     if (top3.length) bullets.push(`分词器处理的${ATTR ? ' token ' : '文本（按字符计）'}中，占比前三位的来源为${top3.map(k => `${KL[k]} ${B(P(F.by_kind[k] / tot))}`).join('、')}。`);
     else bullets.push('没有任何请求带来源构成：所分析的请求均不含全文，或全部渲染失败（见下方「注意」）。');
-    if (F.new_share != null) bullets.push(`需重新处理的 token（位于与同线程上一请求的公共前缀之后）占 ${B(P(F.new_share))}；其余 ${B(P(1 - F.new_share))} 位于公共前缀内。`);
-    if (F.template_lost) bullets.push(`模板改写历史造成 ${B(N(F.template_lost))} 个 token 需重新处理，其所属消息的内容未变；占全部 token 的 ${B(P(F.template_lost_share))}，占需重新处理的 token 的 ${B(pctOf(F.template_lost, F.new_sum))}，涉及 ${B(F.template_lost_req)} 个请求。`);
+    if (F.new_share != null) bullets.push(`有同线程上一请求且 token 可比较的请求中，需重新处理的 token（公共前缀之后）占 ${B(P(F.new_share))}；其余 ${B(P(1 - F.new_share))} 位于公共前缀内。线程首请求不计入该比例。`);
+    if (F.template_lost) bullets.push(`模板改写历史造成 ${B(N(F.template_lost))} 个 token 需重新处理，其所属消息的内容未变；占有计数的全部 token 的 ${B(P(F.template_lost_share_total))}，占需重新处理的 token 的 ${B(pctOf(F.template_lost, F.new_sum))}，涉及 ${B(F.template_lost_req)} 个请求。`);
     if (F.cache_hit != null) bullets.push(`vLLM 前缀缓存命中率为 ${B(P(F.cache_hit))}（token 加权）。`);
     const dt = F.deltas.append_tool, du = F.deltas.append_user;
     if (dt && du) bullets.push(`单个请求需重新处理的 token 数的中位数：「${KIND_CN.append_tool}」为 ${B(N(dt.p50))}，「${KIND_CN.append_user}」为 ${B(N(du.p50))}。`);
     h += '<div class="summary"><ul>' + bullets.map(b => `<li>${b}</li>`).join('') + '</ul></div>' + attrNotice();
     h += '<div class="kpis">' + kpi(N(F.n_sessions), '个', '会话') + kpi(N(F.n_req), '个', '请求') + kpi(N(F.tok_total / 1e6, 2), 'M token', 'prompt token 合计', '全部请求的 prompt token 数之和')
-      + kpi(P(F.new_share), '', '需重新处理的 token 占比', '与同线程上一请求的公共前缀之后的 token 数 / 全部 token 数') + kpi(P(F.cache_hit), '', 'vLLM 前缀缓存命中率', 'cached_tokens 之和 / prompt_tokens 之和')
+      + kpi(P(F.new_share), '', '需重新处理的 token 占比', '公共前缀之后的 token 数 / 有同线程上一请求且 token 可比较的请求的 token 数') + kpi(P(F.cache_hit), '', 'vLLM 前缀缓存命中率', 'cached_tokens 之和 / prompt_tokens 之和')
       + kpi(N(F.template_lost), 'token', '模板改写造成的重新处理量', '所属消息内容未变、因渲染结果变化而需重新处理的 token 数') + '</div>';
 
     // 1 来源
@@ -394,7 +394,7 @@
     h += '<h2 id="o4"><span class="no">4</span>优化上限估算</h2>' + defs([['口径', '各项为分词与前端侧的<b>上限</b>，即该措施完全生效时可减少的分词量；不含 prefill'], ['依据', '本报告第 1～3 节的统计值' + (ATTR ? '' : '；本报告没有 token 级归属，各来源的占比按字符计')]]);
     const fixedShare = ((F.by_kind.tools_def || 0) + (F.by_kind.system || 0)) / tot;
     const rows = [
-      ['按消息缓存分词结果，仅对需重新处理的片段分词', '需重新处理的 token 占比 ' + B(P(F.new_share)), '分词量减少 ' + B(P(1 - (F.new_share || 0)))],
+      ['按消息缓存分词结果，仅对需重新处理的片段分词', '有同线程上一请求且 token 可比较的请求中，需重新处理的 token 占比 ' + B(P(F.new_share)), '该范围内分词量减少 ' + B(P(F.new_share == null ? null : 1 - F.new_share))],
       ['缓存工具定义与 system 的渲染文本及 token', '工具定义与 system 合计占 ' + B(P(fixedShare)) + '，同一客户端的各会话内容相同', '分词量减少 ' + B(P(fixedShare)) + '，并省去这两部分的模板渲染'],
       ['模板标记按角色查表拼接，不经过 BPE', '模板标记占 ' + B(P((F.by_kind.markup || 0) / tot)), '分词量减少 ' + B(P((F.by_kind.markup || 0) / tot))],
       ['分段缓存以删除思考后的形态缓存 assistant 片段；或客户端不回传思考；或设置模板参数 clear_thinking=false', '模板改写历史造成 ' + B(N(F.template_lost)) + ' token 需重新处理，占需重新处理 token 的 ' + B(pctOf(F.template_lost, F.new_sum)), '需重新处理的 token 减少 ' + B(pctOf(F.template_lost, F.new_sum)) + '；前缀缓存不再于该位置失效'],
@@ -434,7 +434,7 @@
     tipFns = {req: i => reqTipHtml(reqs[+i], reqs), delta: i => deltaTipHtml(reqs[+i], reqs)};
     const meta = [['会话', E(s.id) + (s.parent ? `（子代理；父会话 ${E(s.parent)}）` : '')], ['客户端', E(s.client) + ' · ' + E(s.ua || '')], ['模型', E(s.model)], ['时间', `${s.first} 至 ${s.last}（${N(s.duration_s, 1)} s）`], ['记录', `<b>${s.n_req}</b> 个请求，含全文的 <b>${s.n_text}</b> 个，含 golden 的 <b>${s.gold}</b> 个${s.followed ? '，由整会话跟踪采集的 ' + s.followed + ' 个' : ''}；线程 <b>${s.n_threads}</b> 条` + (s.text_embedded ? '' : '；原文未嵌入（超出 --embed-mb）')]];
     let h = header('会话 ' + s.id.slice(0, 28), meta, [['s1', '1 长度增长'], ['s2', '2 重新处理量'], ['s3', '3 消息梯子'], ['s4', '4 逐请求']], s.id);
-    h += '<div class="kpis">' + kpi(N(s.max_tok), 'token', '最长 prompt', '各请求 prompt 长度的最大值') + kpi(N(s.sum_tok), 'token', 'prompt token 合计', '全部请求的 prompt token 数之和') + kpi(P(s.new_share), '', '需重新处理的 token 占比', '与同线程上一请求的公共前缀之后的 token 数 / 全部 token 数')
+    h += '<div class="kpis">' + kpi(N(s.max_tok), 'token', '最长 prompt', '各请求 prompt 长度的最大值') + kpi(N(s.sum_tok), 'token', 'prompt token 合计', '全部请求的 prompt token 数之和') + kpi(P(s.new_share), '', '需重新处理的 token 占比', '公共前缀之后的 token 数 / 有同线程上一请求且 token 可比较的请求的 token 数')
       + kpi(N(s.template_lost), 'token', '模板改写造成的重新处理量', '所属消息内容未变、因渲染结果变化而需重新处理的 token 数') + kpi(P(s.cache_hit), '', 'vLLM 前缀缓存命中率', 'cached_tokens 之和 / prompt_tokens 之和') + kpi(N(s.max_msgs), '条', '最大消息条数', '各请求 messages 数组长度的最大值') + '</div>' + attrNotice();
 
     // 1 增长
