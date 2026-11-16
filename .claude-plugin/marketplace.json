@@ -25,7 +25,7 @@
     },
     {
       "name": "app-tuner",
-      "description": "应用级调优 — 针对具体应用场景的深度性能调优",
+      "description": "应用级调优 — 针对具体应用场景的深度性能调优，含模型优化后的精度回归验证（准确率对比、对→错回归题定位、精度门禁）",
       "author": {
         "name": "Kunpeng Acceleration Team"
       },
@@ -33,7 +33,8 @@
       "source": "./Plugins/app-tuner",
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
-      "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64"]
+      "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64",
+        "precision", "accuracy", "regression", "quantization"]
     },
     {
       "name": "openwiki-sync",

@@ -1,0 +1,61 @@
+{
+  "skill_name": "model-precision-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "aime2024 这个数据集我们刚跑完 fp16 优化，结果都在 evals/fixtures/case-a/opendatas/output/aime2024_gen 下面（基线和优化后各一次）。帮我做个精度对比，看看这次优化有没有把原来对的题弄错，最后给个能不能上的结论。",
+      "expected_output": "中文精度对比报告：两次运行目录、准确率 90.0%→80.0%、题 7 为真实回归、题 9 为空输出/截断、题 6（1.4 hours）判对、未达标结论",
+      "files": [],
+      "expectations": [
+        "识别出基线与优化后两个 run 目录并说明对比来源",
+        "报告优化前准确率 90.0%（9/10）",
+        "报告优化后准确率 80.0%（8/10）",
+        "指出题 7 是真实精度回归（45 → 54）",
+        "题 6（gold=84，优化后答案 1.4 hours）被判为正确、不计入回归",
+        "将题 9（优化后输出为空）归因为空输出/截断，而不是推理错误",
+        "给出明确的达标/未达标（能否上线）结论"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "GPQA 这两次运行帮我验一下精度：\n优化前 evals/fixtures/case-b/opendatas/output/gpqa_gen_diamond/20261109-baseline_dsv4pro_2026-11-09-22-14-03\n优化后 evals/fixtures/case-b/opendatas/output/gpqa_gen_diamond/20261111-opt-bf16_dsv4pro_2026-11-11-23-41-52\n看看有没有精度回归，有的话把题号列出来。",
+      "expected_output": "中文精度回归报告：准确率 83.33%→83.33%、唯一回归题号 3、改善题 4、存在回归的结论",
+      "files": [],
+      "expectations": [
+        "报告两次准确率均为 83.33%（5/6 → 5/6）",
+        "列出唯一回归题号 3（gold=D，优化前 D → 优化后 A）",
+        "指出题 4 是改善（A → B），且未把改善当作整体达标依据",
+        "按最后一个 ANSWER: X 抽取答案，未把推理过程中的干扰字母 A~D 误判为答案（无额外假回归）",
+        "结论明确表述为存在回归 / 未达标"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "aime2025 这版 int8 量化优化跑完了，帮我核一下精度，别只看总分，我要知道具体哪几道题被弄坏了。\n基线：evals/fixtures/case-c/opendatas/output/aime2025_gen/20261113-baseline_dsv4pro_2026-11-13-07-12-08\n优化后：evals/fixtures/case-c/opendatas/output/aime2025_gen/20261115-opt-int8_dsv4pro_2026-11-15-18-02-33",
+      "expected_output": "中文精度回归报告：准确率 87.5%→75.0%、回归题 4 与题 5（截断）、改善题 6、1.4 hours / 1,000 / 3 hours 24 minutes 均判对",
+      "files": [],
+      "expectations": [
+        "报告优化前准确率 87.5%（7/8）与优化后 75.0%（6/8）",
+        "指出题 4（36 → 35）是真实精度回归",
+        "将题 5（优化后输出为空）归因为空输出/截断，而不是推理错误",
+        "题 0（1.4 hours）、题 1（1,000）、题 2（3 hours 24 minutes）均判为正确，未产生假回归",
+        "指出题 6（13 → 12）是改善",
+        "结论明确表述为存在回归 / 未达标"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "fp8 这版 GPQA 跑完了，帮我跟基线对一下，看有没有题被弄坏：\n基线 evals/fixtures/case-d/opendatas/output/gpqa_gen_diamond/20261110-baseline_dsv4pro_2026-11-10-11-20-07\n优化 evals/fixtures/case-d/opendatas/output/gpqa_gen_diamond/20261113-opt-fp8_dsv4pro_2026-11-13-14-05-41\n有回归的话把题号和原因说清楚。",
+      "expected_output": "中文精度回归报告：准确率 83.33%→66.67%、回归题 3（D→A）与题 5（截断）、改善题 4、未达标结论",
+      "files": [],
+      "expectations": [
+        "报告两次准确率 83.33% → 66.67%（5/6 → 4/6）",
+        "指出题 3（gold=D，D → A）是真实精度回归",
+        "将题 5（输出在 but the resp 处中断）归因为截断/空输出，而不是推理错误",
+        "题 4（C → B）识别为改善，且未抵消回归",
+        "未把题 0 中被引用的 'ANSWER: A' 当答案（判为 B）",
+        "结论明确表述为存在回归 / 未达标"
+      ]
+    }
+  ]
+}

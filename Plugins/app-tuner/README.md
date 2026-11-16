@@ -12,6 +12,7 @@ app-tuner 提供 1 个主编排 skill(`kpbot-app-tuner`)及其内部资源:
 - **分析型子 skill**(subskills,自研,13 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/vLLM-Ascend profiling/其他兜底
 - **质量保障**: 对抗性审查、current_run 门控、subagent 独立上下文执行
 - **AgentENV 专项技能包**: `skills/kptools-agentenv-tuning/` — 独立入口及按需安装的专项 Skill，共享环境采集和验证约定。
+- **验证类 skill**: `skills/model-precision-analysis/` — 模型优化后的精度回归验证，输出准确率对比、回归题定位与达标判定。
 
 ## 安装
 
@@ -76,6 +77,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | [`vllm-fastokens-segment-cache-migration`](skills/vllm-fastokens-segment-cache-migration/SKILL.md) | 评估 vLLM 切换到官方 fastokens 并启用段缓存的可行性，通过基线组和段缓存开启组验证 token 一致性、并发稳定性、分词性能、内存与回退准备 |
+
+### 验证类 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`model-precision-analysis`](skills/model-precision-analysis/SKILL.md) | 优化后精度回归验证：读取精度评测工具 `opendatas/output` 下的合并结果，输出准确率对比、回归/改善题号与达标结论，精度不达标即阻止按性能放行 |
 
 ### 分析型子 skill(subskills,自研)
 

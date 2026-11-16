@@ -1,0 +1,38 @@
+{
+ "0": {
+  "origin_prompt": "q0",
+  "prediction": "The quoted answer in the paper is 'ANSWER: A' but that's the distractor.\nANSWER: B",
+  "gold": "B",
+  "exec_times": 1
+ },
+ "1": {
+  "origin_prompt": "q1",
+  "prediction": "Option C is the only one consistent with the mechanism.\n**ANSWER: C**",
+  "gold": "C",
+  "exec_times": 1
+ },
+ "2": {
+  "origin_prompt": "q2",
+  "prediction": "Eliminating A, B, C leaves \\boxed{D}",
+  "gold": "D",
+  "exec_times": 1
+ },
+ "3": {
+  "origin_prompt": "q3",
+  "prediction": "Reasoning ...\nANSWER: D",
+  "gold": "D",
+  "exec_times": 1
+ },
+ "4": {
+  "origin_prompt": "q4",
+  "prediction": "Both B and C are tempting.\nANSWER: C",
+  "gold": "B",
+  "exec_times": 1
+ },
+ "5": {
+  "origin_prompt": "q5",
+  "prediction": "The conservation law applies.\nANSWER: C",
+  "gold": "C",
+  "exec_times": 1
+ }
+}

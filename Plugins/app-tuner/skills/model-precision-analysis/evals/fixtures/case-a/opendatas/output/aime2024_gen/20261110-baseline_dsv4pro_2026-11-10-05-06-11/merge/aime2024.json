@@ -1,0 +1,62 @@
+{
+ "0": {
+  "origin_prompt": "q0",
+  "prediction": "Let $x$ be the count. Solving gives $x=127$, so \\boxed{127}.",
+  "gold": "127",
+  "exec_times": 1
+ },
+ "1": {
+  "origin_prompt": "q1",
+  "prediction": "The sum is \\boxed{204}.",
+  "gold": "204",
+  "exec_times": 1
+ },
+ "2": {
+  "origin_prompt": "q2",
+  "prediction": "We get \\boxed{36}.",
+  "gold": "36",
+  "exec_times": 1
+ },
+ "3": {
+  "origin_prompt": "q3",
+  "prediction": "Therefore \\boxed{150}.",
+  "gold": "150",
+  "exec_times": 1
+ },
+ "4": {
+  "origin_prompt": "q4",
+  "prediction": "Checking small cases: 34, 35 ... so the answer is \\boxed{35}.",
+  "gold": "36",
+  "exec_times": 1
+ },
+ "5": {
+  "origin_prompt": "q5",
+  "prediction": "Thus \\boxed{60}.",
+  "gold": "60",
+  "exec_times": 1
+ },
+ "6": {
+  "origin_prompt": "q6",
+  "prediction": "\\boxed{84}",
+  "gold": "84",
+  "exec_times": 1
+ },
+ "7": {
+  "origin_prompt": "q7",
+  "prediction": "Modulo arithmetic yields \\boxed{45}.",
+  "gold": "45",
+  "exec_times": 1
+ },
+ "8": {
+  "origin_prompt": "q8",
+  "prediction": "The final count is \\boxed{12}.",
+  "gold": "12",
+  "exec_times": 1
+ },
+ "9": {
+  "origin_prompt": "q9",
+  "prediction": "\\boxed{210}",
+  "gold": "210",
+  "exec_times": 1
+ }
+}
