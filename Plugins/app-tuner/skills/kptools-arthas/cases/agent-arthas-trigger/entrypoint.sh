@@ -11,6 +11,11 @@ if [ "${SKILL_MODE}" = "with" ]; then
     cp -r /staging/skill ".opencode/skills/${SKILL_NAME}"
 fi
 
+# 项目级权限配置：deny webfetch/websearch（外发通道；显式 deny 在 --auto 下依然生效）。
+# bash/edit 保留：本用例工作流需要执行 collect.sh 与落盘证据；读范围约束见两臂 prompts
+# 与 SKILL 安全约束节（docs/agent-case-security-notes.md 规则 1/8）。
+printf '%s\n' '{"permission":{"webfetch":"deny","websearch":"deny"}}' > /workspace/opencode.json
+
 # 启动 workload（with/without 同一前提）并注入 PID 到 prompt
 cat > /workspace/DemoApp.java <<'JAVA'
 public class DemoApp {

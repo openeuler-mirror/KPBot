@@ -24,6 +24,14 @@ bash scripts/deploy.sh
 
 下载 arthas-boot.jar 到 `~/.arthas/arthas-boot.jar`（来源 `https://arthas.aliyun.com/arthas-boot.jar`，可用 `ARTHAS_BOOT_URL` 覆盖）。
 
+下载后执行 sha256 完整性校验（下载的可执行产物先校验再 `java -jar` 执行）：
+
+- 默认校验脚本内固定的官方 arthas-boot 4.3.5 摘要常量
+- 覆盖 `ARTHAS_BOOT_URL` 时必须同时提供 `ARTHAS_BOOT_SHA256`（fail-closed，拒绝任意来源免校验执行）
+- 上游发布新版本后默认摘要不再匹配 → 安装失败并提示，属预期 fail-closed 行为；确认升级后同步更新 deploy.sh 与 agent 用例 Dockerfile 内的摘要常量
+
+容器镜像构建（cases/agent-arthas-trigger/Dockerfile）同样固定摘要常量，摘要不匹配直接构建失败。
+
 ### 2.2 首次 attach 的完整包下载
 
 arthas-boot.jar 只是引导器：**首次 attach 时会从 maven 仓库拉取完整 arthas 包并缓存到 `~/.arthas/`**，此后 attach 直接使用本地缓存。

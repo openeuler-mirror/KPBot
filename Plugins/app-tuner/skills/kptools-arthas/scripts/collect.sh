@@ -135,7 +135,15 @@ PORT_ARGS=()
 if [ -n "$TELNET_PORT" ]; then
     PORT_ARGS=(--telnet-port "$TELNET_PORT" --http-port -1)
 elif port_in_use 3658; then
-    OWNER_PID=$(ss -ltnp 2>/dev/null | awk '$4 ~ /:3658$/ {print $0}' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+    # 占用者识别须容错：赋值语句的退出码随命令替换传递，pipefail 下 ss 缺失（127）
+    # 或 grep 无匹配（非 root 看不到 pid= 段）都会让 errexit 静默终止整次采集，
+    # 随机端口回退将永不生效。失败时置空 → 下方按“其他进程占用”处理（换随机端口）。
+    if ! command -v ss >/dev/null 2>&1; then
+        echo "NOTICE: ss 不可用（未装 iproute？），无法识别 3658 占用者，按其他进程占用处理" >&2
+        OWNER_PID=""
+    else
+        OWNER_PID=$(ss -ltnp 2>/dev/null | awk '$4 ~ /:3658$/ {print $0}' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)
+    fi
     if [ -z "$OWNER_PID" ] || [ "$OWNER_PID" != "$PID" ]; then
         NEW_PORT=""
         for _ in 1 2 3 4 5 6 7 8 9 10; do

@@ -109,6 +109,30 @@ else
     skip "AT-002: 本机无 java/arthas，安装路径需网络，跳过幂等检查"
 fi
 
+echo "  AT-002b/c/d: 下载完整性校验（sha256 fail-closed）"
+FAKEHOME="$TEST_RESULTS_DIR/fakehome"; mkdir -p "$FAKEHOME"
+if [ -f /opt/arthas/arthas-boot.jar ]; then
+    skip "AT-002b/c/d: 环境存在 /opt/arthas 系统级安装，跳过下载路径用例"
+elif ! command -v curl >/dev/null 2>&1; then
+    skip "AT-002b/c/d: 无 curl，跳过下载校验用例"
+else
+    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file:///nonexistent.jar" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+    assert_equal 3 $rc "AT-002b: 覆盖 ARTHAS_BOOT_URL 未配对 SHA256 → 3"
+    assert_contains "$output" "必须同时提供 ARTHAS_BOOT_SHA256" "AT-002b: fail-closed 提示配对摘要"
+
+    printf 'fake-jar-bytes' > "$TEST_RESULTS_DIR/fake-boot.jar"
+    WRONG_SHA="$(printf 'other-content' | sha256sum | awk '{print $1}')"
+    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file://$TEST_RESULTS_DIR/fake-boot.jar" ARTHAS_BOOT_SHA256="$WRONG_SHA" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+    assert_equal 1 $rc "AT-002c: 摘要不匹配 → 1 且产物删除"
+    [ ! -e "$FAKEHOME/.arthas/arthas-boot.jar" ]
+    assert_success $? "AT-002c: 校验失败产物已清理"
+
+    RIGHT_SHA="$(sha256sum "$TEST_RESULTS_DIR/fake-boot.jar" | awk '{print $1}')"
+    output=$(HOME="$FAKEHOME" ARTHAS_BOOT_JAR="" ARTHAS_BOOT_URL="file://$TEST_RESULTS_DIR/fake-boot.jar" ARTHAS_BOOT_SHA256="$RIGHT_SHA" bash "$SCRIPTS/deploy.sh" 2>&1); rc=$?
+    assert_equal 0 $rc "AT-002d: 配对摘要匹配 → 0"
+    assert_contains "$output" "sha256 verified" "AT-002d: 报告已校验安装"
+fi
+
 # =============================================================================
 # 4. collect 参数校验（AT-003 系列）
 # =============================================================================
@@ -158,6 +182,27 @@ kill "$SLEEP_PID" 2>/dev/null; wait "$SLEEP_PID" 2>/dev/null
 echo "  AT-006: 不存在的 PID"
 bash "$SCRIPTS/collect.sh" -p 999999999 -c "version" >/dev/null 2>&1; rc=$?
 assert_equal 1 $rc "AT-006: 目标进程不存在 → 1"
+
+echo "  AT-008: 3658 被非目标进程占用时端口回退不静默终止（errexit 回归）"
+if ! command -v java >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+    skip "AT-008: 需 java + python3（端口回退回归用例）"
+else
+    # 临时监听占住 3658（模拟其他进程会话驻留；占用者既非目标进程也非本脚本）
+    (timeout 10 python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",3658)); s.listen(1); time.sleep(10)' >/dev/null 2>&1 &)
+    sleep 1
+    bash -c 'exec -a java sleep 20' & FAKE_JAVA_3658=$!
+    sleep 0.5
+    printf 'fake' > "$TEST_RESULTS_DIR/fake-boot2.jar"
+    bash "$SCRIPTS/collect.sh" -p "$FAKE_JAVA_3658" --jar "$TEST_RESULTS_DIR/fake-boot2.jar" \
+        -c "version" -o "$TEST_RESULTS_DIR/at008_evidence" \
+        >"$TEST_RESULTS_DIR/at008.out" 2>"$TEST_RESULTS_DIR/at008.stderr"; rc=$?
+    assert_equal 1 $rc "AT-008: 假 jar 全命令失败 → exit 1（而非管道赋值静默终止）"
+    grep -q "端口 3658 被" "$TEST_RESULTS_DIR/at008.stderr"
+    assert_success $? "AT-008: stderr 含端口占用回退 NOTICE"
+    [ -n "$(ls "$TEST_RESULTS_DIR/at008_evidence" 2>/dev/null)" ]
+    assert_success $? "AT-008: 证据目录已创建（回退分支确实执行）"
+    kill "$FAKE_JAVA_3658" 2>/dev/null; wait "$FAKE_JAVA_3658" 2>/dev/null
+fi
 
 # =============================================================================
 # 5. 端到端冒烟（AR 组：需 java + javac + arthas-boot.jar + 可联网首次 attach）
