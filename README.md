@@ -237,6 +237,7 @@ code-optimizer 在 Claude Code 中安装 **78 个** skill，在 OpenCode 中安�
 - `analyze-caller-context` — 调用上下文 14 维度分析
 - `analyze-testcase` — 测试用例性能画像分析
 - `arm-spe-analysis` — ARM SPE 采样分析
+- `gcov-coverage-analysis` — gcov/lcov 覆盖率驱动的性能优化点识别（热点行/冷路径/循环画像/函数调用计数）
 - `register-pressure-analysis` — 寄存器压力诊断
 
 **优化类**
