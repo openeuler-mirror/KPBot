@@ -1,0 +1,11 @@
+[package]
+name = "cube-preconnect-lifecycle-regression"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "results/patched_lifecycle.rs"
+
+[dependencies]
+tokio = { version = "=1.44.2", features = ["rt", "macros", "time", "sync", "test-util"] }

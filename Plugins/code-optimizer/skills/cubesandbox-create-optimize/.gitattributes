@@ -1,0 +1,2 @@
+# Keep reference patch bytes consistent across Linux and Windows checkouts.
+references/*.patch text eol=lf

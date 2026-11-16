@@ -1,0 +1,127 @@
+diff --git a/CubeShim/shim/src/sandbox/sb.rs b/CubeShim/shim/src/sandbox/sb.rs
+index a6e3505..fa556c2 100644
+--- a/CubeShim/shim/src/sandbox/sb.rs
++++ b/CubeShim/shim/src/sandbox/sb.rs
+@@ -219,11 +219,15 @@ impl SandBox {
+         )
+     }
+ 
+-    async fn connect_agent(&mut self) -> CResult<()> {
+-        let conn = AsyncUtils::connect_agent(&self.id).await?;
++    fn install_agent_conn(&mut self, conn: Client) {
+         let client = agent_ttrpc::AgentServiceClient::new(conn.clone());
+         self.conn = Some(Arc::new(Mutex::new(conn)));
+         self.client = Some(Arc::new(Mutex::new(client)));
++    }
++
++    async fn connect_agent(&mut self) -> CResult<()> {
++        let conn = AsyncUtils::connect_agent(&self.id).await?;
++        self.install_agent_conn(conn);
+ 
+         Ok(())
+     }
+@@ -470,7 +474,39 @@ impl SandBox {
+     }
+ 
+     pub async fn create_sandbox(&mut self) -> CResult<()> {
+-        let snapshot = self.start_vm().await?;
++        // BEGIN owned preconnect setup
++        // JoinSet aborts its tasks on drop, including request cancellation and
++        // later `?` exits. Never detach a raw JoinHandle from this request.
++        let preconnect_id = self.id.clone();
++        let preconnect_deadline =
++            tokio::time::Instant::now() + Duration::from_secs(30);
++        let mut preconnect = tokio::task::JoinSet::new();
++        preconnect.spawn(async move {
++            // Bound the connect call itself, not just the retry-loop checks.
++            tokio::time::timeout_at(preconnect_deadline, async move {
++                let mut backoff = Duration::from_millis(1);
++                loop {
++                    match AsyncUtils::connect_agent(&preconnect_id).await {
++                        Ok(conn) => return conn,
++                        Err(_) => {
++                            sleep(backoff).await;
++                            backoff = (backoff * 2).min(Duration::from_millis(50));
++                        }
++                    }
++                }
++            })
++            .await
++        });
++
++        let snapshot = match self.start_vm().await {
++            Ok(snapshot) => snapshot,
++            Err(error) => {
++                // Ordinary failure paths can wait for resource destruction.
++                preconnect.shutdown().await;
++                return Err(error);
++            }
++        };
++        // END owned preconnect setup
+ 
+         //todo: app snapshot
+         if self.conf.notify_snapshot_ret {
+@@ -479,7 +515,21 @@ impl SandBox {
+             }
+         }
+ 
+-        self.connect_agent().await?;
++        // BEGIN owned preconnect join
++        // The post-restore grace period never extends the original deadline.
++        let join_deadline = preconnect_deadline
++            .min(tokio::time::Instant::now() + Duration::from_secs(10));
++        let joined =
++            tokio::time::timeout_at(join_deadline, preconnect.join_next()).await;
++        match joined {
++            Ok(Some(Ok(Ok(conn)))) => self.install_agent_conn(conn),
++            _ => {
++                // Cancel AND drain before starting the serial fallback.
++                preconnect.shutdown().await;
++                self.connect_agent().await?;
++            }
++        }
++        // END owned preconnect join
+ 
+         infof!(self.log, "agent is ready");
+ 
+@@ -564,7 +614,10 @@ impl SandBox {
+         let (tx, mut rx) = channel::<()>(1);
+         let arc_conainers = self.containers.clone();
+         let arc_state = self.state.clone();
+-        let conn = AsyncUtils::connect_agent(&self.id).await?;
++        let conn = match self.conn.as_ref() {
++            Some(conn) => conn.lock().await.clone(),
++            None => AsyncUtils::connect_agent(&self.id).await?,
++        };
+         let client = health_ttrpc::HealthClient::new(conn);
+         let log = self.log.clone();
+         let handle = tokio::spawn(async move {
+diff --git a/hypervisor/vmm/src/device_manager.rs b/hypervisor/vmm/src/device_manager.rs
+index 2e2edae..5ca06de 100644
+--- a/hypervisor/vmm/src/device_manager.rs
++++ b/hypervisor/vmm/src/device_manager.rs
+@@ -4476,11 +4476,19 @@ impl DeviceManager {
+             total_nodes
+         };
+ 
+-        let rt = tokio::runtime::Builder::new_multi_thread()
+-            .worker_threads(work_thread_num)
+-            .enable_all()
+-            .build()
+-            .unwrap();
++        // Build the restore runtime once per process: constructing a
++        // multi-thread runtime for every sandbox restore is measurable work
++        // (and highly variable under concurrent creates) while the runtime
++        // itself is stateless across restores.
++        static RESTORE_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> =
++            std::sync::OnceLock::new();
++        let rt = RESTORE_RUNTIME.get_or_init(|| {
++            tokio::runtime::Builder::new_multi_thread()
++                .worker_threads(work_thread_num)
++                .enable_all()
++                .build()
++                .unwrap()
++        });
+ 
+         rt.block_on(async move {
+             // Process device groups in order to ensure correct restoration sequence

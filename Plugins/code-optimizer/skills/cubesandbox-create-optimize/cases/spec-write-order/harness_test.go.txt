@@ -1,0 +1,448 @@
+// SPDX-License-Identifier: Apache-2.0
+package sandboxspec
+
+import (
+	"context"
+	"errors"
+	"os"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/db/models"
+	sandboxtypes "github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/service/sandbox/types"
+)
+
+var ErrSandboxSpecStoreNotReady = errors.New("store not ready")
+
+func TestExecutionDoesNotInheritOperatorCredentials(t *testing.T) {
+	for _, key := range []string{"KPBOT_ENV_SENTINEL_TOKEN", "CI_JOB_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "DATABASE_URL"} {
+		if _, inherited := os.LookupEnv(key); inherited {
+			t.Errorf("operator environment key %s reached compiled test code", key)
+		}
+	}
+	if os.Getenv("GOENV") != "off" || os.Getenv("GOCACHE") == "" || os.Getenv("HOME") == "" {
+		t.Error("dedicated execution environment is missing")
+	}
+}
+var failureCount atomic.Int32
+
+type PutOptions struct{}
+type fakeDB struct {
+	mu                  sync.Mutex
+	rows                map[string]string
+	writes              map[string]int
+	blockID, blockValue string
+	entered             chan struct{}
+	release             chan struct{}
+	fail                error
+}
+type fakeQuery struct {
+	db  *fakeDB
+	ctx context.Context
+	id  string
+}
+type result struct{ Error error }
+
+var currentDB *fakeDB
+
+type observedContext struct {
+	context.Context
+	once    sync.Once
+	entered chan struct{}
+}
+
+func (ctx *observedContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.entered) })
+	return ctx.Context.Done()
+}
+
+func getDB() *fakeDB                    { return currentDB }
+func IsReady() bool                     { return currentDB != nil }
+func recordPersistFailure(string)       { failureCount.Add(1) }
+func persistFailureReason(error) string { return "failure" }
+func buildRecord(id string, request *sandboxtypes.CreateCubeSandboxReq, _ PutOptions) (*models.SandboxSpec, error) {
+	if id == "" || request == nil {
+		return nil, errors.New("invalid request")
+	}
+	return &models.SandboxSpec{SandboxID: id, RequestJSON: request.Payload}, nil
+}
+func (db *fakeDB) WithContext(ctx context.Context) *fakeQuery { return &fakeQuery{db: db, ctx: ctx} }
+func (q *fakeQuery) Table(string) *fakeQuery                  { return q }
+func (q *fakeQuery) Where(_ string, id string) *fakeQuery     { q.id = id; return q }
+func (q *fakeQuery) Delete(*models.SandboxSpec) result {
+	if err := q.ctx.Err(); err != nil {
+		return result{err}
+	}
+	q.db.mu.Lock()
+	defer q.db.mu.Unlock()
+	if q.db.fail != nil {
+		return result{q.db.fail}
+	}
+	delete(q.db.rows, q.id)
+	return result{}
+}
+func upsertRecord(ctx context.Context, record *models.SandboxSpec) error {
+	db := currentDB
+	if db == nil {
+		return ErrSandboxSpecStoreNotReady
+	}
+	db.mu.Lock()
+	blocked := record.SandboxID == db.blockID && record.RequestJSON == db.blockValue
+	entered, release, failure := db.entered, db.release, db.fail
+	db.writes[record.SandboxID]++
+	db.mu.Unlock()
+	if blocked {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if failure != nil {
+		return failure
+	}
+	db.mu.Lock()
+	db.rows[record.SandboxID] = record.RequestJSON
+	db.mu.Unlock()
+	return nil
+}
+
+func setup(t *testing.T, capacity int) *fakeDB {
+	t.Helper()
+	specWriteStatesMu.Lock()
+	if len(specWriteStates) != 0 {
+		t.Fatalf("previous test leaked %d states", len(specWriteStates))
+	}
+	specWriteStatesMu.Unlock()
+	// Keep the real queue, but drive actual worker items explicitly so barriers
+	// determine the order instead of relying on the scheduler or sleeps.
+	asyncPutOnce = sync.Once{}
+	asyncPutOnce.Do(func() { asyncPutQueue = make(chan asyncPutItem, capacity) })
+	failureCount.Store(0)
+	db := &fakeDB{rows: make(map[string]string), writes: make(map[string]int)}
+	currentDB = db
+	t.Cleanup(func() {
+		if len(asyncPutQueue) != 0 {
+			t.Error("queued items not consumed")
+		}
+		specWriteStatesMu.Lock()
+		defer specWriteStatesMu.Unlock()
+		if len(specWriteStates) != 0 {
+			t.Errorf("leaked %d per-ID states", len(specWriteStates))
+		}
+	})
+	return db
+}
+func request(value string) *sandboxtypes.CreateCubeSandboxReq {
+	return &sandboxtypes.CreateCubeSandboxReq{Payload: value}
+}
+func queued(t *testing.T, id, value string) asyncPutItem {
+	t.Helper()
+	if err := PutAsync(context.Background(), id, request(value), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	return <-asyncPutQueue
+}
+func waitResult(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("operation did not finish")
+		return nil
+	}
+}
+func blocking(db *fakeDB, id, value string) {
+	db.blockID, db.blockValue = id, value
+	db.entered, db.release = make(chan struct{}, 1), make(chan struct{})
+}
+
+func waitEntered(t *testing.T, entered <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("operation did not reach its context-aware gate")
+	}
+}
+
+func TestQueuedOldWriteCannotOverwriteNewPut(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "id", "old")
+	if err := Put(context.Background(), "id", request("new"), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "new" || db.writes["id"] != 1 {
+		t.Fatalf("rows=%v writes=%v", db.rows, db.writes)
+	}
+}
+
+func TestInflightOldWriteFinishesBeforeNewPut(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "id", "old")
+	blocking(db, "id", "old")
+	worker := make(chan error, 1)
+	go func() { worker <- persistAsyncPutItem(old) }()
+	<-db.entered
+	ctx := &observedContext{Context: context.Background(), entered: make(chan struct{})}
+	update := make(chan error, 1)
+	go func() { update <- Put(ctx, "id", request("new"), PutOptions{}) }()
+	waitEntered(t, ctx.entered)
+	select {
+	case err := <-update:
+		close(db.release)
+		t.Fatalf("new Put crossed old in-flight write: %v", err)
+	default:
+	}
+	close(db.release)
+	if err := waitResult(t, worker); err != nil {
+		t.Fatal(err)
+	}
+	if err := waitResult(t, update); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "new" {
+		t.Fatal(db.rows)
+	}
+}
+
+func TestQueuedWriteCannotResurrectDeletedRecord(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "id", "old")
+	if err := Delete(context.Background(), "id"); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := db.rows["id"]; ok {
+		t.Fatal("deleted row resurrected")
+	}
+}
+
+func TestDeleteWaitsForInflightWrite(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "id", "old")
+	blocking(db, "id", "old")
+	worker := make(chan error, 1)
+	go func() { worker <- persistAsyncPutItem(old) }()
+	<-db.entered
+	deletion := make(chan error, 1)
+	ctx := &observedContext{Context: context.Background(), entered: make(chan struct{})}
+	go func() { deletion <- Delete(ctx, "id") }()
+	waitEntered(t, ctx.entered)
+	select {
+	case err := <-deletion:
+		close(db.release)
+		t.Fatalf("Delete crossed old write: %v", err)
+	default:
+	}
+	close(db.release)
+	if err := waitResult(t, worker); err != nil {
+		t.Fatal(err)
+	}
+	if err := waitResult(t, deletion); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := db.rows["id"]; ok {
+		t.Fatal("row survived Delete")
+	}
+}
+
+func TestDeleteThenNewGenerationKeepsNewRow(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "id", "old")
+	if err := Delete(context.Background(), "id"); err != nil {
+		t.Fatal(err)
+	}
+	fresh := queued(t, "id", "fresh")
+	if old.state != fresh.state {
+		t.Fatal("state was discarded while an old item still held a reference")
+	}
+	if err := persistAsyncPutItem(fresh); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "fresh" {
+		t.Fatal(db.rows)
+	}
+}
+
+func TestNewerQueuedGenerationWinsOutOfOrderWorkers(t *testing.T) {
+	db := setup(t, 4)
+	first := queued(t, "id", "first")
+	second := queued(t, "id", "second")
+	if err := persistAsyncPutItem(second); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistAsyncPutItem(first); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "second" || db.writes["id"] != 1 {
+		t.Fatalf("rows=%v writes=%v", db.rows, db.writes)
+	}
+}
+
+func TestQueueFullFallbackUsesSameOrdering(t *testing.T) {
+	db := setup(t, 1)
+	if err := PutAsync(context.Background(), "id", request("old"), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := PutAsync(context.Background(), "id", request("new"), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	old := <-asyncPutQueue
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "new" || db.writes["id"] != 1 {
+		t.Fatalf("rows=%v writes=%v", db.rows, db.writes)
+	}
+}
+
+func TestCanceledUpdateDoesNotWaitForOldDBCall(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "id", "old")
+	blocking(db, "id", "old")
+	worker := make(chan error, 1)
+	go func() { worker <- persistAsyncPutItem(old) }()
+	<-db.entered
+	parent, cancel := context.WithCancel(context.Background())
+	ctx := &observedContext{Context: parent, entered: make(chan struct{})}
+	update := make(chan error, 1)
+	go func() { update <- Put(ctx, "id", request("new"), PutOptions{}) }()
+	waitEntered(t, ctx.entered)
+	cancel()
+	if err := waitResult(t, update); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	close(db.release)
+	if err := waitResult(t, worker); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "old" {
+		t.Fatal(db.rows)
+	}
+}
+
+func TestOtherIDIsNotBlockedByInflightWrite(t *testing.T) {
+	db := setup(t, 4)
+	old := queued(t, "blocked", "old")
+	blocking(db, "blocked", "old")
+	worker := make(chan error, 1)
+	go func() { worker <- persistAsyncPutItem(old) }()
+	<-db.entered
+	other := make(chan error, 1)
+	go func() { other <- Put(context.Background(), "other", request("new"), PutOptions{}) }()
+	if err := waitResult(t, other); err != nil {
+		t.Fatal(err)
+	}
+	close(db.release)
+	if err := waitResult(t, worker); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["other"] != "new" {
+		t.Fatal(db.rows)
+	}
+}
+
+func TestStateLivesUntilLastQueuedReferenceThenIsReleased(t *testing.T) {
+	setup(t, 4)
+	old := queued(t, "id", "old")
+	if err := Put(context.Background(), "id", request("new"), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	specWriteStatesMu.Lock()
+	present := specWriteStates["id"] == old.state
+	specWriteStatesMu.Unlock()
+	if !present {
+		t.Fatal("state expired while an old queued item could still run")
+	}
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	specWriteStatesMu.Lock()
+	count := len(specWriteStates)
+	specWriteStatesMu.Unlock()
+	if count != 0 {
+		t.Fatal("completed ID retained forever")
+	}
+}
+
+func TestStoreNotReadyAndCanceledEnqueueAreExplicit(t *testing.T) {
+	db := setup(t, 4)
+	currentDB = nil
+	if err := PutAsync(context.Background(), "id", request("value"), PutOptions{}); !errors.Is(err, ErrSandboxSpecStoreNotReady) {
+		t.Fatal(err)
+	}
+	currentDB = db
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := PutAsync(ctx, "id", request("value"), PutOptions{}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if failureCount.Load() != 2 || len(asyncPutQueue) != 0 {
+		t.Fatal("failed enqueue was hidden")
+	}
+}
+
+func TestWorkerReportsExhaustedRetriesAndReleasesState(t *testing.T) {
+	db := setup(t, 4)
+	db.fail = errors.New("DB unavailable")
+	item := queued(t, "id", "value")
+	asyncPutQueue <- item
+	close(asyncPutQueue)
+	asyncPutWorker()
+	if db.writes["id"] != asyncPutRetries || failureCount.Load() != 1 {
+		t.Fatalf("writes=%v failures=%d", db.writes, failureCount.Load())
+	}
+}
+
+func TestFailedNewPutDoesNotRestoreOlderQueuedIntent(t *testing.T) {
+	db := setup(t, 4)
+	db.rows["id"] = "persisted"
+	old := queued(t, "id", "old-queued")
+	db.fail = errors.New("new write failed")
+	if err := Put(context.Background(), "id", request("new"), PutOptions{}); !errors.Is(err, db.fail) {
+		t.Fatal(err)
+	}
+	db.fail = nil
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "persisted" || db.writes["id"] != 1 || failureCount.Load() != 1 {
+		t.Fatalf("failed latest intent silently fell back to an older write: rows=%v writes=%v failures=%d", db.rows, db.writes, failureCount.Load())
+	}
+}
+
+func TestFailedDeleteStillSupersedesOlderQueuedIntent(t *testing.T) {
+	db := setup(t, 4)
+	db.rows["id"] = "persisted"
+	old := queued(t, "id", "old-queued")
+	db.fail = errors.New("delete failed")
+	if err := Delete(context.Background(), "id"); !errors.Is(err, db.fail) {
+		t.Fatal(err)
+	}
+	db.fail = nil
+	if err := persistAsyncPutItem(old); err != nil {
+		t.Fatal(err)
+	}
+	if db.rows["id"] != "persisted" || db.writes["id"] != 0 {
+		t.Fatalf("failed delete intent allowed an older queued write: rows=%v writes=%v", db.rows, db.writes)
+	}
+}

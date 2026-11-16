@@ -1,0 +1,8 @@
+name: cubesandbox-create-optimize-replica-schedulability
+skill: cubesandbox-create-optimize
+tier: B
+entrypoint: ["python3", "cases/replica-schedulability/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 需要 Go 工具链；实际参考 hunk + 真实 TTL/singleflight，DB/健康状态源为 stub。

@@ -170,6 +170,7 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 |------|------|
 | `kpbot-code-optimizer` | 优化 Pipeline 编排 |
 | `kpbot-code-optimizer-workflow` | 优化 Pipeline 工作流 |
+| [cubesandbox-create-optimize](skills/cubesandbox-create-optimize/SKILL.md) | 面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口 |
 | `drive-claude-optimize-pipeline` | 驱动 Claude 执行优化 Pipeline |
 | `batch-drive-optimize-pipeline` | 批量驱动优化 Pipeline |
 | `interactive-optimizer` | 交互式优化器 |
