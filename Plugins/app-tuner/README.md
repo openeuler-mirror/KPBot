@@ -102,6 +102,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键基准(计划哈希确认、只读预检、NUMA/TAP/代理准备、create/density/Snapshot/dirty_page/Rollback/Clone/Pause-Resume 全矩阵、差集清理与证据归档) |
+| [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
 
 ### 场景优化类 skill
 
