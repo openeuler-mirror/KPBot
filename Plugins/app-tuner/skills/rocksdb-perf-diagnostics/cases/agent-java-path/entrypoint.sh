@@ -23,7 +23,12 @@ fi
 
 echo "[entrypoint] SKILL_MODE=${SKILL_MODE} model=${MODEL:-deepseek/deepseek-v4-flash}"
 
-if ! opencode run --auto --format json -m "${MODEL:-deepseek/deepseek-v4-flash}" "$(cat "${PROMPT_FILE}")" \
+AUTO_FLAG="--auto"
+if opencode run --help 2>&1 | grep -q -- "--dangerously-skip-permissions"; then
+    AUTO_FLAG="--dangerously-skip-permissions"
+fi
+
+if ! opencode run "${AUTO_FLAG}" --format json -m "${MODEL:-deepseek/deepseek-v4-flash}" "$(cat "${PROMPT_FILE}")" \
         > results/trace.jsonl 2> results/opencode.log; then
     SKILL_MODE="${SKILL_MODE}" python3 -c 'import json,os;json.dump({"success":False,"reason":"opencode run failed","skill_mode":os.environ["SKILL_MODE"]},open("results/result.json","w"),indent=2)'
     exit 1

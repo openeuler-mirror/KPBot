@@ -7,6 +7,7 @@
 #   OPENCODE_BIN     opencode 二进制路径
 #   OPENCODE_AUTH    auth.json 路径
 #   DOCKER_RUN_ARGS  追加给 docker run 的参数（默认 --network host）
+#   RUN_TIMEOUT      单臂超时秒数（默认 1200）
 set -uo pipefail
 
 DEFAULT_IMAGE="kpbot/app-tuner-agent-execute-optimization:1.0-openeuler24.03"
@@ -20,26 +21,70 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-BIN="${OPENCODE_BIN:-/usr/local/lib/node_modules/opencode-ai/bin/opencode.exe}"
+# 优先使用 cannbot 二进制（CANNBot 环境的 provider 在它里面），否则退回 opencode。
+CANNBOT_BIN=/usr/local/lib/node_modules/cannbot/node_modules/cannbot-linux-arm64/bin/cannbot
+if [ -n "${OPENCODE_BIN:-}" ]; then
+    BIN="$OPENCODE_BIN"
+elif [ -x "$CANNBOT_BIN" ]; then
+    BIN="$CANNBOT_BIN"
+else
+    BIN="/usr/local/lib/node_modules/opencode-ai/bin/opencode.exe"
+fi
 AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
 RUN_ARGS="${DOCKER_RUN_ARGS:---network host}"
+RUN_TIMEOUT="${RUN_TIMEOUT:-1200}"
+
+# 透传 CANNBot / Anthropic provider 环境变量。`-e VAR` 从宿主环境取值，
+# 不把 secret 写进命令行。
+ENV_ARGS=()
+for var in \
+    MODEL \
+    ANTHROPIC_AUTH_TOKEN \
+    ANTHROPIC_BASE_URL \
+    ANTHROPIC_MODEL \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL \
+    ANTHROPIC_DEFAULT_OPUS_MODEL \
+    ANTHROPIC_DEFAULT_SONNET_MODEL \
+    OPENCODE \
+    OPENCODE_CONFIG_CONTENT; do
+    if [ -n "${!var:-}" ]; then
+        ENV_ARGS+=(-e "$var")
+    fi
+done
+
+# 可选：把宿主的 opencode/cannbot 配置目录挂进容器。
+CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+MOUNT_CONFIG=()
+if [ -d "$CONFIG_DIR" ]; then
+    MOUNT_CONFIG=(-v "$CONFIG_DIR":/root/.config/opencode:ro)
+fi
 
 for path in "${BIN}" "${AUTH}"; do
     [ -e "${path}" ] || echo "警告: 路径不存在 ${path}" >&2
 done
+
+echo "  cli=${BIN}" >&2
+echo "  auth=${AUTH}" >&2
+echo "  config=${CONFIG_DIR}" >&2
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 for mode in with without; do
     echo "==> SKILL_MODE=${mode}"
-    cid=$(docker run -d ${RUN_ARGS} -e SKILL_MODE=${mode} \
+    cid=$(docker run -d ${RUN_ARGS} ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} ${MOUNT_CONFIG[@]+"${MOUNT_CONFIG[@]}"} \
+        -e SKILL_MODE=${mode} \
         -v "${BIN}":/usr/local/bin/opencode \
         -v "${AUTH}":/root/.local/share/opencode/auth.json:ro \
         "${IMAGE}") || { echo "docker run 失败" >&2; exit 1; }
 
-    docker wait "${cid}" >/dev/null
-    docker inspect -f '{{.State.ExitCode}}' "${cid}" > "${TMP}/${mode}.exit"
+    if timeout "${RUN_TIMEOUT}" docker wait "${cid}" >/dev/null; then
+        docker inspect -f '{{.State.ExitCode}}' "${cid}" > "${TMP}/${mode}.exit"
+    else
+        echo "  [warn] ${mode}: timeout after ${RUN_TIMEOUT}s; killing container" >&2
+        docker kill "${cid}" >/dev/null 2>&1 || true
+        echo 124 > "${TMP}/${mode}.exit"
+    fi
 
     docker cp "${cid}":/workspace/results/result.json "${TMP}/${mode}.json" 2>/dev/null || true
     if [ ! -s "${TMP}/${mode}.json" ]; then

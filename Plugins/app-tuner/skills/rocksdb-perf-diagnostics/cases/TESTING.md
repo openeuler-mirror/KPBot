@@ -257,6 +257,8 @@ sed -n '1,20p' /tmp/ab-java/without/prompt.txt
 4. 按 `case.yaml` 的 `assert` 检查 `with.result.json`
 5. 输出汇总表;`--strict` 要求 with 成功
 
+> 布局兼容:`run_all.sh` 会检查 `build.context` 下是否存在 `skills/rocksdb-perf-diagnostics`。如果没有(例如在 `some_skills/rocksdb-perf-diagnostics` 或 `.opencode/skills/...` 下运行),会自动在 `$OUT/.build-context` 构造临时 context,再把 Dockerfile 的 `COPY skills/...` 映射过去,不需要手工改 `case.yaml`。
+
 ### 4.3 手工运行单个 case(调试用)
 
 ```bash
@@ -280,14 +282,24 @@ cd cases/agent-execute-optimization
 ./run_ab.sh --save /tmp/ab-exec-docker
 ```
 
-### 4.4 指定模型
+### 4.4 指定模型与运行时
 
-`run_ab.sh` 默认只把 `SKILL_MODE` 传进容器。要改模型,用 `DOCKER_RUN_ARGS`:
+`run_ab.sh` 会优先使用 CANNBot 环境的 `cannbot` 二进制(存在时),否则退回 `opencode`;并自动把宿主机的 `MODEL`、`ANTHROPIC_*`、`OPENCODE`、`OPENCODE_CONFIG_CONTENT` 透传进容器,同时挂载 `~/.config/opencode`。通常只需要:
 
 ```bash
-DOCKER_RUN_ARGS="--network host -e MODEL=<provider/model>" \
-  ./run_ab.sh --save /tmp/ab-java-docker
+MODEL=cannbot/deepseek-v4.1-flash ./run_ab.sh --save /tmp/ab-java-docker
 ```
+
+`MODEL` 必须是 `cannbot models` / `opencode models` 里真实存在的 ID(大小写敏感)。`run_all.sh --model` 会自动追加 `-e MODEL=...`。
+
+entrypoint 会自动检测 CLI 的自动批准参数(`--auto` 或 `--dangerously-skip-permissions`),不需要手工改。
+
+超时:
+
+- `RUN_TIMEOUT`(默认 1200s)是**单臂**超时(WITH / WITHOUT 各一次)
+- `run_all.sh --timeout`(默认 2400s)是**单个 case** 的总超时;它会把 `RUN_TIMEOUT` 设为总超时的一半
+
+如果 `REASON` 显示 `model not found`,先跑 `cannbot models` 确认真实 ID;如果显示 `Unexpected server error`,检查容器内的 provider 环境变量/配置是否已透传。
 
 `run_all.sh --model` 已经会自动追加这个 `-e MODEL=...`。
 
