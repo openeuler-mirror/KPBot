@@ -34,6 +34,9 @@ bash install.sh project opencode /path/to/project
 > 用 kptools-agentenv-tuning 检查 AgentENV 并发恢复慢的问题。先检查 ARM 服务器环境，
 > 结合我的沙箱测试命令给出可验证的方案。
 
+> 用 agentenv-kernel-hz 判断当前项目是否适合调整内核 HZ。
+> 我有 ublk_ctl_mutex 等待和调度跟踪数据。
+
 专项 Skill 可在实际安装后按其名称独立调用；入口不会把未安装的专项当作可用能力。
 
 ## ARM 服务器上的第一步验证
@@ -99,6 +102,11 @@ Agent 用例由容器内 root 拥有的监督器采集 trace 并执行评分，�
 AGENTENV_TEST_IMAGE=<镜像名> python3 -B -m unittest discover \
   -s Plugins/app-tuner/skills/kptools-agentenv-tuning/evals -p test_container_security.py -v
 ```
+
+该套件需对每个用例镜像分别执行一次（`AGENTENV_TEST_IMAGE` 指定被测镜像）。
+套件使用固定假 agent 报告驱动各用例的 verify.sh，其 findings 文本须覆盖所有
+用例的必需关键词；新增用例引入新的必需关键词时，需同步扩展
+`evals/test_container_security.py` 的夹具文本，否则套件会对新用例镜像假失败。
 
 用例镜像默认使用原有 openEuler 基础镜像；网络环境需要时可用 Docker 的
 `--build-arg BASE_IMAGE=<兼容镜像>` 指定镜像源。

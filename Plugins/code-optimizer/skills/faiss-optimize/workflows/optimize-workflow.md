@@ -1,5 +1,7 @@
 # Faiss 完整优化流程（CP0–CP7）
 
+本工作流实现 [通用向量检索 CP0–CP7](../../vector-search-optimize/references/cp0-cp7.md) 的 Faiss 专项步骤。由通用入口转入时，沿用传入的范围和已有实验状态。
+
 状态协议：[state.schema.json](references/state.schema.json)。交接协议：[handoff.schema.json](references/handoff.schema.json)。本流程由 primary 协调，阶段产物写独立 run_dir，代码改动写目标源码仓。
 
 | 阶段 | 执行者 | 完成条件 |

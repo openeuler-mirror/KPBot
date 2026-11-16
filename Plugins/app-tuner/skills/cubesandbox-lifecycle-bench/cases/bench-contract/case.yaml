@@ -1,0 +1,17 @@
+# 用例：Tier A —— 一键生命周期基准的计划、安全和命令契约
+# 运行：bash cases/bench-contract/run.sh（从 skill 根目录或任意目录均可）
+name: bench-contract
+skill: cubesandbox-lifecycle-bench
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: requires_live_service
+    expect: false

@@ -6,7 +6,7 @@
 
 ## 概述
 
-code-optimizer 提供 78 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
+code-optimizer 提供 95 个专业技能（skills），覆盖从热点分析到代码优化的完整 Pipeline：
 
 - **性能分析**: 热点分析、火焰图解析、Top-down 分析、SPE 分析、调用上下文分析
 - **优化决策**: 意图解析、任务分解、优化策略决策、架构分析
@@ -14,7 +14,7 @@ code-optimizer 提供 78 个专业技能（skills），覆盖从热点分析到�
 - **平台支持**: Kunpeng-0xd01/0xd03/0xd06 微架构深度优化
 - **ARM 指令**: 完整的 ARM 指令集查询（Base/SVE/NEON/SME，共 1527+ 条指令）
 - **质量保障**: 对抗性审查、优化验证、修复代码
-- **Faiss 向量检索**: IVFPQ、FastScan、HNSW、RaBitQ 与 TurboQuant 的 CP0–CP7 优化工作流，配套构建、基线、采样、SIMD 和 UT/ST 验证
+- **向量数据库与向量检索**：通用 CP0–CP7 优化工作流，按实际目标接入 Faiss、DiskANN 专项流程
 - **TF 推理优化**: TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel + 多维 profiling）
 - **CubeSandbox Guest 连接优化**: 快照恢复期间有界预连接、monitor 连接复用和 restore runtime 复用，附原理、独立操作手册、历史补丁与创建总时间配对复现工具
 
@@ -104,6 +104,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | [cubesandbox-agent-preconnect](skills/cubesandbox-agent-preconnect/SKILL.md) | CubeSandbox Guest 预连接与连接/runtime 复用；自带实施、回退、验证协议和工具，不依赖其他 skill |
 | `apply-optimization` | 应用优化方案 |
 | `apply-generic-optimization` | 通用优化应用 |
+| [cubesandbox-master-create-path](skills/cubesandbox-master-create-path/SKILL.md) | 模板解析 TTL 缓存、同键查询合并与 best-effort spec 异步落库，附一致性、构建部署和独立复现工具；不依赖其他 skill |
 | `apply-vectorization` | 向量化优化（NEON/SVE） |
 | `asm-optimization` | 汇编级优化 |
 | `branch-elimination` | 分支消除 |
@@ -111,6 +112,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `operation-fusion` | 操作融合 |
 | `prefetch-optimization` | 预取优化 |
 | `memory-access-optimization` | 访存优化 |
+| [cubesandbox-rootfs-shadow-pool](skills/cubesandbox-rootfs-shadow-pool/SKILL.md) | rootfs 后台预派生、rename 领养与目录合并持久化，附混合构建、生命周期、容量和独立复现工具；不依赖其他 skill |
 | `scalar-vector-hybrid` | 标量-向量混合优化 |
 | `source-transform-autovec` | 源码变换辅助自动向量化 |
 | `precision-transform` | 精度变换优化 |
@@ -130,10 +132,13 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 这两个技能可独立调用，尚未接入通用代码优化流水线内部的策略路由。
 
-### Faiss 向量检索 (Vector Search)
+### 向量数据库与向量检索
 
-完整优化使用 [`faiss-optimize`](skills/faiss-optimize/SKILL.md)，由 `kpbot-code-optimizer` 根据库名与源码指纹路由。
-明确的 Faiss 请求优先进入 Faiss 工作流；仅出现 RaBitQ 等共享算法名时，需要区分目标库。
+`kpbot-code-optimizer` 将检索优化任务交给 [`vector-search-optimize`](skills/vector-search-optimize/SKILL.md)。该入口定义一套 [通用 CP0–CP7](skills/vector-search-optimize/references/cp0-cp7.md)，按实际库和执行层级路由。Faiss、DiskANN 复用各自的角色、构建入口和实验状态。其他引擎和数据库服务层可直接使用通用流程。
+
+#### Faiss
+
+Faiss 专项由 [`faiss-optimize`](skills/faiss-optimize/SKILL.md) 编排。
 
 | 技能 | 职责 |
 |------|------|
@@ -147,13 +152,30 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 | `vector-experiment-methodology` / `vector-ut-st-validation` | 交错性能对照、正确性验证与报告契约 |
 
 安装沿用现有 `install.sh`，同时注册五个 Faiss 角色。运行产物保存在独立目录；算法、版本、数据和资源限制由当前任务决定。
-入门与安装验证见 [Faiss 集成说明](../../docs/faiss-integration.md)。
+
+#### DiskANN
+
+DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排基线、候选实现和复验。安装器同时注册五个专业子 Agent。
+
+| 技能 | 职责 |
+|------|------|
+| [`diskann-optimize`](skills/diskann-optimize/SKILL.md) | CP0–CP7 编排和实验状态管理 |
+| [`diskann-source-analysis`](skills/diskann-source-analysis/SKILL.md) | 确认版本、索引后端、调用链和瓶颈 |
+| [`diskann-benchmark-baseline`](skills/diskann-benchmark-baseline/SKILL.md) | 冻结基线、运行原生基准和采样 |
+
+三个技能复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`。安装和运行方式见 [DiskANN 快速入门](skills/diskann-optimize/quickstart.md)。
+
+### 向量数据库 (Vector DB)
+| 技能 | 描述 |
+|------|------|
+| `vector-db-optimization-migration` | 向量数据库/检索库跨版本优化迁移（引擎中立流程、Faiss/DiskANN 按需路由、资产分型、分层 patch、G0–G5 等价性门禁、同窗 ABBA） |
 
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |
 |------|------|
 | `kpbot-code-optimizer` | 优化 Pipeline 编排 |
 | `kpbot-code-optimizer-workflow` | 优化 Pipeline 工作流 |
+| [cubesandbox-create-optimize](skills/cubesandbox-create-optimize/SKILL.md) | 面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口 |
 | `drive-claude-optimize-pipeline` | 驱动 Claude 执行优化 Pipeline |
 | `batch-drive-optimize-pipeline` | 批量驱动优化 Pipeline |
 | `interactive-optimizer` | 交互式优化器 |

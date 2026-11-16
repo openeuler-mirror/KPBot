@@ -63,6 +63,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 专项 Skill 集中放在 `skills/kptools-agentenv-tuning/skills/`；安装器会将实际存在的
 专项暴露为独立入口。
 
+| 技能 | 描述 |
+|------|------|
+| `agentenv-pvspinlock` | ARM Guest/Host 半虚拟化锁等待与唤醒优化 |
+| `agentenv-kernel-hz` | 并发恢复场景 HZ 调优及调度延迟验证 |
+| `agentenv-cluster-tlbi` | cluster 布局与 TLBI 范围控制联合分析 |
+
 安装、ARM 服务器只读采集和验证范围见 [AgentENV 技能包说明](skills/kptools-agentenv-tuning/README.md)。
 
 ### 独立调优 skill
@@ -95,6 +101,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
 | `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
+| [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键基准(计划哈希确认、只读预检、NUMA/TAP/代理准备、create/density/Snapshot/dirty_page/Rollback/Clone/Pause-Resume 全矩阵、差集清理与证据归档) |
 
 ### 场景优化类 skill
 

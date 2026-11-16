@@ -1,0 +1,8 @@
+name: cubesandbox-master-create-path-spec-write-order
+skill: cubesandbox-master-create-path
+tier: B
+entrypoint: ["python3", "cases/spec-write-order/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 实际 async.go 与应用补丁后的 Put/Delete；DB、model 和请求编码使用受控 stub。
