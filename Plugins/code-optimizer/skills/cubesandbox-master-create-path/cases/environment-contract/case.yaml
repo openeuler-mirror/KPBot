@@ -1,0 +1,8 @@
+name: cubesandbox-master-create-path-environment-contract
+skill: cubesandbox-master-create-path
+tier: B
+entrypoint: ["python3", "cases/environment-contract/test_environment.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 需要 Git；以假凭据 sentinel 验证实际子进程环境，不构成沙箱。
