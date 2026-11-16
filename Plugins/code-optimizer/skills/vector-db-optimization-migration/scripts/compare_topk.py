@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare two top-k dumps for G3/G4 gates.
+"""Compare two top-k dumps for the G0/G3 equivalence gates.
 
 Input contract: text file, one row per (query, rank) result.
 Accepted row forms (blank lines and lines starting with '#' are ignored):
@@ -10,11 +10,29 @@ Accepted row forms (blank lines and lines starting with '#' are ignored):
 
 `doc_id` is compared as a string; `distance` is parsed as float.
 
+This tool checks baseline-vs-candidate equivalence, NOT recall against
+ground truth: the reported overlap@k is the set overlap of the two
+top-k lists. For G4, compute recall@k of each arm against the frozen
+ground truth separately; do not use baseline overlap as recall.
+
+Default (strict, for G0/G3 "bit-exact" equivalence): the two dumps must
+agree on the query set (both directions), per-query row counts, doc-id
+order, and distances compared by doc id with zero tolerance (exact
+float equality — the strictest check possible on text dumps). Any
+deviation exits 1. Relaxations are explicit and must be justified by
+the mechanism under test:
+
+    --allow-order-change   accept order/tie-break changes (OPT_IN
+                           mechanisms); still requires identical doc-id
+                           sets and distances
+    --atol/--rtol          distance tolerance (default 0 = exact)
+
 Typical use:
     python3 compare_topk.py --baseline base.dump --candidate cand.dump --k 10
 
-Exit code is 1 when any recall@k is below 1.0 or any matched distance is
-outside tolerance (use --no-fail to only report).
+Exit codes: 0 = equivalent under the requested strictness; 1 = any
+mismatch (query set, row count, order, id set, distance); 2 = parse
+error. --no-fail keeps exit 0 for report-only runs.
 """
 
 import argparse
@@ -24,8 +42,8 @@ import sys
 from collections import OrderedDict
 
 DEFAULTS = {
-    "atol": 1e-6,
-    "rtol": 1e-6,
+    "atol": 0.0,
+    "rtol": 0.0,
     "max_report": 20,
 }
 
@@ -38,7 +56,7 @@ def split_row(line):
     return [p for p in parts if p != ""]
 
 
-def parse_dump(path, limit_k=None):
+def parse_dump(path):
     data = OrderedDict()
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for lineno, raw in enumerate(fh, 1):
@@ -61,8 +79,6 @@ def parse_dump(path, limit_k=None):
                 dist = float(dist)
             except ValueError:
                 raise ValueError("%s:%d: bad distance %r" % (path, lineno, dist))
-            if limit_k is not None and rank >= limit_k:
-                continue
             data.setdefault(qid, []).append((rank, doc_id, dist))
     for qid in data:
         data[qid].sort(key=lambda x: x[0])
@@ -76,74 +92,109 @@ def rel_diff(a, b):
     return abs(a - b) / denom
 
 
-def compare(base, cand, k, atol, rtol, max_report):
-    qids = list(base.keys())
+def compare(base, cand, k, atol, rtol, max_report, allow_order_change):
+    base_qids = list(base.keys())
+    cand_qids = list(cand.keys())
+    base_qset = set(base_qids)
+    cand_qset = set(cand_qids)
+
     report = []
-    total_recall = 0.0
-    min_recall = 1.0
+    total_overlap = 0.0
+    min_overlap = 1.0
     exact_order = 0
+    order_mismatch = 0
+    row_count_mismatch = 0
     dist_mismatch = 0
+    id_mismatch_queries = 0
     max_abs = 0.0
     max_rel = 0.0
-    id_mismatch_queries = 0
 
-    for qid in qids:
+    for qid in base_qids:
         b_rows = base[qid][:k]
         c_rows = cand.get(qid, [])[:k]
         b_ids = [r[1] for r in b_rows]
         c_ids = [r[1] for r in c_rows]
         b_set = set(b_ids)
         c_set = set(c_ids)
-        recall = 0.0 if not b_set else len(b_set & c_set) / float(len(b_set))
-        total_recall += recall
-        min_recall = min(min_recall, recall)
+        overlap = 0.0 if not b_set else len(b_set & c_set) / float(len(b_set))
+        total_overlap += overlap
+        min_overlap = min(min_overlap, overlap)
+
         same_order = b_ids == c_ids
         if same_order:
             exact_order += 1
-        elif b_set != c_set:
+        else:
+            order_mismatch += 1
+        if b_set != c_set:
             id_mismatch_queries += 1
+        if len(b_rows) != len(c_rows):
+            row_count_mismatch += 1
 
+        # Distance comparison aligned by doc_id (independent of position):
+        # every id present on both sides must agree within tolerance; ids
+        # present on only one side are counted as id set mismatches above.
+        b_map = {}
+        for _, doc_id, dist in b_rows:
+            b_map.setdefault(doc_id, []).append(dist)
+        c_map = {}
+        for _, doc_id, dist in c_rows:
+            c_map.setdefault(doc_id, []).append(dist)
         query_dist_bad = False
-        for pos, (b_row, c_row) in enumerate(zip(b_rows, c_rows)):
-            if b_row[1] != c_row[1]:
+        for doc_id, b_dists in b_map.items():
+            c_dists = c_map.get(doc_id)
+            if c_dists is None or len(c_dists) != len(b_dists):
                 continue
-            bd, cd = b_row[2], c_row[2]
-            ad = abs(bd - cd)
-            rd = rel_diff(bd, cd)
-            max_abs = max(max_abs, ad)
-            max_rel = max(max_rel, rd)
-            if not (math.isclose(bd, cd, rel_tol=rtol, abs_tol=atol)):
-                dist_mismatch += 1
-                query_dist_bad = True
+            for bd, cd in zip(b_dists, c_dists):
+                ad = abs(bd - cd)
+                rd = rel_diff(bd, cd)
+                max_abs = max(max_abs, ad)
+                max_rel = max(max_rel, rd)
+                if not (math.isclose(bd, cd, rel_tol=rtol, abs_tol=atol)):
+                    dist_mismatch += 1
+                    query_dist_bad = True
 
-        if (not same_order) or recall < 1.0 or query_dist_bad:
+        if (
+            (not same_order and not allow_order_change)
+            or b_set != c_set
+            or len(b_rows) != len(c_rows)
+            or query_dist_bad
+        ):
             if len(report) < max_report:
                 report.append(
                     {
                         "query_id": qid,
-                        "recall": recall,
+                        "overlap": overlap,
                         "exact_order": same_order,
+                        "baseline_rows": len(b_rows),
+                        "candidate_rows": len(c_rows),
                         "baseline": [{"rank": r, "id": i, "dist": d} for r, i, d in b_rows],
                         "candidate": [{"rank": r, "id": i, "dist": d} for r, i, d in c_rows],
                     }
                 )
 
-    n = len(qids)
+    missing_candidate = [q for q in base_qids if q not in cand_qset]
+    extra_candidate = [q for q in cand_qids if q not in base_qset]
+    n = len(base_qids)
     summary = {
         "queries": n,
         "k": k,
-        "mean_recall": (total_recall / n) if n else 0.0,
-        "min_recall": min_recall if n else 0.0,
+        "mean_overlap": (total_overlap / n) if n else 0.0,
+        "min_overlap": min_overlap if n else 0.0,
+        "overlap_metric": "overlap@k (set overlap vs baseline, not recall vs ground truth)",
         "exact_order_queries": exact_order,
+        "order_mismatch_queries": order_mismatch,
+        "row_count_mismatch_queries": row_count_mismatch,
         "id_mismatch_queries": id_mismatch_queries,
         "distance_mismatches": dist_mismatch,
         "max_abs_distance_diff": max_abs,
         "max_rel_distance_diff": max_rel,
-        "missing_candidate_queries": sum(1 for q in qids if q not in cand),
+        "missing_candidate_queries": len(missing_candidate),
+        "extra_candidate_queries": len(extra_candidate),
+        "allow_order_change": bool(allow_order_change),
         "atol": atol,
         "rtol": rtol,
     }
-    return summary, report
+    return summary, report, {"missing_candidate": missing_candidate, "extra_candidate": extra_candidate}
 
 
 def main(argv=None):
@@ -151,16 +202,24 @@ def main(argv=None):
     ap.add_argument("--baseline", required=True, help="baseline top-k dump")
     ap.add_argument("--candidate", required=True, help="candidate/migrated top-k dump")
     ap.add_argument("--k", type=int, default=None, help="compare only top-k (default: full dump)")
-    ap.add_argument("--atol", type=float, default=DEFAULTS["atol"])
-    ap.add_argument("--rtol", type=float, default=DEFAULTS["rtol"])
+    ap.add_argument("--atol", type=float, default=DEFAULTS["atol"],
+                    help="absolute distance tolerance (default 0 = exact equality)")
+    ap.add_argument("--rtol", type=float, default=DEFAULTS["rtol"],
+                    help="relative distance tolerance (default 0 = exact equality)")
+    ap.add_argument("--allow-order-change", action="store_true",
+                    help="accept order/tie-break changes (OPT_IN mechanisms); "
+                         "doc-id sets and distances must still match")
     ap.add_argument("--max-report", type=int, default=DEFAULTS["max_report"])
     ap.add_argument("--json", help="write machine-readable report to this path")
     ap.add_argument("--no-fail", action="store_true", help="always exit 0 unless parse error")
     args = ap.parse_args(argv)
 
     try:
-        base = parse_dump(args.baseline, args.k)
-        cand = parse_dump(args.candidate, args.k)
+        # Truncation to top-k happens row-count-wise in compare(), not by
+        # rank value, so both 0-based and 1-based rank columns behave the
+        # same way.
+        base = parse_dump(args.baseline)
+        cand = parse_dump(args.candidate)
     except (OSError, ValueError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 2
@@ -173,32 +232,44 @@ def main(argv=None):
     if k is None:
         k = max(len(rows) for rows in base.values())
 
-    summary, report = compare(base, cand, k, args.atol, args.rtol, args.max_report)
+    summary, report, qid_lists = compare(
+        base, cand, k, args.atol, args.rtol, args.max_report, args.allow_order_change
+    )
     result = {"summary": summary, "mismatches": report}
 
     print(
-        "queries=%d k=%d mean_recall=%.6f min_recall=%.6f exact_order=%d/%d "
-        "id_mismatch_queries=%d dist_mismatch=%d max_abs=%.6g max_rel=%.6g missing_candidate=%d"
+        "queries=%d k=%d mean_overlap=%.6f min_overlap=%.6f exact_order=%d/%d "
+        "order_mismatch=%d row_count_mismatch=%d id_mismatch_queries=%d dist_mismatch=%d "
+        "max_abs=%.6g max_rel=%.6g missing_candidate=%d extra_candidate=%d%s"
         % (
             summary["queries"],
             summary["k"],
-            summary["mean_recall"],
-            summary["min_recall"],
+            summary["mean_overlap"],
+            summary["min_overlap"],
             summary["exact_order_queries"],
             summary["queries"],
+            summary["order_mismatch_queries"],
+            summary["row_count_mismatch_queries"],
             summary["id_mismatch_queries"],
             summary["distance_mismatches"],
             summary["max_abs_distance_diff"],
             summary["max_rel_distance_diff"],
             summary["missing_candidate_queries"],
+            summary["extra_candidate_queries"],
+            " [order-change allowed]" if args.allow_order_change else "",
         )
     )
 
     for item in report:
         print(
-            "  qid=%s recall=%.3f exact_order=%s"
-            % (item["query_id"], item["recall"], item["exact_order"])
+            "  qid=%s overlap=%.3f exact_order=%s rows=%d/%d"
+            % (item["query_id"], item["overlap"], item["exact_order"],
+               item["baseline_rows"], item["candidate_rows"])
         )
+    for qid in qid_lists["missing_candidate"][: args.max_report]:
+        print("  MISSING_IN_CANDIDATE qid=%s" % qid)
+    for qid in qid_lists["extra_candidate"][: args.max_report]:
+        print("  EXTRA_IN_CANDIDATE qid=%s" % qid)
 
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fh:
@@ -206,10 +277,19 @@ def main(argv=None):
         print("report_json=%s" % args.json)
 
     failed = (
-        summary["min_recall"] < 1.0
+        (summary["order_mismatch_queries"] > 0 and not args.allow_order_change)
+        or summary["row_count_mismatch_queries"] > 0
+        or summary["id_mismatch_queries"] > 0
         or summary["distance_mismatches"] > 0
         or summary["missing_candidate_queries"] > 0
+        or summary["extra_candidate_queries"] > 0
     )
+    if failed:
+        print(
+            "exit=1: query set / row count / order / id set / distance mismatch "
+            "(atol=%g rtol=%g, order-change %s)"
+            % (args.atol, args.rtol, "allowed" if args.allow_order_change else "rejected")
+        )
     if failed and not args.no_fail:
         return 1
     return 0

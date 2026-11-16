@@ -1,20 +1,36 @@
 #!/usr/bin/env python3
 """Check macro/flag consistency across translation units.
 
-Parses compile_commands.json and verifies that required macros/flags are present
-in every selected entry, and (optionally) that selected flags are uniform.
+Parses compile_commands.json and verifies that required macros/flags are
+present in every selected entry, and that uniform flags are consistent.
+
+Parsing semantics (aligned with how the compiler reads its own command
+line, in argument order):
+
+- macros: `-DNAME=VALUE` defines, `-UNAME` removes an earlier definition
+  on the same command line; `--require-macro NAME=VALUE` therefore fails
+  when any selected TU cancels the macro with -U.
+- flags: both `-march=value` and the space-separated `-march value`
+  forms are recognized; a later occurrence overrides an earlier one.
+- uniformity: a flag that is missing from some selected TUs counts as
+  its own "<absent>" value — one TU with `-march` and one without is
+  reported (and by default fails) as non-uniform.
+
+Exit code is 1 when a required macro/flag is missing, or when uniform
+flags are non-uniform (unless --allow-inconsistent is given). Use
+--path-filter to restrict the check to the TUs that actually build the
+migrated code; running over the whole project typically reports
+irrelevant non-uniformity (e.g. plain C files without -march).
 
 Typical use:
     python3 check_compile_flags.py \
       --compile-commands build/compile_commands.json \
+      --path-filter faiss/ \
       --require-macro <MACRO=VALUE> \
       --require-flag=-march=armv8.2-a+sve
 
 Note: flags beginning with '-' must use the '--require-flag=-march=...' form
 (equals sign) so argparse does not treat them as another option.
-
-Exit code is 1 when a required macro/flag is missing or --strict-uniform finds
-different values for a uniform flag.
 """
 
 import argparse
@@ -39,6 +55,10 @@ INTERESTING_PREFIXES = (
 )
 
 UNIFORM_FLAGS_DEFAULT = ("-march", "-mcpu", "-mtune", "-mabi", "-flto", "-fopenmp", "-msve-vector-bits")
+
+SPACE_VALUE_FLAGS = ("-march", "-mcpu", "-mtune", "-mabi", "-msve-vector-bits")
+
+ABSENT = "<absent>"
 
 
 def load_entries(path):
@@ -71,7 +91,7 @@ def normalize_flag(token):
         else:
             name, value = name_value, "1"
         return ("macro", name, value)
-    for prefix in ("-march", "-mcpu", "-mtune", "-mabi", "-msve-vector-bits"):
+    for prefix in SPACE_VALUE_FLAGS:
         if token == prefix:
             return ("flag", prefix, "")
         if token.startswith(prefix + "="):
@@ -85,22 +105,43 @@ def normalize_flag(token):
 
 
 def parse_entry(entry):
+    """Compute effective macros and flags, honoring argument order.
+
+    - -D defines a macro, -U removes it (later tokens win).
+    - Space-separated "-march value" pairs are folded into one flag.
+    - Repeated flags keep the last occurrence (compiler override order).
+    """
+    argv = entry_argv(entry)
     macros = {}
     flags = {}
-    for token in entry_argv(entry):
-        item = normalize_flag(token)
-        if item is None:
-            continue
-        kind, name, value = item
-        if kind == "macro":
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token.startswith("-U") and len(token) > 2:
+            macros.pop(token[2:], None)
+        elif token.startswith("-D") and len(token) > 2:
+            item = normalize_flag(token)
+            _, name, value = item
             macros[name] = value
+        elif token in SPACE_VALUE_FLAGS:
+            if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                flags[token] = argv[i + 1]
+                i += 1  # consume the value token
+            else:
+                flags[token] = ""
         else:
-            flags[name] = value
+            item = normalize_flag(token)
+            if item is not None:
+                kind, name, value = item
+                flags[name] = value
+        i += 1
     return macros, flags
 
 
 def flag_display(key, value):
-    if key in ("-march", "-mcpu", "-mtune", "-mabi", "-msve-vector-bits"):
+    if value is None:
+        return ABSENT
+    if key in SPACE_VALUE_FLAGS:
         return "%s=%s" % (key, value)
     if key in ("-flto", "-fopenmp") and value not in ("1", ""):
         return "%s=%s" % (key, value)
@@ -110,11 +151,12 @@ def flag_display(key, value):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--compile-commands", required=True)
-    ap.add_argument("--path-filter", action="append", default=[], help="substring filter on file path (repeatable)")
-    ap.add_argument("--require-macro", action="append", default=[], help="NAME or NAME=VALUE (repeatable)")
+    ap.add_argument("--path-filter", action="append", default=[], help="substring filter on file path (repeatable); restrict to the TUs that build the migrated code")
+    ap.add_argument("--require-macro", action="append", default=[], help="NAME or NAME=VALUE (repeatable); fails if a TU defines the macro with a different value or cancels it with -U")
     ap.add_argument("--require-flag", action="append", default=[], help="exact flag/token, e.g. -march=armv8.2-a+sve (repeatable)")
-    ap.add_argument("--uniform-flag", action="append", default=None, help="flag key that must be uniform (repeatable)")
-    ap.add_argument("--strict-uniform", action="store_true", help="fail if uniform flags differ across entries")
+    ap.add_argument("--uniform-flag", action="append", default=None, help="flag key that must be uniform, absence counts as a value (repeatable)")
+    ap.add_argument("--allow-inconsistent", action="store_true", help="only report non-uniform flags; exit code stays 0 (default: non-uniform flags exit 1)")
+    ap.add_argument("--strict-uniform", action="store_true", help="(deprecated no-op: non-uniform flags already fail by default; kept for compatibility)")
     ap.add_argument("--json", help="write machine-readable report to this path")
     ap.add_argument("--max-report", type=int, default=20)
     args = ap.parse_args(argv)
@@ -187,13 +229,15 @@ def main(argv=None):
                     }
                 )
 
+    # Uniformity: absence is its own value bucket, so "one TU has -march,
+    # another does not" is reported (and fails by default) as non-uniform.
     uniform_values = {}
     for key in uniform_flags:
         counter = defaultdict(list)
         for rec in selected:
             value = rec["flags"].get(key)
-            if value is not None:
-                counter[value].append(rec["file"])
+            display = flag_display(key, value)
+            counter[display].append(rec["file"])
         uniform_values[key] = OrderedDict(
             (k, v) for k, v in sorted(counter.items(), key=lambda kv: (-len(kv[1]), kv[0]))
         )
@@ -205,7 +249,7 @@ def main(argv=None):
                 {
                     "flag": key,
                     "values": [
-                        {"value": flag_display(key, v), "count": len(files), "files": files[: args.max_report]}
+                        {"value": v, "count": len(files), "files": files[: args.max_report]}
                         for v, files in values.items()
                     ],
                 }
@@ -253,8 +297,10 @@ def main(argv=None):
         print("report_json=%s" % args.json)
 
     if missing:
+        print("exit=1: required macro/flag missing or cancelled (-U) in some selected TU")
         return 1
-    if args.strict_uniform and inconsistent:
+    if inconsistent and not args.allow_inconsistent:
+        print("exit=1: uniform flags are non-uniform (use --allow-inconsistent to report only)")
         return 1
     return 0
 

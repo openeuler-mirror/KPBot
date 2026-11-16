@@ -46,10 +46,14 @@ C_EXT = {
     ".cu",
 }
 
-OPTION_RE = re.compile(r"option\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s+\"[^\"]*\"\s+(ON|OFF)\b", re.S)
+OPTION_RE = re.compile(r"option\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s+\"[^\"]*\"(?:\s+(ON|OFF))?\s*\)", re.S)
 DEFINE_RE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_][A-Za-z0-9_]*)", re.M)
 IFDEF_RE = re.compile(r"^[ \t]*#[ \t]*(?:ifdef|ifndef)[ \t]+([A-Za-z_][A-Za-z0-9_]*)", re.M)
-IF_DEFINED_RE = re.compile(r"^[ \t]*#[ \t]*if\b[^\n]*?\bdefined[ \t]*\(?[ \t]*([A-Za-z_][A-Za-z0-9_]*)", re.M)
+# preprocessor lines that may contain defined(...) expressions
+IF_LINE_RE = re.compile(r"^[ \t]*#[ \t]*(?:el)?if\b.*$", re.M)
+# every defined(NAME) inside such a line is captured, so combined
+# conditions like `#if defined(A) && defined(B)` register both macros
+DEFINED_RE = re.compile(r"\bdefined\s*\(?\s*([A-Za-z_][A-Za-z0-9_]*)")
 
 
 def iter_files(root):
@@ -78,7 +82,9 @@ def scan_cmake(root):
             continue
         text = read_text(path)
         for match in OPTION_RE.finditer(text):
-            name, default = match.group(1), match.group(2)
+            name = match.group(1)
+            # CMake: option(<var> "<doc>" [value]) — a missing value means OFF
+            default = match.group(2) or "OFF"
             options.setdefault(name, {"default": default, "files": []})
             options[name]["files"].append(rel(root, path))
     return options
@@ -97,8 +103,9 @@ def scan_macros(root):
             defines[name] += 1
         for name in IFDEF_RE.findall(text):
             conditionals[name] += 1
-        for name in IF_DEFINED_RE.findall(text):
-            conditionals[name] += 1
+        for line_match in IF_LINE_RE.finditer(text):
+            for name in DEFINED_RE.findall(line_match.group(0)):
+                conditionals[name] += 1
     return defines, conditionals
 
 

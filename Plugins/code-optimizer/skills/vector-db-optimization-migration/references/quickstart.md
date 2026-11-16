@@ -42,12 +42,13 @@ python3 <skill>/scripts/scan_version_delta.py \
 ```bash
 python3 <skill>/scripts/check_compile_flags.py \
   --compile-commands /path/to/build/compile_commands.json \
+  --path-filter <相关源码子串，如 faiss/> \
   --require-macro <MACRO=VALUE> \
   --require-flag=-march=armv8.2-a+sve \
   --json "$RUN_DIR/compile-flags.json"
 ```
 
-要求：相关 TU 的 `-D`、`-march`、`-flto` 一致；缺项或分裂时先修构建，不进入门禁。
+要求：相关 TU 的 `-D`、`-march`、`-flto` 一致；脚本默认“缺失或分裂即退出 1”（`-U` 取消的宏算缺失；某 TU 缺 `-march` 算分裂；`-march val` 空格形态与 `-march=val` 等价识别）。缺项或分裂时先修构建，不进入门禁。用 `--path-filter` 限定到迁移涉及的 TU，避免对全量 TU（如纯 C 文件）误报；确需只报告不失败时显式加 `--allow-inconsistent`。
 
 ## 3. 追溯矩阵与 patch 排序
 
@@ -72,6 +73,8 @@ python3 <skill>/scripts/compare_topk.py \
   --k 10
 ```
 
+脚本默认严格：查询集（双向）、每查询条数、doc-id 顺序、按 doc-id 对齐的距离全等（零容差）任一不符即退出 1。不要为“通过”放宽容差；只有 OPT_IN 机制按其契约显式加 `--allow-order-change`（仍要求集合与距离全等）或显式 `--atol/--rtol` 并记录理由。
+
 任何差异都停止，先排查宏/ABI/构建，不要进入性能阶段。
 
 ## 5. G1–G3 冒烟
@@ -87,7 +90,7 @@ g++ -O2 -std=c++17 <skill>/templates/kernel_probe.cpp -ldl -o "$RUN_DIR/G2-kerne
 
 ## 6. G4–G5（完整迁移）
 
-- G4：每数据集 recall@k 不得低于冻结基线（含 1e-6 级微差）；同时看逐查询 mismatch。
+- G4：每数据集 recall@k 不得低于冻结基线（含 1e-6 级微差）。recall 必须用冻结 ground truth 对每臂分别计算；`compare_topk.py` 的 `overlap@k` 是候选与基线 top-k 的集合重合率，只作等价性排查参考，不得当 recall 报告。同时看逐查询 mismatch。
 - G5：同机、同窗口、同核集/NUMA、同索引做交错 ABBA；报告每数据集 QPS、geomean、per-dataset floor、噪声地板与归因。
 
 不要把 G0–G3 的冒烟结果当作最终收益；也不要在 G4 失败时进入 G5。

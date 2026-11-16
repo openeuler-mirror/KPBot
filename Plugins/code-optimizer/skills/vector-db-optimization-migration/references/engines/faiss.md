@@ -60,12 +60,13 @@ Faiss 专属 Skill 未安装时，按 `engine-routing.md` 的降级规则处理�
 # 版本差异审计（CMake option / 宏 / 公共头）
 python3 scripts/scan_version_delta.py --source <src_faiss> --target <dst_faiss> --json <run_dir>/version-delta.json
 
-# 编译宏/flag 一致性
+# 编译宏/flag 一致性（默认缺失/分裂即退出 1；--path-filter 限定到 Faiss 相关 TU）
 python3 scripts/check_compile_flags.py --compile-commands <build>/compile_commands.json \
+  --path-filter faiss/ \
   --require-macro <MACRO=VALUE> --require-flag=-march=<value> --json <run_dir>/compile-flags.json
 
-# top-k dump 对比
+# top-k 等价性对比（G0/G3；默认严格：查询集/条数/顺序/距离全等）
 python3 scripts/compare_topk.py --baseline <base.dump> --candidate <cand.dump> --k 10
 ```
 
-`scan_version_delta.py` 是启发式取证，发现项必须回到当前 commit 复核；`strings libfaiss.so` 不能证明宏已启用。
+`scan_version_delta.py` 是启发式取证，发现项必须回到当前 commit 复核；`strings libfaiss.so` 不能证明宏已启用。`check_compile_flags.py` 按参数顺序解析 `-D`/`-U`（被 `-U` 取消的宏算缺失），`-march val` 与 `-march=val` 等价识别，某 TU 缺失 uniform flag 也算分裂。`compare_topk.py` 的 `overlap@k` 是与基线的重合率；G4 recall 用冻结 ground truth 每臂分别计算。
