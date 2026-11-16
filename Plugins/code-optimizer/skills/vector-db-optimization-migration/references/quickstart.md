@@ -48,7 +48,7 @@ python3 <skill>/scripts/check_compile_flags.py \
   --json "$RUN_DIR/compile-flags.json"
 ```
 
-要求：相关 TU 的 `-D`、`-march`、`-flto` 一致；脚本默认“缺失或分裂即退出 1”（`-U` 取消的宏算缺失；某 TU 缺 `-march` 算分裂；`-march val` 空格形态与 `-march=val` 等价识别）。缺项或分裂时先修构建，不进入门禁。用 `--path-filter` 限定到迁移涉及的 TU，避免对全量 TU（如纯 C 文件）误报；确需只报告不失败时显式加 `--allow-inconsistent`。
+要求：相关 TU 的 `-D`、`-march`、`-flto` 一致；脚本默认“缺失或分裂即退出 1”（`-U` 取消的宏算缺失，含空格形态 `-U NAME`；某 TU 缺 `-march` 算分裂；`-march val` 空格形态与 `-march=val` 等价识别；`-fno-lto` 等负向 flag 记为显式关闭，与开启、缺失都判定为不同取值）。缺项或分裂时先修构建，不进入门禁。用 `--path-filter` 限定到迁移涉及的 TU，避免对全量 TU（如纯 C 文件）误报；确需只报告不失败时显式加 `--allow-inconsistent`。
 
 ## 3. 追溯矩阵与 patch 排序
 
@@ -73,7 +73,7 @@ python3 <skill>/scripts/compare_topk.py \
   --k 10
 ```
 
-脚本默认严格：查询集（双向）、每查询条数、doc-id 顺序、按 doc-id 对齐的距离全等（零容差）任一不符即退出 1。不要为“通过”放宽容差；只有 OPT_IN 机制按其契约显式加 `--allow-order-change`（仍要求集合与距离全等）或显式 `--atol/--rtol` 并记录理由。
+脚本默认严格：查询集（双向）、每查询条数、rank 连续无重复、doc-id 顺序、按 doc-id 对齐的距离**按位模式**全等（`-0.0` 与 `+0.0` 也不放过；零容差）任一不符即退出 1；省略 `--k` 时全量比对（候选多出的行不会被静默截掉），显式 `--k` 才截断两侧。不要为“通过”放宽容差；只有 OPT_IN 机制按其契约显式加 `--allow-order-change`（仍要求集合与距离全等）或显式 `--atol/--rtol` 并记录理由（非零容差下比较退化为数值相等，±0.0 不再区分）。
 
 任何差异都停止，先排查宏/ABI/构建，不要进入性能阶段。
 

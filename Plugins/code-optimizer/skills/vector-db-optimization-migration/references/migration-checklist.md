@@ -69,7 +69,7 @@ acceptance（recall 门禁/性能门限/噪声地板/ABBA 轮次/per-dataset flo
 - [ ] 同机、同窗口、同核集/NUMA、同索引、同参数。
 - [ ] ABBA/BABA 多轮紧贴交错，记录每轮库 SHA256。
 - [ ] 记录背景负载与异常窗口，保留所有有效轮次。
-- [ ] 噪声地板已用惰性/全 OFF 对照实测标定。
+- [ ] 噪声地板已按 `equivalence-and-gates.md` G5 口径用同配置 A/A 自对照（A 对 A、B 对 B，采集条件与 ABBA 一致）实测标定，未用全 OFF 对全 ON 差值充当噪声。
 - [ ] 报告每数据集 QPS、Recall、geomean、per-dataset floor。
 - [ ] 内核段/宿主段已分开计时或隔离回放。
 - [ ] 未把跨版本绝对 QPS 相减当迁移收益。

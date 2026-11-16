@@ -5,19 +5,26 @@ Groups:
 
   compare_topk  G0/G3 equivalence gates: order swap, ULP-level distance
                 drift, extra/missing candidate query, row-count mismatch
-                must all exit 1 by default; --allow-order-change and
-                explicit tolerances are the only relaxations; output
-                fields use overlap@k naming (no recall-vs-ground-truth
-                claim).
-  check_flags   compile_commands.json parsing: -U cancels an earlier -D,
-                later -D wins after -U, space-separated "-march value"
-                is folded, a TU missing a uniform flag counts as its own
-                <absent> value, non-uniform flags fail by default and
+                must all exit 1 by default; distance equality in strict
+                mode is bit-pattern equality (-0.0 vs +0.0 fails); rank
+                columns must be contiguous and duplicate-free; omitting
+                --k compares the full dumps (candidate extra rows are
+                not truncated away); --allow-order-change and explicit
+                tolerances are the only relaxations; output fields use
+                overlap@k naming (no recall-vs-ground-truth claim).
+  check_flags   compile_commands.json parsing: -U cancels an earlier -D
+                (both "-UNAME" and "-U NAME"), later -D wins after -U,
+                space-separated "-march value" is folded, negative
+                boolean flags (-fno-lto) leave the flag explicitly off,
+                a TU missing a uniform flag counts as its own <absent>
+                value, non-uniform flags fail by default and
                 --allow-inconsistent downgrades to report-only.
   scan_delta    version-delta audit: CMake option() without a default is
                 implicit OFF (no false "added"), and every defined() in a
                 combined #if condition is captured.
-  skill         SKILL.md frontmatter intact and referenced assets exist.
+  skill         SKILL.md frontmatter intact, referenced assets exist,
+                and the G5 noise-floor wording is consistent between
+                the gates doc and the delivery checklist.
 
 Prints "PYTEST_SUMMARY: {json}" on the last line.
 """
@@ -88,6 +95,40 @@ def test_compare_topk(tmp):
     record("compare_topk", "ULP-level distance drift exits 1 (default zero tolerance)",
            p.returncode == 1, f"rc={p.returncode}")
 
+    # Bit-pattern equality: -0.0 vs +0.0 are numerically equal but must
+    # still fail in strict mode (reviewer round-2 counterexample).
+    b, c = dump_pair(tmp, "q0 1 A -0.0\n", "q0 1 A 0.0\n")
+    p = run_py("compare_topk.py", ["--baseline", b, "--candidate", c])
+    record("compare_topk", "-0.0 vs +0.0 exits 1 (bit-pattern equality)",
+           p.returncode == 1 and "dist_mismatch=1" in p.stdout, f"rc={p.returncode} {p.stdout.splitlines()[0] if p.stdout else ''}")
+
+    # Same bit pattern on both sides still passes.
+    b, c = dump_pair(tmp, "q0 1 A -0.0\n", "q0 1 A -0.0\n")
+    p = run_py("compare_topk.py", ["--baseline", b, "--candidate", c])
+    record("compare_topk", "identical -0.0 on both sides exits 0",
+           p.returncode == 0, f"rc={p.returncode}")
+
+    # Rank columns must be contiguous and duplicate-free (reviewer
+    # round-2 counterexample: candidate writes ranks 1,2 as 1,1).
+    b, c = dump_pair(tmp, "q0 1 A 1\nq0 2 B 2\n", "q0 1 A 1\nq0 1 B 2\n")
+    p = run_py("compare_topk.py", ["--baseline", b, "--candidate", c, "--k", "2"])
+    record("compare_topk", "duplicate rank in candidate exits 1",
+           p.returncode == 1 and "rank_mismatch=1" in p.stdout, f"rc={p.returncode} {p.stdout.splitlines()[0] if p.stdout else ''}")
+
+    # Default full-dump comparison: a candidate with extra rows must not
+    # be silently truncated to the baseline row count (round-2 example:
+    # baseline 1 row A, candidate 2 rows A,B used to return 0).
+    b, c = dump_pair(tmp, "q0 1 A 1\n", "q0 1 A 1\nq0 2 B 2\n")
+    p = run_py("compare_topk.py", ["--baseline", b, "--candidate", c])
+    record("compare_topk", "full mode: candidate extra rows exit 1 (no silent truncation)",
+           p.returncode == 1 and "row_count_mismatch=1" in p.stdout, f"rc={p.returncode} {p.stdout.splitlines()[0] if p.stdout else ''}")
+
+    # ...but an explicit --k truncates both sides (intended relaxation).
+    b, c = dump_pair(tmp, "q0 1 A 1\n", "q0 1 A 1\nq0 2 B 2\n")
+    p = run_py("compare_topk.py", ["--baseline", b, "--candidate", c, "--k", "1"])
+    record("compare_topk", "explicit --k truncates both sides and exits 0",
+           p.returncode == 0, f"rc={p.returncode}")
+
     # Identical dumps pass.
     b, c = dump_pair(tmp, "q0 1 A 1.5\nq0 2 B 2.5\n", "q0 1 A 1.5\nq0 2 B 2.5\n")
     p = run_py("compare_topk.py", ["--baseline", b, "--candidate", c, "--k", "2"])
@@ -155,6 +196,46 @@ def test_check_flags(tmp):
     cc = compile_commands(tmp, [cc_entry("a.cpp", ["g++", "-UFEATURE", "-DFEATURE=2", "-c", "/src/a.cpp"])])
     p = run_py("check_compile_flags.py", ["--compile-commands", cc, "--require-macro", "FEATURE=2"])
     record("check_flags", "-U then -D keeps later definition",
+           p.returncode == 0, f"rc={p.returncode} {p.stdout.splitlines()[0] if p.stdout else ''}")
+
+    # Space-separated "-U NAME" cancels the macro (round-2 counterexample:
+    # `-DFEATURE=1 -U FEATURE` used to leave the macro defined).
+    cc = compile_commands(tmp, [cc_entry("a.cpp", ["g++", "-DFEATURE=1", "-U", "FEATURE", "-c", "/src/a.cpp"])])
+    p = run_py("check_compile_flags.py", ["--compile-commands", cc, "--require-macro", "FEATURE=1"])
+    record("check_flags", "space-separated -U cancels macro, exits 1",
+           p.returncode == 1 and "MISSING" in p.stdout, f"rc={p.returncode}")
+
+    # Space-separated "-D NAME=VALUE" defines the macro.
+    cc = compile_commands(tmp, [cc_entry("a.cpp", ["g++", "-D", "FEATURE=1", "-c", "/src/a.cpp"])])
+    p = run_py("check_compile_flags.py", ["--compile-commands", cc, "--require-macro", "FEATURE=1"])
+    record("check_flags", "space-separated -D defines macro, exits 0",
+           p.returncode == 0, f"rc={p.returncode}")
+
+    # Negative boolean flags: `-flto -fno-lto` leaves LTO explicitly off,
+    # so --require-flag=-flto must fail for that TU (round-2 counterexample).
+    cc = compile_commands(tmp, [
+        cc_entry("a.cpp", ["g++", "-flto", "-c", "/src/a.cpp"]),
+        cc_entry("b.cpp", ["g++", "-flto", "-fno-lto", "-c", "/src/b.cpp"]),
+    ])
+    p = run_py("check_compile_flags.py", ["--compile-commands", cc, "--require-flag=-flto"])
+    record("check_flags", "-flto overridden by -fno-lto exits 1",
+           p.returncode == 1 and "MISSING" in p.stdout and "b.cpp" in p.stdout,
+           f"rc={p.returncode} {p.stdout.splitlines()[:3] if p.stdout else ''}")
+
+    # ...and one TU on, one explicitly off is also a non-uniform pair.
+    cc = compile_commands(tmp, [
+        cc_entry("a.cpp", ["g++", "-flto", "-c", "/src/a.cpp"]),
+        cc_entry("b.cpp", ["g++", "-fno-lto", "-c", "/src/b.cpp"]),
+    ])
+    p = run_py("check_compile_flags.py", ["--compile-commands", cc])
+    record("check_flags", "-flto vs -fno-lto across TUs exits 1 as non-uniform",
+           p.returncode == 1 and "INCONSISTENT" in p.stdout and "-fno-lto" in p.stdout,
+           f"rc={p.returncode} {p.stdout.splitlines()[:2] if p.stdout else ''}")
+
+    # Explicitly requiring the negative form is satisfied by -fno-lto.
+    cc = compile_commands(tmp, [cc_entry("a.cpp", ["g++", "-fno-lto", "-c", "/src/a.cpp"])])
+    p = run_py("check_compile_flags.py", ["--compile-commands", cc, "--require-flag=-fno-lto"])
+    record("check_flags", "--require-flag=-fno-lto exits 0 when flag is off",
            p.returncode == 0, f"rc={p.returncode} {p.stdout.splitlines()[0] if p.stdout else ''}")
 
     # A TU missing a uniform flag is its own <absent> value and fails.
@@ -302,6 +383,16 @@ def test_skill(tmp):
         gates = handle.read()
     record("skill", "noise floor uses same-config A/A calibration",
            "同配置自对照" in gates and "不得用" in gates, "")
+
+    # The delivery checklist must not contradict the gates doc: the old
+    # "惰性/全 OFF 对照" calibration wording is forbidden, and the item
+    # must reference the G5 gates (round-2 drift between the two files).
+    with open(os.path.join(SKILL_DIR, "references", "migration-checklist.md"), encoding="utf-8") as handle:
+        checklist = handle.read()
+    record("skill", "checklist noise-floor wording matches G5 gates",
+           "同配置" in checklist and "equivalence-and-gates.md" in checklist
+           and "惰性/全 OFF 对照实测标定" not in checklist,
+           checklist.splitlines()[71] if len(checklist.splitlines()) > 71 else "")
 
 
 def main():

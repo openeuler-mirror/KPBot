@@ -54,8 +54,8 @@ Faiss 专属 Skill 未安装时，本 Skill 仍可给出通用迁移计划，但
 - 交接单模板 → `templates/HANDOFF.md`
 - G2 内核位级探针骨架（dlopen 双库）→ `templates/kernel_probe.cpp`
 - 版本差异扫描（CMake option / 宏 / 公共头；适用于类 CMake 构建的引擎）→ `scripts/scan_version_delta.py --source <src> --target <dst> --json <out>`
-- 编译宏与 flags 一致性（按参数顺序解析 `-D`/`-U`，识别 `-march=val` 与 `-march val` 两种形态；uniform flag 缺失也算分裂）→ `scripts/check_compile_flags.py --compile-commands <json> --path-filter <相关 TU 子串> --require-macro NAME=VALUE --require-flag=-march=...`（默认缺失或分裂即退出 1）
-- top-k dump 等价性对比（G0/G3）→ `scripts/compare_topk.py --baseline <dump> --candidate <dump> --k 10`（默认严格：查询集、条数、顺序、距离全等；`--allow-order-change` 仅供 OPT_IN 机制复核；输出 `overlap@k` 是与基线的重合率，G4 recall 必须用冻结 ground truth 分别计算，不得用该值替代）
+- 编译宏与 flags 一致性（按参数顺序解析 `-D`/`-U`，含空格形态 `-D NAME`/`-U NAME`；识别 `-march=val` 与 `-march val` 两种形态；负向 flag 如 `-fno-lto` 记为显式关闭；uniform flag 缺失也算分裂）→ `scripts/check_compile_flags.py --compile-commands <json> --path-filter <相关 TU 子串> --require-macro NAME=VALUE --require-flag=-march=...`（默认缺失或分裂即退出 1）
+- top-k dump 等价性对比（G0/G3）→ `scripts/compare_topk.py --baseline <dump> --candidate <dump> --k 10`（默认严格：查询集、条数、rank 连续无重复、顺序、距离按位模式全等（`-0.0` 与 `+0.0` 亦不放过）；省略 `--k` 时全量比对，显式 `--k` 才截断；`--allow-order-change` 仅供 OPT_IN 机制复核；输出 `overlap@k` 是与基线的重合率，G4 recall 必须用冻结 ground truth 分别计算，不得用该值替代）
 
 ## 迁移流程
 

@@ -56,7 +56,7 @@ Faiss 的完整风险表见 `engines/faiss.md`，DiskANN 见 `engines/diskann.md
 ## 4. 验证动作
 
 1. **全量干净重建**：不只构建目标文件；记录构建目录、编译器版本、flags。
-2. **编译一致性**：`scripts/check_compile_flags.py` 检查相关 TU 的 `-D`、`-march`、`-flto`；按参数顺序解析（`-U` 取消的宏算缺失），`-march val` 与 `-march=val` 等价识别，uniform flag 缺失也算分裂，默认缺失或分裂即退出 1。
+2. **编译一致性**：`scripts/check_compile_flags.py` 检查相关 TU 的 `-D`、`-march`、`-flto`；按参数顺序解析（`-U` 取消的宏算缺失，含空格形态 `-D NAME`/`-U NAME`），`-march val` 与 `-march=val` 等价识别，`-fno-lto` 等负向 flag 记为显式关闭，uniform flag 缺失也算分裂，默认缺失或分裂即退出 1。
 3. **链接检查**：确认没有意外符号缺失或重复；必要时检查 SONAME。
 4. **运行时探针**：`gdb`/breakpoint 或 `LD_DEBUG=libs` 确认实际加载库。
 5. **序列化往返**：目标库 save → 目标库 load；旧索引 → 目标库 load。

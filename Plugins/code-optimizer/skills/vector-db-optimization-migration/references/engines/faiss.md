@@ -69,4 +69,4 @@ python3 scripts/check_compile_flags.py --compile-commands <build>/compile_comman
 python3 scripts/compare_topk.py --baseline <base.dump> --candidate <cand.dump> --k 10
 ```
 
-`scan_version_delta.py` 是启发式取证，发现项必须回到当前 commit 复核；`strings libfaiss.so` 不能证明宏已启用。`check_compile_flags.py` 按参数顺序解析 `-D`/`-U`（被 `-U` 取消的宏算缺失），`-march val` 与 `-march=val` 等价识别，某 TU 缺失 uniform flag 也算分裂。`compare_topk.py` 的 `overlap@k` 是与基线的重合率；G4 recall 用冻结 ground truth 每臂分别计算。
+`scan_version_delta.py` 是启发式取证，发现项必须回到当前 commit 复核；`strings libfaiss.so` 不能证明宏已启用。`check_compile_flags.py` 按参数顺序解析 `-D`/`-U`（含空格形态 `-D NAME`/`-U NAME`；被 `-U` 取消的宏算缺失），`-march val` 与 `-march=val` 等价识别，负向 flag（如 `-fno-lto`）记为显式关闭、与开启/缺失互相判为分裂，某 TU 缺失 uniform flag 也算分裂。`compare_topk.py` 默认严格比对（rank 连续无重复、顺序、距离按位模式全等；省略 `--k` 时全量比对），其 `overlap@k` 是与基线的重合率；G4 recall 用冻结 ground truth 每臂分别计算。

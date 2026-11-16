@@ -8,10 +8,14 @@ Parsing semantics (aligned with how the compiler reads its own command
 line, in argument order):
 
 - macros: `-DNAME=VALUE` defines, `-UNAME` removes an earlier definition
-  on the same command line; `--require-macro NAME=VALUE` therefore fails
-  when any selected TU cancels the macro with -U.
-- flags: both `-march=value` and the space-separated `-march value`
-  forms are recognized; a later occurrence overrides an earlier one.
+  on the same command line; both space-separated forms (`-D NAME=VALUE`,
+  `-U NAME`) are recognized too. `--require-macro NAME=VALUE` therefore
+  fails when any selected TU cancels the macro with -U.
+- flags: `-march=value` and the space-separated `-march value` forms are
+  equivalent; a later occurrence overrides an earlier one.
+- negative boolean flags: `-fno-lto`, `-fno-openmp`, `-fno-fast-math`
+  map onto the positive key with value "0", so `-flto -fno-lto` leaves
+  LTO explicitly OFF and `--require-flag=-flto` fails for that TU.
 - uniformity: a flag that is missing from some selected TUs counts as
   its own "<absent>" value — one TU with `-march` and one without is
   reported (and by default fails) as non-uniform.
@@ -40,23 +44,19 @@ import shlex
 import sys
 from collections import OrderedDict, defaultdict
 
-INTERESTING_PREFIXES = (
-    "-D",
-    "-U",
-    "-march",
-    "-mcpu",
-    "-mtune",
-    "-mabi",
-    "-msve-vector-bits",
-    "-flto",
-    "-fopenmp",
-    "-ffast-math",
-    "-fno-fast-math",
-)
-
 UNIFORM_FLAGS_DEFAULT = ("-march", "-mcpu", "-mtune", "-mabi", "-flto", "-fopenmp", "-msve-vector-bits")
 
 SPACE_VALUE_FLAGS = ("-march", "-mcpu", "-mtune", "-mabi", "-msve-vector-bits")
+
+# Boolean-style flags: "-flto" sets the key to "1", the matching negative
+# form ("-fno-lto") sets the SAME key to "0", so `-flto -fno-lto` leaves
+# the flag explicitly off, and `-flto` in one TU vs `-fno-lto` in another
+# is a non-uniform pair.
+BOOL_FLAGS = {
+    "-flto": "-fno-lto",
+    "-fopenmp": "-fno-openmp",
+    "-ffast-math": "-fno-fast-math",
+}
 
 ABSENT = "<absent>"
 
@@ -82,32 +82,52 @@ def entry_argv(entry):
     return shlex.split(command)
 
 
+def define_macro(macros, name_value):
+    if "=" in name_value:
+        name, value = name_value.split("=", 1)
+    else:
+        name, value = name_value, "1"
+    macros[name] = value
+
+
 def normalize_flag(token):
-    """Return a canonical key for flags we care about, else None."""
+    """Return a canonical (kind, key, value) for flags we care about, else None.
+
+    Negative boolean flags map onto the positive key with value "0"
+    (e.g. -fno-lto -> ("flag", "-flto", "0")) so an explicit disable is
+    distinguishable from both "on" and "absent".
+    """
     if token.startswith("-D") and len(token) > 2:
-        name_value = token[2:]
-        if "=" in name_value:
-            name, value = name_value.split("=", 1)
-        else:
-            name, value = name_value, "1"
-        return ("macro", name, value)
+        return ("macro",) + split_name_value(token[2:])
     for prefix in SPACE_VALUE_FLAGS:
         if token == prefix:
             return ("flag", prefix, "")
         if token.startswith(prefix + "="):
             return ("flag", prefix, token.split("=", 1)[1])
-    if token in ("-flto", "-fopenmp", "-ffast-math", "-fno-fast-math"):
-        return ("flag", token, "1")
+    for positive, negative in BOOL_FLAGS.items():
+        if token == positive:
+            return ("flag", positive, "1")
+        if token == negative:
+            return ("flag", positive, "0")
     if token.startswith("-flto=") or token.startswith("-fopenmp="):
         key, value = token.split("=", 1)
         return ("flag", key, value)
     return None
 
 
+def split_name_value(name_value):
+    if "=" in name_value:
+        name, value = name_value.split("=", 1)
+    else:
+        name, value = name_value, "1"
+    return (name, value)
+
+
 def parse_entry(entry):
     """Compute effective macros and flags, honoring argument order.
 
-    - -D defines a macro, -U removes it (later tokens win).
+    - -D defines a macro ("-DNAME=V" or "-D NAME=V"), -U removes it
+      ("-UNAME" or "-U NAME"); later tokens win.
     - Space-separated "-march value" pairs are folded into one flag.
     - Repeated flags keep the last occurrence (compiler override order).
     """
@@ -117,15 +137,24 @@ def parse_entry(entry):
     i = 0
     while i < len(argv):
         token = argv[i]
-        if token.startswith("-U") and len(token) > 2:
+        nxt = argv[i + 1] if i + 1 < len(argv) else None
+        if token == "-U":
+            # space-separated form: -U NAME
+            if nxt is not None and not nxt.startswith("-"):
+                macros.pop(nxt, None)
+                i += 1
+        elif token == "-D":
+            # space-separated form: -D NAME[=VALUE]
+            if nxt is not None and not nxt.startswith("-"):
+                define_macro(macros, nxt)
+                i += 1
+        elif token.startswith("-U") and len(token) > 2:
             macros.pop(token[2:], None)
         elif token.startswith("-D") and len(token) > 2:
-            item = normalize_flag(token)
-            _, name, value = item
-            macros[name] = value
+            define_macro(macros, token[2:])
         elif token in SPACE_VALUE_FLAGS:
-            if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
-                flags[token] = argv[i + 1]
+            if nxt is not None and not nxt.startswith("-"):
+                flags[token] = nxt
                 i += 1  # consume the value token
             else:
                 flags[token] = ""
@@ -143,8 +172,12 @@ def flag_display(key, value):
         return ABSENT
     if key in SPACE_VALUE_FLAGS:
         return "%s=%s" % (key, value)
-    if key in ("-flto", "-fopenmp") and value not in ("1", ""):
-        return "%s=%s" % (key, value)
+    if key in BOOL_FLAGS:
+        if value == "0":
+            return BOOL_FLAGS[key]  # e.g. -fno-lto
+        if value == "1":
+            return key
+        return "%s=%s" % (key, value)  # e.g. -flto=thin
     return key
 
 
@@ -153,7 +186,7 @@ def main(argv=None):
     ap.add_argument("--compile-commands", required=True)
     ap.add_argument("--path-filter", action="append", default=[], help="substring filter on file path (repeatable); restrict to the TUs that build the migrated code")
     ap.add_argument("--require-macro", action="append", default=[], help="NAME or NAME=VALUE (repeatable); fails if a TU defines the macro with a different value or cancels it with -U")
-    ap.add_argument("--require-flag", action="append", default=[], help="exact flag/token, e.g. -march=armv8.2-a+sve (repeatable)")
+    ap.add_argument("--require-flag", action="append", default=[], help="exact flag/token, e.g. -march=armv8.2-a+sve, -flto or -fno-lto (repeatable)")
     ap.add_argument("--uniform-flag", action="append", default=None, help="flag key that must be uniform, absence counts as a value (repeatable)")
     ap.add_argument("--allow-inconsistent", action="store_true", help="only report non-uniform flags; exit code stays 0 (default: non-uniform flags exit 1)")
     ap.add_argument("--strict-uniform", action="store_true", help="(deprecated no-op: non-uniform flags already fail by default; kept for compatibility)")
@@ -183,10 +216,7 @@ def main(argv=None):
 
     required_macros = []
     for spec in args.require_macro:
-        if "=" in spec:
-            name, value = spec.split("=", 1)
-        else:
-            name, value = spec, None
+        name, value = split_name_value(spec) if "=" in spec else (spec, None)
         required_macros.append((name, value))
 
     required_flags = []
@@ -217,14 +247,14 @@ def main(argv=None):
                 )
         for kind, name, value in required_flags:
             actual = rec["flags"].get(name)
-            expected = flag_display(name, value)
-            ok = actual is not None and (value in ("", "1") or actual == value)
-            if not ok:
+            # exact match: "-flto" requires on ("1"), "-fno-lto" requires
+            # explicitly off ("0"); "-flto=thin" does not satisfy "-flto".
+            if actual is None or actual != value:
                 missing.append(
                     {
                         "file": rec["file"],
                         "kind": "flag",
-                        "expected": expected,
+                        "expected": flag_display(name, value),
                         "actual": None if actual is None else flag_display(name, actual),
                     }
                 )
