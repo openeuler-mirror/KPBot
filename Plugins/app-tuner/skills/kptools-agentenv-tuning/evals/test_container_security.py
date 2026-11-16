@@ -65,7 +65,12 @@ if model == 'fake/report-symlink':
     report.symlink_to('/etc/os-release')
 else:
     report.write_text(json.dumps({'status': 'blocked', 'validation_level': 'environment',
-        'findings': ['unknown host container module ioctl guest benchmark cpuset dvmbm'],
+        # 关键词夹具契约：findings 文本必须覆盖所有用例 verify.sh 的必需关键词
+        # （pvspinlock: guest/负载/压测/benchmark；tlbi: 绑定/cpuset/绑核/亲和、
+        #   dvmbm/实现/机制/补丁/位图；kernel-hz: 构建选项/clktck）。
+        # 新增用例如引入新的必需关键词，须同步扩展本夹具，否则本套件会假失败。
+        'findings': ['unknown host container module ioctl guest benchmark cpuset dvmbm '
+                     '构建选项 clktck 用户态计时'],
         'evidence_paths': [], 'candidate_actions': [], 'missing_inputs': [], 'gain_pct': None}))
 if model == 'fake/no-skill':
     print(json.dumps({'type': 'text', 'text': 'skills/' + expected + '/SKILL.md'}))
