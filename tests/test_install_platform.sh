@@ -40,6 +40,24 @@ run_install() {
     bash "$INSTALLER" project "$tool" "$dir" >/dev/null 2>&1
 }
 
+check_vector_install() {
+    local config_root="$1"
+    local skill_root="$config_root/skills"
+    local role skill
+    for skill in diskann-optimize diskann-source-analysis diskann-benchmark-baseline; do
+        check "installs $skill" '[ -f "$skill_root/$skill/SKILL.md" ]'
+    done
+    check "installs DiskANN native performance case" '[ -f "$skill_root/diskann-benchmark-baseline/cases/rust-memory-search/run.py" ]'
+    check "installs common vector workflow" '[ -f "$skill_root/vector-search-optimize/SKILL.md" ] && [ -f "$skill_root/vector-search-optimize/references/cp0-cp7.md" ]'
+    check "routes vector tasks through the common workflow" 'grep -q "向量检索接管.*vector-search-optimize" "$skill_root/kpbot-code-optimizer/SKILL.md"'
+    check "preserves the OpenZL route alongside vector search" 'grep -Fq openzl-compression-tuning "$skill_root/kpbot-code-optimizer/SKILL.md" && [ -f "$skill_root/openzl-compression-tuning/SKILL.md" ]'
+    check "routes to installed Faiss and DiskANN workflows" 'grep -Fq faiss-optimize "$skill_root/vector-search-optimize/SKILL.md" && grep -Fq diskann-optimize "$skill_root/vector-search-optimize/SKILL.md" && [ -f "$skill_root/faiss-optimize/SKILL.md" ]'
+    for role in analyzer profiler candidate-planner implementer reviewer; do
+        check "registers DiskANN $role as subagent" 'grep -q "^mode: subagent$" "$config_root/agents/diskann-$role.md"'
+    done
+    check "keeps vector and DiskANN workflows out of the agent registry" '[ ! -e "$config_root/agents/vector-search-optimize.md" ] && [ ! -e "$config_root/agents/diskann-optimize.md" ]'
+}
+
 check_agentenv_package() {
     local skills="$1"
     local name source_skill
@@ -88,6 +106,7 @@ check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimi
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
+check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
 run_install opencode
@@ -103,8 +122,8 @@ check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfp
 for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
-check "OpenCode overlay includes Faiss route" 'grep -q "Faiss 路由优先级" "$OPENCODE_SKILLS/kpbot-code-optimizer/SKILL.md"'
 check_agentenv_package "$OPENCODE_SKILLS"
+check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo
 echo "Result: $pass passed, $fail failed"

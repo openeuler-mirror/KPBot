@@ -1,0 +1,37 @@
+name: rust-memory-search
+skill: diskann-benchmark-baseline
+tier: B
+# Native Rust DiskANN toolchain/binary. No LLM, secret or private dataset required.
+# The caller supplies SOURCE/BINARY and a fresh RESULTS directory; run from this case.
+entrypoint: ["bash", "entrypoint.sh"]
+env_requires: []
+env_vars:
+  SOURCE: /path/to/DiskANN
+  BINARY: /path/to/diskann-benchmark
+  RESULTS: results
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: performance_executed
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: samples
+    op: gte
+    expect: 2
+  - type: json_field
+    file: results/result.json
+    field: qps_median
+    op: gte
+    expect: 0.000001
+  - type: json_field
+    file: results/result.json
+    field: recall_min
+    op: gte
+    expect: 0.95

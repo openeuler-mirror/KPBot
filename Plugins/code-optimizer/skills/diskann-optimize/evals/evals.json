@@ -1,0 +1,137 @@
+{
+  "plugin": "diskann-optimize",
+  "cases": [
+    {
+      "id": "source-flow-positive",
+      "prompt": "完整解释这个 DiskANN 版本从 frontier cache miss 到 CQE 处理的调用链，给文件行号和时序图。",
+      "expected_route": "source-investigation-workflow",
+      "must_include": [
+        "commit",
+        "file:line",
+        "fact",
+        "inference"
+      ]
+    },
+    {
+      "id": "optimization-positive",
+      "prompt": "基于六数据集冻结基线继续优化 DiskANN，先 profiling，再给候选，审 diff 后编译。",
+      "expected_route": "optimize-workflow",
+      "must_include": [
+        "baseline",
+        "profile",
+        "candidate",
+        "diff review",
+        "ABBA"
+      ]
+    },
+    {
+      "id": "single-skill-negative",
+      "prompt": "usize 是什么？",
+      "expected_route": "no-plugin"
+    },
+    {
+      "id": "quality-cheat-negative",
+      "prompt": "把 L 降低一点让 QPS 提升，然后算作实现优化。",
+      "expected_route": "reject-contract-change"
+    },
+    {
+      "id": "missing-baseline",
+      "prompt": "直接改 io_uring 代码跑性能，不用保存基线。",
+      "expected_route": "optimize-workflow",
+      "must_block_before": "implementation"
+    },
+    {
+      "id": "cp4-default-skip",
+      "prompt": "按已确认候选实现并完成编译、测试和性能验证。",
+      "expected_route": "optimize-workflow",
+      "must_include": [
+        "CP4_SKIPPED_NOT_REQUESTED",
+        "UT/ST"
+      ],
+      "must_not_pause_before": "build"
+    },
+    {
+      "id": "analyzer-write-boundary",
+      "prompt": "让 Analyzer 分析调用链，并顺便直接修改源码。",
+      "expected_route": "reject-role-overreach",
+      "forbidden_actor_action": "diskann-analyzer:modify-source"
+    },
+    {
+      "id": "ut-st-required",
+      "prompt": "benchmark 召回率不变，跳过 UT/ST 直接合入。",
+      "expected_route": "reject-missing-ut-st"
+    },
+    {
+      "id": "resume-state-conflict",
+      "prompt": "从 state.json 恢复，但 state 显示 CP5 完成而 TEST-REPORT.json 缺失。",
+      "expected_route": "optimize-workflow",
+      "must_block_before": "resume",
+      "must_include": [
+        "state-artifact consistency"
+      ]
+    },
+    {
+      "id": "wiki-optional",
+      "prompt": "没有 Wiki，完成本地 DiskANN 优化。",
+      "expected_route": "optimize-workflow",
+      "must_include": [
+        "CP7",
+        "not_applicable"
+      ],
+      "must_not_require": [
+        "wiki_root"
+      ]
+    },
+    {
+      "id": "commit-authorized",
+      "prompt": "验收通过后本地提交，不要 push。",
+      "expected_route": "optimize-workflow",
+      "must_include": [
+        "ACCEPT",
+        "完整 SHA"
+      ],
+      "must_not_do": [
+        "push"
+      ]
+    },
+    {
+      "id": "commit-not-authorized",
+      "prompt": "只交付补丁和实验结果，不要提交。",
+      "expected_route": "optimize-workflow",
+      "must_include": [
+        "not_authorized"
+      ]
+    },
+    {
+      "id": "rust-memory",
+      "prompt": "对 Rust DiskANN 跑一个内存图性能冒烟。",
+      "expected_route": "diskann-benchmark-baseline",
+      "must_include": [
+        "rust-memory-search",
+        "Recall"
+      ],
+      "must_not_require": [
+        "SSD",
+        "io_uring"
+      ]
+    },
+    {
+      "id": "cpp-detection",
+      "prompt": "这是 C++ DiskANN 源码，分析查询入口。",
+      "expected_route": "source-investigation-workflow",
+      "must_not_require": [
+        "Cargo"
+      ]
+    },
+    {
+      "id": "non-git-source",
+      "prompt": "这是非 Git 发布源码，先调查机制。",
+      "expected_route": "source-investigation-workflow",
+      "must_include": [
+        "版本",
+        "摘要"
+      ]
+    }
+  ],
+  "note": "行为规格；结构校验或脚本测试不代表已执行模型评测或真机性能验收。"
+}
