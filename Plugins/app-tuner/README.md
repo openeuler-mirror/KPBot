@@ -99,6 +99,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
+| `kptools-jvmjit` | JVM JIT 符号化 perf 采样分析(libperf-jvmti + perf inject --jit：方法级热点、JIT 代码指令级注解导出 annotate.txt 源码+汇编+逐指令周期占比、容器内采集与工具注入 toolpack)，含 dump 刷盘语义与 [JIT] 残留处理纪律 |
 | `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键基准(计划哈希确认、只读预检、NUMA/TAP/代理准备、create/density/Snapshot/dirty_page/Rollback/Clone/Pause-Resume 全矩阵、差集清理与证据归档) |
