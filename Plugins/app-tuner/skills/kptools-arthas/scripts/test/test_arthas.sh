@@ -204,6 +204,32 @@ else
     kill "$FAKE_JAVA_3658" 2>/dev/null; wait "$FAKE_JAVA_3658" 2>/dev/null
 fi
 
+echo "  AT-009: 命令含未加引号通配符时不被路径名展开（glob 回归）"
+if ! command -v java >/dev/null 2>&1; then
+    skip "AT-009: 需 java（glob 回归用例）"
+else
+    GLOB_DIR="$TEST_RESULTS_DIR/globdir"; mkdir -p "$GLOB_DIR"
+    touch "$GLOB_DIR/FooController.java" "$GLOB_DIR/XxxControllerTest.java"
+    printf 'fake' > "$GLOB_DIR/fake.jar"
+    bash -c 'exec -a java sleep 20' & FAKE_JAVA_GLOB=$!
+    sleep 0.5
+    ( cd "$GLOB_DIR" && bash "$SCRIPTS/collect.sh" -p "$FAKE_JAVA_GLOB" --jar "$GLOB_DIR/fake.jar" \
+        -c "dashboard -n 1;*Controller*;sc -d *Controller*" -o "$GLOB_DIR/ev" \
+        >"$GLOB_DIR/out" 2>"$GLOB_DIR/stderr" ); rc=$?
+    EVID_GLOB="$(ls "$GLOB_DIR"/ev/*.txt 2>/dev/null | head -1)"
+    assert_equal 1 $rc "AT-009: 假 jar 全命令失败 → exit 1"
+    grep -Fq "=== CMD: *Controller* ===" "$EVID_GLOB"
+    assert_success $? "AT-009: 无空格通配 token 保持字面（不被展开）"
+    grep -Fq "=== CMD: sc -d *Controller* ===" "$EVID_GLOB"
+    assert_success $? "AT-009: 含空格命令中的通配符保持字面"
+    if grep -Fq "FooController.java" "$EVID_GLOB"; then
+        assert_failure 1 "AT-009: 通配符未被当前目录文件名展开"
+    else
+        assert_success 0 "AT-009: 通配符未被当前目录文件名展开"
+    fi
+    kill "$FAKE_JAVA_GLOB" 2>/dev/null; wait "$FAKE_JAVA_GLOB" 2>/dev/null
+fi
+
 # =============================================================================
 # 5. 端到端冒烟（AR 组：需 java + javac + arthas-boot.jar + 可联网首次 attach）
 # =============================================================================

@@ -159,16 +159,16 @@ elif port_in_use 3658; then
     fi
 fi
 
-# 命令串按 ';' 拆分（含空项过滤与去空白）
+# 命令串按 ';' 拆分（含空项过滤与去空白）。用 read 拆分：read 不做路径名展开，
+# 含通配符的 token（如 `*Controller*`）不会被当前目录文件名展开成多条无效命令
+# （for 循环 + 未加引号展开会触发 glob；含空格字段虽因整字段匹配失败而幸免，
+# 无空格 token 则必然中招，agent 生成的命令不保证总带空格）
+IFS=";" read -ra _CMDS_RAW <<< "$CMDS"
 CMDS_LIST=()
-OLD_IFS="$IFS"
-IFS=";"
-for c in ${CMDS}; do
-    IFS="$OLD_IFS"
+for c in ${_CMDS_RAW[@]+"${_CMDS_RAW[@]}"}; do
     c_trim="$(echo "$c" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     [ -n "$c_trim" ] && CMDS_LIST+=("$c_trim")
 done
-IFS="$OLD_IFS"
 [ "${#CMDS_LIST[@]}" -gt 0 ] || { echo "ERROR: 命令串为空" >&2; exit 3; }
 
 # 证据目录
