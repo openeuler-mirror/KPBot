@@ -53,7 +53,7 @@ repo 锚点给的也是"声明值"，仍可能缺间接依赖（见附录 A）�
 
 ## 构建管线要点
 
-- 入口：`build_images.py`（166: ~/swegym-aenv/build_images.py），
+- 入口：`build_images.py`（数据集配套的构建脚本），
   `SCRIPT_FIXES` / `ENV_SCRIPT_FIXES` 承载全部时代锚点修复史
 - 镜像源：`docker.m.daocloud.io` 镜像站（公网直连 docker.io 被墙时可用）
 - 私有 registry：本机 5001 起 `registry:2`，产出 `sweb.eval.arm64.*`
@@ -91,16 +91,6 @@ repo 锚点给的也是"声明值"，仍可能缺间接依赖（见附录 A）�
 基础镜像换 x86_64 变体；wheel 由 pip 按平台自动选择——aarch64 上踩过的
 wheel 缺失问题在 x86 上大概率不存在（x86 wheel 生态更全），但 pin 版本
 **不要放宽**，否则验收照样挂。
-
-## 本机资产（166）
-
-| 资产 | 位置 |
-|---|---|
-| 构建脚本（含全部 SCRIPT_FIXES 历史） | ~/swegym-aenv/build_images.py |
-| 数据集规格 | ~/swegym-aenv/swegym_train_293.jsonl |
-| 冻结清单（293 实例 + 65 环境） | ~/swegym-aenv/build/env-specs/ |
-| 私有 registry | 127.0.0.1:5001（sweb.eval.arm64.* 293 个） |
-| swegym-pkg 补丁版 | ~/swegym-aenv/swegym-pkg/（log_parsers/env-yml 重试） |
 
 ---
 
