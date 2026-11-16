@@ -95,6 +95,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `analyze-caller-context` | 调用上下文分析 |
 | `analyze-testcase` | 测试用例分析 |
 | `arm-spe-analysis` | ARM SPE (Statistical Profiling Extension) 分析 |
+| `gcov-coverage-analysis` | gcov/lcov 覆盖率驱动的性能优化点识别（热点行/冷路径/循环画像/函数调用计数） |
 | `register-pressure-analysis` | 寄存器压力分析 |
 | `hot-library-version-gap` | 热点库版本差距核对(进程实际加载库与版本 vs 已知含优化的版本，只读诊断) |
 
