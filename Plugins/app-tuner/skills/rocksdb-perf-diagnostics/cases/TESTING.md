@@ -149,7 +149,7 @@ sed -n '1,20p' /tmp/ab-java/without/prompt.txt
 ./evals/run_ab_subagent.sh --eval 2 --out /tmp/ab-java --grade --model <provider/model>
 ```
 
-五个 eval:
+六个 eval:
 
 | id | 内容 | 关键断言 |
 |---|---|---|
@@ -158,6 +158,7 @@ sed -n '1,20p' /tmp/ab-java/without/prompt.txt
 | 3 | 执行循环 | baseline → 只改一个参数 → 复测 → before/after → 保留/回退 |
 | 4 | 读路径优化 | `prefix_extractor` + `index_type=kHashSearch`;`memtable_prefix_bloom_size_ratio`;生效范围与验证 |
 | 5 | 手段覆盖与收益验证 | 已知手段覆盖表、跳过理由、before/after 收益判据 |
+| 6 | 架构前置检查(SVE2 bloom) | 128-bit SVE 不满足 256-bit;跳过;bloom_impl_test 与收益验证 |
 
 ### 3.4 产物
 
@@ -441,6 +442,7 @@ scripts/collect_properties.sh /path/to/db --full
 | eval 3 执行循环 | 2 | `run_ab_subagent.sh --eval 3` | baseline、单变量、before/after、保留/回退 | with 6/6 vs without 5/6 |
 | eval 4 读路径优化 | 2 | `run_ab_subagent.sh --eval 4` | prefix hash index、memtable prefix bloom、生效范围、验证指标 | 需可用模型 |
 | eval 5 手段覆盖与收益验证 | 2 | `run_ab_subagent.sh --eval 5` | 覆盖表、跳过理由、before/after 收益判据 | 需可用模型 |
+| eval 6 架构前置检查 | 2 | `run_ab_subagent.sh --eval 6` | 环境检查、SVE 向量长度、跳过结论、正确性/收益验证 | 需可用模型 |
 | agent-java-path | 3 | `run_all.sh --case agent-java-path` | success、assertion_pass_rate、skills_invoked | 需可用模型 |
 | agent-execute-optimization | 3 | `run_all.sh --case agent-execute-optimization` | success、one_variable、changed_param | 需可用模型 |
 

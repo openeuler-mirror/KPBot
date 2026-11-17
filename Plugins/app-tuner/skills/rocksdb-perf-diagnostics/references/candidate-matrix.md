@@ -31,6 +31,20 @@
 
 完成标准:表里每个相关条目都有"执行 / 跳过 + 理由",且至少有一个候选进入 Phase 3。
 
+### 1.1 环境/架构前置检查(源码/架构级手段必填)
+
+| 检查项 | 命令 | 期望 | 实际 | 是否满足 |
+|---|---|---|---|---|
+| CPU 架构 | `uname -m` | aarch64 / x86_64 | | |
+| CPU 特性 | `grep -m1 -ow sve2 /proc/cpuinfo` | 有/无 | | |
+| SVE 向量长度 | `/proc/sys/abi/sve_default_vector_length` | 32 bytes(256-bit) | | |
+| 编译器 + 运行时 | `check_arch_sve2.sh` | 编译通过、`svcntw()==8`、`HWCAP2_SVE2` | | |
+| RocksDB 版本 | `include/rocksdb/version.h` | 6.26.x | | |
+| 补丁可应用 | `git apply --check` | 通过 / 已应用 | | |
+| 部署目标 CPU | 在**目标机**运行 `scripts/check_arch_sve2.sh` | 与构建机同构 / SVE2 + 256-bit | | |
+
+源码/向量化补丁直接跑 `scripts/check_arch_sve2.sh --rocksdb <path>`;退出码 `0` 可应用、`1` 硬错误、`2` 跳过。**"证据"列必须包含该检查结果,不能只写"应该支持"。**
+
 ---
 
 ## 2. 收益验证表(Phase 5 必填)

@@ -38,6 +38,8 @@ metadata:
 - **一次只动一个变量**:同时改多个参数,复测结果无法归因。
 - **先预测再验证**:改动前写下"预期哪个指标怎么变、预期收益多少",复测对不上就说明假设错了。
 - **已知手段必须覆盖**:形成假设前先过一遍 `references/optimization-playbook.md`,用覆盖表记录"执行/跳过 + 理由",不能只凭记忆选参数。
+- **架构特定优化先查环境**:SVE2/AVX2 等向量化补丁先跑 `scripts/check_arch_sve2.sh` 或等价检查;不满足就跳过并记录证据。
+- **源码补丁先验证正确性**:先跑补丁自带的测试(如 `bloom_impl_test`),再做性能对比;测试 skip 或失败不得声称优化有效。
 - **无收益不保留**:每个改动必须有 before/after 数字;收益不超过噪声就回退,不能靠"应该有效"保留。
 - **优先零侵入观测**:LOG / property → Statistics → perf_context / EventListener → 系统层 tracing,按侵入性和开销递增选择。
 - **随时可回退**:改配置前先快照(文件备份 / 记录原值),记录每轮变更。
@@ -54,6 +56,7 @@ metadata:
 2. **接入方式**:C++ 应用 / Java(JNI) / 直接用 `db_bench` 或 `ldb` / 只拿到 LOG 和监控数据。
 3. **负载与目标**:读密集还是写密集?点查 / 范围扫描 / 混合?目标是吞吐、P50、P99、抖动、还是写停顿?SLO 是多少?
 4. **运行形态**:服务能否重启?能否改代码重编译?有没有现成压测(db_bench 参数 / YCSB workload)?
+5. **架构/编译条件**:目标 CPU 架构(aarch64 / x86)、SVE2 / AVX2 等特性、SVE 向量长度、编译器版本、能否重新编译 RocksDB,以及**构建机与部署目标机是否同构**(向量化补丁的全局 flags 会绑定 CPU 能力)。源码级/向量化补丁必须先查这些。
 
 完成标准:能用一句话说清"谁的、什么负载、什么指标、什么约束"。
 
@@ -92,6 +95,7 @@ metadata:
 - 每个相关条目都要有"执行 / 跳过 + 理由"
 - 跳过要写清:条件不满足 / 风险过高 / 已有更强手段 / 需授权
 - 证据必须指向 Phase 2 的实际观测
+- 源码/架构级方法(如 `optimization-playbook.md` §3 的 SVE2 bloom 补丁)先跑 `scripts/check_arch_sve2.sh`;不满足写"跳过:环境不满足"并附检查输出
 
 完成标准:覆盖表填完,且至少有一个候选进入 Phase 3。没有覆盖表,不得进入 Phase 3。
 
@@ -125,6 +129,7 @@ metadata:
 ### Phase 5 — 验证与回退
 
 - 用**同一个指标、同一负载、同一环境**复测;建议 3 次取中位数并记录方差。
+- 源码补丁必须先跑补丁自带的正确性测试(如 `bloom_impl_test`);测试 skip 或失败不得进入性能结论。
 - 填 `references/candidate-matrix.md` 的"收益验证表":baseline / after / delta / 重复与方差 / 目标达成? / 保留或回退。
 - **收益必须超过噪声**;无收益、回归或无法验证 → 回退,并明确写"该假设被否"。
 - 确认预期指标改善,且没有把别的指标(如 P99、空间、恢复时间)恶化。
@@ -154,6 +159,7 @@ metadata:
 
 - `scripts/parse_rocksdb_log.py` — 从 LOG 抽取 stall / compaction / flush 事件并汇总;只读,支持 `--json`。
 - `scripts/collect_properties.sh` — 用 `ldb` 零改代码采集关键 property;`--full` 附带 `rocksdb.stats`。
+- `scripts/check_arch_sve2.sh` — SVE2 bloom 补丁的环境前置检查:架构、SVE2、256-bit 向量、编译器、RocksDB 版本、`git apply --check`;只读,退出码 0/1/2。
 
 脚本遵循 PEP 8 / 小写下划线命名;运行前确认 `python3` 与 `ldb` 可用。
 
@@ -165,7 +171,8 @@ metadata:
 - `references/properties-tools.md` — DB properties 清单、EventListener、ThreadStatus、ColumnFamilyMetaData、ldb/sst_dump/db_bench。
 - `references/symptom-to-cause.md` — 症状 → 证据 → 病因 → 优化方向 对照表。
 - `references/options-map.md` — 参数按读/写/空间放大归类 + 代价与副作用。
-- `references/optimization-playbook.md` — 已知优化手段:命中条件、确切参数、配置写法、生效范围、代价、验证指标、源码依据。
+- `references/optimization-playbook.md` — 已知优化手段:命中条件、确切参数、配置写法、生效范围、代价、验证指标、源码依据(含 §3 SVE2 bloom 补丁)。
+- `references/patches/bloomfilter_sve2.diff` — RocksDB 6.26.1 的 ARM SVE2 bloom filter 向量化补丁(含 ARM CRC32C 汇编与 `bloom_impl_test`)。
 - `references/candidate-matrix.md` — 已知手段覆盖表 + 收益验证表模板(Phase 2.5 / Phase 5 强制产物)。
 - `references/report-template.md` — 结构化诊断报告模板。
 

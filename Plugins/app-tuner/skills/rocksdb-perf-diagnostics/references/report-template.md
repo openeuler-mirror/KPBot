@@ -50,6 +50,17 @@
 |---|---|---|---|---|---|---|---|---|
 | | playbook § | | 是/否 | | | | 执行/跳过 | |
 
+## 4.2 环境/架构前置检查(源码/架构级手段)
+| 检查项 | 命令 | 期望 | 实际 | 是否满足 |
+|---|---|---|---|---|
+| CPU 架构 | `uname -m` | | | |
+| CPU 特性 | `grep -m1 -ow sve2 /proc/cpuinfo` | | | |
+| SVE 向量长度 | `sve_default_vector_length` / `svcntw()` | 32 bytes / 8 | | |
+| 编译器 + 运行时 | `scripts/check_arch_sve2.sh` | | | |
+| RocksDB 版本 | `include/rocksdb/version.h` | | | |
+| 补丁可应用 | `git apply --check` | | | |
+| 部署目标 CPU | 在**目标机**运行 `check_arch_sve2.sh` | | | |
+
 ## 5. 根因
 - 结论(一句话):
 - 支持证据:

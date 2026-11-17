@@ -78,6 +78,20 @@
         "明确'收益不超过噪声或无法验证就回退'的判据",
         "没有建议未经授权的破坏性操作"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "当前环境是 aarch64,RocksDB 6.26.1。我们有一个 bloom filter SVE2 向量化补丁,要求 256-bit SVE。CPU 有 sve2,但 /proc/sys/abi/sve_default_vector_length 显示 16(128-bit)。请按 skill 的流程判断是否应用该补丁:给出环境检查项、结论、如果应用如何验证正确性和收益。不要执行破坏性操作。",
+      "expected_output": "先按 skill 做环境/架构前置检查(uname -m、/proc/cpuinfo 的 sve2、SVE 向量长度、编译器 flags、RocksDB 版本、git apply --check,可调用 scripts/check_arch_sve2.sh);识别 128-bit SVE 不满足补丁的 256-bit 要求(svcntw()==8),结论为不应用/跳过并记录证据。若强行应用,bloom_impl_test 的 SVE2PathRuntimePrerequisites 会 skip,运行时回退,不能声称有收益。若环境满足,先跑 bloom_impl_test 验证正确性,再做同负载 before/after(DB_GET P99、SST_READ_MICROS、bloom 计数、吞吐)。",
+      "files": [],
+      "expectations": [
+        "提到或运行 check_arch_sve2.sh / 等价检查,覆盖架构、sve2、SVE 向量长度、编译器、RocksDB 版本、补丁可应用性",
+        "识别 128-bit SVE 不满足补丁的 256-bit 要求(svcntw()==8),结论为不应用/跳过",
+        "说明强行应用时 SVE2PathRuntimePrerequisites 会 skip、运行时回退、没有收益",
+        "给出正确性验证方法(bloom_impl_test 及其覆盖点)",
+        "给出性能验证指标(DB_GET P99、SST_READ_MICROS、bloom 计数、吞吐)和 before/after 方法",
+        "没有建议未经授权的破坏性操作"
+      ]
     }
   ]
 }

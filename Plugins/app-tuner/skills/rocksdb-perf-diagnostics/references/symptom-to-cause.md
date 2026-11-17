@@ -42,7 +42,7 @@
 |---|---|
 | 证据 | `DB_GET` histogram 的 P99 远高于 P50;`block_cache_hit_count` 低;`READ_AMP_TOTAL_READ_BYTES / READ_AMP_ESTIMATE_USEFUL_BYTES` 高;perf_context 的 `block_read_count` 高 |
 | 病因 | 读放大(层内文件多 / L0 多)、cache 不够、bloom 未生效、SST index 仍为二分查找、memtable 未开 prefix bloom、value 过大 |
-| 首选方向 | `block_cache`↑;`filter_policy`(bloom)与 `bloom_bits_per_key` 检查;`optimize_filters_for_hits`;`prefix_extractor` + `block_based_table_factory={index_type=kHashSearch;}`(需重写存量 SST);`memtable_prefix_bloom_size_ratio>0`(动态,新 memtable 生效);减少层数/文件数(见写方向);大 value 考虑 BlobDB。详见 `references/optimization-playbook.md` |
+| 首选方向 | `block_cache`↑;`filter_policy`(bloom)与 `bloom_bits_per_key` 检查;`optimize_filters_for_hits`;`prefix_extractor` + `block_based_table_factory={index_type=kHashSearch;}`(需重写存量 SST);`memtable_prefix_bloom_size_ratio>0`(动态,新 memtable 生效);源码级:若是 aarch64 + SVE2 + 256-bit,评估 `optimization-playbook.md` §3 的 bloom SVE2 补丁(先跑 `scripts/check_arch_sve2.sh`);减少层数/文件数(见写方向);大 value 考虑 BlobDB。 |
 | 验证 | P99 下降、cache 命中上升、perf_context 的 `block_read_count` 下降;`sst_dump --show_properties` 的 `prefix_extractor_name` 不是 `nullptr`;`MEMTABLE_HIT/MISS` 改善 |
 
 ### B. 范围扫描 / 迭代慢

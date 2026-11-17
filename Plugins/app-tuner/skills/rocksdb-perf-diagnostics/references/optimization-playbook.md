@@ -201,7 +201,119 @@ db->SetOptions(cf, {{"memtable_prefix_bloom_size_ratio", "0.01"},
 
 ---
 
-## 3. 组合使用顺序
+## 3. Bloom filter 查找的 SVE2 向量化(源码补丁)
+
+### 命中条件
+
+- 读密集型、点查为主,bloom filter 在热路径上
+- `bloom_sst_miss_count` / `bloom_memtable_miss_count` 高,`DB_GET` P99 高,
+  `SST_READ_MICROS` / `READ_BLOCK_GET_MICROS` 高
+- 目标环境是 **aarch64 + SVE2 + 256-bit SVE**
+- 允许改 RocksDB 源码并重新编译
+
+### 环境前置检查(强制,不满足不得应用)
+
+先跑本 skill 的检查脚本:
+
+```bash
+<patch 所在 skill>/scripts/check_arch_sve2.sh --rocksdb /path/to/rocksdb
+```
+
+它逐项检查:
+
+| 检查项 | 期望 |
+|---|---|
+| `uname -m` | `aarch64` / `arm64` |
+| `/proc/cpuinfo` | 含 `sve` 与 `sve2` |
+| SVE 向量长度 | `/proc/sys/abi/sve_default_vector_length` = 32 bytes,或运行时 `svcntw() == 8` |
+| `getauxval` | `AT_HWCAP2 & HWCAP2_SVE2 != 0` |
+| 编译器 | `g++`/`clang++` 接受 `-march=armv8-a+crc+crypto+sve2 -msve-vector-bits=256` |
+| RocksDB 版本 | 补丁目标是 `6.26.x` |
+| 补丁 | `git apply --check` 通过(或已应用) |
+
+脚本退出码:`0` 全部满足;`1` 硬错误(路径/补丁冲突);`2` 前置条件不满足(跳过)。
+**退出码 2 时不要应用补丁**,在覆盖表写“跳过:环境不满足 + 具体证据”。
+
+### 补丁与生效方式
+
+- 补丁:`references/patches/bloomfilter_sve2.diff`
+- 核心改动:`util/bloom_impl.h` 的 `FastLocalBloomImpl::HashMayMatchPrepared` 增加 SVE2 路径;
+  `CMakeLists.txt` / `Makefile` / `build_tools/build_detect_platform` 增加 `HAVE_ARM_SVE2_BLOOM`
+  和编译 flags;带 `util/bloom_impl_test.cc`。
+- **本补丁不包含 ARM CRC32C 汇编**;`crc32c_p8c10*.S` 及对应编译选项已移除。
+- 运行时检查:`getauxval(AT_HWCAP2) & HWCAP2_SVE2` 且 `svcntw() == 8`;
+  不满足时回退到标量/AVX2 路径。
+
+### 应用步骤
+
+```bash
+cd /path/to/rocksdb
+git apply --check <skill>/references/patches/bloomfilter_sve2.diff
+git checkout -b bloom-sve2        # 可选,便于回退
+git apply <skill>/references/patches/bloomfilter_sve2.diff
+
+# Makefile 路径
+make -j"$(nproc)" bloom_impl_test
+./bloom_impl_test
+
+# 或 CMake 路径(以实际构建日志为准)
+cmake -DWITH_TESTS=ON ... && make -j bloom_impl_test && ./bloom_impl_test
+```
+
+- 先跑 `bloom_impl_test` 验证正确性;如果 `SVE2PathRuntimePrerequisites` 被 skip,
+  说明运行时条件不满足,不要声称优化有效。
+- 再跑同一 workload 的 before/after。
+
+### 生效范围与风险
+
+- **构建时生效**,需要重新编译 RocksDB 及应用;不是配置项。
+- 运行时只有 SVE2 + 256-bit 才走 SVE2 路径,否则回退。
+- **部署约束(重要)**:`build_detect_platform`/CMake 会把 SVE2/256-bit flags 加到全局,
+  因此该构建产物**只应部署到 SVE2 + 256-bit 的目标机**。
+  - 构建机与部署机同构、且部署流程保证不会发到其他 CPU:该风险可接受,运行时
+    `svcntw()==8` 只是额外兜底。
+  - 如果二进制会分发到混合 CPU / 不同 SVE 向量长度的机器:不要用全局 flags 版本;
+    改用 target-specific flags / 单独二进制 / 运行时 dispatch。否则非 bloom 代码
+    也可能因全局 SVE2 指令 SIGILL,而 bloom 路径的运行时检查保护不到其他代码。
+  - 在**目标部署机**上跑 `scripts/check_arch_sve2.sh`;构建机与目标机的 CPU 能力必须一致。
+  - **当前选择:方案 A**——保留全局 SVE2/256-bit flags,只部署到 SVE2 + 256-bit 同构环境。
+    如果将来需要面向混合 CPU 分发,改用方案 B:target-specific flags / 独立 `.cc` + 运行时 dispatch /
+    单独构建二进制。
+- CMake 路径已改为 `CHECK_CXX_COMPILER_FLAG` 并把 flags 加入 `CMAKE_CXX_FLAGS`;
+  仍需以实际编译命令/日志确认 flags 生效。
+- 补丁与 RocksDB 版本绑定;升级需要 rebase。
+- 本补丁只包含 bloom SVE2;CRC32C 汇编已移除。如果后续要单独做 CRC32C 优化,请提供对应 `.S` 文件并单独验证。
+
+### 验证指标
+
+- **正确性**:`bloom_impl_test` 全通过(未对齐 cache line、1–30 probes、每个 8-lane chunk、缺失 bit)。
+- **运行时路径**:`SVE2PathRuntimePrerequisites` 未 skip;`perf stat`/`perf record` 能看到 SVE 指令。
+- **性能**:同一 workload 的 `DB_GET` P50/P99、`SST_READ_MICROS`、
+  `READ_BLOCK_GET_MICROS`、`bloom_sst_miss_count` / `bloom_memtable_miss_count`、吞吐;
+  before/after 至少 3 次取中位数,同数据、同并发、同编译优化等级。
+- **回退**:保留原分支/补丁反apply;性能不达标或正确性失败立即回退。
+
+### 本机验证示例(环境相关,仅作方法参考)
+
+- 环境:aarch64 / SVE2 / 256-bit / g++ 12.3.1 / RocksDB 6.26.1
+- `scripts/check_arch_sve2.sh`:全部 PASS
+- `bloom_impl_test`:4/4 PASS,`SVE2PathRuntimePrerequisites` 未被 skip
+- 微基准(20M 次查找、6 probes、cache-line resident):
+  标量约 4.5–4.6 ns/lookup,SVE2 约 3.5 ns/lookup,约 **1.3x**
+- 说明:以上是单机示例,不能直接当作业务收益;真实收益要用同一 workload 的
+  `DB_GET` P99 / `SST_READ_MICROS` / 吞吐做 before/after。
+
+### 源码依据
+
+- 补丁:`references/patches/bloomfilter_sve2.diff`
+- `util/bloom_impl.h`:`FastLocalBloomImpl::HashMayMatchPrepared` 的 SVE2 分支
+- `CMakeLists.txt` / `Makefile` / `build_tools/build_detect_platform`:`HAVE_ARM_SVE2_BLOOM`
+- `util/bloom_impl_test.cc`:正确性测试
+- RocksDB `6.26.1`
+
+---
+
+## 4. 组合使用顺序
 
 1. 先确认 `prefix_extractor` 与访问模式匹配(前缀长度、是否固定)。
 2. 先开 memtable prefix bloom(动态、影响小),复测 `MEMTABLE_HIT/MISS` 与 `DB_GET` P99。
@@ -210,7 +322,7 @@ db->SetOptions(cf, {{"memtable_prefix_bloom_size_ratio", "0.01"},
 
 ---
 
-## 4. 新增手段的模板
+## 5. 新增手段的模板
 
 后续补充优化点时,按这个结构追加:
 
