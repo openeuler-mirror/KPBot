@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "meta_rate": 1,
+  "text_rate": 0,
+  "gold_rate": 0,
+  "output": "stats",
+  "follow_new": 0,
+  "follow_sessions": [],
+  "follow_gold": false,
+  "follow_output": "stats"
+}
