@@ -2,15 +2,14 @@
 
 自包含对比，路由判断不依赖其他 skill 文档。
 
-> 注：kptools-arthas 为本仓库**在途 PR #139**（当前 master 未合入）。合入前，"免重启方法级
-> 交互分析"诉求指向**外部工具 arthas**（https://github.com/alibaba/arthas），非本仓库 skill；
+> 注：下表 arthas 指**外部工具**（https://github.com/alibaba/arthas），非本仓库 skill；
 > 其余路由目标（kptools-devkit java-perf / kptools-py-spy / kptools-nmon）均已在本仓库存在。
 
 ## 工具路由表
 
 | 用户诉求 | 推荐 | 理由 |
 |----------|------|------|
-| Java 进程方法级耗时分解、入参/返回值、锁持有者（免重启） | kptools-arthas（在途 PR #139，master 未合入；合入前用外部工具 arthas） | attach 式交互诊断，无需部署期规划 |
+| Java 进程方法级耗时分解、入参/返回值、锁持有者（免重启） | 外部工具 arthas | attach 式交互诊断，无需部署期规划 |
 | Java 采样火焰图全景（CPU/ALLOC/LOCK） | kptools-devkit java-perf | 鲲平台 aarch64 一等支持 |
 | **perf 下 Java 符号缺失、JIT 反汇编、指令级热点、容器内 Java 采集** | **本 Skill（kptools-jvmjit）** | 唯一给出 JIT 代码机器码级证据的路径 |
 | Python 进程热点 | kptools-py-spy | 语言路由 |

@@ -198,7 +198,7 @@ objdump -d "$DUMP_DIR/jitted-61-397.so" | head -40
 | "容器里 Java 进程怎么 perf 采集" | 容器场景 | 本 Skill 容器模式（§5） |
 | "看热点是否被 C2 向量化" | 指令级 | 本 Skill + objdump 判读（§6） |
 | "优化前后 JIT 代码对比" | 结构性验证 | 两轮采集 + 反汇编对比 |
-| "运行中的 Java 方法耗时/入参返回值" | 免重启交互 | 出界 → kptools-arthas（在途 PR #139，master 未合入；合入前为外部工具 arthas，github.com/alibaba/arthas） |
+| "运行中的 Java 方法耗时/入参返回值" | 免重启交互 | 出界 → 外部工具 arthas（github.com/alibaba/arthas） |
 | "给 Java 采张火焰图" | 全景 | 出界 → kptools-devkit java-perf |
 | "Python/Go 进程热点" | 语言路由 | 出界 → kptools-py-spy / go-pprof-analysis |
 | "JVM 参数/GC 调优" | 调优动作 | 出界 → kpbot-app-tuner（本 Skill 只分析） |

@@ -6,8 +6,7 @@ description: >
   下钻（jitted-*.so 可直接 objdump）、容器内 Java 进程的指令级采集。当用户遇到
   Java 进程 perf 采样全是 unknown / [JIT] 裸地址、需要 JIT 反汇编或指令级热点、
   提到 libperf-jvmti、perf inject --jit、-agentpath、容器里 Java 进程 perf 采集时
-  触发。运行中 Java 的免重启方法级交互分析 → kptools-arthas（上游 PR #139 在途，
-  当前 master 未合入；合入前为外部工具 arthas，https://github.com/alibaba/arthas）；
+  触发。运行中 Java 的免重启方法级交互分析 → 外部工具 arthas（非本仓库 skill）；
   采样火焰图全景 → kptools-devkit java-perf。
 license: Apache-2.0
 compatibility: Linux aarch64/x86_64；openEuler 22.03/24.03 + perf 6.6 + JDK 17 实测验证；JVM 须以 -agentpath 启动期加载 agent（无法运行期附加）
@@ -24,9 +23,8 @@ metadata:
 
 本 Skill 解决 **JVM 进程在 perf 采样下符号缺失 / 无指令级视角** 的问题，产出符号化热点与 JIT 代码反汇编证据。
 
-- 方法级耗时分解、入参返回值观察等免重启交互分析 → kptools-arthas
-  **注：kptools-arthas 为上游在途 PR #139，当前 master 未合入；合入前该诉求指向外部工具 arthas
-  （https://github.com/alibaba/arthas，非本仓库 skill，勿臆造其调用方式）**
+- 方法级耗时分解、入参返回值观察等免重启交互分析 → 外部工具 arthas
+  （https://github.com/alibaba/arthas，非本仓库 skill，勿当作可加载的技能调用）
 - Java 采样火焰图全景（CPU/ALLOC/LOCK）→ kptools-devkit java-perf（aarch64 优先）
 - 分析出的 JIT 代码热点 → 源码/字节码移交 code-optimizer（向量化、内联、精度）
 - Python → kptools-py-spy；系统级 CPU/内存/IO 趋势 → kptools-nmon
