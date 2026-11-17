@@ -11,6 +11,7 @@
 | L1 BIOS/OS: Network Parameter Tuning | softirq、IRQ、RPS/XPS、drops、retrans、远程压测网络疑点 | `network-optimization` |
 | L1 BIOS/OS: Linux Kernel Parameters | sysctl、内核参数、补丁缺失、容器/VM 能力限制 | `os-optimization` |
 | L2 Application Config: MySQL/PostgreSQL/Flink/Async/Tokenizer/Prefix Cache | 应用内部状态能解释瓶颈 | `application-config-optimization`，按需 `database-workload-analysis` |
+| L2 Application Config: Ceph（OS 系统层参数、ceph.conf、PG 分布/balancer、OSD 绑核） | 场景为 Ceph 存储集群或瓶颈归因于 OSD/存储集群 | `ceph-optimization`，按需 `network-optimization`、`cpu-affinity-optimization`、`bios-optimization` |
 | L3 Performance Libraries: libc string、BiSheng Stringlibs、jemalloc、tcmalloc、KQMalloc | 热点落在 malloc/free、memcpy/memset/string、allocator 或高性能库可替换 | `performance-library-selection`，按需 `compiler-optimization` |
 | L4 Compiler: Architecture Flags、CRC and LSE、GCC/LLVM/BiSheng、PGO、LTO、Function Alignment、Loop Vectorization、MySQL Patch | 编译选项、代码生成、profile-guided、平台编译器或源码补丁相关 | `compiler-optimization` |
 | L5 Source Code: Zero Copy and Batching、Data Structure Alignment/Slimming、Operator Fusion、Scheduling、Deep Copy to Shallow Copy | 热点需要源码/算法/数据结构配套，不是单纯系统参数 | `other-optimization`，按需 `application-config-optimization` 或 `compiler-optimization` |
@@ -38,3 +39,4 @@
 | NUMA miss、远端内存、线程迁移 | Foundations NUMA、CPU Affinity、L1 NUMA Balancing |
 | cache miss 或 DDR bound | L6 HHA DDR Tuning、L2/L3 Cache Isolation、Software Prefetch |
 | 高层应用锁、连接池、buffer/cache | L2 Application Config 对应应用文件 |
+| OSD 进程 CPU 高、存储 IO 瓶颈、PG 分布不均告警 | Ceph 存储调优（ceph-optimization）、L6 NUMA/OSD 绑核 |

@@ -43,6 +43,7 @@
 | L1 icache miss 高 | topdown 或 perf stat 中 L1 icache miss 比例达到阈值 | `compiler-optimization`，重点分析 PGO/LTO、布局、内联、代码尺寸和目标架构选项 |
 | 线程切换高且 L3/LLC cache miss 高 | `context_switch_rate_per_sec` 高，且 L3/LLC miss 比例达到阈值 | `cpu-affinity-optimization`，重点分析绑核、NUMA、线程迁移和 IRQ 隔离 |
 | 数据库/应用内部状态解释瓶颈 | 连接池、队列、buffer/cache、锁等待、数据库状态可解释瓶颈 | `application-config-optimization` |
+| Ceph 存储场景 | 场景为 Ceph 存储集群（RBD/RGW/CephFS），或瓶颈/热点证据落在 OSD、MON、存储网络、PG 分布 | `ceph-optimization`，按需 `network-optimization`、`cpu-affinity-optimization`、`bios-optimization` |
 | OS/BIOS/硬件/加速卡证据命中 | 环境诊断或采集信息显示对应问题 | `os-optimization`、`bios-optimization`、`accelerator-optimization`、`hardware-upgrade-analysis` |
 | 既有分类无法覆盖 | 证据明确存在异常但不属于现有专项 | `other-optimization` |
 

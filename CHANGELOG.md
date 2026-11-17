@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- app-tuner 新增 `ceph-optimization` subskill：面向 Ceph 存储集群的系统与集群级调优体检（依据鲲鹏 BoostKit Ceph 指南 9.3.3/9.3.4）；Ceph 专属项（ceph.conf 全量参数、PG 分布与 balancer upmap、OSD 绑核）输出带备份/持久化/逐节点应用/重启窗口/回退的候选动作，OS 层参数（swappiness/MTU/pid_max/file_max/read_ahead/IO 调度器/nr_requests）与 NUMA 不均衡只读体检输出 os_tuning_findings 证据移交 os-optimization；含调优 playbook 与参数知识库 JSON，注册到主编排候选规则、Dynamic Skill Catalog 与知识路由；附 tier-A 用例 `cases/skill-integrity` 与触发评估集 `evals/`（evals.json 含 expectations、eval_queries.json 正/负例路由矩阵）
 - code-optimizer 扩展 `arm-spe-analysis` skill：新增 spe-parser 标准 CSV 管线与深度时延分析。`spe-csv.sh`/`spe-to-csv.py` 把 SPE 记录解析为 13 列标准 CSV（含 weight/data_src/addr，perf 不支持时自动降级），并支持 `--parser` 接入任意开源 spe-parser（自动 schema 校验）；`spe-latency-report.py` 生成门禁式深度报告：指令时延分布（P50/P90/P99/直方图）、缓存命中层级（L1/L2/L3/Peer/Remote/DRAM + 各层级平均时延）、指令追逐（逐 PC/逐函数采样数与加权时延双热点 + P99 尾部指令）、高时延指令根因（单因子归因 + 组合共现）、tlb/remote/p99/tail 门禁判定、前后对比（--baseline），Markdown + JSON 输出；附 `spe_latency_analysis.md` 参考文档与 `test_spe_csv.sh`/`test_spe_latency_report.sh` 双测试套件（52 断言）。
 - app-tuner 新增 `kptools-ascend-profiling-analysis-nostack` skill：无栈 profiling trace 的 step 识别（`STEP_TIME` → `kernel_details` → `step_trace_time` → `communication` → 纯 trace 降级）、每步时间、P1/P2/P3 近似阶段、模型结构与 Free 去向 HTML 报告；附 `detect_steps` 单测与触发评测；分析前主动收集模型/版本/源码/with-stack，缺失时降级并标低置信度。
 - app-tuner 有栈 profiling 报告增强：首页/每步 Computing vs Free 重点框、按层类型聚类的模型结构（GDN/Attention/MoE/压缩层）、MTP/DSpark 外部模型结构，并去除代表实例框与包装层重复帧。
