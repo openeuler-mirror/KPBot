@@ -55,6 +55,9 @@ done
 # 未显式 --model 时，在 CANNBot 环境里从 ANTHROPIC_MODEL 推导模型 ID，
 # 例如 deepseek-v4-flash[1m] -> cannbot/deepseek-v4-flash。
 CANNBOT_BIN=/usr/local/lib/node_modules/cannbot/node_modules/cannbot-linux-arm64/bin/cannbot
+if [[ -z "${OPENCODE_BIN:-}" && -x "$CANNBOT_BIN" ]]; then
+    export OPENCODE_BIN="$CANNBOT_BIN"
+fi
 if [[ -z "$MODEL" && -x "$CANNBOT_BIN" && -n "${ANTHROPIC_MODEL:-}" ]]; then
     _m="${ANTHROPIC_MODEL%%[*}"
     if [[ "$_m" == */* ]]; then
@@ -135,7 +138,7 @@ if [[ -e "$OUT" && ! -d "$OUT" ]]; then
 fi
 mkdir -p "$OUT"
 if [[ -n "$MODEL" ]]; then
-    export DOCKER_RUN_ARGS="${DOCKER_RUN_ARGS:---network host} -e MODEL=$MODEL"
+    export MODEL
 fi
 FAILED=0
 SELECTED=0

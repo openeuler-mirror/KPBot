@@ -21,61 +21,79 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 优先使用 cannbot 二进制（CANNBot 环境的 provider 在它里面），否则退回 opencode。
-CANNBOT_BIN=/usr/local/lib/node_modules/cannbot/node_modules/cannbot-linux-arm64/bin/cannbot
-if [ -n "${OPENCODE_BIN:-}" ]; then
-    BIN="$OPENCODE_BIN"
-elif [ -x "$CANNBOT_BIN" ]; then
-    BIN="$CANNBOT_BIN"
-else
-    BIN="/usr/local/lib/node_modules/opencode-ai/bin/opencode.exe"
-fi
+# 默认必须是 Linux 真实路径；CANNBot 环境通过 OPENCODE_BIN 显式指定 cannbot 二进制。
+BIN="${OPENCODE_BIN:-/usr/local/bin/opencode}"
 AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
-RUN_ARGS="${DOCKER_RUN_ARGS:---network host}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-1200}"
 
-# 透传 CANNBot / Anthropic provider 环境变量。`-e VAR` 从宿主环境取值，
-# 不把 secret 写进命令行。
-ENV_ARGS=()
-for var in \
-    MODEL \
-    ANTHROPIC_AUTH_TOKEN \
-    ANTHROPIC_BASE_URL \
-    ANTHROPIC_MODEL \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL \
-    ANTHROPIC_DEFAULT_OPUS_MODEL \
-    ANTHROPIC_DEFAULT_SONNET_MODEL \
-    OPENCODE \
-    OPENCODE_CONFIG_CONTENT; do
-    if [ -n "${!var:-}" ]; then
-        ENV_ARGS+=(-e "$var")
-    fi
-done
+# fail-closed：路径不存在直接退出，不打印警告后继续。
+[ -e "${BIN}" ] || { echo "错误: opencode 二进制不存在 ${BIN}" >&2; exit 1; }
+[ -e "${AUTH}" ] || { echo "错误: opencode auth.json 不存在 ${AUTH}" >&2; exit 1; }
 
-# 可选：把宿主的 opencode/cannbot 配置目录挂进容器。
-CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
-MOUNT_CONFIG=()
-if [ -d "$CONFIG_DIR" ]; then
-    MOUNT_CONFIG=(-v "$CONFIG_DIR":/root/.config/opencode:ro)
+# AUTH realpath + 白名单（防任意文件被注入容器）。
+AUTH_REAL="$(realpath -e "${AUTH}")" || { echo "错误: 无法解析 auth.json 路径" >&2; exit 1; }
+case "${AUTH_REAL}" in
+    "$HOME"/.local/share/opencode/*|/etc/opencode/*) ;;
+    *) echo "错误: auth.json 路径不在白名单内: ${AUTH_REAL}" >&2; exit 1 ;;
+esac
+AUTH="${AUTH_REAL}"
+
+# BIN realpath + 白名单（含 CANNBot 二进制）。
+BIN_REAL="$(realpath -e "${BIN}")" || { echo "错误: 无法解析 opencode 二进制路径" >&2; exit 1; }
+case "${BIN_REAL}" in
+    /usr/local/bin/opencode|/usr/local/lib/node_modules/opencode-ai/bin/*|\
+    /usr/local/lib/node_modules/cannbot/node_modules/cannbot-linux-arm64/bin/*|\
+    "$HOME"/.local/bin/*|"$HOME"/.npm-global/*|"$HOME"/.local/share/opencode/*) ;;
+    *) echo "错误: opencode 二进制路径不在白名单内: ${BIN_REAL}" >&2; exit 1 ;;
+esac
+BIN="${BIN_REAL}"
+
+# BIN ELF 魔数校验（fail-closed）。
+BIN_MAGIC="$(head -c 4 "${BIN}" | od -An -tx1 | tr -d ' 
+')"
+[ "${BIN_MAGIC}" = "7f454c46" ] || { echo "错误: ${BIN} 不是 ELF 二进制 (magic=${BIN_MAGIC})" >&2; exit 1; }
+
+# 可选 sha256 指纹（设置即强制比对）。
+if [ -n "${OPENCODE_SHA256:-}" ]; then
+    BIN_HASH="$(sha256sum "${BIN}" | awk '{print $1}')"
+    [ "${BIN_HASH}" = "${OPENCODE_SHA256}" ] || { echo "错误: opencode sha256 不匹配: got=${BIN_HASH}" >&2; exit 1; }
 fi
 
-for path in "${BIN}" "${AUTH}"; do
-    [ -e "${path}" ] || echo "警告: 路径不存在 ${path}" >&2
+# DOCKER_RUN_ARGS 白名单：拒绝 --privileged / --pid=host / --volume / -v / --network=host 等。
+RUN_ARGS_FILTERED=()
+for tok in ${DOCKER_RUN_ARGS:-}; do
+    case "${tok}" in
+        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=bridge|--read-only|--tmpfs*)
+            RUN_ARGS_FILTERED+=("${tok}") ;;
+        *)
+            echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}" >&2; exit 1 ;;
+    esac
 done
 
+# provider 环境变量透传（非路径输入）。
+ENV_ARGS=()
+for var in MODEL ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL \
+           ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL \
+           OPENCODE; do
+    if [ -n "${!var:-}" ]; then ENV_ARGS+=(-e "$var"); fi
+done
+
+# 凭证整文件 base64 经 env 注入，不做卷挂载。
+AUTH_JSON_B64="$(base64 -w0 "${AUTH}")"
+
 echo "  cli=${BIN}" >&2
-echo "  auth=${AUTH}" >&2
-echo "  config=${CONFIG_DIR}" >&2
+echo "  auth=${AUTH} (env-injected)" >&2
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 for mode in with without; do
     echo "==> SKILL_MODE=${mode}"
-    cid=$(docker run -d ${RUN_ARGS} ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} ${MOUNT_CONFIG[@]+"${MOUNT_CONFIG[@]}"} \
+    cid=$(docker run -d ${RUN_ARGS_FILTERED[@]+"${RUN_ARGS_FILTERED[@]}"} \
+        ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} \
         -e SKILL_MODE=${mode} \
-        -v "${BIN}":/usr/local/bin/opencode \
-        -v "${AUTH}":/root/.local/share/opencode/auth.json:ro \
+        -e "OPENCODE_AUTH_JSON=${AUTH_JSON_B64}" \
+        -v "${BIN}":/usr/local/bin/opencode:ro \
         "${IMAGE}") || { echo "docker run 失败" >&2; exit 1; }
 
     if timeout "${RUN_TIMEOUT}" docker wait "${cid}" >/dev/null; then
@@ -104,6 +122,8 @@ for mode in with without; do
 
     docker rm "${cid}" >/dev/null
 done
+
+unset AUTH_JSON_B64
 
 python3 - "${TMP}" <<'PY'
 import json

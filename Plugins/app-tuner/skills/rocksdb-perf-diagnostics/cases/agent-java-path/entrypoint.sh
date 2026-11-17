@@ -5,6 +5,56 @@ set -uo pipefail
 cd /workspace
 mkdir -p results
 
+# ---- 非 root + 权限收敛 ----
+AGENT_UID=1000
+AGENT_GID=1000
+AGENT_HOME=/home/agent
+CHROOT_BIN="$(command -v chroot || true)"
+[ -n "${CHROOT_BIN}" ] || { echo "错误: chroot 不存在" >&2; exit 1; }
+grep -q '^agent:' /etc/passwd 2>/dev/null || echo "agent:x:${AGENT_UID}:${AGENT_GID}::${AGENT_HOME}:/bin/bash" >> /etc/passwd
+grep -q '^agent:' /etc/group 2>/dev/null || echo "agent:x:${AGENT_GID}:" >> /etc/group
+mkdir -p "${AGENT_HOME}/.local/share/opencode" "${AGENT_HOME}/.config/opencode"
+chown -R "${AGENT_UID}:${AGENT_GID}" "${AGENT_HOME}"
+chmod 700 "${AGENT_HOME}/.local/share/opencode"
+chown "${AGENT_UID}:${AGENT_GID}" /workspace/results
+chmod 700 /workspace/results
+
+# 凭证通过 env 注入，落文件后从环境移除；文件在 agent home，600。
+if [ -n "${OPENCODE_AUTH_JSON:-}" ]; then
+    (
+        umask 077
+        printf '%s' "${OPENCODE_AUTH_JSON}" | base64 -d > "${AGENT_HOME}/.local/share/opencode/auth.json"
+    )
+    chown "${AGENT_UID}:${AGENT_GID}" "${AGENT_HOME}/.local/share/opencode/auth.json"
+    chmod 600 "${AGENT_HOME}/.local/share/opencode/auth.json"
+    unset OPENCODE_AUTH_JSON
+fi
+
+cat > /workspace/opencode.json <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "deny",
+    "websearch": "deny",
+    "external_directory": "deny",
+    "bash": "deny",
+    "edit": "allow",
+    "read": {
+      "*": "allow",
+      "*auth.json": "deny",
+      "/home/agent/.local/share/opencode/*": "deny",
+      "*.env": "ask",
+      "*.env.*": "ask"
+    }
+  }
+}
+JSON
+chmod 644 /workspace/opencode.json
+mkdir -p /workspace/.opencode
+cp /workspace/opencode.json /workspace/.opencode/opencode.json
+chmod 755 /workspace/.opencode
+chmod 644 /workspace/.opencode/opencode.json
+
 SKILL_MODE="${SKILL_MODE:-with}" # with | without
 
 if [ "${SKILL_MODE}" = "with" ]; then
@@ -28,7 +78,9 @@ if opencode run --help 2>&1 | grep -q -- "--dangerously-skip-permissions"; then
     AUTO_FLAG="--dangerously-skip-permissions"
 fi
 
-if ! opencode run "${AUTO_FLAG}" --format json -m "${MODEL:-deepseek/deepseek-v4-flash}" "$(cat "${PROMPT_FILE}")" \
+if ! "${CHROOT_BIN}" --skip-chdir --userspec="${AGENT_UID}:${AGENT_GID}" / \
+        env HOME="${AGENT_HOME}" PATH=/usr/local/bin:/usr/bin:/bin \
+        opencode run "${AUTO_FLAG}" --format json -m "${MODEL:-deepseek/deepseek-v4-flash}" "$(cat "${PROMPT_FILE}")" \
         > results/trace.jsonl 2> results/opencode.log; then
     SKILL_MODE="${SKILL_MODE}" python3 -c 'import json,os;json.dump({"success":False,"reason":"opencode run failed","skill_mode":os.environ["SKILL_MODE"]},open("results/result.json","w"),indent=2)'
     exit 1

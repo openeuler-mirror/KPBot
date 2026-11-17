@@ -358,6 +358,22 @@ docker run --rm --entrypoint bash <image> -lc 'ls -R /staging/skill; ls -R /work
 | `skills_invoked` 为空 | prompt 没让 agent 调用 skill,或 skill 未安装 | 检查 `entrypoint.sh` 的 `with` 分支和 trace |
 | `one_variable=false` | agent 一次改了多个参数 | 重跑;检查 `mock_invocations.log` |
 
+### 4.8 安全约束
+
+- `run_ab.sh` 对 `OPENCODE_BIN` / `OPENCODE_AUTH` **fail-closed**:不存在直接退出;`realpath -e` + 白名单前缀;BIN 做 ELF 魔数校验;可选 `OPENCODE_SHA256` 指纹。
+- 默认 `OPENCODE_BIN=/usr/local/bin/opencode`;CANNBot 环境由 `run_all.sh` 自动导出 cannbot 二进制(在白名单内)。
+- `DOCKER_RUN_ARGS` 走白名单(仅 `--cpus/--memory/--pids-limit/--rm/--name/--network=bridge/--read-only/--tmpfs`);拒绝 `--privileged`、`--pid=host`、`--volume`、`-v`、`--network=host`。
+- 凭证整文件 base64 经 `OPENCODE_AUTH_JSON` env 注入,不再 `-v` 挂载;entrypoint 写入非 root agent home(600)后 `unset`。
+- agent 以**非 root uid 1000** 运行(`chroot --skip-chdir --userspec=1000:1000 /`),`/workspace/results` 归 uid 1000。
+- entrypoint 写 `/workspace/opencode.json` 和 `/workspace/.opencode/opencode.json`:
+  - `webfetch` / `websearch` / `external_directory` deny
+  - `read` 对 `*auth.json`、agent home 下的 auth 路径 deny
+  - Java 用例 `bash` 整体 deny
+  - 执行用例 `bash` 仅 deny 外发/凭证读取类命令(`curl/wget/ssh/scp/rsync/nc/ncat`、`cat *auth.json`、`cat /proc/*/environ`、`python3 -c`、`env`、`printenv`),mock 仍可运行
+- 这些配置对 `--auto` 生效:`--auto` 只放行未被显式 deny 的动作。
+
+注意:安全约束会增加 agent 行为约束,可能影响 `one_variable` 等行为指标;失败时先看 `with.opencode.log` 是否 `PermissionDenied`。
+
 ---
 
 ## 5. 第 4 层:真实现场冒烟
