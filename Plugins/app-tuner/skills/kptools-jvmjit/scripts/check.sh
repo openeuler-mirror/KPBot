@@ -60,22 +60,25 @@ if [ -n "$CONTAINER" ]; then
     else
         ok "容器存在: $CONTAINER"
         if docker exec "$CONTAINER" true 2>/dev/null; then
-            # perf「存在性」与「采样权限」分开判定（127 命令不存在 ≠ EPERM 无权限，
-            # 二者处置完全不同：前者 toolpack 注入即可，后者才需要容器能力）
-            if docker exec "$CONTAINER" command -v perf >/dev/null 2>&1; then
-                if docker exec "$CONTAINER" perf stat -e cycles -- true >/dev/null 2>&1; then
-                    ok "容器内 perf 可用且有采样权限"
-                else
-                    fail "容器内 perf_event_open 无权限：重建容器加 --cap-add=PERFMON（旧运行时用 --cap-add SYS_ADMIN），guide §5.1"
-                fi
-            elif docker exec "$CONTAINER" test -x "$TOOLS/perf" >/dev/null 2>&1; then
-                if docker exec "$CONTAINER" env "LD_LIBRARY_PATH=$TOOLS/lib" "$TOOLS/perf" stat -e cycles -- true >/dev/null 2>&1; then
-                    ok "容器内 perf（$TOOLS）可用且有采样权限"
-                else
-                    fail "容器内 perf_event_open 无权限：重建容器加 --cap-add=PERFMON（旧运行时用 --cap-add SYS_ADMIN），guide §5.1"
-                fi
+            # perf「存在性」与「采样权限」分开判定。存在性用直接执行 perf --version：
+            # docker exec 直接 execve 不经 shell，不能用 shell 内建 command（恒 127 误判）；
+            # 返回码 0=存在，127/126=可执行不存在，EPERM=存在但无权限。
+            # 注入目录探测用 docker exec -e 设置 LD_LIBRARY_PATH，不依赖容器内 env/test。
+            PATH_PERF=0; TOOLS_PERF=0
+            docker exec "$CONTAINER" perf --version >/dev/null 2>&1 && PATH_PERF=1
+            docker exec -e "LD_LIBRARY_PATH=$TOOLS/lib" "$CONTAINER" "$TOOLS/perf" --version >/dev/null 2>&1 && TOOLS_PERF=1
+            if [ "$PATH_PERF" -eq 0 ] && [ "$TOOLS_PERF" -eq 0 ]; then
+                fail "容器内无 perf（PATH 与 $TOOLS 均未找到）：先执行 bash scripts/toolpack.sh --container $CONTAINER --dest $TOOLS 注入宿主工具，无需重建容器（guide §5.2）"
             else
-                fail "容器内无 perf（镜像未内置且未注入）：先执行 bash scripts/toolpack.sh --container $CONTAINER 注入宿主工具，无需重建容器（guide §5.2）"
+                STAT_OK=0
+                [ "$PATH_PERF" -eq 1 ] && docker exec "$CONTAINER" perf stat -e cycles -- true >/dev/null 2>&1 && STAT_OK=1
+                [ "$STAT_OK" -eq 0 ] && [ "$TOOLS_PERF" -eq 1 ] \
+                    && docker exec -e "LD_LIBRARY_PATH=$TOOLS/lib" "$CONTAINER" "$TOOLS/perf" stat -e cycles -- true >/dev/null 2>&1 && STAT_OK=1
+                if [ "$STAT_OK" -eq 1 ]; then
+                    ok "容器内 perf 可用且有采样权限（PATH=$PATH_PERF, $TOOLS=$TOOLS_PERF）"
+                else
+                    fail "容器内 perf 存在但 perf_event_open 无权限：重建容器加 --cap-add=PERFMON（旧运行时用 --cap-add SYS_ADMIN），guide §5.1"
+                fi
             fi
         else
             fail "容器未运行: $CONTAINER"

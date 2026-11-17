@@ -61,8 +61,8 @@ else
     echo "WARN: agent $AGENT_PATH 不存在，仅注入 perf；JVM 加载 agent 前需先放入容器" >&2
 fi
 
-# 容器内验证（env 参数数组形式，不经 bash -c 字符串拼接）
-VER=$(docker exec "$CONTAINER" env "LD_LIBRARY_PATH=$DEST/lib" "$DEST/perf" --version 2>&1) \
+# 容器内验证（docker exec -e 设置 LD_LIBRARY_PATH，参数数组形式，不经 bash -c、不依赖容器内 env）
+VER=$(docker exec -e "LD_LIBRARY_PATH=$DEST/lib" "$CONTAINER" "$DEST/perf" --version 2>&1) \
     || { echo "FAIL: 容器内 perf 无法运行（检查架构/glibc: 容器 glibc 须 >= 宿主）: $VER" >&2; exit 1; }
 echo "工具注入完成: $DEST"
 echo "容器内 perf: $VER"

@@ -159,6 +159,11 @@ else
                     else
                         bad "check.sh 容器模式失败"; tail -6 "$WORK/ctr-check.log" >&2
                     fi
+                    # P1 回归（第 2 轮）：镜像内置 perf（PATH）时须判「可用」而非「无 perf」
+                    # 存在性判定必须是直接执行（docker exec 不经 shell，内建 command 恒 127）
+                    docker exec "$CTR" bash -c 'printf "#!/bin/sh\nLD_LIBRARY_PATH=/tmp/jvmjit-tools/lib exec /tmp/jvmjit-tools/perf \"\$@\"\n" > /usr/local/bin/perf && chmod +x /usr/local/bin/perf'
+                    OUT=$(bash "$S/scripts/check.sh" --container "$CTR" 2>&1 || true)
+                    echo "$OUT" | grep -q "PATH=1" && ok "check.sh 识别 PATH 内置 perf（直接执行判定）" || bad "PATH 内置 perf 被误判: $(echo "$OUT" | grep FAIL | head -1)"
                     if bash "$S/scripts/collect.sh" -p "$CPID" --container "$CTR" -d 6 --call-graph --stop-jvm --annotate-timeout 60 -o "$WORK/ctr-out" >"$WORK/ctr-collect.log" 2>&1; then
                         ok "collect.sh 容器模式退出 0"
                         grep -q "DemoCompute" "$WORK/ctr-out/report.txt" && ok "容器内采集：report 含 DemoCompute 符号" || bad "容器模式 report 无 Java 符号"
