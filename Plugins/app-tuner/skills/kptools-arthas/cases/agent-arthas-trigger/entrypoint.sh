@@ -7,22 +7,39 @@ SKILL_NAME="kptools-arthas"
 export ARTHAS_BOOT_JAR="${ARTHAS_BOOT_JAR:-/opt/arthas/arthas-boot.jar}"
 AGENT_USER="arthas-agent"
 AGENT_HOME="/home/${AGENT_USER}"
+write_fail() { SKILL_MODE="${SKILL_MODE}" python3 -c "import json,os;json.dump({'success':False,'reason':'$1','skill_mode':os.environ['SKILL_MODE']},open('results/result.json','w'),indent=2)"; exit 1; }
+# agent 视角自检：降权后不可读/未存活的资源立即 fail-closed，绝不让权限配置
+# 问题以"opencode 无凭证"或"PID 已死"这类下游错误掩盖（评审 P1/P2）
+check_agent() { # <description> <以 agent 身份执行的命令...>
+    local desc="$1"; shift
+    setpriv --reuid="${AGENT_USER}" --regid="${AGENT_USER}" --init-groups \
+        env HOME="${AGENT_HOME}" "$@" || write_fail "${desc}"
+}
 
 # ---- 凭证重组：OPENCODE_AUTH_JSON 整文件 base64 → agent 隔离 HOME 下 auth.json ----
-# docs/agent-case-security-notes.md 规则 1：不做 -v 卷挂载、600 权限、运行后即删；
+# docs/agent-case-security-notes.md 规则 1：不做 -v 挂载、600 权限、运行后即删；
 # 凭证文件位于 /workspace 之外，读取禁令见两臂 prompts 与 SKILL 安全约束节。
+# umask 077 仅限凭证解码段：目录链由 root 创建，必须整链 chown 给 agent
+# （否则 0700 root 属主使降权后的 agent 无法遍历读取，且 opencode 也无法写入
+# 自己的 storage）；解码完立即恢复 umask 022，后续 root 产物（class/opencode.json）
+# 保持 0644，agent 可读不可改。
 umask 077
 AUTH_DIR="${AGENT_HOME}/.local/share/opencode"
 mkdir -p "${AUTH_DIR}"
+chown -R "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}/.local"
 AUTH_TMP="$(mktemp /tmp/opencode_auth.XXXXXX)"
 printf '%s' "${OPENCODE_AUTH_JSON:-}" | base64 -d > "${AUTH_TMP}"
 install -m 600 -o "${AGENT_USER}" -g "${AGENT_USER}" "${AUTH_TMP}" "${AUTH_DIR}/auth.json"
 rm -f "${AUTH_TMP}"
+umask 022
+check_agent "auth.json 对 agent 不可读（凭证目录属主/权限错误）" test -r "${AUTH_DIR}/auth.json"
 
 # ---- 项目级权限配置：deny webfetch/websearch（外发通道；显式 deny 在 --auto 下依然生效）----
-# bash/edit 保留：本用例工作流需要执行 collect.sh 与落盘证据。root 持有、agent 不可改
-# （/workspace 根对 agent 不可写）。
+# bash/edit 保留：本用例工作流需要执行 collect.sh 与落盘证据。root 拥有、644 可读
+# 不可改（/workspace 根对 agent 不可写；deny 配置静默缺失不可接受——基线 §3 规则 6）。
 printf '%s\n' '{"permission":{"webfetch":"deny","websearch":"deny"}}' > /workspace/opencode.json
+chmod 644 /workspace/opencode.json
+check_agent "opencode.json 对 agent 不可读（deny 配置将静默缺失）" test -r /workspace/opencode.json
 
 if [ "${SKILL_MODE}" = "with" ]; then
     mkdir -p .opencode/skills
@@ -87,15 +104,16 @@ public class DemoApp {
 }
 JAVA
 javac -d /workspace /workspace/DemoApp.java
+check_agent "DemoApp.class 对 agent 不可读（umask/属主错误，JVM 将起不来）" test -r /workspace/DemoApp.class
 setpriv --reuid="${AGENT_USER}" --regid="${AGENT_USER}" --init-groups \
     env HOME="${AGENT_HOME}" java -cp /workspace DemoApp & JPID=$!
 sleep 3
+kill -0 "$JPID" 2>/dev/null || write_fail "DemoApp JVM 未存活（class 可读性/同 uid 运行问题），agent 无有效分析目标"
 echo "[entrypoint] DemoApp PID=$JPID"
 trap 'kill $JPID 2>/dev/null; rm -f "${AUTH_DIR}/auth.json"' EXIT
 
 sed "s/__TARGET_PID__/${JPID}/g" "prompts/${SKILL_MODE}-skill.md" > "prompts/${SKILL_MODE}-skill.eff.md"
 PROMPT_FILE="prompts/${SKILL_MODE}-skill.eff.md"
-write_fail() { SKILL_MODE="${SKILL_MODE}" python3 -c "import json,os;json.dump({'success':False,'reason':'$1','skill_mode':os.environ['SKILL_MODE']},open('results/result.json','w'),indent=2)"; exit 1; }
 [ -f "${PROMPT_FILE}" ] || { write_fail "missing prompt"; }
 
 # agent 段以非 root 用户运行（规则 3）；trace/log FD 由 root shell 先行建立
