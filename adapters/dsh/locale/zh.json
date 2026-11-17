@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "KPBot 代码优化",
+    "description": "在 DSH 中加载 KPBot 代码优化技能。首版支持普通子代理优化流程；不含 app-tuner、Claude 批量驱动和旧 workflow。资源按包声明发现，支持后续领域目录拆分。"
+  }
+}

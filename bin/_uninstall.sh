@@ -4,6 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 PACKAGE_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Identify the tool position; a later "dsh" may be a legacy project path.
+# Explicit DSH invocations must never fall through to the Claude uninstaller.
+case "${1:-}:${2:-}" in
+    dsh:*|project:dsh|global:dsh)
+        exec node "$PACKAGE_ROOT/adapters/dsh/install.mjs" uninstall "$@"
+        ;;
+esac
+
 LEVEL="project"
 TOOL="claude"
 INSTALL_PATH=""
@@ -13,7 +21,7 @@ for arg in "$@"; do
         global|project) LEVEL="$arg" ;;
         claude|opencode) TOOL="$arg" ;;
         -h|--help)
-            echo "Usage: kpbot uninstall [global|project] [claude|opencode] [path]"
+            echo "Usage: kpbot uninstall [global|project] [claude|opencode|dsh] [path]"
             exit 0
             ;;
         *) INSTALL_PATH="$arg" ;;

@@ -5,6 +5,15 @@
 
 set -e
 
+# DSH is the first argument, or follows an explicit installation level.
+# Later arguments may be legacy install paths named "dsh".
+case "${1:-}:${2:-}" in
+    dsh:*|project:dsh|global:dsh)
+        _dsh_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        exec node "$_dsh_root/adapters/dsh/install.mjs" install "$@"
+        ;;
+esac
+
 # --- Color & output helpers ---
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'
@@ -118,7 +127,7 @@ Usage: install.sh [level] [tool] [install_path]
 
 Arguments:
   level        - Installation level: "project" (default) or "global"
-  tool         - Target tool: "claude" (default) or "opencode"
+  tool         - Target tool: "claude" (default), "opencode", or "dsh"
   install_path - Project-level installation directory (default: current working directory)
 
 Options:
@@ -131,12 +140,17 @@ Examples:
   install.sh project opencode             # Project-level, OpenCode
   install.sh global opencode              # Global-level, OpenCode
   install.sh project claude /path/to/proj # Project-level, Claude Code, custom path
+  install.sh project dsh "/my project"    # DSH project root (spaces supported)
+  install.sh global dsh                    # DSH_HOME or ~/.dsh
+  install.sh global dsh "/my dsh home"     # Custom DSH home
 
 Installation paths:
   Claude:   .claude/skills/     + CLAUDE.md in project root (project)
             ~/.claude/skills/   + ~/.claude/CLAUDE.md (global)
   OpenCode: .opencode/skills/   + AGENTS.md in project root (project)
             ~/.config/opencode/ + AGENTS.md (global)
+  DSH:      .dsh/skills/ (project)
+            DSH_HOME/skills/ or ~/.dsh/skills/ (global; explicit path overrides DSH home)
 
 After installation, launch directly:
   Claude:   claude
