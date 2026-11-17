@@ -34,6 +34,15 @@ See the Mulan PSL v2 for more details.
 
 Third Party Open Source Software
 
+Bundled component: prompt capture collection and analysis implementation
+Location: Plugins/app-tuner/skills/kptools-prompt-capture/
+Source: prompt_capture collection code, offline analysis tools and report assets;
+        import checksums and adaptation details are recorded in references/.
+License: MulanPSL-2.0 (see the repository LICENSE).
+The contributor has confirmed ownership or authorization to distribute the
+imported collection code, analysis tools, CSS and JavaScript under MulanPSL-2.0.
+The vllm-ascend business proxy itself is not bundled by this skill.
+
 The external tools and services referenced by KPBot skills (such as openwiki,
 profiling tools and platform CLIs) are invoked at runtime and are not bundled
 in this repository. Their copyrights and licenses belong to their respective

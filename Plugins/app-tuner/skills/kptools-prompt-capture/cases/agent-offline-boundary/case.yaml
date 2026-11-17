@@ -1,0 +1,36 @@
+name: agent-offline-boundary
+skill: kptools-prompt-capture
+tier: agent
+image: kpbot/prompt-capture-agent:1.0-openeuler24.03
+model: opencode/glm-5.3-flash-free
+auth: runtime_mount
+ab:
+  conditions: [with, without]
+  metric: success
+  uplift: compare skill guidance with identical read-only analysis tools; not whole-package availability
+build:
+  context: ../../../..
+  dockerfile: skills/kptools-prompt-capture/cases/agent-offline-boundary/Dockerfile
+entrypoint: ["bash", "/harness/entrypoint.sh"]
+env_requires:
+  - allowlisted Linux opencode ELF binary and a single auth.json file (OPENCODE_AUTH)
+  - built-in model provider; custom host configuration directories are not mounted
+  - network access to the selected model API
+env_vars:
+  MODEL: opencode/glm-5.3-flash-free
+  SKILL_MODE: with
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: inputs_unchanged
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: report_correct
+    expect: true
