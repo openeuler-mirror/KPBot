@@ -131,6 +131,15 @@ else
         ok "测试镜像: $IMG"
         if docker run -d --cap-add SYS_ADMIN --name "$CTR" "$IMG" sleep infinity >/dev/null 2>&1; then
             ok "容器已启动（--cap-add SYS_ADMIN）"
+            # 三态判定回归（镜像无 perf 且未注入时须指引 toolpack，而非误判无权限要求重建容器）
+            if docker exec "$CTR" bash -c "command -v perf" >/dev/null 2>&1; then
+                skip "三态回归需镜像内无 perf（$IMG 含 perf），跳过无-perf 分支断言"
+            else
+                OUT=$(bash "$S/scripts/check.sh" --container "$CTR" 2>&1 || true)
+                echo "$OUT" | grep -q "容器内无 perf" && echo "$OUT" | grep -q "toolpack" \
+                    && ok "check.sh 无-perf 分支指引 toolpack（非权限误判）" || bad "无-perf 分支判定错误: $(echo "$OUT" | grep FAIL | head -1)"
+                echo "$OUT" | grep -q "PERFMON\|SYS_ADMIN" && bad "无-perf 分支误报权限问题" || ok "无-perf 分支不提能力重建"
+            fi
             if bash "$S/scripts/toolpack.sh" --container "$CTR" >"$WORK/toolpack.log" 2>&1 \
                || bash "$S/scripts/toolpack.sh" --container "$CTR" >/dev/null 2>&1; then
                 ok "toolpack.sh 工具注入成功"

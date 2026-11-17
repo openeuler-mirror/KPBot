@@ -102,7 +102,8 @@ bash scripts/collect.sh -p <PID> -d 8 --stop-jvm
 
 ## 错误处理
 
-- `perf_event_open ... Operation not permitted`（容器内）→ 容器缺 perf 权限：重启容器加 `--cap-add=PERFMON`（旧运行时 `SYS_ADMIN`），见 guide §5.1
+- check.sh 报 `容器内无 perf（镜像未内置且未注入）` → 先 `toolpack.sh --container <ctr>` 注入宿主工具（**无需重建容器**），再重跑 check.sh
+- `perf_event_open ... Operation not permitted`（容器内，perf 已存在）→ 容器缺 perf 权限：重启容器加 `--cap-add=PERFMON`（旧运行时 `SYS_ADMIN`），见 guide §5.1；注意区分"无 perf（注入即可）"与"无权限（才需能力）"，check.sh 已分开判定
 - check.sh 报 `agent not loaded` → JVM 未带 `-agentpath` 启动：在启动参数追加 `-agentpath:/usr/lib64/libperf-jvmti.so` 后重启；容器场景把 agent cp 进容器再重启
 - report 出现 `[JIT] tid` 裸地址 → dump 滞后（非故障）：等 dump 增长或优雅退出后重新 inject；测试环境直接 `--stop-jvm`
 - `jitted code must be sampled with perf record -k 1` → record 未带 `-k 1`，collect.sh 已内置；手工执行时补上

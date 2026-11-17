@@ -97,7 +97,8 @@ dump 写在容器文件系统，宿主机 perf 虽能看到容器进程，但 `i
 
 ### 5.1 权限
 
-容器内 `perf_event_open` 报 `Operation not permitted` = 缺 perf 能力：
+容器内 `perf_event_open` 报 `Operation not permitted` = 缺 perf 能力（前提：perf 已存在——
+镜像无 perf 时先 `toolpack.sh` 注入，那是另一种状态，无需重建容器）：
 
 ```bash
 docker run --cap-add=PERFMON ...        # 内核 5.8+ / 新版运行时
