@@ -73,7 +73,8 @@
   "opencode": {
     "exclude": [
       "drive-claude-optimize-pipeline",
-      "batch-drive-optimize-pipeline"
+      "batch-drive-optimize-pipeline",
+      "multimedia-code-optimizer"
     ]
   }
 }
