@@ -3,11 +3,15 @@
 
 Run: python3 tests/test_pipeline.py
 Each case asserts the accuracy pair, the regression/improvement case ids, and that
---fail-on-regression returns exit code 1 when a regression exists.
+--fail-on-regression returns exit code 1 when a regression exists. The gate checks
+assert that undecidable comparisons exit 2 and that an ambiguous or missing dataset
+is an error instead of a silent fallback to some other json.
 """
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +48,43 @@ def section(text: str, header: str) -> str:
     return text.split(header)[1].split("###")[0]
 
 
+def run(*args):
+    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True)
+
+
+def check_gates() -> int:
+    failures = 0
+    a = FIX / "case-a/opendatas/output/aime2024_gen/20261110-baseline_dsv4pro_2026-11-10-05-06-11"
+    b = FIX / "case-b/opendatas/output/gpqa_gen_diamond/20261109-baseline_dsv4pro_2026-11-09-22-14-03"
+
+    mixed = run(a, b)
+    ok = mixed.returncode == 2 and "不可判定" in mixed.stdout
+    failures += 0 if ok else 1
+    print(f"{'PASS' if ok else 'FAIL'}  undecidable runs exit 2{'':<30} exit={mixed.returncode}")
+
+    missing = run(a, a, "--dataset-name", "no_such_dataset")
+    ok = missing.returncode != 0 and "--dataset-name" in missing.stderr
+    failures += 0 if ok else 1
+    print(f"{'PASS' if ok else 'FAIL'}  missing --dataset-name is an error{'':<21} exit={missing.returncode}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        merge = Path(tmp) / "merge"
+        merge.mkdir()
+        src = a / "merge" / "aime2024.json"
+        shutil.copy(src, merge / "aime2024.json")
+        shutil.copy(src, merge / "other.json")
+        ambiguous = run(tmp, tmp)
+        ok = ambiguous.returncode != 0 and "--dataset-name" in ambiguous.stderr
+        failures += 0 if ok else 1
+        print(f"{'PASS' if ok else 'FAIL'}  ambiguous merge dir is an error{'':<20} exit={ambiguous.returncode}")
+
+        picked = run(tmp, tmp, "--dataset-name", "other")
+        ok = picked.returncode == 0 and f"json: {merge / 'other.json'}" in picked.stdout
+        failures += 0 if ok else 1
+        print(f"{'PASS' if ok else 'FAIL'}  --dataset-name picks the named json{'':<16} exit={picked.returncode}")
+    return failures
+
+
 def main() -> int:
     failures = 0
     for name, (before, after, (acc_b, acc_a, reg, imp)) in CASES.items():
@@ -58,7 +99,9 @@ def main() -> int:
         ok = got_acc == (acc_b, acc_a) and got_reg == reg and got_imp == imp and rc == 1
         failures += 0 if ok else 1
         print(f"{'PASS' if ok else 'FAIL'}  {name:<50} acc={got_acc} reg={got_reg} imp={got_imp} exit={rc}")
-    print(f"\n{len(CASES) - failures}/{len(CASES)} end-to-end fixture cases passed")
+    failures += check_gates()
+    total = len(CASES) + 4
+    print(f"\n{total - failures}/{total} end-to-end cases passed")
     return 1 if failures else 0
 
 

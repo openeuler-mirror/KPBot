@@ -9,6 +9,12 @@ Usage:
     python3 analyze_precision.py <before_dir> <after_dir> [--dataset-name <json_name>]
                                  [--fail-on-regression]
 
+Exit status:
+    0 - comparable runs, no regression
+    1 - comparable runs, at least one correct->wrong flip (gate failed)
+    2 - runs are not comparable (gold mismatch or case ids differ), so the
+        verdict is undecidable and must not be read as a pass
+
 Item schema (shared by all datasets in this tool):
     {"origin_prompt": str, "prediction": str, "gold": str, "exec_times": int}
 """
@@ -37,30 +43,50 @@ UNIT_SECONDS = {
 }
 
 
-def find_json(run_dir: Path, dataset_name=None):
-    """Locate the merged result json inside a run directory."""
-    merge = run_dir / "merge"
-    if merge.is_dir():
-        cands = sorted(merge.glob("*.json"))
-        if dataset_name:
-            name = dataset_name if dataset_name.endswith(".json") else f"{dataset_name}.json"
-            exact = merge / name
+def find_json(run_dir: Path, dataset_name=None) -> Path | None:
+    """Locate the merged result json inside a run directory.
+
+    Never falls back silently: a `--dataset-name` that does not exist is an error,
+    and several json files under one folder require an explicit `--dataset-name`,
+    otherwise two runs could be compared across different datasets.
+    """
+    name = None
+    if dataset_name:
+        name = dataset_name if dataset_name.endswith(".json") else f"{dataset_name}.json"
+    folders = [d for d in (run_dir / "merge", run_dir) if d.is_dir()]
+    if name:
+        for folder in folders:
+            exact = folder / name
             if exact.is_file():
                 return exact
+        raise FileNotFoundError(
+            f"--dataset-name {name} 在 {run_dir} 下不存在（已查找 merge/ 与目录根）"
+        )
+    for folder in folders:
+        cands = sorted(folder.glob("*.json"))
+        if len(cands) > 1:
+            raise ValueError(
+                f"{folder} 下有多个结果 json，无法确定分析哪一个；"
+                "请用 --dataset-name 显式指定"
+            )
         if cands:
             return cands[0]
-    cands = sorted(run_dir.glob("*.json"))
-    return cands[0] if cands else None
+    return None
 
 
 def is_truncated(text: str) -> bool:
-    """True when the generation was cut off in the middle of a `\\boxed{...}`.
+    """True when the tail of the generation has an unclosed `\\boxed{...}`.
 
-    A truncated tail like `\\boxed{21` would otherwise be read as the number 21 and
-    silently counted as a correct answer, which inflates accuracy instead of being
-    reported as an unfinished answer.
+    A truncated tail like `\\boxed{21` or `\\boxed{\\frac{1}{2` would otherwise be
+    read as a number and silently counted as an answer, which inflates accuracy or
+    fakes a regression instead of being reported as an unfinished answer. Earlier
+    complete boxes do not mask a truncated tail.
     """
-    return text.rfind("\\boxed") > text.rfind("}")
+    idx = text.rfind("\\boxed")
+    if idx < 0:
+        return False
+    boxes = list(BOXED_RE.finditer(text))
+    return not boxes or boxes[-1].start() != idx
 
 
 def extract_boxes(text: str) -> list[str]:
@@ -144,21 +170,29 @@ def answers_match(answer: str, gold: str) -> bool:
 def answer_of(prediction: str, gold: str) -> tuple[str, str]:
     """Return (extracted_answer, source) for a prediction.
 
+    A generation whose tail leaves a `\\boxed{...}` unclosed is treated as truncated
+    and yields no answer, even when an earlier complete box exists. The only exception
+    is an explicit final `ANSWER: X` line, which is a complete answer on its own.
+
     Source preference depends on the gold type:
-    - numeric gold: the LAST boxed value; if nothing is boxed, the last number in the
-      whole prediction (the model sometimes states the value outside \\boxed{}).
+    - numeric gold: the LAST boxed value that contains a value; if nothing is boxed,
+      the last number in the whole prediction (the model sometimes states the value
+      outside \\boxed{}).
     - letter gold (GPQA): the model is told to end with `ANSWER: X`, so take the LAST
-      `ANSWER: X` match. Only if that is absent fall back to the last A-D letter —
-      the first letter is usually a distractor inside the reasoning.
+      `ANSWER: X` match. Only if that is absent fall back to the last boxed letter,
+      then the last A-D letter — the first letter is usually a distractor inside the
+      reasoning.
+    - text gold: the LAST non-empty boxed content.
     """
     gold_num = NUMBER_RE.fullmatch(gold.strip())
     gold_letter = LETTER_RE.fullmatch(gold.strip())
+    truncated = is_truncated(prediction)
 
     if gold_num:
-        boxes = extract_boxes(prediction)
-        if not boxes and is_truncated(prediction):
+        if truncated:
             return "", "none"
-        for cand in (boxes or [prediction]):
+        boxes = extract_boxes(prediction)
+        for cand in (reversed(boxes) if boxes else [prediction]):
             cand = dedecorate(cand)
             for converted in unit_values(cand):
                 if answers_match(converted, gold):
@@ -172,17 +206,19 @@ def answer_of(prediction: str, gold: str) -> tuple[str, str]:
         matches = ANSWER_RE.findall(prediction)
         if matches:
             return matches[-1].upper(), "answer"
+        if truncated:
+            return "", "none"
         boxes = extract_boxes(prediction)
-        for cand in (boxes or [prediction]):
+        for cand in (reversed(boxes) if boxes else [prediction]):
             letters = LETTER_RE.findall(dedecorate(cand))
             if letters:
                 return letters[-1], "boxed" if boxes else "plain"
         return "", "none"
 
-    boxes = extract_boxes(prediction)
-    if not boxes and is_truncated(prediction):
+    if truncated:
         return "", "none"
-    candidates = boxes if boxes else [prediction]
+    boxes = extract_boxes(prediction)
+    candidates = reversed(boxes) if boxes else [prediction]
     for cand in candidates:
         norm = normalize_answer(cand, gold)
         if norm:
@@ -219,20 +255,15 @@ def analyze(results: dict) -> dict:
     return out
 
 
-def summarize(run_dir: Path, results: dict) -> dict:
-    s = analyze(results)
-    jf = find_json(run_dir)
-    s["json"] = jf.name if jf else None
-    return s
-
-
-def report(before_dir, after_dir, before_res, after_res) -> tuple[str, int]:
-    before, after = summarize(Path(before_dir), before_res), summarize(Path(after_dir), after_res)
+def report(
+    before_dir, after_dir, before_res, after_res, before_json, after_json
+) -> tuple[str, int, bool]:
+    before, after = analyze(before_res), analyze(after_res)
     lines = [
         "## 精度对比分析",
         "",
-        f"- 优化前：`{before_dir}` (json: {before['json']}, gold_type: {before['gold_type']})",
-        f"- 优化后：`{after_dir}` (json: {after['json']}, gold_type: {after['gold_type']})",
+        f"- 优化前：`{before_dir}` (json: {before_json}, gold_type: {before['gold_type']})",
+        f"- 优化后：`{after_dir}` (json: {after_json}, gold_type: {after['gold_type']})",
         "",
         "| 指标 | 优化前 | 优化后 |",
         "|------|--------|--------|",
@@ -305,7 +336,9 @@ def report(before_dir, after_dir, before_res, after_res) -> tuple[str, int]:
         lines.append("")
 
     if gold_mismatch:
-        std = "不可判定（gold 不一致）" if not regressions else "未达标（存在回归）"
+        std = "未达标（存在回归）" if regressions else "不可判定（gold 不一致）"
+    elif only_one_side:
+        std = "未达标（存在回归）" if regressions else "不可判定（题号不一致）"
     else:
         std = "达标" if not regressions else "未达标（存在回归）"
     lines.append("### 结论")
@@ -318,7 +351,13 @@ def report(before_dir, after_dir, before_res, after_res) -> tuple[str, int]:
             f"其中 {before['total'] - len(gold_mismatch)} 题可按题号对比；"
             f"{len(gold_mismatch)} 题 gold 不一致，需先确认是否同一份数据集。"
         )
-    return "\n".join(lines), len(regressions)
+    incomparable = bool(gold_mismatch or only_one_side)
+    if incomparable:
+        lines.append(
+            "两次运行不可比（gold 或题号不一致），脚本以退出码 2 结束；"
+            "退出码 2 不是达标，需先确认两次跑的是同一份数据集。"
+        )
+    return "\n".join(lines), len(regressions), incomparable
 
 
 def load_dir(run_dir, dataset_name=None):
@@ -327,7 +366,7 @@ def load_dir(run_dir, dataset_name=None):
     if not jf:
         raise FileNotFoundError(f"no result json under {run_dir}")
     with open(jf, encoding="utf-8") as f:
-        return json.load(f)
+        return json.load(f), jf
 
 
 def main():
@@ -345,12 +384,16 @@ def main():
     before_dir = Path(args.before)
     after_dir = Path(args.after)
     try:
-        before = load_dir(before_dir, args.dataset_name)
-        after = load_dir(after_dir, args.dataset_name)
-    except FileNotFoundError as exc:
+        before, before_json = load_dir(before_dir, args.dataset_name)
+        after, after_json = load_dir(after_dir, args.dataset_name)
+    except (FileNotFoundError, ValueError) as exc:
         sys.exit(f"error: {exc}\n提示：确认两次运行的目录；结果 json 通常在 <run_dir>/merge/ 下")
-    text, n_regressions = report(before_dir, after_dir, before, after)
+    text, n_regressions, incomparable = report(
+        before_dir, after_dir, before, after, before_json, after_json
+    )
     print(text)
+    if incomparable:
+        sys.exit(2)
     if args.fail_on_regression and n_regressions:
         sys.exit(1)
 

@@ -40,7 +40,16 @@ CASES = [
     ("Reasoning was cut off mid", "210", "", False),
     # truncated inside \boxed: must not be read as an answer
     (r"Working\ldots so \boxed{21", "21", "", False),
-    (r"Earlier \boxed{3} then cut off at \boxed{4", "3", "3", True),
+    # a truncated tail wins over an earlier complete box
+    (r"Earlier \boxed{3} then cut off at \boxed{4", "3", "", False),
+    # truncated inside nested braces (\frac) must not fall back to the last number
+    (r"so \boxed{\frac{1}{2", "0.5", "", False),
+    # multiple complete boxes: the LAST one is the final answer
+    (r"We had \boxed{12} but after checking the answer is \boxed{45}", "45", "45", True),
+    (r"We had \boxed{45} but corrected it to \boxed{12}", "45", "12", False),
+    (r"reject \boxed{0} then \boxed{127}", "127", "127", True),
+    (r"Options: \boxed{A} is a distractor, so \boxed{D}", "D", "D", True),
+    (r"\boxed{draft} then finalize \boxed{equilateral}", "equilateral", "equilateral", True),
     # answer stated without \boxed
     ("therefore the answer is 127", "127", "127", True),
     # text gold
