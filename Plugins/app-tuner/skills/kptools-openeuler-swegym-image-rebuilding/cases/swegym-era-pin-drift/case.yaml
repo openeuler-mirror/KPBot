@@ -1,0 +1,57 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 修复一个"依赖漂移"的 SWE-Gym 任务环境
+#
+# 拉取与测试方法（人类可读）：
+#   docker build --network host -f skills/kptools-openeuler-swegym-image-rebuilding/cases/swegym-era-pin-drift/Dockerfile \
+#       -t kpbot/app-tuner-agent-swegym-era-pin-drift:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。fixture 是一个微缩 SWE-Gym 实例（/workspace）：
+#   testbed git 仓库两笔提交 —— base_commit 时代 requirements 含 pyarrow==13.0.0，
+#   HEAD 丢掉了该 pin（漂移源）；官方验收测试断言 pyarrow 主版本 = 13。
+#   开箱环境为漂移态且 gold=0（镜像构建时预装并自检）。
+#   任务：定位漂移源 → 修复 env/requirements.txt → bash build_env.sh 重建
+#   → bash run_gold.sh 直到 gold=1 → 产出 opt/build_report.json。
+#   with/without 唯一变量是 skill 与 prompt 是否提及 skill。
+#   无 skill 时模型的典型失败模式：装 latest pyarrow（25.x 过不了时代断言）、
+#   瞎猜版本、或绕过 env 配置直接 pip install（pin_ok 判据拦截）。
+#   判据四件套（verify.sh，全部 fail-closed）：
+#     tamper_ok  受保护文件（官方测试/gold 脚本/构建脚本）sha256 未被改动
+#     pin_ok     env/requirements.txt 含精确时代 pin（pyarrow==13.0.0）
+#     gold_ok    verify 亲自重跑 run_gold.sh（不接受 agent 自述）
+#     report_ok  build_report.json 必填字段非空且 base_commit 与真实锚点一致
+#   镜像构建与运行均需出网（dnf 源 / pypi 镜像 / 模型 API），推荐 --network host；
+#   单条件端到端约 5–15 分钟（pip 安装 pandas/pyarrow 各 ~1 分钟）。
+
+name: swegym-era-pin-drift
+skill: kptools-openeuler-swegym-image-rebuilding
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/app-tuner-agent-swegym-era-pin-drift:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection          # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载
+
+ab:
+  conditions: [with, without]      # 同一任务两条件对照
+  skill_enabled:
+    with: true                     # 运行时把 /staging/skill 接入 .opencode/skills/
+    without: false                 # 不接入任何 skill，仅靠模型自身
+  metric: gold_ok                  # 核心对比指标：官方验收是否真实翻案（0/1）
+  uplift: gold_ok_with - gold_ok_without
+
+build:
+  context: ../../../..                         # 指向 Plugins/app-tuner/
+  dockerfile: skills/kptools-openeuler-swegym-image-rebuilding/cases/swegym-era-pin-drift/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - x86_64 / aarch64 主机（纯构建，无 ISA / KVM 依赖）
+  - opencode 二进制（只读挂载）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载）
+  - 容器可访问 dnf 源 / pypi 镜像（镜像内已配 tuna 镜像源）及模型 API（需 --network host）
+  - 磁盘余量 ≥ 5GB（venv + wheels），单条件耗时约 5–15 分钟
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
