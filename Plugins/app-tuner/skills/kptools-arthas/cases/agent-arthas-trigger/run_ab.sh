@@ -107,11 +107,13 @@ for mode in with without; do
     docker rm "${cid}" >/dev/null
 done
 
-# --save 回拷产物做凭证剔除：避免凭证经日志/结果落盘到宿主（更不可进仓库）
+# --save 回拷产物做凭证剔除：避免凭证经日志/结果落盘到宿主（更不可进仓库）。
+# 凭证 blob 经 stdin 传入 python——argv 会经 /proc/<pid>/cmdline 与 ps 对本机
+# 其他用户可见，不得把 base64 凭证拼进命令行（评审意见，与 #141 同步收敛）。
 if [ -n "${SAVE_DIR}" ]; then
-    python3 - "${SAVE_DIR}" "${AUTH_JSON_B64:-}" <<'PY'
+    cat > "${TMP}/redact.py" <<'PY'
 import os, re, sys
-save, blob = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "")
+save, blob = sys.argv[1], sys.stdin.read()
 pat = re.compile(r'("(?:access_token|api[_-]?key|secret|token|password|key)"\s*:\s*")[^"]*(")', re.I)
 skey = re.compile(r'sk-[A-Za-z0-9_\-]{8,}')
 for name in sorted(os.listdir(save)):
@@ -131,6 +133,7 @@ for name in sorted(os.listdir(save)):
         open(p, "w", encoding="utf-8").write(t)
         print("[redact] %s: 已剔除凭证串" % name)
 PY
+    printf '%s' "${AUTH_JSON_B64:-}" | python3 "${TMP}/redact.py" "${SAVE_DIR}"
 fi
 
 unset AUTH_JSON_B64
