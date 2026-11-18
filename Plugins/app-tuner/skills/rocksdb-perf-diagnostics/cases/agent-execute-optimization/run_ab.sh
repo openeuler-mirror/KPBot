@@ -4,10 +4,13 @@
 # 用法:
 #   ./run_ab.sh [--save <目录>] [<image>]
 # 环境变量:
-#   OPENCODE_BIN     opencode 二进制路径
-#   OPENCODE_AUTH    auth.json 路径
-#   DOCKER_RUN_ARGS  追加给 docker run 的参数（默认 --network host）
-#   RUN_TIMEOUT      单臂超时秒数（默认 1200）
+#   OPENCODE_BIN       opencode / cannbot 二进制路径（白名单校验）
+#   OPENCODE_AUTH      auth.json 路径（整文件 base64 经 env 注入，不挂载）
+#   OPENCODE_EXTRA_ENV 空格分隔的宿主 env 变量名，受控透传进容器（provider 专属变量）
+#   DOCKER_RUN_ARGS    追加给 docker run 的参数（默认为空 = Docker 默认 bridge；
+#                      白名单: --cpus* / --memory* / --pids-limit* / --rm / --name=*
+#                      / --network=bridge / --tmpfs*；不接受 --read-only / --network=host / -v）
+#   RUN_TIMEOUT        单臂超时秒数（默认 1200）
 set -uo pipefail
 
 DEFAULT_IMAGE="kpbot/app-tuner-agent-execute-optimization:1.0-openeuler24.03"
@@ -63,8 +66,10 @@ fi
 RUN_ARGS_FILTERED=()
 for tok in ${DOCKER_RUN_ARGS:-}; do
     case "${tok}" in
-        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=bridge|--read-only|--tmpfs*)
+        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=bridge|--tmpfs*)
             RUN_ARGS_FILTERED+=("${tok}") ;;
+        --read-only)
+            echo "错误: agent 用例不支持 --read-only（auth/skill 需要可写根；权限配置已预置）" >&2; exit 1 ;;
         *)
             echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}" >&2; exit 1 ;;
     esac
@@ -76,6 +81,15 @@ for var in MODEL ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL \
            ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL \
            OPENCODE; do
     if [ -n "${!var:-}" ]; then ENV_ARGS+=(-e "$var"); fi
+done
+
+# 受控 provider env 透传：OPENCODE_EXTRA_ENV="MY_PROVIDER_TOKEN MY_PROVIDER_URL"
+for name in ${OPENCODE_EXTRA_ENV:-}; do
+    if ! [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        echo "错误: OPENCODE_EXTRA_ENV 含非法变量名: $name" >&2
+        exit 1
+    fi
+    if [ -n "${!name:-}" ]; then ENV_ARGS+=(-e "$name"); fi
 done
 
 # 凭证整文件 base64 经 env 注入，不做卷挂载。

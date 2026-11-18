@@ -285,13 +285,16 @@ cd cases/agent-execute-optimization
 
 ### 4.4 指定模型与运行时
 
-`run_ab.sh` 会优先使用 CANNBot 环境的 `cannbot` 二进制(存在时),否则退回 `opencode`;并自动把宿主机的 `MODEL`、`ANTHROPIC_*`、`OPENCODE`、`OPENCODE_CONFIG_CONTENT` 透传进容器,同时挂载 `~/.config/opencode`。通常只需要:
+`run_ab.sh` 会优先使用 CANNBot 环境的 `cannbot` 二进制(存在时),否则退回 `opencode`。凭证整文件 base64 经 `OPENCODE_AUTH_JSON` env 注入,**不挂载 auth.json**;provider 配置通过宿主导出的 `MODEL` / `ANTHROPIC_*` 透传。额外 provider 变量用 `OPENCODE_EXTRA_ENV`(空格分隔):
 
 ```bash
 MODEL=cannbot/deepseek-v4.1-flash ./run_ab.sh --save /tmp/ab-java-docker
+
+OPENCODE_EXTRA_ENV="MY_PROVIDER_TOKEN MY_PROVIDER_URL" \
+  MODEL=cannbot/deepseek-v4.1-flash ./run_ab.sh --save /tmp/ab-java-docker
 ```
 
-`MODEL` 必须是 `cannbot models` / `opencode models` 里真实存在的 ID(大小写敏感)。`run_all.sh --model` 会自动追加 `-e MODEL=...`。
+`MODEL` 必须是 `cannbot models` / `opencode models` 里真实存在的 ID(大小写敏感)。`run_all.sh --model` 会把 `MODEL` 导出给 `run_ab.sh`(由 `run_ab.sh` 注入容器)。
 
 entrypoint 会自动检测 CLI 的自动批准参数(`--auto` 或 `--dangerously-skip-permissions`),不需要手工改。
 
@@ -354,7 +357,7 @@ docker run --rm --entrypoint bash <image> -lc 'ls -R /staging/skill; ls -R /work
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | `docker build` 失败 | 基础镜像/网络/dnf 源 | `--network host`;检查 `openeuler/openeuler:24.03-lts` |
-| 容器内 `Unexpected server error` | 模型/provider 不在容器内 | 用 `DOCKER_RUN_ARGS` 传 `MODEL` 和 provider 环境 |
+| 容器内 `Unexpected server error` | 模型/provider 不在容器内 | `export MODEL` / `ANTHROPIC_*`;额外变量用 `OPENCODE_EXTRA_ENV`;`DOCKER_RUN_ARGS` 不接受 `-e` |
 | `with.result.json` 缺失 | `entrypoint.sh` 失败 | 看 `with.opencode.log`、`with.trace.jsonl` |
 | `skills_invoked` 为空 | prompt 没让 agent 调用 skill,或 skill 未安装 | 检查 `entrypoint.sh` 的 `with` 分支和 trace |
 | `one_variable=false` | agent 一次改了多个参数 | 重跑;检查 `mock_invocations.log` |
@@ -363,15 +366,22 @@ docker run --rm --entrypoint bash <image> -lc 'ls -R /staging/skill; ls -R /work
 
 - `run_ab.sh` 对 `OPENCODE_BIN` / `OPENCODE_AUTH` **fail-closed**:不存在直接退出;`realpath -e` + 白名单前缀;BIN 做 ELF 魔数校验;可选 `OPENCODE_SHA256` 指纹。
 - 默认 `OPENCODE_BIN=/usr/local/bin/opencode`;CANNBot 环境由 `run_all.sh` 自动导出 cannbot 二进制(在白名单内)。
-- `DOCKER_RUN_ARGS` 走白名单(仅 `--cpus/--memory/--pids-limit/--rm/--name/--network=bridge/--read-only/--tmpfs`);拒绝 `--privileged`、`--pid=host`、`--volume`、`-v`、`--network=host`。
+- `DOCKER_RUN_ARGS` 走白名单(仅 `--cpus/--memory/--pids-limit/--rm/--name/--network=bridge/--tmpfs*`);拒绝 `--privileged`、`--pid=host`、`--volume`、`-v`、`--network=host`;agent 运行不支持 `--read-only`(需要可写根写凭证/装配 skill)。
 - 凭证整文件 base64 经 `OPENCODE_AUTH_JSON` env 注入,不再 `-v` 挂载;entrypoint 写入非 root agent home(600)后 `unset`。
 - agent 以**非 root uid 1000** 运行(`chroot --skip-chdir --userspec=1000:1000 /`),`/workspace/results` 归 uid 1000。
-- entrypoint 写 `/workspace/opencode.json` 和 `/workspace/.opencode/opencode.json`:
+- 权限配置预置在镜像:`/workspace/opencode.json` 和 `/workspace/.opencode/opencode.json`;entrypoint 只做 fail-closed 校验,不运行时写入:
   - `webfetch` / `websearch` / `external_directory` deny
   - `read` 对 `*auth.json`、agent home 下的 auth 路径 deny
   - Java 用例 `bash` 整体 deny
   - 执行用例 `bash` 仅 deny 外发/凭证读取类命令(`curl/wget/ssh/scp/rsync/nc/ncat`、`cat *auth.json`、`cat /proc/*/environ`、`python3 -c`、`env`、`printenv`),mock 仍可运行
 - 这些配置对 `--auto` 生效:`--auto` 只放行未被显式 deny 的动作。
+- 文档与实现一致性自检:
+
+  ```bash
+  grep -nE "OPENCODE_CONFIG_CONTENT|挂载 ~/.config/opencode|默认 --network host|DOCKER_RUN_ARGS 传" cases/TESTING.md cases/*/run_ab.sh cases/*/case.yaml | grep -v "grep -nE" || true
+  ```
+
+  期望无输出(或仅“不支持”的说明)。
 
 注意:安全约束会增加 agent 行为约束,可能影响 `one_variable` 等行为指标;失败时先看 `with.opencode.log` 是否 `PermissionDenied`。
 

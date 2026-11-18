@@ -34,9 +34,10 @@ build:
 entrypoint: ["/workspace/entrypoint.sh"]
 
 env_requires:
-  - opencode 二进制（运行时挂载）
-  - opencode auth.json（运行时挂载）
-  - 容器可访问模型 API（必要时 --network host）
+  - opencode / cannbot 二进制（运行时挂载，白名单校验）
+  - 凭证经 OPENCODE_AUTH_JSON base64 env 注入（不挂载 auth.json）
+  - provider 配置由宿主导出 MODEL / ANTHROPIC_*（额外变量用 OPENCODE_EXTRA_ENV）
+  - 容器默认 bridge 网络（不支持 --network=host）
 
 env_vars:
   MODEL: deepseek/deepseek-v4-flash

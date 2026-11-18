@@ -19,6 +19,10 @@ COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/verify.sh 
 # mock 基准是 agent 的输入，保留在 /workspace。
 COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/fixtures /workspace/fixtures
 
+# 权限配置预置进镜像，避免只读根上运行时写失败导致 deny 静默缺失。
+COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/opencode.json /workspace/opencode.json
+COPY skills/rocksdb-perf-diagnostics/cases/agent-execute-optimization/opencode.json /workspace/.opencode/opencode.json
+
 RUN chmod +x /opt/entrypoint.sh /opt/verify.sh /workspace/fixtures/mock_db_bench.sh
 
 CMD ["/opt/entrypoint.sh"]

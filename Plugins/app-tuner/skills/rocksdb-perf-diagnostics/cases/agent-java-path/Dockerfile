@@ -16,6 +16,10 @@ COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/prompts /opt/prompts
 COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/entrypoint.sh /opt/entrypoint.sh
 COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/verify.sh /opt/verify.sh
 
+# 权限配置预置进镜像，避免只读根上运行时写失败导致 deny 静默缺失。
+COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/opencode.json /workspace/opencode.json
+COPY skills/rocksdb-perf-diagnostics/cases/agent-java-path/opencode.json /workspace/.opencode/opencode.json
+
 RUN chmod +x /opt/entrypoint.sh /opt/verify.sh
 
 CMD ["/opt/entrypoint.sh"]
