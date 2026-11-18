@@ -25,6 +25,7 @@ REQUIRED_SUBSKILLS = (
     "accelerator-optimization",
     "application-config-optimization",
     "bios-optimization",
+    "ceph-optimization",
     "compiler-optimization",
     "cpu-affinity-optimization",
     "database-workload-analysis",

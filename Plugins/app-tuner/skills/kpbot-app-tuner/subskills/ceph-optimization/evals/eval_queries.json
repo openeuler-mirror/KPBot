@@ -1,0 +1,13 @@
+{
+  "skill_name": "ceph-optimization",
+  "queries": [
+    { "id": "CQ-01", "prompt": "Ceph 集群 PG 分布不均，个别 OSD 成为瓶颈", "should_trigger": true, "note": "PG 分布/balancer" },
+    { "id": "CQ-02", "prompt": "OSD 进程和网卡中断同 NUMA，CPU 瓶颈", "should_trigger": true, "note": "OSD 绑核" },
+    { "id": "CQ-03", "prompt": "ceph.conf 副本数、cluster_network 该怎么配", "should_trigger": true, "note": "ceph.conf 参数" },
+    { "id": "CQ-04", "prompt": "Ceph 数据盘 read_ahead 和 IO 调度器怎么选", "should_trigger": true, "note": "9.3.3 系统调优：只读体检后移交 os-optimization" },
+    { "id": "NQ-01", "prompt": "MySQL buffer pool 命中率低", "should_trigger": false, "note": "routes to database-workload-analysis" },
+    { "id": "NQ-02", "prompt": "BIOS 里 SMMU 和 CPU Prefetching 要不要关", "should_trigger": false, "note": "routes to bios-optimization" },
+    { "id": "NQ-03", "prompt": "网卡丢包重传高，看看队列和中断", "should_trigger": false, "note": "routes to network-optimization" },
+    { "id": "NQ-04", "prompt": "服务 malloc 热点高，换 tcmalloc 试试", "should_trigger": false, "note": "routes to performance-library-selection" }
+  ]
+}
