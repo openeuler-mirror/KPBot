@@ -17,7 +17,11 @@
     "dpdk",
     "network",
     "pps",
-    "forwarding"
+    "forwarding",
+    "precision",
+    "accuracy",
+    "regression",
+    "quantization"
   ],
   "platforms": [
     "claude",
