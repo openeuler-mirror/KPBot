@@ -3,9 +3,9 @@
 
 Run: python3 tests/test_pipeline.py
 Each case asserts the accuracy pair, the regression/improvement case ids, and that
---fail-on-regression returns exit code 1 when a regression exists. The gate checks
-assert that undecidable comparisons exit 2 and that an ambiguous or missing dataset
-is an error instead of a silent fallback to some other json.
+a regression exits 1 both with the legacy --fail-on-regression flag and without it.
+The gate checks assert that undecidable comparisons exit 2 and that an ambiguous or
+missing dataset is an error instead of a silent fallback to some other json.
 """
 import re
 import shutil
@@ -89,18 +89,23 @@ def main() -> int:
     failures = 0
     for name, (before, after, (acc_b, acc_a, reg, imp)) in CASES.items():
         dirs = [str(FIX / before), str(FIX / after)]
-        out = subprocess.run([sys.executable, str(SCRIPT), *dirs], capture_output=True, text=True).stdout
+        plain = subprocess.run([sys.executable, str(SCRIPT), *dirs], capture_output=True, text=True)
+        out = plain.stdout
         got_acc = re.search(r"\| 准确率 \| ([\d.]+%) \| ([\d.]+%) \|", out).groups()
         got_reg = re.findall(r"^- 题 (\d+): gold=", section(out, "### ⚠️ 回归项"), re.M)
         got_imp = re.findall(r"^- 题 (\d+): gold=", section(out, "### 改善项"), re.M)
+        rc_plain = plain.returncode
         rc = subprocess.run(
             [sys.executable, str(SCRIPT), *dirs, "--fail-on-regression"], capture_output=True
         ).returncode
+        plain_ok = rc_plain == 1
+        failures += 0 if plain_ok else 1
+        print(f"{'PASS' if plain_ok else 'FAIL'}  {name:<50} no-flag exit={rc_plain}")
         ok = got_acc == (acc_b, acc_a) and got_reg == reg and got_imp == imp and rc == 1
         failures += 0 if ok else 1
         print(f"{'PASS' if ok else 'FAIL'}  {name:<50} acc={got_acc} reg={got_reg} imp={got_imp} exit={rc}")
     failures += check_gates()
-    total = len(CASES) + 4
+    total = 2 * len(CASES) + 4
     print(f"\n{total - failures}/{total} end-to-end cases passed")
     return 1 if failures else 0
 

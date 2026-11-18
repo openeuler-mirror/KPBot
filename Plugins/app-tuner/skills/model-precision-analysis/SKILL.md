@@ -12,7 +12,7 @@ description: 模型精度分析（model precision analysis）— 对比优化前
 
 ```bash
 python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> \
-    [--dataset-name aime2024.json] [--fail-on-regression]
+    [--dataset-name aime2024.json]
 ```
 
 脚本只读文件，不修改任何数据。报告含两次准确率、未答/截断数、逐题明细、回归项和改善项。
@@ -21,8 +21,10 @@ python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> \
 | 退出码 | 含义 |
 |--------|------|
 | 0 | 两次运行可比，且没有回归 |
-| 1 | 两次运行可比，但存在“对→错”回归（`--fail-on-regression` 时抛出） |
+| 1 | 两次运行可比，但存在“对→错”回归（无论是否传 `--fail-on-regression`） |
 | 2 | 两次运行**不可比**（gold 或题号不一致），结论为“不可判定”，不是达标 |
+
+退出码与开关已解耦：只要存在回归就以 1 退出，`--fail-on-regression` 仅为兼容旧调用保留（传与不传行为一致）。
 
 `--dataset-name` 指定的 json 不存在、或 `merge/` 下有多个 json 却没指定时，脚本直接报错退出，
 不会静默换成别的文件——否则会跨数据集比较，结论完全无效。
@@ -141,7 +143,7 @@ box 里混着多个不相关数字、或模型用的单位与 gold 不同但数�
 
 ```bash
 python3 tests/test_extraction.py   # 31 条抽取用例（含多 \boxed{} 与各类截断）
-python3 tests/test_pipeline.py     # 8 组端到端（准确率/回归题号/退出码 0/1/2/dataset-name 门禁）
+python3 tests/test_pipeline.py     # 12 组端到端（准确率/回归题号/退出码 0/1/2/dataset-name 门禁）
 ```
 
 `evals/evals.json` 中的用例覆盖数字题、字母题、混合格式与干扰项场景，可直接用于技能效果对比。

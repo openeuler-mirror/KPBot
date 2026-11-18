@@ -7,11 +7,11 @@ computes per-run accuracy, and reports per-case before-vs-after changes.
 
 Usage:
     python3 analyze_precision.py <before_dir> <after_dir> [--dataset-name <json_name>]
-                                 [--fail-on-regression]
 
 Exit status:
     0 - comparable runs, no regression
-    1 - comparable runs, at least one correct->wrong flip (gate failed)
+    1 - comparable runs, at least one correct->wrong flip (gate failed, always
+        returned regardless of the legacy --fail-on-regression flag)
     2 - runs are not comparable (gold mismatch or case ids differ), so the
         verdict is undecidable and must not be read as a pass
 
@@ -377,7 +377,7 @@ def main():
     ap.add_argument(
         "--fail-on-regression",
         action="store_true",
-        help="exit with status 1 when any case flips from correct to wrong",
+        help="deprecated no-op kept for compatibility; a regression always exits 1",
     )
     args = ap.parse_args()
 
@@ -394,7 +394,7 @@ def main():
     print(text)
     if incomparable:
         sys.exit(2)
-    if args.fail_on_regression and n_regressions:
+    if n_regressions:
         sys.exit(1)
 
 
