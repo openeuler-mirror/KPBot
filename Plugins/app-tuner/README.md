@@ -112,6 +112,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `nginx-optimization` | Nginx 场景专属调优(http/https × 长/短连接四场景、L1 环境/L2 配置/L3 鲲鹏加速分层、IRQ-worker 布局、KAL OpenSSL/KAE 加速、火焰图热点对策与压测验证纪律)，含 evals 评测集与 agent 级 with/without A/B 用例集(场景决策、调优循环纪律) |
 | [`kptools-dpdk-tuning`](skills/kptools-dpdk-tuning/SKILL.md) | DPDK 应用性能调优(诊断+顾问双模式) — 现象驱动的分层排查与硬件+场景驱动的分层配置建议，覆盖 BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延，不修改业务源码；需要改码的优化移交 code-optimizer 的 `dpdk-optimization` |
 
+### 独立诊断 skill
+
+| 技能 | 描述 |
+|------|------|
+| `rocksdb-perf-diagnostics` | RocksDB 性能诊断与优化 — 用 LOG / properties / Statistics / perf_context / EventListener 定位写停顿、compaction 积压、读写/空间放大,并在授权下执行单变量复测 |
+
 ## 目录结构
 
 ```
@@ -162,6 +168,7 @@ app-tuner/
 | AgentENV 沙箱 | "检查 AgentENV 的 ublk 或并发恢复性能" | `kptools-agentenv-tuning` |
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
+| RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
 
 ### 优化工作流
 
