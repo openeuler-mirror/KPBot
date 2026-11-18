@@ -133,6 +133,28 @@ done
 check_agentenv_package "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
+echo "== domain group gate (fixture: DOMAIN.md marks a group) =="
+FIX="$TMPROOT/fixture"
+mkdir -p "$FIX/Plugins/demo/.claude-plugin" \
+         "$FIX/Plugins/demo/skills/alpha" \
+         "$FIX/Plugins/demo/skills/dom/beta" \
+         "$FIX/Plugins/demo/skills/nodom/gamma" \
+         "$FIX/proj"
+cp "$INSTALLER" "$FIX/install.sh"
+printf '{"name":"demo"}\n' > "$FIX/Plugins/demo/.claude-plugin/plugin.json"
+printf '{"version":"test"}\n' > "$FIX/package.json"
+printf -- '---\nname: alpha\ndescription: flat skill\n---\n' > "$FIX/Plugins/demo/skills/alpha/SKILL.md"
+printf '# dom domain\n' > "$FIX/Plugins/demo/skills/dom/DOMAIN.md"
+printf -- '---\nname: beta\ndescription: grouped skill\n---\n' > "$FIX/Plugins/demo/skills/dom/beta/SKILL.md"
+printf -- '---\nname: gamma\ndescription: orphan skill\n---\n' > "$FIX/Plugins/demo/skills/nodom/gamma/SKILL.md"
+bash "$FIX/install.sh" project claude "$FIX/proj" > "$TMPROOT/fixture.log" 2>&1
+FIX_SKILLS="$FIX/proj/.claude/skills"
+check "flat skill installed"                   '[ -f "$FIX_SKILLS/alpha/SKILL.md" ]'
+check "grouped skill installed flat"           '[ -f "$FIX_SKILLS/beta/SKILL.md" ]'
+check "group dir not installed"                '[ ! -e "$FIX_SKILLS/dom" ]'
+check "group without DOMAIN.md not installed"  '[ ! -e "$FIX_SKILLS/gamma" ]'
+check "warns about group without DOMAIN.md"    'grep -q "skill group without DOMAIN.md" "$TMPROOT/fixture.log"'
+
 echo
 echo "Result: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
