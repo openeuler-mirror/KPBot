@@ -46,7 +46,7 @@
 | [PyTorch Embedding lookup @ ARM CPU](Plugins/code-optimizer/skills/parallel-unique-pytorch/SKILL.md) | **code-optimizer**：针对 raw_id → unique → hashmap → gather 链路，使用并行排序与 OpenMP 优化 Host 侧去重，并注册兼容 `torch.compile` 的自定义算子。 |
 | [向量数据库与向量检索](Plugins/code-optimizer/skills/vector-search-optimize/SKILL.md) | **code-optimizer**：使用通用 CP0–CP7 执行环境调查、基线、候选优化与复验，并按目标路由到 Faiss 或 DiskANN 专项工作流。 |
 | [VSAG HGraph RaBitQ 向量检索 @ ARM/SVE](Plugins/code-optimizer/skills/vsag-rabitq-optimization/SKILL.md) | **code-optimizer**：优化并发查询组批、worker 生命周期、OpenBLAS/CBLAS 后端与 SIMD/SVE lookup，并改进 L2 计算、数据布局及临时缓冲区。 |
-| [搜索推荐 DAG @ 鲲鹏](Plugins/code-optimizer/skills/sra/sra-dag-tuning/SKILL.md) | **code-optimizer**：优化召回、粗排、精排和重排中的关键路径并行、批量打分、Top-K、特征缓存与锁竞争；可结合 **app-tuner** 完成绑核、系统配置和性能库调优。 |
+| [搜索推荐 DAG @ 鲲鹏](Plugins/code-optimizer/skills/sra-dag-tuning/SKILL.md) | **code-optimizer**：优化召回、粗排、精排和重排中的关键路径并行、批量打分、Top-K、特征缓存与锁竞争；可结合 **app-tuner** 完成绑核、系统配置和性能库调优。 |
 | [哈希表与特征 / KV 查表 @ 鲲鹏](Plugins/code-optimizer/skills/hashmap-optimization/SKILL.md) | **code-optimizer**：从查询链路与负载特征出发，区分计算、带宽和延迟瓶颈，通过数据布局与查询实现等改动优化查表热点。 |
 | [MySQL / InnoDB OLTP @ 鲲鹏](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/database-workload-analysis/SKILL.md) | **app-tuner**：结合 sysbench 与数据库内部指标，调优 NUMA/IRQ 亲和性、buffer pool、线程与表缓存、OS 参数及 PGO 编译配置。 |
 | [Spark / Flink 大数据处理 @ ARM](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/bigdata-playbook.md) | **app-tuner**：根据物理机或容器的 CPU、内存配额，调整 executor、TaskManager、并行度、内存与框架参数，并结合性能库选型优化运行环境。 |

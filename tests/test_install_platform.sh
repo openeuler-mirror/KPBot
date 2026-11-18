@@ -127,6 +127,11 @@ check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-dr
 check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
+check "opencode overlay keeps base references" '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/references/experiment-contract.md" ]'
+check "opencode overlay keeps base scripts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/scripts/experiment_feedback.py" ]'
+check "opencode overlay keeps base prompts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/prompts/stage.validate-experiment.md" ]'
+check "opencode overlay keeps app-tuner parts" '[ -d "$OPENCODE_SKILLS/kpbot-app-tuner/subskills/accelerator-optimization" ]'
+check "opencode overlay applies diff files"    'cmp -s "$OPENCODE_SKILLS/kpbot-code-optimizer/prompts/stage.parse-intent.md" "$ROOT/Plugins/code-optimizer/opencode/kpbot-code-optimizer/prompts/stage.parse-intent.md"'
 for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done

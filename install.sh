@@ -435,8 +435,10 @@ if [ "$TOOL" = "opencode" ]; then
         if [ -d "$plugin_dir/opencode" ]; then
             while IFS=$'\t' read -r overlay_src name; do
                 [ -n "$name" ] || continue
-                rm -rf "${CONFIG_ROOT:?}/skills/$name"
-                cp -r "$overlay_src" "$CONFIG_ROOT/skills/$name"
+                # 覆盖层只存差异文件：必须"合并覆盖"到主源已安装的 skill 上，
+                # 不能先删后拷，否则主源的 references/scripts/subskills 会整片丢失。
+                mkdir -p "$CONFIG_ROOT/skills/$name"
+                cp -r "$overlay_src"/. "$CONFIG_ROOT/skills/$name/"
             done < <(list_skills "$plugin_dir/opencode")
         fi
     done
