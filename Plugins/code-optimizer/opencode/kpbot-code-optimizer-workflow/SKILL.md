@@ -30,7 +30,8 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 | 9 | OpenZL 压缩内核优化 | `openzl-compression-tuning` | openzl、压缩、huffman、fse、熵编码、熵解码、codec 内核、压缩内核 | `src/openzl/` 源码树；`ZS_Huf*` / `openzl` 符号；`unitBench` 目录；`addBits` / `lookBits` 位流函数 |
 | 10 | DPDK 数据面代码优化 | `dpdk-optimization` | dpdk 代码、数据面、转发性能、收发包、热路径、PPS 低、l3fwd、rte_ring、mbuf | `rte_eth_rx_burst`/`rte_` 符号、`RTE_PKTMBUF_HEADROOM`；Makefile/meson 依赖 libdpdk |
 | 11 | folly 异步链路优化 | `folly-future-optimization` | folly、future、promise、then 回调、SharedPromise、FunctionTraits、Core 构造 | `folly/futures/` 源码树；`folly::` 命名空间；`FOLLY_FUTURE` 宏；链接 libfolly |
-| 12 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 12 | protobuf 序列化库优化 | `protobuf-optimization` | protobuf、proto 反序列化、消息合并、MapMergeFrom、MiniParse、arena 分配 | `src/google/protobuf/` 源码树；`libprotobuf`；`TcParser`/`MapMergeFrom` 符号 |
+| 13 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 ### 路由流程
 
