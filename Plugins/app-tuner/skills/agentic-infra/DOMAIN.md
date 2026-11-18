@@ -8,15 +8,12 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
 
 ## 成员
 
-（占位——成员目录已建立，内容按下方清单逐个独立 PR 迁入。）
-
-- `kptools-agentenv-tuning/`（占位，含专项子技能包待迁入）
-- `kptools-openeuler-agentenv/`（占位，待迁入）
+- `kptools-agentenv-tuning/`
+- `kptools-openeuler-agentenv/`
 
 ## 后续迁入（各自独立 PR）
 
-- `kptools-agentenv-tuning`（含 pvspinlock / kernel-hz / cluster-tlbi 三个专项子技能包；
-  第四个专项 agentenv-snapshot-fs 在 PR #136 评审中）
+- `kptools-agentenv-tuning`
 - `kptools-openeuler-agentenv`
 - `cubesandbox-deployment`、`cubesandbox-bench-protocol`、`cubesandbox-lifecycle-bench`、
   `sandbox-timeline-profile`
