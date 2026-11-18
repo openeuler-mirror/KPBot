@@ -1,0 +1,61 @@
+{
+  "skill_name": "parallel-accumulator",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "serial-accumulator-parallelize",
+      "prompt": "我的点积函数跑得很慢：sum += a[i]*b[i] 单累加器。perf stat 显示 IPC 0.5，cache miss 和分支预测失败都很低。怎么优化？只给方案。",
+      "expected_output": "识别为串行累加器延迟绑定（低 IPC + 低 miss），给出多累加器展开（s0..s3 纯 C，或 NEON float32x4_t 多累加器），说明目的是重叠依赖链隐藏 FP 延迟。",
+      "files": [],
+      "assertions": [
+        "识别串行依赖链是瓶颈",
+        "给出多累加器展开方案",
+        "提到 NEON 向量累加器可选"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "associativity-warning",
+      "prompt": "多累加器重排后结果和原来差了一点，能保证完全一样吗？",
+      "expected_output": "说明浮点重排改变舍入顺序，结果相差 ε 而非逻辑错误；加/乘/min/max 满足结合律才合法；若要求位精确可复现则不能应用。",
+      "files": [],
+      "assertions": [
+        "说明浮点结合律与 ε 舍入差异",
+        "指出位精确场景不能应用"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "tail-no-single-accumulator",
+      "prompt": "展开后剩 2-3 个元素的尾处理怎么写？",
+      "expected_output": "尾处理不得回退成单累加器循环（会重新引入串行依赖），用成对/多累加器或直接归约处理剩余元素。",
+      "files": [],
+      "assertions": [
+        "尾处理不回退单累加器"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "non-associative-rejection",
+      "prompt": "我这个循环是 sum -= a[i]（减法归约），能用多累加器并行化吗？",
+      "expected_output": "减法不满足结合律，不能直接多累加器并行化；说明只有加/乘/min/max 满足结合律，减法需先改写为加法或拒绝对冲。",
+      "files": [],
+      "assertions": [
+        "识别减法不结合，不能盲目并行化",
+        "给出可改写成加法的替代或拒绝"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "sve-256-accumulator",
+      "prompt": "目标平台是支持 SVE 256-bit 的鲲鹏，点积归约想用 SVE 向量累加器，怎么写？任意 n 怎么处理尾元素？",
+      "expected_output": "给出 svfloat32_t 累加器 + svwhilelt_b32 生成 predicate + svmla_f32_m 乘加 + svaddv_f32 水平归约；说明 predicate 自动 masking 越界 lane，任意 n 无需标量尾；256-bit 时 svcntw()==8，可变宽度同一代码适配 512-bit。",
+      "files": [],
+      "assertions": [
+        "使用 svfloat32_t + predicate 尾处理",
+        "说明 svcntw() 与可变向量宽度",
+        "无需标量尾循环"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+name: protocol-contract
+skill: parallel-accumulator
+tier: A
+entrypoint: ["python3", "skills/parallel-accumulator/cases/protocol-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: skills/parallel-accumulator/cases/protocol-contract/results/result.json
+    field: success
+    expect: true
