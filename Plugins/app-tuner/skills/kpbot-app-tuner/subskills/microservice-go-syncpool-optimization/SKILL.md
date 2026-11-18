@@ -71,13 +71,14 @@ description: 面向 Go 微服务中 sync.Pool 对象创建/回收频繁、GC 后
 
 ### Step 2：补丁与工具链构建
 
+- 先把基线 Go 源码树复制到独立构建根目录，在构建根目录应用补丁；基线 `$GOROOT` 保持只读。
 - 按 `go-runtime-patch-playbook.md` 校验私有补丁与当前 Go 基线是否匹配；补丁路径由本轮执行参数传入，不写入仓库。
 - 不匹配时先做版本适配，禁止直接套用其它 Go 版本的补丁。
-- 构建新工具链并记录产物 hash，原工具链保留用于回退。
+- 在构建根目录执行 `make.bash`，记录新工具链产物 hash 和构建根目录路径；基线工具链保留用于回退。
 
 ### Step 3：服务重编译
 
-- 用新工具链全量清理后重编译业务二进制，记录 `go version -m` 和产物 hash。
+- 用 `$BUILD_ROOT/bin/go` 全量清理后重编译业务二进制，记录 `go version -m` 和产物 hash。
 - 重编译前后除工具链和补丁外不得同时改变编译参数、运行库、启动参数或配置。
 - 启动后复核 `/proc/<pid>/exe`、`cmdline`、`maps` 和健康检查。
 
@@ -154,4 +155,5 @@ description: 面向 Go 微服务中 sync.Pool 对象创建/回收频繁、GC 后
 - 本 skill 不调整 `GOGC`、`GOMEMLIMIT` 等 GC 策略，这些属于 application-config-optimization。
 - 本 skill 只负责 `sync.Pool` 相关的 runtime 补丁和两个 GODEBUG 开关，不扩展到其它 runtime 修改。
 - 本 skill 不生成、不保存补丁原文；补丁由外部私有制品提供，仓库只保留行为级说明。
+- 基线 `$GOROOT` 只读；补丁应用、工具链构建和回退都在隔离构建根目录完成。
 - 补丁跨 Go 版本复用时，先做版本适配，不直接套用。
