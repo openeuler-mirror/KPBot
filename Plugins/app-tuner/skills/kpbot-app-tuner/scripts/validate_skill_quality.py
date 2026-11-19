@@ -31,6 +31,7 @@ REQUIRED_SUBSKILLS = (
     "database-workload-analysis",
     "hardware-upgrade-analysis",
     "io-memory-network-bottleneck-analysis",
+    "microservice-go-syncpool-optimization",
     "network-optimization",
     "os-optimization",
     "other-optimization",

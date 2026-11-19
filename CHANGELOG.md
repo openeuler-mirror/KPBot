@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- app-tuner 新增 `microservice-go-syncpool-optimization` 子 skill：面向 Go 微服务 sync.Pool 堆内存颠簸，给 Go runtime 打补丁新增 `GODEBUG=poolretain` 与 `GODEBUG=poolprealloc` 两个控制开关，覆盖 Go 基线锁定、隔离构建根目录、补丁与 Go 基线匹配校验、工具链构建、服务重编译、二进制等价门控、单变量 A/B 和回退；补丁由外部私有制品提供，仓库只保留行为级说明；子 skill 已注册到任务包目录、覆盖集合和回归测试；附补丁/参数/验证三个 references 分册
 - app-tuner 新增 `ceph-optimization` subskill：面向 Ceph 存储集群的系统与集群级调优体检（依据鲲鹏 BoostKit Ceph 指南 9.3.3/9.3.4）；Ceph 专属项（ceph.conf 全量参数、PG 分布与 balancer upmap、OSD 绑核）输出带备份/持久化/逐节点应用/重启窗口/回退的候选动作，OS 层参数（swappiness/MTU/pid_max/file_max/read_ahead/IO 调度器/nr_requests）与 NUMA 不均衡只读体检输出 os_tuning_findings 证据移交 os-optimization；含调优 playbook 与参数知识库 JSON，注册到主编排候选规则、Dynamic Skill Catalog 与知识路由；附 tier-A 用例 `cases/skill-integrity` 与触发评估集 `evals/`（evals.json 含 expectations、eval_queries.json 正/负例路由矩阵）
 - code-optimizer 新增 `parallel-accumulator` skill：归约循环串行累加器并行化（识别单累加器延迟绑定，三级改写纯 C 多累加器 / NEON 单累加器 / NEON 多累加器，浮点结合律与位精确门控，尾处理不回退单累加器），附 `accumulator_plan.py`（按 FP 延迟/吞吐计算累加器数量）、tier-A 用例 `cases/protocol-contract`、agent 端到端 A/B 用例 `cases/agent-optimize-dotproduct`（点积多累加器展开），对标 Intel performance-patterns 的 parallel-accumulator pattern
 - code-optimizer 新增 `agent-memory-db-optimization` skill：Agent 记忆系统 / 图数据库后端（Graphiti/Neo4j）五阶段优化（冻结确定性负载 → 客户端/驱动/服务端三段归因 → top-down 与缓存缺失率瓶颈建模 → 分层杠杆实施 → 矩阵复测与跨架构对照）；杠杆覆盖载荷瘦身（不用的向量不回传）、PackStream 解码下沉 Rust、时序水合下沉、读路径多副本扩展、服务端数组/属性解码快路径与向量相似度单遍就地；以 LLM/embedding 缓存回放冻结模型调用，门禁为 0 缓存未命中 + 图规模校验和 + 结果逐字节等价；附 4 个 references（测量协议/瓶颈建模/杠杆库/负结果）与 `llm_replay_cache.py` 及单测；接入统一流水线场景路由（4 个入口文件）
