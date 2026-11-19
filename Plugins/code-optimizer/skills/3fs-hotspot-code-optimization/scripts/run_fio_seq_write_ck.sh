@@ -13,15 +13,20 @@
 #   3. 汇总输出到终端，并落盘到 ${OUT_DIR}/
 #
 # 用法:
-#   CK_PASS=... ./run_fio_seq_write_ck.sh              # 默认 size=4g bs=4M
-#   SIZE=8g BS=4M CK_PASS=... ./run_fio_seq_write_ck.sh
+#   read -rs CK_PASS && export CK_PASS                 # 先交互注入密码(勿写在命令行)
+#   ./run_fio_seq_write_ck.sh                          # 默认 size=4g bs=4M
+#   SIZE=8g BS=4M ./run_fio_seq_write_ck.sh
 #   FIO_OVERWRITE=1 ./run_fio_seq_write_ck.sh          # (默认已=1) 文件已存在时追加 --overwrite=1
 #
-# 安全注入 (敏感项无默认值; 避免明文进命令行/shell history):
+# 安全注入 (敏感项无默认值; 避免明文进命令行/shell history/进程 argv):
 #   read -rs CK_PASS && export CK_PASS                 # 交互输入 ClickHouse 密码
 #   read -rs CK_SSH_PASS && export CK_SSH_PASS         # 交互输入 SSH 密码
+#   CK_PASS 全程不进 argv: 本地模式经 CLICKHOUSE_PASSWORD 环境变量传递,
+#   远程模式经 ssh stdin 首行传递(远端 read -r 接收后以环境变量注入);
 #   SSH 密码非空时内部经 SSHPASS 环境变量走 sshpass -e, 绝不进命令行参数;
-#   CK_SSH_PASS 留空则使用 SSH key 认证(优先推荐)。
+#   CK_SSH_PASS 留空则使用 SSH key 认证(优先推荐, 强制 publickey 不降级口令)。
+#   SSH 主机密钥校验默认 accept-new(首连记录、变更拒连), CK_SSH_OPTS 可覆盖,
+#   KNOWN_HOSTS 可指定带外核对指纹后的预置文件; 不要改为 no。
 #
 # 依赖:
 #   - 本机为 3FS FUSE 客户端且已挂载 ${MOUNT_POINT}
@@ -50,6 +55,8 @@ usage() {
   FIO_BIN=/usr/local/bin/fio  USRBIO_SO=/usr/lib64/hf3fs_usrbio.so
   CK_PORT=9123  CK_DB=3fs  CK_SSH_USER=root  OUT_DIR=./output
   CK_SETTLE_SECS=10  FIO_OVERWRITE=1
+  CK_SSH_OPTS (默认 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
+  KNOWN_HOSTS (可选; 预置 known_hosts 文件路径, 带外核对指纹后生成)
 EOF
 }
 
@@ -104,25 +111,31 @@ if ! command -v clickhouse-client >/dev/null 2>&1; then
     fi
 fi
 
-# SSH 封装: CK_SSH_PASS 为空 → key 认证; 非空 → sshpass -e (密码走 SSHPASS 环境变量)
+# SSH 封装: CK_SSH_PASS 为空 → key 认证(强制 publickey, 不降级口令提示);
+# 非空 → sshpass -e (密码走 SSHPASS 环境变量, 不进 argv)。
+# 主机密钥校验默认 accept-new(首连信任并记录, 变更拒连); 校验失败必须中止排查
+# (节点重装? 伪造?), 不得降级为 no 绕过; KNOWN_HOSTS 可指定预置文件
+CK_SSH_OPTS="${CK_SSH_OPTS:--o StrictHostKeyChecking=accept-new -o ConnectTimeout=5}"
+[ -n "${KNOWN_HOSTS:-}" ] && CK_SSH_OPTS="${CK_SSH_OPTS} -o UserKnownHostsFile=${KNOWN_HOSTS}"
 ck_ssh() {
     if [ -n "$CK_SSH_PASS" ]; then
-        SSHPASS="$CK_SSH_PASS" sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$@"
+        SSHPASS="$CK_SSH_PASS" sshpass -e ssh ${CK_SSH_OPTS} "$@"
     else
-        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$@"
+        ssh ${CK_SSH_OPTS} -o PreferredAuthentications=publickey "$@"
     fi
 }
 
 # run_ck <SQL>
-# 本地模式: 直接执行
-# 远程模式: stdout 经 ssh 管道送入远端 clickhouse-client 的 stdin
+# 密码不进本地与远端任何进程的 argv (进程表不可见):
+#   本地模式: CLICKHOUSE_PASSWORD 环境变量 (clickhouse-client 自动读取)
+#   远程模式: stdin 首行为密码, 远端 read -r 接收后以环境变量注入, 其余行为 SQL
 run_ck() {
     local sql="$1"
     if [ "$CK_MODE" = "local" ]; then
-        printf '%s\n' "$sql" | clickhouse-client --port "$CK_PORT" --password "$CK_PASS"
+        printf '%s\n' "$sql" | CLICKHOUSE_PASSWORD="$CK_PASS" clickhouse-client --port "$CK_PORT"
     else
-        printf '%s\n' "$sql" | ck_ssh "${CK_SSH_USER}@${CK_SSH_HOST}" \
-            "clickhouse-client --port $CK_PORT --password $(printf '%q' "$CK_PASS")"
+        printf '%s\n%s\n' "$CK_PASS" "$sql" | ck_ssh "${CK_SSH_USER}@${CK_SSH_HOST}" \
+            'read -r _CK_P; CLICKHOUSE_PASSWORD="$_CK_P" clickhouse-client --port '"$CK_PORT"
     fi
 }
 

@@ -27,7 +27,9 @@ usage() {
     cat <<'EOF'
 用法: bash get_flame.sh [duration] [subdir]
   duration   采集时长秒数（默认 5）
-  subdir     输出子目录名（可选，已存在则覆盖）
+  subdir     输出子目录名（可选，已存在则覆盖）。安全约束：仅允许单层
+             目录名 [A-Za-z0-9._-]+，不得含 / 、. 或 ..（防路径穿越删除
+             输出根之外的目录）；rm -rf 前还会校验解析结果仍在输出根内
 环境变量:
   PROC=storage_main|meta_main|hf3fs_fuse_main   采集的进程名（默认 storage_main）
   FLAMEGRAPH_DIR=<dir>                          FlameGraph 工具目录（默认 <脚本目录>/FlameGraph）
@@ -52,7 +54,27 @@ TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
 # 如果指定了子目录，输出到 <root>/subdir/，否则输出到 <root>/
 if [ -n "${SUBDIR}" ]; then
+    # 子目录名白名单校验：拒绝路径分隔符、. 与 ..（防 "../../.." 类路径穿越
+    # 让下方 rm -rf 删到输出根之外，如整棵 skills 目录）
+    case "${SUBDIR}" in
+        */*|.|..)
+            echo "[ERROR] 非法子目录名: ${SUBDIR}（不得含路径分隔符，不得为 . 或 ..）" >&2
+            exit 1 ;;
+    esac
+    if ! [[ "${SUBDIR}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        echo "[ERROR] 非法子目录名: ${SUBDIR}（仅允许 [A-Za-z0-9._-]+）" >&2
+        exit 1
+    fi
     OUTPUT="${OUTPUT_ROOT}/${SUBDIR}"
+    # 双保险：rm -rf 前校验解析后的目标仍在输出根之内
+    OUTPUT_REAL="$(realpath --canonicalize-missing "${OUTPUT}")"
+    ROOT_REAL="$(realpath --canonicalize-missing "${OUTPUT_ROOT}")"
+    case "${OUTPUT_REAL}" in
+        "${ROOT_REAL}"/*) ;;
+        *)
+            echo "[ERROR] 输出目录越界: ${OUTPUT_REAL} 不在 ${ROOT_REAL} 之内，拒绝删除" >&2
+            exit 1 ;;
+    esac
     # 如果子目录已存在，删除后重新创建（覆盖）
     if [ -d "${OUTPUT}" ]; then
         echo "[INFO] 子目录已存在，将覆盖: ${OUTPUT}"
