@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer
-description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表、embedding lookup 去重、OpenZL 压缩内核、folly future/promise 异步链路和 protobuf 序列化库优化等专项优化。
+description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表、embedding lookup 去重、OpenZL 压缩内核、folly future/promise 异步链路、protobuf 序列化库优化和 UTF-8 校验 NEON 路由等专项优化。
 ---
 
 # 鲲鹏性能优化流水线
@@ -38,7 +38,8 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 11 | DPDK 数据面代码优化 | `dpdk-optimization` | dpdk 代码、数据面、转发性能、收发包、热路径、PPS 低、l3fwd、rte_ring、mbuf | `rte_eth_rx_burst`/`rte_` 符号、`RTE_PKTMBUF_HEADROOM`；Makefile/meson 依赖 libdpdk |
 | 12 | folly 异步链路优化 | `folly-future-optimization` | folly、future、promise、then 回调、SharedPromise、FunctionTraits、Core 构造 | `folly/futures/` 源码树；`folly::` 命名空间；`FOLLY_FUTURE` 宏；链接 libfolly |
 | 13 | protobuf 序列化库优化 | `protobuf-optimization` | protobuf、proto 反序列化、消息合并、MapMergeFrom、MiniParse、arena 分配 | `src/google/protobuf/` 源码树；`libprotobuf`；`TcParser`/`MapMergeFrom` 符号 |
-| 14 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 14 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
+| 15 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 **向量检索接管**：优化对象已明确落在向量数据库或检索路径时，直接加载 `vector-search-optimize`，传递用户目标、已知库名、源码、基准、数据和已有实验状态。由它识别执行层级，选择 Faiss、DiskANN 专项或通用 CP0–CP7。只有明确指向 VSAG 的专项任务才直达 VSAG 路由。共享算法名先交给通用入口查明实际后端。延续用户给出的资源范围和交互模式。
 
