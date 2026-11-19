@@ -1,0 +1,45 @@
+{
+  "service": "dsv41-prefill",
+  "window": "2026-11-19T09:00Z / 10min / 4 windows",
+  "balancedness": [
+    0.78,
+    0.81,
+    0.76,
+    0.79
+  ],
+  "rank_waiting": [
+    22,
+    3,
+    4,
+    2,
+    3,
+    5,
+    4,
+    3
+  ],
+  "rank_running": [
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8
+  ],
+  "rank_ttft_ms": [
+    2380,
+    910,
+    940,
+    880,
+    960,
+    920,
+    900,
+    930
+  ],
+  "kv_cache_usage_pct": 88.0,
+  "preemptions": 0,
+  "free_mem_gib": 3.0,
+  "bytes_per_expert_gib": 2.4,
+  "ep_size": 16
+}

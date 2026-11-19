@@ -1,0 +1,8 @@
+{
+  "service": "dsv41-prefill",
+  "window": "2026-11-19T11:00Z / 10min / 4 windows",
+  "balancedness": [0.97, 0.98, 0.97, 0.98],
+  "rank_waiting": [4, 3, 4, 3, 4, 3, 3, 4],
+  "rank_running": [8, 8, 8, 8, 8, 8, 8, 8],
+  "rank_ttft_ms": [905, 910, 900, 915, 908, 912, 903, 907]
+}

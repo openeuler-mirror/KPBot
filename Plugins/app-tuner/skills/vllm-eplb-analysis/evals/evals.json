@@ -1,0 +1,112 @@
+{
+  "skill_name": "vllm-eplb-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "analyze-imbalanced-log-and-metrics",
+      "prompt": "P 节点最近 TTFT 长尾很严重，我怀疑是 MoE 专家热点，但不确定该不该开 EPLB。日志在 /tmp/opencode/eplb-analyze-1/prefill.log，metrics 在 /tmp/opencode/eplb-analyze-1/metrics.txt，帮我判断一下。",
+      "expected_output": "给出 imbalanced 结论并附证据表：balancedness 中位数 <0.90、在途请求倾斜 ≥1.5、TTFT 倾斜 ≥1.3 且失衡持续；建议交接 vllm-eplb-optimization 以 dynamic 模式开启（含 redundant_experts / window_size / step_interval），并说明上线后如何复测。",
+      "files": [
+        "evals/fixtures/eplb_sample.log",
+        "evals/fixtures/prometheus_sample.txt"
+      ],
+      "assertions": [
+        "结论为 imbalanced（verdict.json）",
+        "至少命中 balancedness、在途请求、TTFT 三个信号",
+        "报告给出证据表与阈值对照",
+        "报告给出交接命令：dynamic 模式 + 三个 eplb-config 参数"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "analyze-borderline-already-enabled",
+      "prompt": "我们已经开了 dynamic EPLB，balancedness 一直在 0.92-0.94，还要不要继续加冗余专家？证据我整理在 /tmp/opencode/eplb-analyze-2/evidence.json",
+      "expected_output": "判定 borderline：balancedness 落在边缘区间只算提示，TTFT 倾斜是唯一明确信号；建议先用 force EPLB 做上限探针（只测量、不上线），差距明显再决定加冗余专家，并说明恢复步骤。",
+      "files": [
+        "evals/fixtures/borderline.json"
+      ],
+      "assertions": [
+        "结论为 borderline（verdict.json）",
+        "识别出唯一明确信号是 TTFT 倾斜，balancedness 只算边缘区间",
+        "建议先做 force EPLB 上限探针而不是直接加冗余专家",
+        "说明了探针后如何还原/继续"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "analyze-balanced-do-not-enable",
+      "prompt": "TTFT P99 有抖动，但 balancedness 0.97 左右很稳，同事说要开 EPLB 试试，你觉得呢？数据在 /tmp/opencode/eplb-analyze-3/evidence.json",
+      "expected_output": "判定 balanced，明确建议不要开 EPLB（没有失衡信号时只有显存与重排开销），并把排查方向转向排队、KV cache、通信或请求长度分布等非专家因素。",
+      "files": [
+        "evals/fixtures/balanced.json"
+      ],
+      "assertions": [
+        "结论为 balanced（verdict.json）",
+        "明确给出不要开 EPLB 的建议",
+        "指出应转向排队/KV/通信/请求长度等非专家瓶颈",
+        "没有推荐加冗余专家或改模板"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "analyze-methodology-without-eplb",
+      "prompt": "现在还没开 EPLB，我怎么判断到底要不要开？给我一套可执行的判断方法。",
+      "expected_output": "说明 balancedness 只在已开 EPLB 时可得，未开时应采集 num_requests_running/waiting、time_to_first_token_seconds、prompt_tokens 等 per-engine 指标；给出 5 个指标、判定矩阵（imbalanced/borderline/balanced/inconclusive）、采集命令与阈值口径。",
+      "files": [],
+      "assertions": [
+        "说明 balancedness 依赖已开启 EPLB，不是上线前唯一依据",
+        "给出 per-engine 指标采集方法（num_requests_* / time_to_first_token_seconds）",
+        "给出四种结论与对应动作的判定矩阵",
+        "给出可直接执行的采集与分析命令"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "analyze-inconclusive-collect-more",
+      "prompt": "只捞到两行 balancedness，能下结论吗？文件在 /tmp/opencode/eplb-analyze-5/evidence.json",
+      "expected_output": "判定 inconclusive：balancedness 窗口少于 3 且缺少其他 per-engine 指标，不能区分真失衡与采样噪声；要求补采至少 3 个窗口并导出 /metrics 后再判定。",
+      "files": [
+        "evals/fixtures/inconclusive.json"
+      ],
+      "assertions": [
+        "结论为 inconclusive（verdict.json）",
+        "说明窗口不足与可用指标不足的原因",
+        "给出补采要求（至少 3 个窗口 + per-engine metrics）",
+        "没有直接建议开或不开 EPLB"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "analyze-then-optimize-end-to-end",
+      "prompt": "先判断 P 节点是不是真的专家负载不均衡（日志 /tmp/opencode/eplb-analyze-6/prefill.log，metrics /tmp/opencode/eplb-analyze-6/metrics.txt），确认不均衡的话直接把模板切到 dynamic EPLB。模板：/tmp/opencode/eplb-analyze-6/run_dp_template.sh",
+      "expected_output": "先给出 imbalanced 结论与三条证据，再按分析给出的参数调用 vllm-eplb-optimization 的 apply_eplb.py 切 dynamic（--redundant-experts 32、window/step 1000），写后校验通过、留有备份，并说明重启与复测口径。",
+      "files": [
+        "evals/fixtures/eplb_sample.log",
+        "evals/fixtures/prometheus_sample.txt",
+        "evals/fixtures/run_dp_template_p_clean.sh"
+      ],
+      "assertions": [
+        "先给出 imbalanced 结论（verdict.json）且证据表完整",
+        "模板被切成 dynamic：V2 runner=1、export DYNAMIC_EPLB、--enable-eplb 与三个 eplb-config",
+        "冗余专家取 32（与分析结论一致，不是无脑默认 16）",
+        "修改前有备份且 bash -n 通过",
+        "报告串起分析→优化两步，并给出复测口径"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "analyze-low-memory-blocks-copies",
+      "prompt": "P 节点确实不均衡（balancedness 0.78、TTFT 2.5 倍），但 KV cache 已经 98%、还在换出，剩不到 0.5G。还能直接开 EPLB 加冗余专家吗？证据在 /tmp/opencode/eplb-analyze-7/evidence.json",
+      "expected_output": "判定 imbalanced 但显存 no_headroom，动作是 free_memory_first：不直接加副本，说明冗余专家挤占 KV cache 的机制，并给出降 KV 压力（max-model-len/并发/上下文）或按 affordable_redundant 收敛副本数的具体做法。",
+      "files": [
+        "evals/fixtures/imbalanced_low_memory.json"
+      ],
+      "assertions": [
+        "结论为 imbalanced，且 memory.verdict 为 no_headroom（verdict.json）",
+        "动作是 free_memory_first，而不是直接交接 dynamic 加副本",
+        "报告说明冗余专家会挤占 KV cache、当前已在换出",
+        "报告给出降 KV 压力或按余量收敛副本数的具体做法"
+      ]
+    }
+  ]
+}
