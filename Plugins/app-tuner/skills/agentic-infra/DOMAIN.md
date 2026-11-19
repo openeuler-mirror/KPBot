@@ -8,15 +8,15 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
 
 ## 成员
 
-- `kptools-agentenv-tuning/`
-- `kptools-openeuler-agentenv/`
+（暂无已就位成员。本域目录下现仅有占位子目录——仅含 `.gitkeep`、尚无 `SKILL.md`，
+不可作为技能加载。）
 
 ## 后续迁入（各自独立 PR）
 
-- `kptools-agentenv-tuning`
-- `kptools-openeuler-agentenv`
+- `kptools-agentenv-tuning`（现居 `../kptools-agentenv-tuning/`）
+- `kptools-openeuler-agentenv`（现居 `../kptools-openeuler-agentenv/`）
 - `cubesandbox-deployment`、`cubesandbox-bench-protocol`、`cubesandbox-lifecycle-bench`、
-  `sandbox-timeline-profile`
+  `sandbox-timeline-profile`（现居本插件 `skills/` 顶层）
 
 迁入注意：含 docker build 用例（`cases/*/case.yaml` 带 `build.context`）的技能深一层
 后需同步修正 `context` 层数、`dockerfile` 前缀、Dockerfile COPY 路径与
