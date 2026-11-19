@@ -1,0 +1,65 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 parallel-accumulator 优化点积函数
+#
+# 构建：
+#   docker build -f skills/parallel-accumulator/cases/agent-optimize-dotproduct/Dockerfile \
+#       -t kpbot/code-optimizer-agent-dotproduct:1.0-openeuler24.03 .
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。待优化目标为单累加器点积（sum += a[i]*b[i]），重点考察
+# 串行累加器依赖链拆分（多累加器展开 / NEON / SVE256 向量累加器）。
+
+name: agent-optimize-dotproduct
+skill: parallel-accumulator
+tier: agent
+
+image: kpbot/code-optimizer-agent-dotproduct:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: speedup
+  uplift: speedup_with / speedup_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/parallel-accumulator/cases/agent-optimize-dotproduct/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机（NEON/SVE 可用）
+  - opencode 二进制（运行时只读挂载，路径白名单校验）
+  - OPENCODE_AUTH_JSON（auth.json 整体 base64 经环境变量注入）
+  - 容器可访问 deepseek API（模型 API 由运行环境代为调用，agent 无网络权限）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+  N: 1000000
+  ITERS: 20
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: optimized_correct
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: speedup
+    op: gte
+    expect: 1.0
+  - type: json_field
+    file: results/result.json
+    field: skills_invoked
+    op: contains
+    value: parallel-accumulator

@@ -9,6 +9,7 @@
 
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
+- **2026/11/17** — **code-optimizer** 新增 `parallel-accumulator` SKILL，覆盖归约循环的串行累加器并行化：识别单累加器延迟绑定（低 IPC + 低 cache miss），用多个独立累加器重叠依赖链隐藏浮点延迟，附三级改写模板（纯 C 多累加器 / NEON 单累加器 / NEON 多累加器）、`accumulator_plan.py` 累加器数量脚本、tier-A 契约用例、agent 端到端 A/B 用例，对标 Intel performance-patterns 的 parallel-accumulator。
 - **2026/11/16** — **app-tuner** 新增 `model-precision-analysis` SKILL，覆盖模型优化后的精度回归验证：读取精度评测工具 `opendatas/output` 合并结果，按数值/选项字母/文本归一化抽取答案（单位、千分位、`\text{}`、截断识别），输出准确率对比、“对→错”回归题定位与达标判定，存在回归即以退出码 1 作为精度门禁（`--fail-on-regression` 为兼容别名），并接入加速卡/应用配置 skill 的 `validation_plan`。
 - **2026/11/06** — **code-optimizer** 新增 `dpdk-optimization` SKILL，覆盖 DPDK 数据面热路径代码优化：worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类判定）与分层代码杠杆库（热路径纪律、双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用），接入统一流水线场景路由，配套 app-tuner 的配置层调优。
 - **2026/11/06** — **app-tuner** 新增 `kptools-dpdk-tuning` SKILL，覆盖 DPDK 应用性能调优：现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延），面向鲲鹏 920 + hns3/Hi1822 主场景，不修改业务源码。
@@ -62,7 +63,7 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（84 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（102 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
 | **[openwiki-sync](Plugins/public/openwiki-sync/)** | documentation | OpenWiki 代码仓文档生成与同步 — 独立 wiki 仓托管 + commit 级联动更新 + 关联恢复，支持 GitCode/Gitee/GitHub |
 | **[kunpeng-knowledge](Plugins/public/kunpeng-knowledge/skills/kunpeng-knowledge/SKILL.md)** | documentation | 鲲鹏知识库只读查询 — 搜索 Wiki、读取页面并返回来源；在 OpenCode 中通过 WeKnora 账号授权 |
@@ -153,8 +154,8 @@ cd /path/to/your-c-project
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 78 个技能
-    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 76 个技能
+    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 102 个技能
+    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 100 个技能
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -227,7 +228,7 @@ bash tests/test_install_platform.sh
 
 ### 可用技能列表
 
-code-optimizer 在 Claude Code 中安装 **78 个** skill，在 OpenCode 中安装 **76 个**（跳过 2 个 claude-only）。
+code-optimizer 在 Claude Code 中安装 **102 个** skill，在 OpenCode 中安装 **100 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -261,6 +262,7 @@ code-optimizer 在 Claude Code 中安装 **78 个** skill，在 OpenCode 中安�
 - `openzl-bench-protocol` — OpenZL unitBench 基准协议（场景注册、KV 数据准备、多机部署复测、topdown 采集，含 3 个脚本）
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
 - `hot-path-overhead-elimination` — 热点路径机制开销消除（主导结果内联、叶子入口、值频率分派、无消费者记账跳过）
+- `parallel-accumulator` — 串行累加器并行化（多累加器展开、NEON 向量累加器，重叠依赖链隐藏浮点延迟）
 
 **Pipeline/编排类**
 - `kpbot-code-optimizer` — 完整优化 Pipeline（Subagent 编排）
@@ -418,7 +420,7 @@ KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (84 skills)
+│   ├── code-optimizer/            # 代码优化插件 (102 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
