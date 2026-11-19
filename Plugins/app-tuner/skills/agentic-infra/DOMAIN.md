@@ -12,7 +12,7 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
 
 ## 后续迁入（各自独立 PR）
 
-- `kptools-openeuler-agentenv`（现居 `../kptools-openeuler-agentenv/`，本域内目录已占位）
+- `kptools-openeuler-agentenv`（现居 `../kptools-openeuler-agentenv/`）
 - `cubesandbox-deployment`、`cubesandbox-bench-protocol`、`cubesandbox-lifecycle-bench`、
   `sandbox-timeline-profile`（现居本插件 `skills/` 顶层）
 
