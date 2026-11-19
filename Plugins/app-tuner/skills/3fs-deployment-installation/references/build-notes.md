@@ -18,11 +18,21 @@ yum install cmake libuv-devel lz4-devel xz-devel double-conversion-devel \
 
 ## 2. 组件安装
 
+**供应链完整性门禁（所有下载物通用，安装前强制执行）**：任何 wget/curl 取件在
+安装/解压/打入源码树之前必须校验完整性 —— 优先比对**官方渠道公布的 sha256/sha512 或
+GPG 签名**（Rust 随包发布 `.sha256` 文件；GitHub Releases 在 release 页给出资产摘要；
+RPM 用 `rpm -K` 验签）；官方未提供校验值时，首次从可信网络下载后立即
+`sha256sum <file> | tee -a /opt/src/install/checksums.sha256` 记入团队部署台账，
+后续每次下载用 `sha256sum -c` 比对台账值。**校验失败即停止，不得"先装上再说"** ——
+编译产物会经二进制替换流程分发全集群并以 root 运行，污染即供应链后门。
+
 ### 2.1 Rust 1.85.0
 
 ```shell
 cd /home
 wget https://static.rust-lang.org/dist/rust-1.85.0-aarch64-unknown-linux-gnu.tar.xz
+wget https://static.rust-lang.org/dist/rust-1.85.0-aarch64-unknown-linux-gnu.tar.xz.sha256
+sha256sum -c rust-1.85.0-aarch64-unknown-linux-gnu.tar.xz.sha256   # 必须 OK 才继续
 tar -xvf rust-1.85.0-aarch64-unknown-linux-gnu.tar.xz
 cd rust-1.85.0-aarch64-unknown-linux-gnu
 sh install.sh
@@ -33,6 +43,9 @@ sh install.sh
 ```shell
 wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients-7.3.63-1.el9.aarch64.rpm
 wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-server-7.3.63-1.el9.aarch64.rpm
+# 门禁：与 release 页公布的资产摘要比对，并记录 sha256 进台账；有签名则 rpm -K 验签
+sha256sum foundationdb-*.rpm
+rpm -K foundationdb-*.rpm 2>/dev/null || true    # 无公钥时以 sha256 台账比对为准
 rpm -ivh foundationdb-clients-7.3.63-1.el9.aarch64.rpm
 rpm -ivh foundationdb-server-7.3.63-1.el9.aarch64.rpm
 ```
@@ -45,6 +58,7 @@ rpm -ivh foundationdb-server-7.3.63-1.el9.aarch64.rpm
 ```shell
 cd /home
 wget https://mirrors.huaweicloud.com/kunpeng/archive/compiler/bisheng_compiler/BiShengCompiler-4.2.0-aarch64-linux.tar.gz
+sha256sum BiShengCompiler-4.2.0-aarch64-linux.tar.gz   # 门禁：与官方下载页公布值比对（未公布则记入台账）
 tar -xvf BiShengCompiler-4.2.0-aarch64-linux.tar.gz
 export PATH=/home/BiShengCompiler-4.2.0-aarch64-linux/bin:$PATH
 clang -v
@@ -69,6 +83,7 @@ Selected multilib: .;@m64
 ```shell
 cd /home
 wget https://github.com/libfuse/libfuse/releases/download/fuse-3.16.1/fuse-3.16.1.tar.gz
+sha256sum fuse-3.16.1.tar.gz    # 门禁：与 release 页公布摘要比对并记录台账
 tar -vzxf fuse-3.16.1.tar.gz
 cd fuse-3.16.1
 mkdir build
@@ -95,10 +110,16 @@ git submodule update --init --recursive
 
 ### 3.2 openEuler 适配补丁
 
+补丁必须**固定 commit 取 raw 内容**并过 sha256 门禁：`blob/` 页面 URL 返回的是 HTML
+页面而非补丁文本（且 master 是可变引用，内容可被后续提交改变，禁止引用）：
+
 ```shell
 mkdir -p /opt/src/install && cd /opt/src/install
-wget https://gitcode.com/boostkit/3FS/blob/master/openeuler_3fs.patch
-wget https://gitcode.com/boostkit/3FS/blob/master/openeuler_3fs_folly.patch
+# <固定commit> 替换为团队评审过的 boostkit/3FS 提交号；raw URL 形式：
+wget "https://gitcode.com/boostkit/3FS/raw/<固定commit>/openeuler_3fs.patch"
+wget "https://gitcode.com/boostkit/3FS/raw/<固定commit>/openeuler_3fs_folly.patch"
+# 门禁：首次下载经评审后 sha256sum *.patch > patches.sha256 记入台账；此后每次校验
+sha256sum -c patches.sha256    # 必须全部 OK 才允许 patch
 cd ${SRC_ROOT}/3fs
 patch -p1 < /opt/src/install/openeuler_3fs.patch
 cd ${SRC_ROOT}/3fs/third_party/folly

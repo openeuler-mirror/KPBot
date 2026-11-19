@@ -10,18 +10,22 @@
 # admin_cli 简写（本文后续用 $ADMIN_CLI 指代）
 ADMIN_CLI="${INSTALL_PREFIX}/bin/admin_cli -cfg ${INSTALL_PREFIX}/etc/admin_cli.toml"
 
-# 需要 token 的管理操作（create-target/upload-chains 等）追加：
-#   --config.user_info.token $(<"${INSTALL_PREFIX}/etc/token.txt")
+# 需要 token 的管理操作（create-target/upload-chains 等）：token 写入
+# ${INSTALL_PREFIX}/etc/admin_cli.toml 的 [user_info] 段（chmod 600），随 -cfg 携带。
+# 禁止 --config.user_info.token <值> 命令行覆盖 —— token 会进入进程 argv，
+# 同机任意用户可经 ps -ef / /proc/<pid>/cmdline 读取（见 SKILL.md 安全基线）。
 ```
 
 远程节点操作凭据（安全基线，见 SKILL.md）：**优先 SSH key 免密**；必须用密码时先
 `read -s -p 'Password: ' SSHPASS; export SSHPASS`，再统一走 `sshpass -e`，
-严禁用 sshpass 的 `-p` 选项携带明文密码：
+严禁用 sshpass 的 `-p` 选项携带明文密码。主机密钥校验用 `accept-new`
+（首次纳管信任并记录，变更即拒连），禁止 `no` / `UserKnownHostsFile=/dev/null`：
 
 ```shell
-SSH_OPTS='-o StrictHostKeyChecking=no'
+SSH_OPTS='-o StrictHostKeyChecking=accept-new'
 sshpass -e ssh ${SSH_OPTS} ${SSH_USER}@${STORAGE1_IP} "systemctl status storage_main | head -10"
 # SSH key 免密时去掉 sshpass -e 前缀即可，下同
+# 主机密钥变更报错时：先查明原因（节点重装?），再 ssh-keygen -R <host> 清旧键重连
 ```
 
 ## 1. 集群状态查看
@@ -129,7 +133,7 @@ sshpass -e ssh ${SSH_OPTS} ${SSH_USER}@${STORAGE1_IP} \
 ## 4. Chain / Target 管理
 
 以下 chain_id/target_id/node_id 均为**示例编号方案**（chain 前缀 9、target 前缀 1），按集群规划替换。
-写操作需带 token（见 §0）。
+写操作需 token —— 已按 §0 写入 `admin_cli.toml` 的 `[user_info]` 段，随 `-cfg` 携带，不落 argv。
 
 ```shell
 # 创建单个 target
@@ -137,7 +141,7 @@ $ADMIN_CLI "create-target --node-id 10001 --disk-index 0 --target-id 10100010010
 
 # 批量创建（从 gen_chain_table.py 生成的命令文件读取，见 installation-guide.md §5.8）
 grep "node-id 10001" <工作目录>/output/create_target_cmd.txt | $ADMIN_CLI
-$ADMIN_CLI --config.user_info.token $(<"${INSTALL_PREFIX}/etc/token.txt") < <工作目录>/output/create_target_cmd.txt
+$ADMIN_CLI < <工作目录>/output/create_target_cmd.txt
 
 # 在指定节点所有磁盘上创建 targets
 $ADMIN_CLI "create-targets --node-id 10001 --allow-existing-target --use-new-chunk-engine"
@@ -297,15 +301,19 @@ sshpass -e ssh ${SSH_OPTS} ${SSH_USER}@${STORAGE1_IP} "cat /storage/data0/3fs/10
 ## 11. ClickHouse 操作
 
 ```shell
-# 密码交互注入，不出现在命令行明文
-read -s -p 'ClickHouse password: ' CK_PASS; export CK_PASS; printf '\n'
+# 密码经 CLICKHOUSE_PASSWORD 环境变量注入（clickhouse-client 自动读取，不落 argv）
+read -rs CLICKHOUSE_PASSWORD; export CLICKHOUSE_PASSWORD; printf '\n'
 
-clickhouse-client --port ${CK_PORT} --password "${CK_PASS}"
-clickhouse-client --port ${CK_PORT} --password "${CK_PASS}" --query "SHOW DATABASES"
-clickhouse-client --port ${CK_PORT} --password "${CK_PASS}" --database 3fs --query "SHOW TABLES"
+clickhouse-client --port ${CK_PORT}
+clickhouse-client --port ${CK_PORT} --query "SHOW DATABASES"
+clickhouse-client --port ${CK_PORT} --database 3fs --query "SHOW TABLES"
 
 # 重新初始化监控表
-clickhouse-client --port ${CK_PORT} --password "${CK_PASS}" -n < ${SRC_ROOT}/3fs/deploy/sql/3fs-monitor.sql
+clickhouse-client --port ${CK_PORT} -n < ${SRC_ROOT}/3fs/deploy/sql/3fs-monitor.sql
+
+# 禁止 --password "<值>" / --password "${VAR}"：展开后明文进入进程 argv，
+# 同机任意用户可经 ps -ef / /proc/<pid>/cmdline 读取。
+# 替代：--password 不带值触发交互输入，或写 ~/.clickhouse-client/config.xml（chmod 600）。
 ```
 
 ## 12. FoundationDB 操作

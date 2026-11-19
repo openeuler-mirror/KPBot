@@ -130,7 +130,8 @@ read -s -p "Password for ${NEW_CLIENT}: " SSHPASS; export SSHPASS; printf '\n'
 设置 SSH/rsync 变量并测试：
 
 ```shell
-export SSH_OPTS='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+# 主机密钥校验用 accept-new（首连信任并记录、变更拒连）；禁止 no / UserKnownHostsFile=/dev/null（可被冒充且不留痕）
+export SSH_OPTS='-o StrictHostKeyChecking=accept-new'
 export RSYNC_RSH="sshpass -e ssh ${SSH_OPTS}"      # SSH key 免密时改为 RSYNC_RSH="ssh ${SSH_OPTS}"
 
 sshpass -e ssh ${SSH_OPTS} ${NEW_CLIENT} 'hostname && ip addr show eth5 && rdma link'

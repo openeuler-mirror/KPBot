@@ -8,7 +8,7 @@
 
 | 方式 | 适用 | 说明 |
 |------|------|------|
-| `scripts/replace_3fs_bin.sh` | 常规批量替换 `${INSTALL_PREFIX}/bin` 下二进制 | 自动完成预检查/顺序停服/备份/md5 校验/顺序启动/验证/ trap 报错快照；节点清单参数化 |
+| `scripts/replace_3fs_bin.sh` | 常规批量替换 `${INSTALL_PREFIX}/bin` 下二进制 | 自动完成预检查/顺序停服/备份（`bin.bak.<时间戳>`）/md5 校验/顺序启动/验证/trap 报错快照；节点清单参数化；**内建 `--rollback [bin.bak.<时间戳>]` 一键回滚**（现场保留为 `bin.failed.<时间戳>` 供取证） |
 | 本手工 SOP | 需要同时替换 `/usr/lib(64)` 下库文件（libhf3fs_api_shared.so、hf3fs_usrbio.so、fio）、需要 chain 恢复、脚本失败后人工接管 | 步骤与脚本同构，粒度更细 |
 
 两者共用同一套停启顺序与备份思想；先读 §2/§3 理解顺序约束再执行脚本。
@@ -46,7 +46,9 @@ read -s -p 'Password for cluster nodes: ' SSHPASS; export SSHPASS; printf '\n'
 export TS=$(date +%Y%m%d_%H%M%S)
 export SRC_BIN=${BUILD_DIR}/bin
 export BACKUP_ROOT=${INSTALL_PREFIX}/backup/rebuild_${TS}
-export SSH_OPTS='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+# 主机密钥校验用 accept-new（首连信任并记录、变更拒连）；禁止 no / UserKnownHostsFile=/dev/null：
+# 管理网被劫持时可冒充节点截获口令、投放恶意二进制且不留痕。密钥变更先查明原因再 ssh-keygen -R <host>
+export SSH_OPTS='-o StrictHostKeyChecking=accept-new'
 export RSYNC_RSH="sshpass -e ssh ${SSH_OPTS}"      # SSH key 免密时改为 "ssh ${SSH_OPTS}"
 ```
 

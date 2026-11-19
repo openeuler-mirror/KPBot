@@ -5,9 +5,10 @@
 # 用法:   replace_3fs_bin.sh <二进制目录>
 #         (如 ${BUILD_DIR}/bin，须含 admin_cli / mgmtd_main / meta_main /
 #          storage_main / hf3fs_fuse_main)
+#         replace_3fs_bin.sh --rollback [bin.bak.<时间戳>]
 # 执行位置: meta 节点（mgmtd/meta 所在节点，本机 hostname 须与 META_HOST 一致）
 #
-# 流程:
+# 替换流程:
 #   0. 预检查（参数目录、必需二进制、到各节点的 SSH）
 #   1. 停止集群: 所有 FUSE（含挂载点释放）-> storage -> meta -> mgmtd
 #   2. 各节点 ${INSTALL_PREFIX}/bin 备份为 bin.bak.<时间戳>，
@@ -16,9 +17,11 @@
 #   4. 验证: 服务状态 + admin_cli list-nodes（期望节点数按清单动态计算）
 #      + 各 FUSE 节点 ${MOUNT_POINT} 挂载
 #
-# 回滚: 用任一节点 ${INSTALL_PREFIX}/bin.bak.<时间戳> 覆盖回
-#       ${INSTALL_PREFIX}/bin 后按同样顺序重启（详见
-#       references/binary-replacement.md）
+# 回滚: 内建 --rollback 模式 —— 停服 -> 现 bin 保留为 bin.failed.<时间戳>
+#       (供取证) -> 从 bin.bak.<时间戳> 恢复 -> md5 抽查 -> 顺序启动 -> 验证；
+#       缺省备份名时自动选 meta 上最新的 bin.bak.*（要求全节点存在）。
+#       手工 SOP（含库文件替换与 rotate-lastsrv chain 恢复）见
+#       references/binary-replacement.md
 #
 # 节点清单与路径全部参数化（环境变量可覆盖，或用 inventory 文件）:
 #   INVENTORY_FILE   inventory 文件，每行 "<角色> <主机名>"，
@@ -30,7 +33,12 @@
 #   SSH_USER         节点间 SSH 用户（默认: root）
 #   INSTALL_PREFIX   线上安装前缀（默认: /opt/3fs）
 #   MOUNT_POINT      FUSE 挂载点（默认: /3fs/stage）
-#   SSH_OPTS         ssh/scp 选项（默认: -o StrictHostKeyChecking=no -o ConnectTimeout=5）
+#   SSH_OPTS         ssh/scp 选项（默认: -o StrictHostKeyChecking=accept-new
+#                    -o ConnectTimeout=5）。accept-new = 首连信任并写入
+#                    known_hosts、主机密钥变更则拒连；不要改为 no 或
+#                    UserKnownHostsFile=/dev/null（管理网被劫持时可冒充节点
+#                    截获口令/投放二进制，且不留取证痕迹）。密钥变更先查明
+#                    原因（如重装系统），再 ssh-keygen -R <host> 清旧键
 #
 # 凭据（本脚本绝不包含明文密码，也不提供命令行传密码的途径）:
 #   优先: SSH key 免密（ssh-copy-id ${SSH_USER}@<节点>）
@@ -46,9 +54,13 @@ set -u
 usage() {
     cat <<'EOF'
 用法: replace_3fs_bin.sh <二进制目录>
+      replace_3fs_bin.sh --rollback [bin.bak.<时间戳>]
 
 在 meta 节点执行，将 <二进制目录> 中的 3FS 二进制滚动替换到全集群：
 预检查 -> 顺序停服 -> 备份 -> 覆盖 + md5 校验 -> 顺序启动 -> 验证。
+
+回滚模式: 停服 -> 现 bin 保留为 bin.failed.<时间戳>(取证) -> 从备份恢复 ->
+md5 抽查 -> 顺序启动 -> 验证；缺省备份名时自动选最新 bin.bak.*（须全节点存在）。
 
 节点清单（inventory 文件优先，其次环境变量，均有默认值）:
   INVENTORY_FILE=<file>        每行 "<角色> <主机名>"，角色 ∈ {meta,storage,fuse}
@@ -58,7 +70,7 @@ usage() {
 
 其他环境变量:
   SSH_USER（默认 root）、INSTALL_PREFIX（默认 /opt/3fs）、
-  MOUNT_POINT（默认 /3fs/stage）、SSH_OPTS
+  MOUNT_POINT（默认 /3fs/stage）、SSH_OPTS（默认 StrictHostKeyChecking=accept-new）
 
 凭据: SSH key 免密优先；密码认证仅支持 SSHPASS 环境变量（sshpass -e）:
   read -s -p 'SSH password: ' SSHPASS; export SSHPASS
@@ -67,6 +79,8 @@ usage() {
   replace_3fs_bin.sh /opt/src/3FS/3fs/build/bin
   STORAGE_HOSTS="storage1 storage2 storage3" replace_3fs_bin.sh ./bin
   INVENTORY_FILE=./inventory.txt replace_3fs_bin.sh ./bin
+  replace_3fs_bin.sh --rollback                              # 回滚到最新备份
+  replace_3fs_bin.sh --rollback bin.bak.20261119_120000        # 回滚到指定备份
 EOF
 }
 
@@ -82,10 +96,18 @@ warn() { log "${C_YEL}[WARN]${C_RST} $*"; }
 die()  { log "${C_RED}[FAIL]${C_RST} $*" >&2; exit 1; }
 
 # ---------- 参数 ----------
+MODE="replace"
+ROLLBACK_SRC=""
 case "${1:-}" in
     -h|--help) usage; exit 0 ;;
+    --rollback)
+        MODE="rollback"
+        ROLLBACK_SRC="${2:-}"
+        [ $# -le 2 ] || { usage >&2; die "--rollback 至多带 1 个备份目录名（bin.bak.<时间戳>）"; }
+        ;;
+    "") usage >&2; die "缺少参数（<二进制目录> 或 --rollback）" ;;
+    *)  [ $# -eq 1 ] || { usage >&2; die "参数个数不符（需要且仅需要 <二进制目录>，或 --rollback [备份名]）"; } ;;
 esac
-[ $# -eq 1 ] || { usage >&2; die "参数个数不符（需要且仅需要 <二进制目录>）"; }
 
 # ---------- 节点清单 ----------
 META_HOST="${META_HOST:-meta}"
@@ -94,7 +116,7 @@ FUSE_HOSTS="${FUSE_HOSTS:-$META_HOST}"
 SSH_USER="${SSH_USER:-root}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-/opt/3fs}"
 MOUNT_POINT="${MOUNT_POINT:-/3fs/stage}"
-SSH_OPTS="${SSH_OPTS:--o StrictHostKeyChecking=no -o ConnectTimeout=5}"
+SSH_OPTS="${SSH_OPTS:--o StrictHostKeyChecking=accept-new -o ConnectTimeout=5}"   # accept-new: 首连信任并记录, 密钥变更拒连; 勿改为 no
 
 if [ -n "${INVENTORY_FILE:-}" ]; then
     [ -f "${INVENTORY_FILE}" ] || die "inventory 文件不存在: ${INVENTORY_FILE}"
@@ -219,17 +241,30 @@ release_mount() { # <host> 释放该节点 FUSE 挂载
 }
 
 # ---------- 0. 预检查 ----------
-BIN_DIR=$(readlink -f "$1" 2>/dev/null) || die "无法解析目录: $1"
-[ -d "$BIN_DIR" ] || die "目录不存在: $1"
-
 META_BINARIES="meta_main mgmtd_main hf3fs_fuse_main admin_cli"
 STORAGE_BINARIES="storage_main admin_cli"
 FUSE_BINARIES="hf3fs_fuse_main admin_cli"
-for f in $META_BINARIES $STORAGE_BINARIES; do
-    [ -x "$BIN_DIR/$f" ] || die "$BIN_DIR 中缺少可执行文件: $f"
-done
-log "二进制目录: $BIN_DIR"
-log "版本: $(strings "$BIN_DIR/meta_main" 2>/dev/null | grep -m1 '^Version: v' || echo unknown)"
+
+if [ "$MODE" = replace ]; then
+    BIN_DIR=$(readlink -f "$1" 2>/dev/null) || die "无法解析目录: $1"
+    [ -d "$BIN_DIR" ] || die "目录不存在: $1"
+    for f in $META_BINARIES $STORAGE_BINARIES; do
+        [ -x "$BIN_DIR/$f" ] || die "$BIN_DIR 中缺少可执行文件: $f"
+    done
+    log "二进制目录: $BIN_DIR"
+    log "版本: $(strings "$BIN_DIR/meta_main" 2>/dev/null | grep -m1 '^Version: v' || echo unknown)"
+else
+    if [ -z "$ROLLBACK_SRC" ]; then
+        latest=$(ls -1d "${INSTALL_PREFIX}"/bin.bak.* 2>/dev/null | sort | tail -1)
+        [ -n "$latest" ] || die "meta 节点无 ${INSTALL_PREFIX}/bin.bak.* 备份，请显式指定备份目录名"
+        ROLLBACK_SRC=$(basename "$latest")
+        log "未指定备份名，自动选择最新: ${ROLLBACK_SRC}"
+    fi
+    case "$ROLLBACK_SRC" in
+        bin.bak.*) ;;
+        *) die "备份目录名应形如 bin.bak.<时间戳>: $ROLLBACK_SRC" ;;
+    esac
+fi
 log "节点清单: meta=$META_HOST storage=[${STORAGE_HOSTS}] fuse=[${FUSE_HOSTS}]"
 log "安装前缀: $INSTALL_PREFIX  挂载点: $MOUNT_POINT  SSH 用户: $SSH_USER"
 
@@ -241,20 +276,92 @@ for h in "${ALL_HOSTS[@]}"; do
     run_on "$h" "true" 2>/dev/null \
         || die "无法 SSH 到 $h (${SSH_USER}@$h)；请配置 SSH key，或 read -s 注入 SSHPASS 后重试（需安装 sshpass）"
 done
+if [ "$MODE" = rollback ]; then
+    for h in "${ALL_HOSTS[@]}"; do
+        run_on "$h" "test -d ${INSTALL_PREFIX}/${ROLLBACK_SRC}" \
+            || die "$h 缺少备份目录: ${INSTALL_PREFIX}/${ROLLBACK_SRC}"
+    done
+    log "回滚源: ${INSTALL_PREFIX}/${ROLLBACK_SRC}（全部节点已确认存在）"
+fi
 ok "预检查通过（涉及节点: ${ALL_HOSTS[*]}）"
+
+# ---------- 公共流程函数（替换/回滚共用同一停启与验证口径） ----------
+stop_cluster() {   # FUSE(含挂载释放) -> storage -> meta -> mgmtd
+    local h
+    for h in "${FUSE_ARR[@]}"; do
+        service_stop "$h" hf3fs_fuse_main
+        release_mount "$h"    # FUSE 进程被杀后挂载可能残留
+    done
+    for h in "${STORAGE_ARR[@]}"; do service_stop "$h" storage_main; done
+    service_stop "$META_HOST" meta_main
+    service_stop "$META_HOST" mgmtd_main
+}
+
+start_cluster() {  # mgmtd -> meta -> storage -> FUSE（每步等 2 秒）
+    local h
+    service_start "$META_HOST" mgmtd_main; sleep 2
+    service_start "$META_HOST" meta_main;  sleep 2
+    for h in "${STORAGE_ARR[@]}"; do service_start "$h" storage_main; sleep 2; done
+    for h in "${FUSE_ARR[@]}"; do service_start "$h" hf3fs_fuse_main; done
+}
+
+verify_cluster() { # 挂载轮询 + list-nodes 节点数（按清单动态计算）
+    local h _ m_ok out cnt n_ok expected
+    for h in "${FUSE_ARR[@]}"; do
+        m_ok=0
+        for _ in $(seq 1 6); do
+            run_on "$h" "mountpoint -q ${MOUNT_POINT}" 2>/dev/null && { m_ok=1; break; }
+            sleep 5
+        done
+        [ "$m_ok" -eq 1 ] || die "$h 的 FUSE 挂载 ${MOUNT_POINT} 未出现"
+        ok "$h 挂载正常: $(run_on "$h" "df -h ${MOUNT_POINT} 2>/dev/null | tail -1" | awk '{print $1, $2, $3, $5, $6}')"
+    done
+    expected=$(( 2 + ${#STORAGE_ARR[@]} ))
+    n_ok=0; out=""
+    for _ in $(seq 1 12); do
+        out=$("${INSTALL_PREFIX}/bin/admin_cli" -cfg "${INSTALL_PREFIX}/etc/admin_cli.toml" "list-nodes" 2>/dev/null)
+        cnt=$(echo "$out" | grep -cE 'PRIMARY_MGMTD|HEARTBEAT_CONNECTED')
+        [ "$cnt" -ge "$expected" ] && { n_ok=1; break; }
+        sleep 5
+    done
+    echo "$out"
+    [ "$n_ok" -eq 1 ] || die "60 秒内未等到全部 ${expected} 个节点上报 (mgmtd/meta/storage×${#STORAGE_ARR[@]})"
+}
+
+# ---------- 回滚模式 ----------
+if [ "$MODE" = rollback ]; then
+    log "===== 回滚步骤1: 停止集群 ====="
+    stop_cluster
+    ok "集群已停止"
+
+    log "===== 回滚步骤2: 保留现场并从 ${ROLLBACK_SRC} 恢复 ====="
+    for h in "${ALL_HOSTS[@]}"; do
+        run_on "$h" "rm -rf ${INSTALL_PREFIX}/bin.failed.${TS} && mv ${INSTALL_PREFIX}/bin ${INSTALL_PREFIX}/bin.failed.${TS} && cp -a ${INSTALL_PREFIX}/${ROLLBACK_SRC} ${INSTALL_PREFIX}/bin" \
+            || die "$h 恢复备份失败"
+    done
+    ok "各节点 bin 已恢复；回滚前现场保留在 ${INSTALL_PREFIX}/bin.failed.${TS}（分析后可删除）"
+
+    log "===== 回滚步骤3: 恢复一致性校验 (admin_cli md5) ====="
+    for h in "${ALL_HOSTS[@]}"; do
+        a=$(run_on "$h" "md5sum ${INSTALL_PREFIX}/${ROLLBACK_SRC}/admin_cli" | awk '{print $1}')
+        b=$(run_on "$h" "md5sum ${INSTALL_PREFIX}/bin/admin_cli" | awk '{print $1}')
+        [ -n "$a" ] && [ "$a" = "$b" ] || die "恢复后 md5 不一致: $h:admin_cli"
+    done
+    ok "md5 与备份一致"
+
+    log "===== 回滚步骤4: 启动集群 ====="
+    start_cluster
+
+    log "===== 回滚步骤5: 验证 ====="
+    verify_cluster
+    ok "回滚完成: ${INSTALL_PREFIX}/bin 已恢复自 ${ROLLBACK_SRC}"
+    log "如 list-chains 出现 UNAVAILABLE，按 references/binary-replacement.md §10 执行 rotate-lastsrv 恢复"
+    exit 0
+fi
 
 # ---------- 1. 停止集群: 所有 FUSE -> storage -> meta -> mgmtd ----------
 log "===== 步骤1: 停止集群 ====="
-for h in "${FUSE_ARR[@]}"; do
-    service_stop "$h" hf3fs_fuse_main
-    # 确保挂载点已释放 (FUSE 进程被杀后挂载可能残留)
-    release_mount "$h"
-done
-for h in "${STORAGE_ARR[@]}"; do
-    service_stop "$h" storage_main
-done
-service_stop "$META_HOST" meta_main
-service_stop "$META_HOST" mgmtd_main
+stop_cluster
 ok "集群已停止"
 
 # ---------- 2. 备份并覆盖二进制 ----------
@@ -314,46 +421,13 @@ ok "二进制已复制并校验 (md5)"
 
 # ---------- 3. 启动集群: mgmtd -> meta -> storage -> 所有 FUSE ----------
 log "===== 步骤3: 启动集群 ====="
-service_start "$META_HOST" mgmtd_main
-sleep 2
-service_start "$META_HOST" meta_main
-sleep 2
-for h in "${STORAGE_ARR[@]}"; do
-    service_start "$h" storage_main
-    sleep 2
-done
-for h in "${FUSE_ARR[@]}"; do
-    service_start "$h" hf3fs_fuse_main
-done
+start_cluster
 
 # ---------- 4. 验证 ----------
 log "===== 步骤4: 验证 ====="
-for h in "${FUSE_ARR[@]}"; do
-    m_ok=0
-    for _ in $(seq 1 6); do
-        run_on "$h" "mountpoint -q ${MOUNT_POINT}" 2>/dev/null && { m_ok=1; break; }
-        sleep 5
-    done
-    [ "$m_ok" -eq 1 ] || die "$h 的 FUSE 挂载 ${MOUNT_POINT} 未出现"
-    ok "$h 挂载正常: $(run_on "$h" "df -h ${MOUNT_POINT} 2>/dev/null | tail -1" | awk '{print $1, $2, $3, $5, $6}')"
-done
-
-ADMIN_CLI="${INSTALL_PREFIX}/bin/admin_cli"
-ADM_CFG="${INSTALL_PREFIX}/etc/admin_cli.toml"
-# 期望上报节点数按清单动态计算: mgmtd + meta + 各 storage（FUSE 节点若上报则多于该值）
-EXPECTED_NODES=$(( 2 + ${#STORAGE_ARR[@]} ))
-n_ok=0
-out=""
-for _ in $(seq 1 12); do
-    out=$("$ADMIN_CLI" -cfg "$ADM_CFG" "list-nodes" 2>/dev/null)
-    cnt=$(echo "$out" | grep -cE 'PRIMARY_MGMTD|HEARTBEAT_CONNECTED')
-    [ "$cnt" -ge "$EXPECTED_NODES" ] && { n_ok=1; break; }
-    sleep 5
-done
-echo "$out"
-[ "$n_ok" -eq 1 ] || die "60 秒内未等到全部 ${EXPECTED_NODES} 个节点上报 (mgmtd/meta/storage×${#STORAGE_ARR[@]})"
+verify_cluster
 
 ok "二进制替换完成"
-log "回滚方式: 各节点 ${INSTALL_PREFIX}/${BACKUP_SUFFIX} 覆盖回 ${INSTALL_PREFIX}/bin 后按序重启"
+log "回滚方式: replace_3fs_bin.sh --rollback ${BACKUP_SUFFIX}（或省略备份名用最新）；手工 SOP 见 references/binary-replacement.md"
 log "如 list-chains 出现 UNAVAILABLE，按 references/binary-replacement.md §10 执行 rotate-lastsrv 恢复"
 exit 0

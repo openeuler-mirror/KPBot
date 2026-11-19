@@ -67,20 +67,32 @@ metadata:
 | `${BUILD_DIR}` | 编译输出目录 | ${SRC_ROOT}/3fs/build |
 | `${INSTALL_PREFIX}` | 线上安装前缀 | /opt/3fs |
 | `${MOUNT_POINT}` | FUSE 挂载点 | /3fs/stage |
-| `${CK_PORT}` / `${CK_PASS}` | ClickHouse TCP 端口 / 密码 | 9123 / read -s 注入，不入库 |
+| `${CK_PORT}` / `${CLICKHOUSE_PASSWORD}` | ClickHouse TCP 端口 / 密码 | 9123 / `read -rs` 注入环境变量（clickhouse-client 自动读取，不落 argv），不入库 |
 | `${FDB_PORT}` | FoundationDB 端口 | 4500 |
 
 主机角色名（meta、storage1、storage2、client2 等）在文档中保留为示例角色名；
 node_id/chain_id/target_id 编号（1、100、10001、900100001 等）为示例编号方案，按集群规划替换。
 
-## 安全基线（凭据不入库）
+## 安全基线（凭据不入库、不落 argv）
 
 - 任何明文密码 / token 不得写入脚本、文档、配置文件样例或 shell history。
+- **凭据不得出现在进程命令行**：argv 可被同机任意用户经 `ps -ef` / `/proc/<pid>/cmdline` 读取。
+  ClickHouse 密码用 `CLICKHOUSE_PASSWORD` 环境变量注入（`read -rs` 交互输入，clickhouse-client
+  自动读取；或 `--password` 不带值触发交互提示），禁止 `--password "<值>"`；
+  admin_cli 的 token 写入 `${INSTALL_PREFIX}/etc/admin_cli.toml` 的 `[user_info]` 段
+  （`chmod 600`）随 `-cfg` 携带，禁止 `--config.user_info.token <值>` 命令行覆盖。
 - 交互式注入：`read -s -p 'Password: ' SSHPASS; export SSHPASS`，远程命令统一 `sshpass -e`；
   严禁用 sshpass 的 `-p` 选项在命令行携带明文密码。
-- 优先配置 SSH key 免密（`ssh-copy-id ${SSH_USER}@<节点>`），仅在无法使用 key 时退回 sshpass -e。
-- ClickHouse 密码统一写 `${CK_PASS}`；admin 用户 token 写入 `${INSTALL_PREFIX}/etc/token.txt` 后 `chmod 600`。
-- 会话结束清理：`unset SSHPASS RSYNC_RSH`。
+- 优先配置 SSH key 免密（`ssh-copy-id ${SSH_USER}@<节点>`），仅在无法使用 key 时退回 sshpass -e；
+  集群侧建议关闭口令登录。
+- **SSH 主机密钥默认校验**：统一 `StrictHostKeyChecking=accept-new`（首次纳管信任并持久化
+  known_hosts，密钥变更则拒连）；禁止 `no` 与 `UserKnownHostsFile=/dev/null` —— 管理网被劫持时
+  可冒充节点截获口令、投放恶意二进制，且不留取证痕迹。主机密钥变更先查明原因（如节点重装），
+  再 `ssh-keygen -R <host>` 清除旧键后重连。
+- **下载物安装前必须校验完整性**（sha256 / GPG 签名，见 `references/build-notes.md` §2 门禁），
+  禁止 `curl … | sh` 把远程内容直接交给 root shell，禁止 `-k` 关闭 TLS 校验。
+- admin 用户 token 文件 `${INSTALL_PREFIX}/etc/token.txt` 与 `admin_cli.toml` 均 `chmod 600`。
+- 会话结束清理：`unset SSHPASS RSYNC_RSH CLICKHOUSE_PASSWORD`。
 
 ## 参考资料索引（渐进披露）
 
@@ -97,7 +109,7 @@ node_id/chain_id/target_id 编号（1、100、10001、900100001 等）为示例�
 | 脚本 | 用途 |
 |------|------|
 | `scripts/preflight_check.sh` | 部署前置检查（只读、无副作用）：hostname/hosts、RDMA、时间同步、端口、依赖；输出 PASS/FAIL 汇总，有 FAIL 时退出码非零 |
-| `scripts/replace_3fs_bin.sh` | 集群二进制滚动替换：预检查 → 顺序停服 → 备份 → 覆盖 + md5 校验 → 顺序启动 → 验证；节点清单/用户/路径全部 env 或 inventory 参数化，凭据仅支持 SSH key 或 SSHPASS 环境变量 |
+| `scripts/replace_3fs_bin.sh` | 集群二进制滚动替换：预检查 → 顺序停服 → 备份（`bin.bak.<时间戳>`）→ 覆盖 + md5 校验 → 顺序启动 → 验证；内建 `--rollback [bin.bak.<时间戳>]` 一键回滚（停服 → 现场保留为 `bin.failed.<时间戳>` → 恢复备份 → md5 抽查 → 启动 → 验证）；节点清单/用户/路径全部 env 或 inventory 参数化，凭据仅支持 SSH key 或 SSHPASS 环境变量，SSH 默认 `StrictHostKeyChecking=accept-new` |
 
 ## 不适用
 
@@ -124,7 +136,7 @@ node_id/chain_id/target_id 编号（1、100、10001、900100001 等）为示例�
 | chain 状态 UNAVAILABLE / 非 UPTODATE | 查 target 盘挂载（`mount`/`df`）与 storage 日志；二进制替换后按 `references/binary-replacement.md` 用 `rotate-lastsrv` 恢复（chain 列表从 `list-chains` 动态获取） |
 | FUSE 挂载失败或写性能只有其它客户端的 1/4 | 按优先级排查：systemd ExecStart 缺 `--cfg` → `filter_list` 网卡名与本机实际不符 → token/fdb.cluster 未推送或权限不对 → `ldd` 缺库 → RDMA link 非 ACTIVE → mgmtd 不可达（`references/fuse-client-expansion.md` §12） |
 | 启动前 `ldd` 显示 not found | 绝不启动服务；补齐缺失库（`libfdb_c.so`、`libhf3fs_api_shared.so` 等）并 `ldconfig` 后复检 |
-| `replace_3fs_bin.sh` 中途 die（停止/启动失败、挂载无法释放等） | 脚本 trap 已打印全部服务状态快照；按 `references/binary-replacement.md` 手工介入，或用备份目录整体回滚后重新定位原因 |
+| `replace_3fs_bin.sh` 中途 die（停止/启动失败、挂载无法释放等） | 脚本 trap 已打印全部服务状态快照；执行 `replace_3fs_bin.sh --rollback`（自动选最新 `bin.bak.*`，现场保留为 `bin.failed.*`）恢复后重新定位原因，或按 `references/binary-replacement.md` 手工介入 |
 | CMake / 编译报错 | 对照 `references/build-notes.md` 的三处必需修改（zstd `BUILD_INTERFACE` 包装、删 `-fcoroutines-ts`、rocksdb `FAIL_ON_WARNINGS=OFF`）与 folly 本地 patch 清单 |
 | ClickHouse / FoundationDB 连接失败 | 核对端口（CK `${CK_PORT}` 默认 9123、FDB 4500）、密码注入方式（`read -s`，不进 history）、`fdb.cluster` 与 public-address 配置 |
 | 节点重启后配置"回退" | 改参后未同步 `${INSTALL_PREFIX}/etc/` 下同名 toml —— 以 `get-config` 实际导出为准修正本地文件（配置管理范式见 `references/cluster-operations.md`） |

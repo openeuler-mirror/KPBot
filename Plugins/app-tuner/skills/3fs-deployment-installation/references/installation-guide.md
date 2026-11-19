@@ -24,8 +24,8 @@ export INSTALL_PREFIX=/opt/3fs             # 线上安装前缀
 export MOUNT_POINT=/3fs/stage              # FUSE 挂载点
 export CK_PORT=9123                        # ClickHouse TCP 端口
 export FDB_PORT=4500                       # FoundationDB 端口
-# ClickHouse 密码不入库，用时交互注入：
-#   read -s -p 'ClickHouse password: ' CK_PASS; export CK_PASS
+# ClickHouse 密码不入库、不落 argv，用时交互注入环境变量（clickhouse-client 自动读取）：
+#   read -rs CLICKHOUSE_PASSWORD; export CLICKHOUSE_PASSWORD
 ```
 
 主机角色名 meta / storage1 / storage2 / client2 为示例角色名；node_id（1、100、10001、10002）、
@@ -198,16 +198,23 @@ storage → admin user/targets/chain table → FUSE 客户端。除特别说明�
 
 ### 5.1 安装 ClickHouse（meta 节点）
 
-1. 获取安装包并安装：
+1. 获取安装包并安装（**禁止 `curl … | sh` 把远程内容直接管道给 root shell，禁止 `-k` 关闭
+   TLS 校验** —— meta 节点保存集群 admin token 与全部配置，被劫持即全集群沦陷）：
 
    ```shell
    cd /home
-   curl -k https://clickhouse.com/ | sh
-   sudo ./clickhouse install
+   # 保留证书校验下载到本地，先人工审阅、比对官方公布的校验和，再执行
+   curl -fSL https://clickhouse.com/ -o clickhouse-install.sh
+   sha256sum clickhouse-install.sh      # 与官方渠道公布值比对，并记录进部署台账
+   vim clickhouse-install.sh            # 人工审阅脚本内容
+   sudo sh clickhouse-install.sh
    ```
 
+   更稳妥的替代：下载固定版本的 RPM 包，`rpm --import` 官方 GPG key 后
+   `rpm -K <包>` 验签通过再安装（验签失败即停止）。
+
 2. 出现 `Allow server to accept connections from the network (default is localhost only), [y/N]` 时选 `y`。
-3. 安装完成时按提示输入密码（即 `${CK_PASS}`，用 `read -s` 注入记忆，**不要写入任何文档/脚本**；
+3. 安装完成时按提示输入密码（即 `${CLICKHOUSE_PASSWORD}`，用 `read -rs` 注入记忆，**不要写入任何文档/脚本**；
    如使用其他密码，后续所有 ClickHouse 配置同步替换）。
 4. 修改默认端口：
 
@@ -222,12 +229,13 @@ storage → admin user/targets/chain table → FUSE 客户端。除特别说明�
    <tcp_port>9123</tcp_port>    <!-- ${CK_PORT} -->
    ```
 
-5. 启动并创建 Metric table：
+5. 启动并创建 Metric table（密码经 `CLICKHOUSE_PASSWORD` 环境变量传递，
+   **不要 `--password "<值>"`** —— 明文会进入进程 argv 被同机用户读取）：
 
    ```shell
    clickhouse start
-   read -s -p 'ClickHouse password: ' CK_PASS; export CK_PASS; printf '\n'
-   clickhouse-client --port ${CK_PORT} --password "${CK_PASS}" -n < ${SRC_ROOT}/3fs/deploy/sql/3fs-monitor.sql
+   read -rs CLICKHOUSE_PASSWORD; export CLICKHOUSE_PASSWORD; printf '\n'
+   clickhouse-client --port ${CK_PORT} -n < ${SRC_ROOT}/3fs/deploy/sql/3fs-monitor.sql
    ```
 
 ### 5.2 更新 FoundationDB 配置（meta 节点）
@@ -279,7 +287,7 @@ storage → admin user/targets/chain table → FUSE 客户端。除特别说明�
    [server.monitor_collector.reporter.clickhouse]
    db = '3fs'
    host = '127.0.0.1'
-   passwd = '<CK_PASS 实际值>'        # 本文件含凭据，建议 chmod 600
+   passwd = '<ClickHouse 密码实际值>'    # 本文件含凭据，必须 chmod 600
    port = '9123'                      # ${CK_PORT}
    user = 'default'
    ```
@@ -618,12 +626,24 @@ storage → admin user/targets/chain table → FUSE 客户端。除特别说明�
 
    将 token 写入文件并收紧权限：
 
-   ```shell
-   vim ${INSTALL_PREFIX}/etc/token.txt        # 粘贴实际 token
-   chmod 600 ${INSTALL_PREFIX}/etc/token.txt
-   ```
+    ```shell
+    vim ${INSTALL_PREFIX}/etc/token.txt        # 粘贴实际 token
+    chmod 600 ${INSTALL_PREFIX}/etc/token.txt
+    ```
 
-2. 安装 data placement Python 依赖：
+    同时把 token 写入 `admin_cli.toml`，让后续管理命令随 `-cfg` 认证、**不经命令行传递**
+    （`--config.user_info.token <值>` 会把 token 落进进程 argv，同机任意用户可经
+    `ps -ef` / `/proc/<pid>/cmdline` 读取，禁止使用）：
+
+    ```shell
+    vim ${INSTALL_PREFIX}/etc/admin_cli.toml   # 增加/修改：
+    #   [user_info]
+    #   token = '<粘贴实际 token>'
+    chmod 600 ${INSTALL_PREFIX}/etc/admin_cli.toml
+    ```
+
+2. 安装 data placement Python 依赖（供应链门禁：requirements 带 hashes 时加
+   `--require-hashes` 强制校验；否则先固定版本，并把下载包的 sha256 记录进部署台账）：
 
    ```shell
    pip3 install -r ${SRC_ROOT}/3fs/deploy/data_placement/requirements.txt
@@ -667,21 +687,19 @@ storage → admin user/targets/chain table → FUSE 客户端。除特别说明�
    ```
 
 5. 创建 storage target（批量执行命令文件；实录环境的 create_target_cmd.txt 中每条 create-target
-   命令均带 `--use-new-chunk-engine` 参数以启用新 chunk engine）：
+   命令均带 `--use-new-chunk-engine` 参数以启用新 chunk engine。token 已在步骤 1 写入
+   `admin_cli.toml` 的 `[user_info]` 段，随 `-cfg` 携带，不落 argv）：
 
    ```shell
-   ${INSTALL_PREFIX}/bin/admin_cli --cfg ${INSTALL_PREFIX}/etc/admin_cli.toml \
-     --config.user_info.token $(<"${INSTALL_PREFIX}/etc/token.txt") < output/create_target_cmd.txt
+   ${INSTALL_PREFIX}/bin/admin_cli --cfg ${INSTALL_PREFIX}/etc/admin_cli.toml < output/create_target_cmd.txt
    ```
 
 6. 上传 chains 与 chain table 到 mgmtd：
 
    ```shell
    ${INSTALL_PREFIX}/bin/admin_cli --cfg ${INSTALL_PREFIX}/etc/admin_cli.toml \
-     --config.user_info.token $(<"${INSTALL_PREFIX}/etc/token.txt") \
      "upload-chains output/generated_chains.csv"
    ${INSTALL_PREFIX}/bin/admin_cli --cfg ${INSTALL_PREFIX}/etc/admin_cli.toml \
-     --config.user_info.token $(<"${INSTALL_PREFIX}/etc/token.txt") \
      "upload-chain-table --desc ${CLUSTER_ID} 1 output/generated_chain_table.csv"
    ```
 
@@ -814,7 +832,7 @@ storage → admin user/targets/chain table → FUSE 客户端。除特别说明�
 | chain 状态统计 | `admin_cli ... "list-chains" \| awk '{print $4}' \| sort \| uniq -c` | 无 UNAVAILABLE/WAITING |
 | FUSE 挂载 | 各客户端 `df -h \| grep ${MOUNT_POINT}` | hf3fs.${CLUSTER_ID} 已挂载，容量符合副本核算 |
 | 端口监听 | meta `ss -tuln` | ${FDB_PORT}、8000、8001、9000、9001、10000、${CK_PORT} 按规划监听 |
-| 监控入库 | `clickhouse-client --port ${CK_PORT} --password "${CK_PASS}" --database 3fs --query "SHOW TABLES"` | 3fs-monitor.sql 建表成功 |
+| 监控入库 | `clickhouse-client --port ${CK_PORT} --database 3fs --query "SHOW TABLES"`（密码经 `CLICKHOUSE_PASSWORD` 环境变量注入，不落 argv） | 3fs-monitor.sql 建表成功 |
 | 读写冒烟 | `mkdir ${MOUNT_POINT}/<测试目录>` 后 dd/fio 小流量读写 | 无 IO 错误 |
 
 ## 7. 逐节点必改文件汇总表
