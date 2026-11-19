@@ -12,8 +12,10 @@
 |---|---|
 | [`sra-dag-tuning`](sra-dag-tuning/SKILL.md) | 搜推 DAG 全栈优化方法总表：业务/DAG（1.1–1.24）→ 基础库 → 编译器 → OS → 芯片/BIOS → 通用，共 6 层 60 条方法，每条按 使用场景 / 使能方法 / 预期收益 组织；自带 `cases/recall-topk` 评测容器 |
 
-后续计划（尚未落地，另行 PR）：向量检索层（Faiss / DiskANN / VSAG / 通用 CP0–CP7）独立成 `skills/vectordb/`，
-embedding 侧 skill（`parallel-unique-pytorch`、`kunpeng-llama-cpp-tuning`）归入本域。
+**场景收益**（原仓库首页场景表条目）：优化召回、粗排、精排和重排中的关键路径并行、批量打分、Top-K、特征缓存与锁竞争；可结合 **app-tuner** 完成绑核、系统配置和性能库调优。
+
+向量检索层已独立成 [`skills/vectordb/`](../vectordb/DOMAIN.md)（Faiss / DiskANN / VSAG / 通用 CP0–CP7 归该域），
+本域只保留业务链路层；embedding 侧 skill（`parallel-unique-pytorch`、`kunpeng-llama-cpp-tuning`）待迁入。
 
 ## 成员登记纪律
 
