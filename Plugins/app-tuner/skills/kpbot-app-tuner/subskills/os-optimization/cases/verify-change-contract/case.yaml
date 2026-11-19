@@ -1,0 +1,22 @@
+# tier A —— verify_os_change.sh A/B 验证契约（4 类基准指标提取 + 三态阈值决策 + 回滚执行）
+# 运行（技能根目录）: bash cases/verify-change-contract/run.sh
+name: verify-change-contract
+skill: os-optimization
+tier: A
+entrypoint: ["bash", "cases/verify-change-contract/run.sh"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 12

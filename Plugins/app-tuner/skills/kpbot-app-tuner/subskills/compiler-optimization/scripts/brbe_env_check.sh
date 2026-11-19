@@ -39,7 +39,9 @@ fi
 
 run_t() {
   if [[ -n "${CONTAINER}" ]]; then
-    docker exec "${CONTAINER}" bash -c "$1" 2>/dev/null
+    # KPBOT_SOURCE_CANN 是宿主侧策略开关：docker exec 默认不继承宿主环境，
+    # 必须显式传入容器探测命令（否则 --container 模式下深度探测永远读不到开关）
+    docker exec -e KPBOT_SOURCE_CANN="${KPBOT_SOURCE_CANN:-0}" "${CONTAINER}" bash -c "$1" 2>/dev/null
   else
     bash -c "$1" 2>/dev/null
   fi
@@ -73,9 +75,11 @@ fi
 
 # ── 2. 昇腾 NPU（hard，证据驱动） ──
 # 注意：lspci 的 "Processing accelerators" 是通用 PCI 类别，会命中 HiSilicon ZIP 压缩引擎（非 NPU），不能作判据。
-# 可靠判据：存在 /dev/davinci* 设备节点，或 npu-smi 可见（必要时 source CANN set_env）。ZIP 引擎不会产生 /dev/davinci*。
+# 可靠判据：存在 /dev/davinci* 设备节点，或 npu-smi 在 PATH 中可见。ZIP 引擎不会产生 /dev/davinci*。
+# 深度探测（source CANN set_env 后再找 npu-smi）仅 KPBOT_SOURCE_CANN=1 时启用（默认关闭）：
+#   绝对路径 source 无法被 PATH mock 拦截，默认关闭保证检测（及其 UT）在任何宿主上结果一致。
 NPU_DEVS=$(run_t 'ls /dev/davinci[0-9]* 2>/dev/null | tr "\n" " "')
-NPU_SMI=$(run_t 'command -v npu-smi 2>/dev/null || { for e in /usr/local/Ascend/ascend-toolkit/set_env.sh /usr/local/Ascend/*/set_env.sh /home/*/cann/set_env.sh; do [ -f "$e" ] && source "$e" >/dev/null 2>&1; done; command -v npu-smi 2>/dev/null; }')
+NPU_SMI=$(run_t 'command -v npu-smi 2>/dev/null || { for e in /usr/local/Ascend/ascend-toolkit/set_env.sh /usr/local/Ascend/*/set_env.sh /home/*/cann/set_env.sh; do [ "${KPBOT_SOURCE_CANN:-0}" = "1" ] && [ -f "$e" ] && source "$e" >/dev/null 2>&1; done; command -v npu-smi 2>/dev/null; }')
 if [[ -n "${NPU_DEVS}" || -n "${NPU_SMI}" ]]; then
   add_check npu pass "davinci=[${NPU_DEVS:-none}] npu-smi=${NPU_SMI:-none}" 1
 else

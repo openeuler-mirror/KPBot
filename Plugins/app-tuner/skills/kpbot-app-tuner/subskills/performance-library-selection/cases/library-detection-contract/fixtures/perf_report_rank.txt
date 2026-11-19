@@ -1,0 +1,6 @@
+               __libc_start_main
+               main
+               |--98.00%--hot_a
+                --2.00%--cold
+   100.00%     0.00%  hotspot_demo  libc.so.6          [.] __libc_start_main
+            ---__libc_start_main

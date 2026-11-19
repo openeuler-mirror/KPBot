@@ -35,3 +35,4 @@ Plugins/app-tuner/skills/*/cases/*/results/
 # 临时目录与临时文件（mktemp / 图表产物，防止误提交）
 /tmp*/
 *.tmp
+Plugins/app-tuner/skills/*/subskills/*/cases/*/results/
