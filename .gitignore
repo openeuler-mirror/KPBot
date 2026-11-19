@@ -12,6 +12,10 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# KPBot 本地安装产物 / 运行现场（项目级 skills、host 快照、runs）
+.kpbot/
+.opencode/
+
 # Editor
 *.swp
 *.swo
