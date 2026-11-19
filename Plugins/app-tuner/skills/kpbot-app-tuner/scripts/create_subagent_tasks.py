@@ -19,6 +19,7 @@ SUBSKILL_CATALOG = {
     "io-memory-network-bottleneck-analysis": "candidate-bottleneck-prescreen",
     "database-workload-analysis": "candidate-database-workload",
     "vllm-ascend-profiling": "candidate-vllm-ascend-profiling",
+    "ceph-optimization": "candidate-ceph",
 }
 
 # vllm-ascend-profiling 的 Stage-1 环境基线在派发指令中显式下发，
@@ -193,6 +194,11 @@ NETWORK_TOKENS = (
     "ena_", "virtio_net", "irq",
 )
 
+CEPH_TOKENS = (
+    "ceph", "osd", "pg_", "bluestore", "bluefs", "rados", "rbd", "cephfs",
+    "mon_", "mgr_", "pgmap", "objecter",
+)
+
 
 def is_network_hotspot(item):
     category = str(item.get("category", item.get("domain", ""))).lower()
@@ -203,6 +209,19 @@ def is_network_hotspot(item):
         for key in ("symbol", "function", "name", "dso", "module")
     )
     return any(token in haystack for token in NETWORK_TOKENS)
+
+
+def is_ceph_hotspot(item):
+    category = str(item.get("category", item.get("domain", ""))).lower()
+    if category in {"ceph", "storage", "ceph_io"}:
+        return True
+    haystack = " ".join(
+        str(item.get(key, "")).lower()
+        for key in ("symbol", "function", "name", "dso", "module")
+    )
+    return any(token in haystack for token in CEPH_TOKENS)
+
+
 
 
 def add_candidate(candidates, subskill_name, priority, reason, source_signal, evidence_path):
@@ -452,6 +471,22 @@ def evidence_driven_candidates(summary, summary_path, args):
             "network_hotspot_high",
             summary_path,
         )
+
+    ceph_percent = sum(
+        as_float(item.get("percent", item.get("samples_pct", item.get("overhead_pct"))))
+        for item in function_rank
+        if is_ceph_hotspot(item)
+    )
+    if ceph_percent >= args.ceph_hotspot_threshold or detected.get("ceph_storage_hotspot"):
+        add_candidate(
+            candidates,
+            "ceph-optimization",
+            "high",
+            f"ceph/osd-related hotspot total reached {ceph_percent:.2f}%",
+            "ceph_storage_hotspot",
+            summary_path,
+        )
+
 
     icache_miss_pct = as_float(topdown.get("l1_icache_miss_pct", topdown.get("icache_miss_pct")))
     icache_high = bool(topdown.get("icache_miss_high") or topdown.get("l1_icache_miss_high") or detected.get("l1_icache_miss_high"))
@@ -708,6 +743,7 @@ def main():
     parser.add_argument("--include-coverage-skills", action=argparse.BooleanOptionalAction, default=True, help="Append main optimization skills that were not evidence candidates")
     parser.add_argument("--third-party-hotspot-threshold", type=float, default=5.0, help="Percent threshold for high hotspot third-party library")
     parser.add_argument("--network-hotspot-threshold", type=float, default=3.0, help="Percent threshold for network-related hotspot functions")
+    parser.add_argument("--ceph-hotspot-threshold", type=float, default=3.0, help="Percent threshold for ceph/osd-related hotspot functions")
     parser.add_argument("--icache-miss-threshold", type=float, default=5.0, help="Percent threshold for L1 icache miss")
     parser.add_argument("--l3-miss-threshold", type=float, default=5.0, help="Percent threshold for L3/LLC cache miss")
     parser.add_argument("--context-switch-threshold", type=float, default=1000.0, help="Context-switches per second threshold")

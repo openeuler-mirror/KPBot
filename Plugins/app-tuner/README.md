@@ -12,6 +12,7 @@ app-tuner 提供 1 个主编排 skill(`kpbot-app-tuner`)及其内部资源:
 - **分析型子 skill**(subskills,自研,13 个): BIOS/OS/网络/CPU 亲和性/编译/性能库/应用配置/加速卡/硬件升级/瓶颈预筛/数据库专项/vLLM-Ascend profiling/其他兜底
 - **质量保障**: 对抗性审查、current_run 门控、subagent 独立上下文执行
 - **AgentENV 专项技能包**: `skills/kptools-agentenv-tuning/` — 独立入口及按需安装的专项 Skill，共享环境采集和验证约定。
+- **验证类 skill**: `skills/model-precision-analysis/` — 模型优化后的精度回归验证，输出准确率对比、回归题定位与达标判定。
 
 ## 安装
 
@@ -77,6 +78,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | [`vllm-fastokens-segment-cache-migration`](skills/vllm-fastokens-segment-cache-migration/SKILL.md) | 评估 vLLM 切换到官方 fastokens 并启用段缓存的可行性，通过基线组和段缓存开启组验证 token 一致性、并发稳定性、分词性能、内存与回退准备 |
 
+### 验证类 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`model-precision-analysis`](skills/model-precision-analysis/SKILL.md) | 优化后精度回归验证：读取精度评测工具 `opendatas/output` 下的合并结果，输出准确率对比、回归/改善题号与达标结论，精度不达标即阻止按性能放行 |
+
 ### 分析型子 skill(subskills,自研)
 
 | 技能 | 描述 |
@@ -98,11 +105,13 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 
 | 技能 | 描述 |
 |------|------|
+| [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
 | `kptools-jvmjit` | JVM JIT 符号化 perf 采样分析(libperf-jvmti + perf inject --jit：方法级热点、JIT 代码指令级注解导出 annotate.txt 源码+汇编+逐指令周期占比、容器内采集与工具注入 toolpack)，含 dump 刷盘语义与 [JIT] 残留处理纪律 |
 | `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键基准(计划哈希确认、只读预检、NUMA/TAP/代理准备、create/density/Snapshot/dirty_page/Rollback/Clone/Pause-Resume 全矩阵、差集清理与证据归档) |
+| [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
 
 ### 场景优化类 skill
 
@@ -110,6 +119,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | `nginx-optimization` | Nginx 场景专属调优(http/https × 长/短连接四场景、L1 环境/L2 配置/L3 鲲鹏加速分层、IRQ-worker 布局、KAL OpenSSL/KAE 加速、火焰图热点对策与压测验证纪律)，含 evals 评测集与 agent 级 with/without A/B 用例集(场景决策、调优循环纪律) |
 | [`kptools-dpdk-tuning`](skills/kptools-dpdk-tuning/SKILL.md) | DPDK 应用性能调优(诊断+顾问双模式) — 现象驱动的分层排查与硬件+场景驱动的分层配置建议，覆盖 BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延，不修改业务源码；需要改码的优化移交 code-optimizer 的 `dpdk-optimization` |
+
+### 独立诊断 skill
+
+| 技能 | 描述 |
+|------|------|
+| `rocksdb-perf-diagnostics` | RocksDB 性能诊断与优化 — 用 LOG / properties / Statistics / perf_context / EventListener 定位写停顿、compaction 积压、读写/空间放大,并在授权下执行单变量复测 |
 
 ## 目录结构
 
@@ -161,6 +176,7 @@ app-tuner/
 | AgentENV 沙箱 | "检查 AgentENV 的 ublk 或并发恢复性能" | `kptools-agentenv-tuning` |
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
+| RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
 
 ### 优化工作流
 

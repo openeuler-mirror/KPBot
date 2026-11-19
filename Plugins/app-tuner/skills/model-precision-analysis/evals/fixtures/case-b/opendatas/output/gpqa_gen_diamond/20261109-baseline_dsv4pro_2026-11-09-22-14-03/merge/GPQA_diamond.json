@@ -1,0 +1,38 @@
+{
+ "0": {
+  "origin_prompt": "q0",
+  "prediction": "Option A is about 'arrival time'. Option C is 'throughput'.\\nANSWER: B",
+  "gold": "B",
+  "exec_times": 1
+ },
+ "1": {
+  "origin_prompt": "q1",
+  "prediction": "Let me compare. A) wrong, B) plausible, D) also wrong.\\nANSWER: C",
+  "gold": "C",
+  "exec_times": 1
+ },
+ "2": {
+  "origin_prompt": "q2",
+  "prediction": "The conservation law applies.\\nANSWER: A",
+  "gold": "A",
+  "exec_times": 1
+ },
+ "3": {
+  "origin_prompt": "q3",
+  "prediction": "Reasoning ...\\nANSWER: D",
+  "gold": "D",
+  "exec_times": 1
+ },
+ "4": {
+  "origin_prompt": "q4",
+  "prediction": "A is plausible but not exact.\\nANSWER: A",
+  "gold": "B",
+  "exec_times": 1
+ },
+ "5": {
+  "origin_prompt": "q5",
+  "prediction": "Both B and C are tempting.\\nANSWER: C",
+  "gold": "C",
+  "exec_times": 1
+ }
+}

@@ -1,0 +1,47 @@
+# 用例：tier A —— ceph-optimization skill 契约与知识库事实单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 引用指南 9.3.3/9.3.4）
+#                  红线不变量（只读体检、重启窗口 requires_restart_window、逐节点契约、
+#                  结论三态 recommended/already_tuned/blocked）
+#   注册完整性     主编排 Dynamic Skill Catalog 行 + Step 7 候选规则、
+#                  candidate-skill-list.md Ceph 信号行、knowledge-technique-routing.md
+#                  两处路由、CHANGELOG 条目
+#   引用完整性     references/ 两文件存在
+#   知识库事实     ceph-tuning-kb.json：source 引用 9.3.3/9.3.4、os_tuning 7 项及建议值
+#                  （swappiness 0/MTU 9000/pid_max 4194303/read_ahead 8192KB/调度器/nr_requests）、
+#                  ceph_conf 三节段、global/client/osd 全量建议值（min_size 1、PG 阈值 3000/300000、
+#                  throttle 2097152000、osd_max_write_size 256、bluestore 比例 0.8/0.2 等）、
+#                  debug_* 清单 59 项、PG 公式与 balancer upmap、osd_numa_node
+#   playbook SOP   ceph.conf 备份/重启命令、balancer 命令、blockdev/调度器命令、debug 59 项
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/kpbot-app-tuner/subskills/ceph-optimization/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/静态，python3+bash 标准库，无真机依赖）。
+
+name: skill-integrity
+skill: ceph-optimization
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: integrity_ran
+    op: gte
+    expect: 20
+  - type: json_field
+    file: results/result.json
+    field: integrity_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0

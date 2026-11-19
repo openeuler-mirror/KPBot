@@ -10,6 +10,7 @@
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
 - **2026/11/16** — **app-tuner** 新增 `kptools-jvmjit` SKILL，覆盖 JVM 进程 perf 采样符号化分析（libperf-jvmti + perf inject --jit）：方法级热点、JIT 代码指令级注解导出（源码+汇编+逐指令周期占比）、容器内采集（权限检测 + 宿主机 perf 工具注入），含 dump 刷盘语义与 [JIT] 残留处理纪律，与外部工具 arthas（免重启方法级交互）/ kptools-devkit java-perf（火焰图全景）分层互补。（[!143](https://gitcode.com/openeuler/KPBot/pull/143)）
+- **2026/11/16** — **app-tuner** 新增 `model-precision-analysis` SKILL，覆盖模型优化后的精度回归验证：读取精度评测工具 `opendatas/output` 合并结果，按数值/选项字母/文本归一化抽取答案（单位、千分位、`\text{}`、截断识别），输出准确率对比、“对→错”回归题定位与达标判定，存在回归即以退出码 1 作为精度门禁（`--fail-on-regression` 为兼容别名），并接入加速卡/应用配置 skill 的 `validation_plan`。
 - **2026/11/06** — **code-optimizer** 新增 `dpdk-optimization` SKILL，覆盖 DPDK 数据面热路径代码优化：worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类判定）与分层代码杠杆库（热路径纪律、双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用），接入统一流水线场景路由，配套 app-tuner 的配置层调优。
 - **2026/11/06** — **app-tuner** 新增 `kptools-dpdk-tuning` SKILL，覆盖 DPDK 应用性能调优：现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延），面向鲲鹏 920 + hns3/Hi1822 主场景，不修改业务源码。
 - **2026/11/05** — **app-tuner** 新增 `nginx-optimization` SKILL，覆盖鲲鹏平台 nginx 场景的 L1 环境层（IRQ 绑核/多队列）、L2 配置层（http/https × 长/短连接四场景模板）、L3 加速层（KAL OpenSSL/KAE/tcmalloc）分层调优，含火焰图热点对策与压测验证纪律。
@@ -238,6 +239,7 @@ code-optimizer 在 Claude Code 中安装 **78 个** skill，在 OpenCode 中安�
 - `analyze-caller-context` — 调用上下文 14 维度分析
 - `analyze-testcase` — 测试用例性能画像分析
 - `arm-spe-analysis` — ARM SPE 采样分析
+- `gcov-coverage-analysis` — gcov/lcov 覆盖率驱动的性能优化点识别（热点行/冷路径/循环画像/函数调用计数）
 - `register-pressure-analysis` — 寄存器压力诊断
 
 **优化类**

@@ -95,6 +95,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | `analyze-caller-context` | 调用上下文分析 |
 | `analyze-testcase` | 测试用例分析 |
 | `arm-spe-analysis` | ARM SPE (Statistical Profiling Extension) 分析 |
+| `gcov-coverage-analysis` | gcov/lcov 覆盖率驱动的性能优化点识别（热点行/冷路径/循环画像/函数调用计数） |
 | `register-pressure-analysis` | 寄存器压力分析 |
 | `hot-library-version-gap` | 热点库版本差距核对(进程实际加载库与版本 vs 已知含优化的版本，只读诊断) |
 
@@ -169,6 +170,13 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 | 技能 | 描述 |
 |------|------|
 | `vector-db-optimization-migration` | 向量数据库/检索库跨版本优化迁移（引擎中立流程、Faiss/DiskANN 按需路由、资产分型、分层 patch、G0–G5 等价性门禁、同窗 ABBA） |
+
+### 媒体库优化 (Media)
+| 技能 | 描述 |
+|------|------|
+| [`multimedia-code-optimizer`](skills/multimedia-code-optimizer/SKILL.md) | 面向 Linux AArch64 的媒体计算密集型代码优化，结合领域优化知识与微架构性能建模，改进关键代码片段的实现，提供统一成本评估、独立正确性验证与代码集成能力。 |
+
+支持指定函数、循环或局部代码片段优化，也可依据已有 Top-down／perf 报告确定优化目标。当前适配 Claude Code，可直接调用，或从 `kpbot-code-optimizer` 的“媒体库优化”进入。
 
 ### Pipeline 类 (Workflow)
 | 技能 | 描述 |

@@ -207,6 +207,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
     - **`performance-library-selection` 先于 `os-optimization`**：当两者同时进入候选列表（evidence_candidate 或 coverage）时，`performance-library-selection` 必须排在 `os-optimization` 之前。库替换会改变 malloc 路径，是 OS 大页/GLIBC_TUNABLES 调优的前置依赖；`scripts/dynamic_workflow_manager.js set-candidates` 会自动归一化该顺序，`references/candidate-skill-list.md` 执行顺序节也强制该规则。
     - 热点 DSO/so 中存在高占比第三方库时，把 `performance-library-selection` 加入候选列表。
     - 网络相关热点函数占比高时，把 `network-optimization` 加入候选列表。
+    - 场景为 Ceph 存储集群（RBD/RGW/CephFS）或瓶颈证据落在 OSD/存储集群路径（OSD 进程 CPU 高、PG 分布不均、存储 IO 瓶颈）时，把 `ceph-optimization` 加入候选列表。
     - topdown 或 perf stat 显示 L1 icache miss 高时，把 `compiler-optimization` 加入候选列表，重点分析 PGO/LTO。
     - **`compiler-optimization` 排最后**：当 `compiler-optimization` 进入候选列表（evidence_candidate 或 coverage）时，它必须排在候选列表**最末位**，晚于所有其他候选 skill。原因：编译级改造（PGO/LTO、重编译、融合策略）会重建二进制，干扰后续其他 skill 的现场 A/B 收益归因，需在其他运行时类手段（应用配置、性能库、加速卡、OS）验证完毕后再执行。`scripts/dynamic_workflow_manager.js set-candidates` 会归一化该顺序，`references/candidate-skill-list.md` 执行顺序节也强制该规则；用户显式推翻该默认时以用户指令为准并在 trace 记录。
     - 线程切换高且 L3/LLC cache miss 高时，把 `cpu-affinity-optimization` 加入候选列表（当证据触发时，理由为证据命中；未触发时，理由为强制基线检查）。
@@ -319,7 +320,9 @@ node scripts/dynamic_workflow_manager.js record-execution \
 | Other 优化 skill | `subskills/other-optimization/SKILL.md` |
 | 非 CPU 瓶颈预筛 | `subskills/io-memory-network-bottleneck-analysis/SKILL.md` |
 | 数据库专项 | `subskills/database-workload-analysis/SKILL.md`，由应用配置 skill 按需引用 |
+| Ceph 存储调优 skill | `subskills/ceph-optimization/SKILL.md` |
 | vLLM Ascend NPU profiling | `subskills/vllm-ascend-profiling/SKILL.md`，由加速卡 skill 按需引用（NPU+vLLM 场景 Stage-1 环境诊断/TTFT profiling 采集） |
+| 模型精度验证 | `../model-precision-analysis/SKILL.md`，由加速卡/应用配置 skill 在量化、精度策略、图或算子变更后按需引用；不进入候选列表、不修改环境，只输出精度回归结论 |
 
 ## Framework Ownership Boundary
 

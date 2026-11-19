@@ -1,0 +1,97 @@
+{
+  "skill_name": "rocksdb-perf-diagnostics",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "这是某个 RocksDB 实例的 LOG 片段:evals/fixtures/sample_LOG.txt。请判断它是否存在写停顿、主要原因是什么、compaction 是否在影响前台读写,并给出优化方向和下一步要采集的指标。不要对数据库做任何破坏性操作。",
+      "expected_output": "判定存在写停顿(既有 Stalling 也有 Stopping),主要触发原因是 L0 文件数(日志中 20/24/28/36/38 level-0 files),次要证据是 immutable memtable 与 pending compaction bytes;识别 compaction 写放大/积压(Compaction Stats 的 L1 Score 24.00 / W-Amp 1.5、Interval compaction 170.7 MB/s 写、pending bytes 64GiB);正确解释 Stalls(count) 字段(level0_slowdown* 是 slowdown,level0_numfiles* 与 memtable_compaction 是 stop);给出与 L0/compaction 直接相关的参数方向;提出同一负载复测并对比 num-files-at-level0 / estimate-pending-compaction-bytes / stall 计数。",
+      "files": ["evals/fixtures/sample_LOG.txt"],
+      "expectations": [
+        "明确判定存在写停顿(write stall),并区分了 Stalling(限速)与 Stopping(停写)两种状态",
+        "指出 L0 文件数(level-0 files)是主要停写原因,并引用了日志中的具体数值(如 20、36、38)",
+        "指出 compaction 积压或写放大证据(如 pending compaction bytes、Compaction Stats 的 Score / W-Amp、Interval compaction 吞吐)",
+        "正确解释 Stalls(count):把 level0_slowdown 与 level0_slowdown_with_compaction 归为 slowdown,把 level0_numfiles、level0_numfiles_with_compaction、memtable_compaction 归为 stop(不把 slowdown 计成硬停)",
+        "至少给出一个与 L0 / compaction 直接相关的参数方向(如 max_background_jobs、write_buffer_size、level0_*_trigger、max_bytes_for_level_base)",
+        "对日志中未观测到的配置(例如 max_bytes_for_level_multiplier 的具体取值)不下确定性结论,或明确标注需要查 OPTIONS 才能确认",
+        "提出同一负载下的复测/验证方法,并给出可对比的指标(num-files-at-level0、estimate-pending-compaction-bytes、stall 计数等)",
+        "没有建议未经用户授权的破坏性操作(如 ldb compact、删除/移除 SST、直接写库)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我们的服务是通过 Java(JNI) 使用 RocksDB 的,不是 C++ 直连。最近写 P99 偏高、偶发写停顿。请给出:1) 可以用哪些 RocksDB 观测手段;2) 每个手段在 Java 侧对应的 API;3) 哪些 C++ 手段在 Java 不可用、应如何替代;4) 下一步采集计划。不要对数据库做任何破坏性操作。",
+      "expected_output": "明确 Java(JNI) 没有 perf_context / PerfLevel 绑定,不能直接拿单次操作的分段耗时;给出 Java 侧可用的 Statistics(StatsLevel / TickerType / HistogramType / getTickerCount / getHistogramData,或 StatisticsCollector)、getProperty/getLongProperty/getMapProperty、EventListener/AbstractEventListener、ColumnFamilyMetaData、Env.getThreadList、setDBOptions/setOptions;说明 LOG 分析与语言无关;给出针对写停顿的下一步采集项。",
+      "files": [],
+      "expectations": [
+        "明确说明 Java(JNI) 没有 perf_context / PerfLevel 绑定(或等价地指出无法在 Java 侧读取 PerfContext),并给出替代方案",
+        "给出 Java 侧 Statistics 的用法,至少覆盖 StatsLevel、TickerType 或 HistogramType、getTickerCount 或 getHistogramData 中的两项",
+        "给出 Java 读取 DB properties 的 API(getProperty / getLongProperty / getMapProperty)",
+        "提到 Java 的 EventListener 或 AbstractEventListener,并指出可用于 stall 或 compaction 回调",
+        "明确指出 Java 有 Env.getThreadList() / ThreadStatus(或等价 API),不得声称其不可用",
+        "提到 Java 的 ColumnFamilyMetaData、setDBOptions / setOptions 中的至少一项",
+        "说明 LOG 日志分析不依赖编程语言",
+        "没有臆造 Java 中不存在的 API(例如 PerfLevel 开关、StatsLevel.EXCEPT_ALL)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "用 evals/fixtures/mock_db_bench.sh 做一次真实的调优循环:先跑 baseline;然后严格按 skill 的方法论,只修改一个参数并复测;最后给出 before/after 对比表和保留/回退结论,并把过程与结果写到 /tmp/opencode/eval3/report.md。不要一次改多个参数。",
+      "expected_output": "先执行 baseline 并记录 stall_count / p99_ms / throughput_ops;只改一个参数(例如 max_background_jobs 或 write_buffer_size)后复测;给出 before/after 数值对比;给出保留或回退的结论;报告包含基本信息、观测、结论、变更与验证等结构化章节。",
+      "files": ["evals/fixtures/mock_db_bench.sh"],
+      "expectations": [
+        "先执行 baseline 并记录了 stall_count / p99_ms / throughput_ops 中的至少两项",
+        "baseline 与复测之间只改变了一个参数(不是同时改多个)",
+        "给出了 before/after 的数值对比(而非只说变好了)",
+        "给出了明确的保留或回退结论,并说明依据",
+        "报告包含结构化章节(如基本信息 / 观测 / 结论 / 变更 / 验证)",
+        "没有在未授权情况下对真实数据库执行破坏性操作"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "我们的 RocksDB 是读密集型,key 有 8 字节公共前缀,点查 P99 高。请给出可以尝试的两个优化手段、确切的配置参数与配置写法、对已有 SST/memtable 是否生效、代价与验证指标。不要执行破坏性操作。",
+      "expected_output": "1) SST 用 prefix hash index:prefix_extractor=fixed:8/capped:8 + block_based_table_factory={index_type=kHashSearch;};必须设置 prefix_extractor;只对新 SST 生效,存量需 compaction 重写;读侧用 prefix_same_as_start,避免 total_order_seek。2) memtable prefix bloom:memtable_prefix_bloom_size_ratio>0(<=0.25),可选 memtable_whole_key_filtering=true;只对新 memtable 生效;Java 6.26 未暴露 whole-key。代价:内存/CPU/index 变大;验证:DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS、sst_dump 的 prefix_extractor_name。",
+      "files": [],
+      "expectations": [
+        "提到 prefix_extractor,并给出 fixed:8 或 capped:8 的具体写法",
+        "提到 block_based_table_factory={index_type=kHashSearch;} 或 index_type=kHashSearch",
+        "提到 memtable_prefix_bloom_size_ratio > 0 且不超过 0.25",
+        "提到 memtable_whole_key_filtering(可选),或说明 Java 6.26 未暴露该 memtable whole-key API",
+        "说明 kHashSearch 只对新写入的 SST 生效,已有 SST 需要 compaction/重写",
+        "说明 memtable prefix bloom 只对新 memtable 生效,需要新 memtable 或 flush/重启",
+        "提到读侧需配合前缀 seek(prefix_same_as_start,避免 total_order_seek)",
+        "给出至少两项验证指标(DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS、sst_dump 的 prefix_extractor_name)",
+        "没有建议未经授权的破坏性操作"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "我们的 RocksDB 读密集型,key 有 8 字节公共前缀,点查 P99 高。请按 skill 的流程给出:1) 已知手段覆盖表(每个相关手段是否适用、证据、决策与理由);2) 选中手段的预期收益、代价与验证指标;3) before/after 收益验证方案与保留/回退判据。不要执行破坏性操作。",
+      "expected_output": "先列出 playbook 中与读路径相关的至少两个手段(SST prefix hash index、memtable prefix bloom),逐条给出适用性、证据、决策与跳过理由;再给出选中手段的预期收益、代价与验证指标;最后给出 before/after 验证方案(同指标、同负载、重复/方差)以及'无收益或无法验证就回退'的判据。",
+      "files": [],
+      "expectations": [
+        "列出至少两个与读路径相关的已知手段(SST prefix hash index、memtable prefix bloom)",
+        "对每个手段给出是否适用,并引用具体证据(如 DB_GET P99、SST_READ_MICROS、MEMTABLE_HIT/MISS)",
+        "对跳过的手段给出理由(条件不满足 / 风险过高 / 已有更强手段 / 需授权)",
+        "给出选中手段的预期收益与代价",
+        "给出 before/after 验证方案,包含同一指标、同一负载、重复次数或方差",
+        "明确'收益不超过噪声或无法验证就回退'的判据",
+        "没有建议未经授权的破坏性操作"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "当前环境是 aarch64,RocksDB 6.26.1。我们有一个 bloom filter SVE2 向量化补丁,要求 256-bit SVE。CPU 有 sve2,但 /proc/sys/abi/sve_default_vector_length 显示 16(128-bit)。请按 skill 的流程判断是否应用该补丁:给出环境检查项、结论、如果应用如何验证正确性和收益。不要执行破坏性操作。",
+      "expected_output": "先按 skill 做环境/架构前置检查(uname -m、/proc/cpuinfo 的 sve2、SVE 向量长度、编译器 flags、RocksDB 版本、git apply --check,可调用 scripts/check_arch_sve2.sh);识别 128-bit SVE 不满足补丁的 256-bit 要求(svcntw()==8),结论为不应用/跳过并记录证据。若强行应用,bloom_impl_test 的 SVE2PathRuntimePrerequisites 会 skip,运行时回退,不能声称有收益。若环境满足,先跑 bloom_impl_test 验证正确性,再做同负载 before/after(DB_GET P99、SST_READ_MICROS、bloom 计数、吞吐)。",
+      "files": [],
+      "expectations": [
+        "提到或运行 check_arch_sve2.sh / 等价检查,覆盖架构、sve2、SVE 向量长度、编译器、RocksDB 版本、补丁可应用性",
+        "识别 128-bit SVE 不满足补丁的 256-bit 要求(svcntw()==8),结论为不应用/跳过",
+        "说明强行应用时 SVE2PathRuntimePrerequisites 会 skip、运行时回退、没有收益",
+        "给出正确性验证方法(bloom_impl_test 及其覆盖点)",
+        "给出性能验证指标(DB_GET P99、SST_READ_MICROS、bloom 计数、吞吐)和 before/after 方法",
+        "没有建议未经授权的破坏性操作"
+      ]
+    }
+  ]
+}

@@ -55,3 +55,18 @@ description: 分析 GPU、NPU 或其他计算卡相关瓶颈，检查设备利�
 缺席条件：无 vLLM 证据且 TTFT 无信息时，不引用；仅 GPU 场景不引用（本映射针对 Ascend NPU）。
 
 执行顺序：先按本 skill 主 workflow 完成 GPU/NPU 通用瓶颈判断，再对命中触发条件的 vLLM 场景追加引用执行；引用产物（Stage-1 环境诊断结论、TTFT 计时/trace 证据）必须带证据路径回填 `accelerator_findings`。
+
+## 模型精度验证引用（model-precision-analysis）
+
+当本轮变更涉及**模型精度路径**（量化 INT8/FP8、混合精度、attention/算子替换、图融合、torch → torch_npu 适配）时，
+本 skill 必须在 `validation_plan` 中追加精度验证，并引用 `../../../model-precision-analysis/SKILL.md` 执行其完整流程：
+用同一批题目跑基线与优化版推理结果，对比抽取后的答案，确认没有“优化前对、优化后错”的回归题。
+
+触发条件（任一命中即引用）：
+
+1. 候选动作改变数值精度（量化位宽、dtype、混合精度策略、算子/库替换）。
+2. 现场已有精度评测工具产物（`opendatas/output/<dataset>/<run_dir>/merge/*.json`）或用户提到精度验证。
+3. 优化后吞吐提升但输出质量存疑，需要给出“能否按性能放行”的结论。
+
+约束：精度未达标（回归数 > 0）时，本 skill 的 `validation_plan` 必须标记该动作为 `rejected` 或要求改用更保守的精度策略，
+不得仅以设备利用率/吞吐提升作为 `accepted` 依据；精度结论与证据路径回填 `accelerator_findings`。

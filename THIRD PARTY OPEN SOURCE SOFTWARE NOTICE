@@ -34,7 +34,33 @@ See the Mulan PSL v2 for more details.
 
 Third Party Open Source Software
 
+Bundled component: prompt capture collection and analysis implementation
+Location: Plugins/app-tuner/skills/kptools-prompt-capture/
+Source: prompt_capture collection code, offline analysis tools and report assets;
+        import checksums and adaptation details are recorded in references/.
+License: MulanPSL-2.0 (see the repository LICENSE).
+The contributor has confirmed ownership or authorization to distribute the
+imported collection code, analysis tools, CSS and JavaScript under MulanPSL-2.0.
+The vllm-ascend business proxy itself is not bundled by this skill.
+
 The external tools and services referenced by KPBot skills (such as openwiki,
 profiling tools and platform CLIs) are invoked at runtime and are not bundled
 in this repository. Their copyrights and licenses belong to their respective
 owners.
+
+The DSH adapter depends on the npm package "yaml" (https://eemeli.org/yaml/),
+licensed under ISC. It is installed as a dependency rather than vendored here.
+
+Copyright Eemeli Aro <eemeli@gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.

@@ -1,0 +1,50 @@
+{
+ "0": {
+  "origin_prompt": "q0",
+  "prediction": "The total income is \\boxed{84} dollars.",
+  "gold": "84",
+  "exec_times": 1
+ },
+ "1": {
+  "origin_prompt": "q1",
+  "prediction": "Summing the series, \\boxed{1000}.",
+  "gold": "1000",
+  "exec_times": 1
+ },
+ "2": {
+  "origin_prompt": "q2",
+  "prediction": "It takes \\boxed{204} minutes in total.",
+  "gold": "204",
+  "exec_times": 1
+ },
+ "3": {
+  "origin_prompt": "q3",
+  "prediction": "Thus \\boxed{90\\%} of the students.",
+  "gold": "90%",
+  "exec_times": 1
+ },
+ "4": {
+  "origin_prompt": "q4",
+  "prediction": "Therefore \\boxed{36}.",
+  "gold": "36",
+  "exec_times": 1
+ },
+ "5": {
+  "origin_prompt": "q5",
+  "prediction": "The maximum is \\boxed{150}.",
+  "gold": "150",
+  "exec_times": 1
+ },
+ "6": {
+  "origin_prompt": "q6",
+  "prediction": "Checking cases gives \\boxed{13}.",
+  "gold": "12",
+  "exec_times": 1
+ },
+ "7": {
+  "origin_prompt": "q7",
+  "prediction": "\\boxed{60}",
+  "gold": "60",
+  "exec_times": 1
+ }
+}

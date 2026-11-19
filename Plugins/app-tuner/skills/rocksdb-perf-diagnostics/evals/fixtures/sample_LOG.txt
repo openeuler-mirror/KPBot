@@ -1,0 +1,29 @@
+2026/10/26-10:00:10.123456 23456 db/column_family.cc:961] [default] Stalling writes because we have 20 level-0 files rate 1048576
+2026/10/26-10:00:12.123456 23456 db/column_family.cc:961] [default] Stalling writes because we have 24 level-0 files rate 1048576
+2026/10/26-10:00:15.123456 23456 db/column_family.cc:939] [default] Stalling writes because we have 4 immutable memtables (waiting for flush), max_write_buffer_number is set to 4 rate 1048576
+2026/10/26-10:00:20.123456 23456 db/column_family.cc:918] [default] Stopping writes because we have 36 level-0 files
+2026/10/26-10:00:21.000000 23457 db/compaction/compaction_job.cc:2218] [default] [JOB 101] Compacting level0 -> level1, score 9.50
+2026/10/26-10:00:21.000000 23457 db/compaction/compaction_job.cc:2224] [default] Compaction start summary: L0 files: 12, L1 files: 40
+2026/10/26-10:00:24.000000 23458 db/column_family.cc:986] [default] Stalling writes because of estimated pending compaction bytes 68719476736 rate 1048576
+2026/10/26-10:00:30.000000 23457 db/compaction/compaction_job.cc:1895] [default] [JOB 101] Compacted (L0) (L1) => 2147483648 bytes
+2026/10/26-10:00:30.123456 23456 db/column_family.cc:961] [default] Stalling writes because we have 28 level-0 files rate 1048576
+2026/10/26-10:00:31.000000 23457 db/flush_job.cc:833] [default] flush_started
+2026/10/26-10:00:32.000000 23457 db/flush_job.cc:302] [default] flush_finished
+2026/10/26-10:00:33.000000 23458 db/compaction/compaction_job.cc:2218] [default] [JOB 102] Compacting level0 -> level1, score 9.50
+2026/10/26-10:00:33.000000 23458 db/compaction/compaction_job.cc:2224] [default] Compaction start summary: L0 files: 16, L1 files: 40
+2026/10/26-10:00:40.000000 23456 db/column_family.cc:918] [default] Stopping writes because we have 38 level-0 files
+2026/10/26-10:00:48.000000 23458 db/compaction/compaction_job.cc:1895] [default] [JOB 102] Compacted (L0) (L1) => 4294967296 bytes
+2026/10/26-10:00:50.000000 23459 db/compaction/compaction_job.cc:2218] [default] [JOB 103] Compacting level1 -> level2, score 24.00
+2026/10/26-10:00:50.000000 23459 db/compaction/compaction_job.cc:2224] [default] Compaction start summary: L1 files: 12, L2 files: 60
+2026/10/26-10:00:52.000000 23460 db/compaction/compaction_job.cc:2218] [default] [JOB 104] Compacting level0 -> level1, score 9.50
+2026/10/26-10:00:52.000000 23460 db/compaction/compaction_job.cc:2224] [default] Compaction start summary: L0 files: 8, L1 files: 40
+2026/10/26-10:00:58.000000 23460 db/compaction/compaction_job.cc:1895] [default] [JOB 104] Compacted (L0) (L1) => 3221225472 bytes
+2026/10/26-10:00:59.000000 23459 db/compaction/compaction_job.cc:1895] [default] [JOB 103] Compacted (L1) (L2) => 1073741824 bytes
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729] ** Compaction Stats [default] **
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729] Level  Files  Size(MB)  Score  Read(GB)  Rn(GB)  Rnp1(GB)  Write(GB)  Wnew(GB)  Moved(GB)  W-Amp
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729]   0     24    6144.0   6.00     0.0      0.0     0.0       0.0      0.0       0.0    0.0
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729]   1     44    6144.0  24.00   120.0     90.0    30.0      90.0     20.0       0.0    1.5
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729]   2     60    3072.0   1.20    40.0     20.0    20.0      20.0      5.0       0.0    1.0
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729] Cumulative compaction: 100.0 GB write, 113.8 MB/s write, 150.0 GB read, 170.7 MB/s read, 900.0 seconds
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1729] Interval compaction: 10.0 GB write, 170.7 MB/s write, 15.0 GB read, 256.0 MB/s read, 60.0 seconds
+2026/10/26-10:01:00.000000 12345 db/internal_stats.cc:1736] Stalls(count): 29 level0_slowdown, 7 level0_slowdown_with_compaction, 5 level0_numfiles, 2 level0_numfiles_with_compaction, 0 stop for pending_compaction_bytes, 4 slowdown for pending_compaction_bytes, 3 memtable_compaction, 1 memtable_slowdown, interval 5 total count
