@@ -127,11 +127,48 @@ check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-dr
 check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
+check "opencode overlay keeps base references" '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/references/experiment-contract.md" ]'
+check "opencode overlay keeps base scripts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/scripts/experiment_feedback.py" ]'
+check "opencode overlay keeps base prompts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/prompts/stage.validate-experiment.md" ]'
+check "opencode overlay keeps app-tuner parts" '[ -d "$OPENCODE_SKILLS/kpbot-app-tuner/subskills/accelerator-optimization" ]'
+check "opencode overlay applies diff files"    'cmp -s "$OPENCODE_SKILLS/kpbot-code-optimizer/prompts/stage.parse-intent.md" "$ROOT/Plugins/code-optimizer/opencode/kpbot-code-optimizer/prompts/stage.parse-intent.md"'
 for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
 check_agentenv_package "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
+
+echo "== preview count vs installed count =="
+PREVIEW_ROOT="$TMPROOT/preview"
+mkdir -p "$PREVIEW_ROOT"
+bash "$INSTALLER" project claude "$PREVIEW_ROOT" > "$TMPROOT/preview.log" 2>&1
+PREVIEW_COUNT="$(grep -o 'Skills ([0-9]\+' "$TMPROOT/preview.log" | head -1 | tr -dc '0-9')"
+INSTALLED_COUNT="$(ls -d "$PREVIEW_ROOT/.claude/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')"
+check "preview reports a skill count"          '[ -n "$PREVIEW_COUNT" ]'
+check "preview count matches installed count"  '[ "$PREVIEW_COUNT" = "$INSTALLED_COUNT" ]'
+check "preview lists nested package skills"    'grep -q "agentenv-kernel-hz" "$TMPROOT/preview.log"'
+
+echo "== domain group gate (fixture: DOMAIN.md marks a group) =="
+FIX="$TMPROOT/fixture"
+mkdir -p "$FIX/Plugins/demo/.claude-plugin" \
+         "$FIX/Plugins/demo/skills/alpha" \
+         "$FIX/Plugins/demo/skills/dom/beta" \
+         "$FIX/Plugins/demo/skills/nodom/gamma" \
+         "$FIX/proj"
+cp "$INSTALLER" "$FIX/install.sh"
+printf '{"name":"demo"}\n' > "$FIX/Plugins/demo/.claude-plugin/plugin.json"
+printf '{"version":"test"}\n' > "$FIX/package.json"
+printf -- '---\nname: alpha\ndescription: flat skill\n---\n' > "$FIX/Plugins/demo/skills/alpha/SKILL.md"
+printf '# dom domain\n' > "$FIX/Plugins/demo/skills/dom/DOMAIN.md"
+printf -- '---\nname: beta\ndescription: grouped skill\n---\n' > "$FIX/Plugins/demo/skills/dom/beta/SKILL.md"
+printf -- '---\nname: gamma\ndescription: orphan skill\n---\n' > "$FIX/Plugins/demo/skills/nodom/gamma/SKILL.md"
+bash "$FIX/install.sh" project claude "$FIX/proj" > "$TMPROOT/fixture.log" 2>&1
+FIX_SKILLS="$FIX/proj/.claude/skills"
+check "flat skill installed"                   '[ -f "$FIX_SKILLS/alpha/SKILL.md" ]'
+check "grouped skill installed flat"           '[ -f "$FIX_SKILLS/beta/SKILL.md" ]'
+check "group dir not installed"                '[ ! -e "$FIX_SKILLS/dom" ]'
+check "group without DOMAIN.md not installed"  '[ ! -e "$FIX_SKILLS/gamma" ]'
+check "warns about group without DOMAIN.md"    'grep -q "skill group without DOMAIN.md" "$TMPROOT/fixture.log"'
 
 echo
 echo "Result: $pass passed, $fail failed"

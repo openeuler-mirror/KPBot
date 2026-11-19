@@ -14,6 +14,20 @@ kptools-agentenv-tuning/
 └── skills/                    # 实际安装的专项 Skill
 ```
 
+## 目录组织
+
+专项 Skill 在**源码中嵌套**于 `skills/`、在**安装后平铺**为独立入口，两层各有分工：
+
+- **源码嵌套**：共享 `references/`（结果契约、优化流程）、`scripts/`（只读采集器、
+  case 监督器）一份维护，各专项通过相对路径 `../../` 引用，不各自复制。
+- **安装平铺**：安装器把专项暴露为与包入口并列的独立入口。每个专项有自己的
+  frontmatter 触发面（description 关键词直接命中对应问题），并携带独立的
+  agent 用例（A/B 消融 + verify 断言）；references 形态既没有独立触发面，
+  也无法承载用例契约，因此需要独立触发或独立用例的内容以专项 Skill 组织。
+- **边界**：若内容不需要独立触发、也不需要独立用例（仅被入口按需引用的
+  背景知识），应写成入口的 `references/` 文件并在 SKILL.md 中按需引用，
+  不新增专项目录。
+
 ## 安装与调用
 
 在 KPBot 仓库运行，目标目录替换为实际项目：
@@ -36,6 +50,9 @@ bash install.sh project opencode /path/to/project
 
 > 用 agentenv-kernel-hz 判断当前项目是否适合调整内核 HZ。
 > 我有 ublk_ctl_mutex 等待和调度跟踪数据。
+
+> 用 agentenv-snapshot-fs 判断快照创建慢是否为写入路径档位问题，
+> 并给出 work_dir 迁移 XFS 的方案与验证步骤。
 
 专项 Skill 可在实际安装后按其名称独立调用；入口不会把未安装的专项当作可用能力。
 

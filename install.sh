@@ -209,6 +209,38 @@ for name in excludes:
 PY
 }
 
+# Enumerate skill directories under a skills/ root, one "<src-dir>\t<skill-name>"
+# line per skill.
+#   - a directory holding SKILL.md is a skill;
+#   - a directory holding DOMAIN.md is a domain group: its children are searched
+#     recursively (≤4 levels), so `skills/<domain>/<skill>/SKILL.md` and
+#     `skills/<domain>/<sub-domain>/<skill>/SKILL.md` both resolve;
+#   - anything else (subskills/, references/, a nested package's own skills/) is
+#     skill-internal and is not enumerated.
+# Domain groups exist only in the source tree: installation always lands each
+# skill at <config>/skills/<skill-name>/ because both Claude Code and OpenCode
+# discover skills one level deep.
+list_skills() {
+    _walk_skills "$1" 1
+}
+
+_walk_skills() {
+    local dir="$1" depth="$2" child
+    for child in "$dir"/*/; do
+        [ -d "$child" ] || continue
+        child="${child%/}"
+        if [ -f "$child/SKILL.md" ]; then
+            printf '%s\t%s\n' "$child" "$(basename "$child")"
+        elif [ -f "$child/DOMAIN.md" ] && [ "$depth" -lt 4 ]; then
+            _walk_skills "$child" $((depth + 1))
+        elif ls "$child"/*/SKILL.md >/dev/null 2>&1; then
+            # 目录里有子 skill，但自身没有 DOMAIN.md ⇒ 整组会被静默跳过
+            # 注意必须写 stderr：list_skills 的 stdout 被 while-read 当数据流消费
+            warn "skill group without DOMAIN.md, not installed: ${child#"$PLUGIN_ROOT"/}" >&2
+        fi
+    done
+}
+
 # --- No arguments: show error + usage ---
 if [ $# -eq 0 ]; then
     echo -e "${RED}${BOLD}错误：未指定任何参数${NC}"
@@ -294,17 +326,20 @@ for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
     fi
     skill_src="$plugin_dir/skills"
     [ -d "$skill_src" ] || continue
-    for skill_dir in "$skill_src"/*/; do
-        [ -d "$skill_dir" ] || continue
-        name=$(basename "$skill_dir")
+    while IFS=$'\t' read -r skill_src_path name; do
+        [ -n "$name" ] || continue
         # Per-plugin exclusions (e.g. opencode-only skips for claude-only skills)
         if plugin_skill_excludes "$plugin_dir" | grep -qx "$name"; then
             continue
         fi
+        case " $SKILLS_TO_INSTALL " in
+            *" $name "*) warn "duplicate skill name: $name ($skill_src_path)"; continue ;;
+        esac
         SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $name"
         SKILL_COUNT=$((SKILL_COUNT + 1))
         # Detect package: skills/<name>/skills/<inner>/SKILL.md
-        for inner_dir in "$skill_dir"skills/*/; do
+        # 注意 skill_src_path 来自 _walk_skills，结尾斜杠已去掉，必须显式补 '/'
+        for inner_dir in "$skill_src_path"/skills/*/; do
             [ -d "$inner_dir" ] || continue
             [ -f "$inner_dir/SKILL.md" ] || continue
             inner_name=$(basename "$inner_dir")
@@ -314,7 +349,7 @@ for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
                 *) SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $inner_name"; SKILL_COUNT=$((SKILL_COUNT + 1)) ;;
             esac
         done
-    done
+    done < <(list_skills "$skill_src")
 done
 
 echo ""
@@ -397,7 +432,11 @@ for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
     fi
     skill_src="$plugin_dir/skills"
     [ -d "$skill_src" ] || continue
-    cp -r "$skill_src/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+    while IFS=$'\t' read -r skill_src_path name; do
+        [ -n "$name" ] || continue
+        rm -rf "${CONFIG_ROOT:?}/skills/$name"
+        cp -r "$skill_src_path" "$CONFIG_ROOT/skills/$name"
+    done < <(list_skills "$skill_src")
 done
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
@@ -409,7 +448,13 @@ if [ "$TOOL" = "opencode" ]; then
             continue
         fi
         if [ -d "$plugin_dir/opencode" ]; then
-            cp -r "$plugin_dir/opencode/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+            while IFS=$'\t' read -r overlay_src name; do
+                [ -n "$name" ] || continue
+                # 覆盖层只存差异文件：必须"合并覆盖"到主源已安装的 skill 上，
+                # 不能先删后拷，否则主源的 references/scripts/subskills 会整片丢失。
+                mkdir -p "$CONFIG_ROOT/skills/$name"
+                cp -r "$overlay_src"/. "$CONFIG_ROOT/skills/$name/"
+            done < <(list_skills "$plugin_dir/opencode")
         fi
     done
     ok "OpenCode overlays applied"

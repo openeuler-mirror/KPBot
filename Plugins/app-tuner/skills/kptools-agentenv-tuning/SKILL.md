@@ -1,6 +1,6 @@
 ---
 name: kptools-agentenv-tuning
-description: AgentENV 沙箱的 openEuler/ARM 内核适配与性能调优入口。当用户提到 AgentENV、ublk 功能使能、沙箱并发恢复、ARM Pvspinlock、CONFIG_HZ、DVMBM/TLBI 广播范围或 UnixBench 并发线性度时使用。收集 Host/Guest 环境证据，按问题选择已安装的专项 Skill，在项目实际负载下验证。
+description: AgentENV 沙箱的 openEuler/ARM 内核适配与性能调优入口。当用户提到 AgentENV、ublk 功能使能、沙箱并发恢复、ARM Pvspinlock、CONFIG_HZ、快照创建慢或批量落盘吞吐差（ext4/XFS 写入路径）、DVMBM/TLBI 广播范围或 UnixBench 并发线性度时使用。收集 Host/Guest 环境证据，按问题选择已安装的专项 Skill，在项目实际负载下验证。
 ---
 
 # AgentENV 内核适配与性能调优
@@ -69,6 +69,7 @@ bash scripts/collect_environment.sh --output /absolute/path/to/new-evidence --ro
 | ublk 不可用、内核未启用 ublk | `agentenv-ublk-enablement` | 设备 I/O 和沙箱功能 |
 | Guest 锁争用、锁持有者被抢占、vCPU 超分 | `agentenv-pvspinlock` | 同场景启用/禁用对照 |
 | 恢复路径锁竞争、调度等待或尾延迟 | `agentenv-kernel-hz` | 当前与候选 HZ 配置对照 |
+| 快照创建慢、批量落盘写入吞吐差 | `agentenv-snapshot-fs` | work_dir 写入路径档位与 XFS 迁移对照 |
 | DVMBM/TLBI 范围广播、进程创建负载并发扩展问题 | `agentenv-cluster-tlbi` | 核对开关、位图策略与布局 |
 
 读取命中的专项文件后按其流程执行。仅出现关键词时先诊断，不直接实施。
@@ -80,6 +81,8 @@ bash scripts/collect_environment.sh --output /absolute/path/to/new-evidence --ro
 - ublk：功能使能及真实 I/O；关闭后负载不能运行时不计算提速。
 - PVspinlock：固定其他因素，在业务相关的资源与超分场景内比较机制开关。
 - HZ：固定其余配置，比较当前配置与实际内核支持的候选配置。
+- snapshot-fs：固定 AgentENV 版本与负载口径，仅变更 `work_dir` 指向
+  （ext4 → XFS）做 A/B；微基准与 folio 构成先确认档位，再测端到端收益。
 - TLBI：核实 DVMBM 实现及策略，分别控制功能开关、CPU 布局和位图更新方式，
   避免将绑定效果计入机制收益；负载准备和线性度口径按已安装的 TLBI 专项文档执行。
 
