@@ -324,7 +324,8 @@ for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
         SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $name"
         SKILL_COUNT=$((SKILL_COUNT + 1))
         # Detect package: skills/<name>/skills/<inner>/SKILL.md
-        for inner_dir in "$skill_src_path"skills/*/; do
+        # 注意 skill_src_path 来自 _walk_skills，结尾斜杠已去掉，必须显式补 '/'
+        for inner_dir in "$skill_src_path"/skills/*/; do
             [ -d "$inner_dir" ] || continue
             [ -f "$inner_dir/SKILL.md" ] || continue
             inner_name=$(basename "$inner_dir")

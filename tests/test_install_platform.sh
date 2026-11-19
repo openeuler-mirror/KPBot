@@ -138,6 +138,16 @@ done
 check_agentenv_package "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
+echo "== preview count vs installed count =="
+PREVIEW_ROOT="$TMPROOT/preview"
+mkdir -p "$PREVIEW_ROOT"
+bash "$INSTALLER" project claude "$PREVIEW_ROOT" > "$TMPROOT/preview.log" 2>&1
+PREVIEW_COUNT="$(grep -o 'Skills ([0-9]\+' "$TMPROOT/preview.log" | head -1 | tr -dc '0-9')"
+INSTALLED_COUNT="$(ls -d "$PREVIEW_ROOT/.claude/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')"
+check "preview reports a skill count"          '[ -n "$PREVIEW_COUNT" ]'
+check "preview count matches installed count"  '[ "$PREVIEW_COUNT" = "$INSTALLED_COUNT" ]'
+check "preview lists nested package skills"    'grep -q "agentenv-kernel-hz" "$TMPROOT/preview.log"'
+
 echo "== domain group gate (fixture: DOMAIN.md marks a group) =="
 FIX="$TMPROOT/fixture"
 mkdir -p "$FIX/Plugins/demo/.claude-plugin" \
