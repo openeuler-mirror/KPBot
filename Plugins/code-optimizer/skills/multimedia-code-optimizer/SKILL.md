@@ -1,65 +1,120 @@
 ---
 name: multimedia-code-optimizer
-description: 面向 Linux AArch64 的媒体计算密集型代码优化，结合领域优化知识与微架构性能建模改进实现，并进行独立正确性验证。适用于指定函数、循环或局部代码片段优化，或基于已有 Top-down／perf 报告的热点代码优化。
+description: Linux AArch64 媒体与计算密集型代码优化的统一入口，每次调用都先让用户重新选择 origin／summary／optimize 三种模式（不复用上次选择，也不因请求里提到某个模式而跳过确认）：origin 用领域优化知识与微架构性能建模改进实现并做独立验证；summary 从项目或前后两个仓库逐个函数提炼可复用的 C→NEON／C→SVE／NEON→SVE 向量化方法并增量融合进 summary/ 方法库；optimize 按热点逐函数做 SVE2p1、256 位向量化改写，并用位精确正确性测试和 A/B 实测证明收益。适用于指定函数、循环或局部代码片段优化，基于 Top-down／perf 报告优化热点代码，总结或沉淀 SIMD/NEON/SVE 向量化经验，用 SIMD/NEON/SVE 优化 ARM 项目，或对热点函数做向量化并验证收益。仅面向 Linux AArch64，x86 SSE/AVX 与 GPU 场景不适用。
 ---
 
 # 多媒体代码优化
 
-你负责协调 Linux AArch64 媒体计算密集型代码优化：确定优化目标、管理任务、调用与恢复 Workflow、处理用户决策并汇报结果。源码分析、实现、验证及写回清理由阶段子 Agent 执行，主 Agent 不直接修改或重新实现候选代码。各阶段的操作与交接见[阶段职责](references/stages.md)。
+本技能是 Linux AArch64 媒体与计算密集型代码优化的统一入口。每次调用后的第一件事都是让用户在 **origin**、**summary**、**optimize** 三个模式中重新选择一个，再进入该模式的完整流程。一次调用只执行一个模式，模式之间不自动切换；用户要换模式就重新走模式选择。
+
+| 模式       | 一句话                                                          | 详细指令                       |
+| ---------- | --------------------------------------------------------------- | ------------------------------ |
+| `origin`   | 原有流程：领域知识 + 微架构建模，候选迭代、独立正确性验证与写回 | `references/modes/origin.md`   |
+| `summary`  | 只读扫描，把向量化改写提炼成可复用方法，增量融合进方法库        | `references/modes/summary.md`  |
+| `optimize` | 逐函数 SIMD 改写，位精确正确性门 + A/B 性能门，实测证明收益     | `references/modes/optimize.md` |
 
 ## 输入
 
-收集 Git 仓库根路径、优化目标和已有 Top-down／perf 数据。优化目标可以是算子、函数、循环或局部代码片段，用函数名或源码文件与代码范围定位；缺失信息集中询问，已提供的不重复问。性能数据路径记录为 `profile_paths`，不主动采集 perf 或准备素材。
+### 第 0 步：选择模式（硬门控，每次调用都重问）
 
-用户指定目标时直接采用，已有性能数据辅助分析，没有也可继续。用户未指定目标时，只依据其提供的 Top-down／perf 数据定位具体热点代码，记录报告位置、输入场景和选择依据到 `instructions`；不按库类型、源码印象或经验猜选。没有数据或数据不能定位具体代码时，请用户补充优化目标或报告，确定对象后再启动 Workflow。默认逐个优化目标。
+**每次执行本技能都要重新完成这一步。** 上一次调用选过什么模式、会话历史里出现过什么、`other/state.json` 或最终报告里记过什么，都不能作为跳过提问的理由。未确定本次模式前，不读源码、不扫描仓库、不启动 Workflow、不追问优化细节。
 
-任务 JSON 包含：`repo_path`、`operator`、`skill_dir`，以及仓库外相互独立的 `preparation_dir`、`run_dir`、`validation_dir`。路径均使用绝对路径；`operator` 记录优化目标及其源码位置，不限于函数名。`instructions` 保存用户要求和目标选择依据，其他选项按需填写：
+1. 每次调用都调用 `ask_user_question` 问这一个问题。即使用户请求里已经出现 `origin`、`summary` 或 `optimize` 字样，也要把三个选项重新摆出来让用户确认；可以把用户提到的那个选项写进问题里（例如“你在请求里提到 optimize，请确认本次模式”），但不能替用户点选。
+2. 三个选项的说明必须让用户能判断差异：
+   - `origin`：已有 Top-down／perf 数据或明确优化目标，想要微架构建模、多候选迭代与独立验证写回。
+   - `summary`：想总结项目里已有的 SIMD 改写，或对比改前改后两个仓库，沉淀成可复用方法库；不改被扫描代码。
+   - `optimize`：想直接改 ARM 项目代码，逐函数做 SVE/NEON 向量化，并要求位精确正确性和实测加速。
+3. 不要用默认值替用户决定，不要把上一次的选择标成推荐，也不要因为某个模式更省事而引导用户。
+4. 模式只在本次调用内有效：不要把选择写成跨调用状态，也不要从其他调用的 `state.json`、报告或历史结论里推断本次模式。
+5. 唯一不重问的边界：同一次调用内部因上下文压缩被接续，且本次调用已经拿到过用户答案；这时沿用本次答案继续，不算新的调用。
 
-- 准备：`build_scope` 表达构建范围，默认项目媒体库构建；`check_revision` 默认 1。具体构建目标与开关由 BuildRequirements 确定。
-- 优化：已有准备文件填 `preparation_path`；`max_candidates` 默认 4，限制新增留档候选数，不含基线，失败候选也计入；已有性能数据填 `profile_paths`。
-- 验证与写回：已有优化文件填 `optimization_path`；`writeback` 默认 `true`，用户明确要求不写回时设为 `false`。片段验证在运行 skill 的本机执行，可按用户要求暂缓；未独立验证通过不写回。
+### 第 1 步：按模式收集输入
+
+模式确定后再收集该模式需要的输入：**本次调用内**已提供的字段不重复问，缺失的集中问一次；上一次调用留下的输入不算已提供。字段清单以对应模式文件的“输入”节为准，速查：
+
+| 模式       | 必需                                        | 可选                                                              | 不要猜的                               |
+| ---------- | ------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| `origin`   | `repo_path`、`operator`                     | `profile_paths`、`build_scope`、`max_candidates`、`writeback`     | 用户未给目标时不得按库类型或经验猜热点 |
+| `summary`  | 子模式 `project` 或 `different`，及对应路径 | `scope`、`merge`                                                  | 子模式和路径不得用默认值替用户决定     |
+| `optimize` | `project_path`，以及第一/二/三问的答案      | `hotspot_file`、`compile_cmd`、`sample_data`、`budget`、`targets` | 验证方式与优化节奏不得替用户决定       |
 
 ## 执行步骤
 
-### 1. 选择流程与检查环境
+### 1. 读模式文件（不可跳过）
 
-| 已有输入 | 启动流程 | 阶段 |
-|---|---|---|
-| 库路径与已确定的优化目标 | `workflows/preparation.js` | BuildRequirements → Environment |
-| 适用的 `ready` 准备结果 | `workflows/optimization-loop.js` | SourceAnalysis（创建 worktree）→ BaselineBuild → 基线 MCA → Knowledge → Implement |
-| 已完成的优化结果 | `workflows/validation.js` | ValidationSetup → Correctness → Writeback |
-| 同一任务中断 | 原控制目录的 `resume` | 从指定阶段接续 |
+选定模式后的第一条动作，是**完整读取**对应的模式文件：
 
-同一项目、机器、工具链和构建配置下可复用准备结果；构建范围、工具链或机器改变时更新准备。新一轮优化使用新的 `run_dir` 和控制目录，只复用准备，不继承旧优化历史。必需 Git、编译工具链、`llvm-objdump`、`llvm-mca` 及可用的目标调度模型，由 Environment 检查；缺项提示用户准备，不自动安装。
+- `origin` → `references/modes/origin.md`
+- `summary` → `references/modes/summary.md`
+- `optimize` → `references/modes/optimize.md`
 
-### 2. 启动 Workflow
+模式文件是该模式唯一权威的步骤、门控和输出契约来源。未读完不得执行命令、扫描代码或改写代码；文件读不到就停下告诉用户，不要凭记忆继续。
 
-调用 `python3 -I <skill_dir>/scripts/workflow_state.py start --state-dir <新控制目录> --script <对应流程脚本> --args <任务文件>`，新控制目录由 helper 创建，无需预先 mkdir。脚本读取结果文件、填入 `preparation`／`optimization` 对象，并冻结任务、流程与阶段规范，恢复沿用同一契约。旧源码快照任务保留原产物，新建 worktree 任务，不跨契约恢复。无需查找原控制目录或抄写结果对象。
+### 2. 按模式文件执行
 
-把输出的 `scriptPath` 直接交给 Workflow；用 `record --state-dir ... --run-id ...` 记录返回的 run ID，可用 `--journal` 指定该运行日志。启动并记录后结束当前回合，由 Workflow 完成事件接续。
+严格按模式文件里的阶段顺序执行，不跳步、不跨模式借用步骤。三个模式共享同一份技能资源：方法库 `summary/`、`scripts/`、`assets/`、`workflows/`。`summary/` 同时是 summary 模式的写入目标和 optimize 模式的必读知识源，summary 模式整理出的方法就是 optimize 模式的起点。
 
-### 3. 衔接与恢复
+### 3. 收尾
 
-收到完成事件后，调用 `collect --state-dir ... --run-id ... --output <任务输出文件>`。脚本读取运行时 JSON 的完整 `result`，原样保存为准备目录的 `preparation-<check_revision>.json`、优化目录的 `optimization.json` 或验证目录的 `validation.json`。任务输出用于结果收集，子阶段 journal 用于恢复。
-
-准备 `ready` 后进入优化；优化正常结束且有 `selected` 才进入验证。后续流程调用 `start --state-dir <下一控制目录> --script <下一流程脚本> --from-state <上一控制目录>`，脚本继承任务并填入结果对象和路径；需要调整目录或用户选择时附加 `--args <任务调整文件>`。
-
-阻塞或中断先处理当前阶段。旧运行结束后，调用 `resume --state-dir ... --stage <stopped_stage>`，从 journal 提取前序结果，生成新的启动文件；将其交给 Workflow 并记录新 run ID。Implement 的 label 为 `media:implement`，恢复时读取 `run_dir/workspace.json`、`implementation.json`、`attempts.md` 与候选补丁，已有候选继续计入预算。Writeback 的 label 为 `media:writeback`，恢复时复用已完成的验证结果并读取 `validation_dir/writeback.json`，已写回的不重复应用，只接续未完成的核对或清理。必要说明用 `--note`，准备环境更新用 `--check-revision <新修订号>`。缺工具提示用户准备，不安装或升级环境。
-
-### 4. 候选迭代与选优
-
-每个任务仅在迭代目录内创建一个 `run_dir/worktree-<8位随机字符>`，由 SourceAnalysis 初始化并纳入原仓库已有未提交修改。实际路径保存到 `workspace.json`，后续阶段、恢复和清理均使用该路径，不按名称猜测或重新创建。版本以 Git tree 与补丁记录，不创建提交；候选不再保存整份源码目录。基线保存在 `run_dir/baseline.patch`，候选保存在 `run_dir/candidates/<id>.patch`，构建产物和证据位于 worktree 外。各候选补丁均相对任务基线，`parent_id` 只记录探索来源。
-
-基线由独立 Agent 执行 MCA 分析；Knowledge 的完整 `isa_comparison` 和含 `rationale` 的 `methods` 交给一个 Implement Agent。Implement 在同一个 worktree、同一上下文内自主“修改 → 编译 → MCA → 调整”，不设外层 Implement 循环或候选 MCA Agent。正式评价前冻结候选补丁与 tree，评价完成立即留档、计入预算并更新 `implementation.json`，再继续探索；局部编译与指令探查不单独计数，也不限制 MCA 调用次数。
-
-脚本核对候选身份、补丁路径、模型和工作量口径，从基线与有效候选中选择最低 MCA 成本，平局保留较早版本，全部不可用则 `selected=null`。优化输出 `schema_version=5`；`current` 仅表示最后留档候选，`selected` 独立保存。未完成的实现记录为 `running`，结束为 `converged`、`budget_exhausted` 或 `blocked`；无新方向即可收敛，不必凑满预算。
-
-### 5. 正确性验证与写回
-
-验证保持两个子 Agent：ValidationSetup 在同一 worktree 中依次还原并构建基线和选中版，在验证目录准备 testbench、链接独立入口并执行最小冒烟测试；Correctness 只运行这些已构建入口，执行完整正确性验证，不修改代码或 testbench、不重复构建。测试覆盖修改及其影响，不默认扩展为媒体端到端测试；整数精确一致，浮点沿用项目规则。不做性能计时，不自动改选或追加修复轮次。
-
-Workflow 仅在选中非基线候选、独立验证 `passed` 且 `writeback=true` 时启动 Writeback 子 Agent。它应用已验证的候选补丁、核对写回结果，再删除本任务创建的临时 worktree；不重新实现代码，不 commit、不 push。写回冲突或失败保留 worktree。用户要求不写回、验证未通过或选中基线时跳过 Writeback，保留 worktree 并说明状态。
+按模式文件规定的输出契约返回结果并结束本轮调用。用户要换模式时，重新从第 0 步开始选择，不复用上一个模式的中间状态。
 
 ## 输出
 
-主 Agent 按保存的结果简短汇报：`optimization.json` 提供选中补丁与 MCA 对比；`validation.json`（`schema_version=3`）提供独立验证覆盖、用例统计，以及 `writeback` 中的修改文件、写回和清理结果。Implement 自测单独标识，不混入独立验证计数。MCA 表示调度成本，不作为真机加速结论。补丁、构建产物和证据不随 worktree 清理删除，不另写逐阶段报告。
+| 模式       | 输出                                                                       | 写入位置                                              |
+| ---------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `origin`   | 准备／优化／验证结果 JSON，主 Agent 按保存的结果简短汇报                   | 任务指定的准备、运行、验证目录与仓库工作区            |
+| `summary`  | `simd_summary_result` JSON（含 `coverage`、`methods`、`summary_paths`）    | 只写 `summary/`；扫描中间文件放 `/tmp`                |
+| `optimize` | `simd_optimize` JSON（含 `verify_method`、逐函数 `status`、`next_action`） | 只写 `simd_optimization_result/` 与通过门控的目标函数 |
+
+两个结构化模式的顶层形状如下（一次调用只输出其中一个；这里只列关键字段，完整字段与取值见对应模式文件的“输出”节）：
+
+summary：
+
+```json
+{
+  "simd_summary_result": {
+    "success": true,
+    "coverage": "complete",
+    "error_message": ""
+  }
+}
+```
+
+optimize：
+
+```json
+{
+  "simd_optimize": {
+    "success": true,
+    "next_action": "await_user",
+    "blocked_reason": ""
+  }
+}
+```
+
+`origin` 不新增顶层结构，沿用准备／优化／验证三个结果文件。`success=false` 时必须在 `error_message` 或 `blocked_reason` 写清原因；summary 的 `coverage` 取 `complete`／`partial`，optimize 的 `next_action` 取 `next_function`／`await_user`／`done`／`blocked`。未通过门控的产物不得写成通过。
+
+## 规则
+
+- **先选模式再动手。** 跳过模式选择或替用户选模式，会让三套流程的门控互相污染：summary 会试图改代码，optimize 会跳过验证，origin 会绕过 Workflow 的写回核对。
+- **一次调用一个模式。** 不复用其他模式的中间产物、状态或结论；模式切换必须由用户发起。
+- **只面向 Linux AArch64。** origin 与 optimize 都只在 AArch64 上做优化；x86 SSE/AVX、GPU 和其它架构明确说明不适用。summary 模式只做代码阅读，不受架构限制，但只归纳 C／NEON／SVE 三类改写。
+- **写入边界固定。** summary 只写 `summary/`，不碰被扫描仓库；optimize 只写 `simd_optimization_result/` 和验证通过的目标函数；origin 只通过 Workflow 写回，不手工改仓库。
+- **`summary/manual/` 是用户的。** 只在缺失时创建，已有内容不读、不改、不合并、不删除。
+- **方法库不记来源、不记性能。** 仓库名、路径、行号、commit、作者、URL 和性能数字都不进 `summary/`；性能结论留在 optimize 模式的测试与报告里。
+- **证据必须真实。** 没跑过的测试、没测过的数字、没读过的函数体都不能写成结论；未验证就标未验证。
+- **重问边界按调用划分。** 新的调用必须重新询问入口模式和该模式的全部条件（origin 的输入、summary 的子模式与路径、optimize 的项目／热点／验证／节奏），不复用上一次调用的答案；只有同一次调用内部被中断或压缩时，才读本次已答记录、只补未完成的部分。
+- **不越权。** 不自动 commit / push，不改平台权限配置，不删除用户文件与历史方法。
+
+## 参考资料
+
+- `references/modes/origin.md`：origin 模式的完整流程、任务 JSON、Workflow 启动与恢复、候选迭代与写回。
+- `references/modes/summary.md`：summary 模式的扫描、逐函数提炼、bundle 合并与质量门。
+- `references/modes/optimize.md`：optimize 模式的优化原则、四问、逐函数闭环、三个门控与输出契约。
+- `references/stages.md`：origin 模式各阶段子 Agent 的职责与交接。
+- `references/arm-simd-optimization/`：ARM 指令、寄存器、谓词、VL 与编译分派知识，origin 模式的 Knowledge 阶段使用。
+- `references/media-optimization-knowledge/`：媒体算法与通用计算优化知识，origin 模式的 Knowledge 阶段使用。
+- `summary/README.md`：向量化方法库导航，summary 模式维护、optimize 模式读取。
+- `scripts/`：`workflow_state.py` 管 origin 的流程状态；`init_summary.py`、`merge_summary.py`、`scan_simd.py`、`validate_summary.py` 属 summary；`check_env.py`、`init_workspace.py`、`scan_candidates.py`、`compare_outputs.py`、`run_ab_bench.py`、`render_report.py` 属 optimize。
+- `assets/bench/` 与 `assets/templates/`：optimize 模式的裸机基准夹具与记录模板。
+- `cases/`：`cases/summary-mode-integrity/`、`cases/optimize-mode-integrity/` 两个 Tier-A 用例；`evals/evals.json` 记录路由样例。
