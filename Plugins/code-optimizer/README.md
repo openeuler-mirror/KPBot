@@ -171,6 +171,13 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 |------|------|
 | `vector-db-optimization-migration` | 向量数据库/检索库跨版本优化迁移（引擎中立流程、Faiss/DiskANN 按需路由、资产分型、分层 patch、G0–G5 等价性门禁、同窗 ABBA） |
 
+### Agent 记忆系统与图数据库 (Memory / Graph DB)
+| 技能 | 描述 |
+|------|------|
+| [`agent-memory-db-optimization`](skills/agent-memory-db-optimization/SKILL.md) | Agent 记忆系统/图数据库后端（Graphiti、Neo4j、Zep/Mem0）五阶段优化：冻结确定性 LLM/embedding 负载 → 客户端/驱动/服务端三段归因 → top-down 与缓存缺失率瓶颈建模 → 分层杠杆（载荷瘦身、PackStream 解码下沉、时序水合下沉、读路径多副本扩展、服务端解码快路径）→ 矩阵复测与跨架构对照；门禁为 0 缓存未命中 + 图规模校验和 + 结果逐字节等价。 |
+
+服务端优化对象是 Neo4j 等图数据库的读路径与存储解码，不是向量索引库内部算法：索引库（Faiss/DiskANN/VSAG）内部优化仍走上面的向量检索入口。
+
 ### 媒体库优化 (Media)
 | 技能 | 描述 |
 |------|------|

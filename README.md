@@ -1,7 +1,7 @@
 # KPBot
 
 [![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](LICENSE)
-[![Scenarios: 19](https://img.shields.io/badge/Scenarios-19-brightgreen.svg)](#optimization-scenarios)
+[![Scenarios: 20](https://img.shields.io/badge/Scenarios-20-brightgreen.svg)](#optimization-scenarios)
 
 面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code 和 OpenCode 提供专业的性能分析与优化插件。
 
@@ -33,7 +33,7 @@
 
 **app-tuner** 在不修改业务源码的前提下，通过系统与 OS 配置、运行环境、编译参数、性能库替换和应用参数进行调优；**code-optimizer** 通过修改源码优化算法、数据结构、算子和框架执行路径。两者可以围绕同一业务场景协同使用。
 
-当前按下表业务场景去重统计，共覆盖 **19 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
+当前按下表业务场景去重统计，共覆盖 **20 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
 
 <!-- 增删场景时同步更新顶部 Scenarios 徽章及上方场景数。 -->
 
@@ -47,6 +47,7 @@
 | [GEMM / BRGEMM 框架集成 @ 鲲鹏](Plugins/code-optimizer/skills/brgemm-optimization/SKILL.md) | **code-optimizer**：面向 oneDNN adapter、ONNX Runtime EP 与自研 runtime，优化 PackB/PrePack、blocked layout、scratch、parallel-K、分块和 primitive cache。 |
 | [PyTorch Embedding lookup @ ARM CPU](Plugins/code-optimizer/skills/parallel-unique-pytorch/SKILL.md) | **code-optimizer**：针对 raw_id → unique → hashmap → gather 链路，使用并行排序与 OpenMP 优化 Host 侧去重，并注册兼容 `torch.compile` 的自定义算子。 |
 | [向量数据库与向量检索](Plugins/code-optimizer/skills/vector-search-optimize/SKILL.md) | **code-optimizer**：使用通用 CP0–CP7 执行环境调查、基线、候选优化与复验，并按目标路由到 Faiss 或 DiskANN 专项工作流。 |
+| [Agent 记忆系统 / 图数据库后端 @ 鲲鹏 / x86_64](Plugins/code-optimizer/skills/agent-memory-db-optimization/SKILL.md) | **code-optimizer**：以 LLM 缓存回放冻结确定性负载，把 ingest/search 耗时拆成客户端、驱动、服务端三段，再按 top-down 与缓存缺失率建模，分层实施载荷瘦身、解码下沉、读路径多副本扩展与服务端解码快路径；要求缓存 0 未命中 + 图规模校验和 + 结果等价，负结果入台账。 |
 | [VSAG HGraph RaBitQ 向量检索 @ ARM/SVE](Plugins/code-optimizer/skills/vsag-rabitq-optimization/SKILL.md) | **code-optimizer**：优化并发查询组批、worker 生命周期、OpenBLAS/CBLAS 后端与 SIMD/SVE lookup，并改进 L2 计算、数据布局及临时缓冲区。 |
 | [搜索推荐 DAG @ 鲲鹏](Plugins/code-optimizer/skills/sra-dag-tuning/SKILL.md) | **code-optimizer**：优化召回、粗排、精排和重排中的关键路径并行、批量打分、Top-K、特征缓存与锁竞争；可结合 **app-tuner** 完成绑核、系统配置和性能库调优。 |
 | [哈希表与特征 / KV 查表 @ 鲲鹏](Plugins/code-optimizer/skills/hashmap-optimization/SKILL.md) | **code-optimizer**：从查询链路与负载特征出发，区分计算、带宽和延迟瓶颈，通过数据布局与查询实现等改动优化查表热点。 |
@@ -258,6 +259,7 @@ code-optimizer 在 Claude Code 中安装 **102 个** skill，在 OpenCode 中安
 - `special-case-optimization` — 特例快路径
 - `compiler-flag-tuning` — 编译选项调优
 - `hashmap-optimization` — 哈希表四阶段优化流程（链路识别→瓶颈建模→仿真测试→杠杆实施）
+- `agent-memory-db-optimization` — Agent 记忆系统/图数据库后端五阶段优化（冻结确定性负载→三段归因→瓶颈建模→分层杠杆→跨架构复测）
 - `openzl-compression-tuning` — OpenZL 压缩内核调优（熵 codec 根表/位流优化、熵选型、无损逐字节门禁、归因方法论与负结果档案）
 - `openzl-bench-protocol` — OpenZL unitBench 基准协议（场景注册、KV 数据准备、多机部署复测、topdown 采集，含 3 个脚本）
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
