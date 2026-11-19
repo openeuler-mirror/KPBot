@@ -135,7 +135,7 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 ### 向量数据库与向量检索
 
-`kpbot-code-optimizer` 将检索优化任务交给 [`vector-search-optimize`](skills/vector-search-optimize/SKILL.md)。该入口定义一套 [通用 CP0–CP7](skills/vector-search-optimize/references/cp0-cp7.md)，按实际库和执行层级路由。Faiss、DiskANN 复用各自的角色、构建入口和实验状态。其他引擎和数据库服务层可直接使用通用流程。
+`kpbot-code-optimizer` 将检索优化任务交给 [`vector-search-optimize`](skills/vector-search-optimize/SKILL.md)。该入口定义一套 [通用 CP0–CP7](skills/vector-search-optimize/references/cp0-cp7.md)，按实际库和执行层级路由。Faiss、DiskANN、pgvector 复用各自的角色、构建入口和实验状态。其他引擎和数据库服务层可直接使用通用流程。
 
 #### Faiss
 
@@ -165,6 +165,18 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 | [`diskann-benchmark-baseline`](skills/diskann-benchmark-baseline/SKILL.md) | 冻结基线、运行原生基准和采样 |
 
 三个技能复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`。安装和运行方式见 [DiskANN 快速入门](skills/diskann-optimize/quickstart.md)。
+
+#### pgvector
+
+pgvector 专项由 [`pgvector-optimize`](skills/pgvector-optimize/SKILL.md) 编排，覆盖 HNSW/IVFFlat 索引、vector / halfvec / bit / sparsevec 距离内核与精确最近邻。安装器同时注册五个专业子 Agent。
+
+| 技能 | 职责 |
+|------|------|
+| [`pgvector-optimize`](skills/pgvector-optimize/SKILL.md) | CP0–CP7 编排、五角色交接与实验状态管理 |
+| `pgvector-analyzer` / `pgvector-profiler` | 源码取证、性能采样与基线与复验证据 |
+| `pgvector-candidate-planner` / `pgvector-implementer` / `pgvector-reviewer` | 候选计划、实现、构建测试与独立验收 |
+
+状态契约 `kpbot-pgvector-opt-run.v1` 由 `init_run` / `validate_state` / `validate_handoff` 校验。复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`，初始化与运行方式见 [pgvector 快速入门](skills/pgvector-optimize/quickstart.md)。
 
 ### 向量数据库 (Vector DB)
 | 技能 | 描述 |

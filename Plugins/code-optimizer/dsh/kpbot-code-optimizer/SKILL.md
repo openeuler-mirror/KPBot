@@ -41,7 +41,7 @@ DesignExperiment / ValidateExperiment 直接执行共享模板，没有同名叶
 
 首版主路径是下述性能库开发流水线。专项仅作为**可用性探测后的条件路由**，关键词 → 稳定技能名如下：
 
-- 向量数据库、向量检索、ANN、Faiss、DiskANN、IVFPQ、FastScan、PQFS、HNSW、RaBitQ、TurboQuant、Vamana → `vector-search-optimize`。共享算法名先查实际后端，明确 VSAG、VSAG HGraph 或 `vsag::` → `vsag-rabitq-optimization`。
+- 向量数据库、向量检索、pgvector、PostgreSQL 向量、ANN、Faiss、DiskANN、IVFPQ、FastScan、PQFS、HNSW、RaBitQ、TurboQuant、Vamana → `vector-search-optimize`。共享算法名先查实际后端，明确 VSAG、VSAG HGraph 或 `vsag::` → `vsag-rabitq-optimization`。
 - ONNX Runtime、onnxruntime、ORT、attention、KDNN、子图融合 → `ort-kdnn-attention-opt`；仅通用 attention 词需源码或用户目标确认 ORT 后端。
 - llama.cpp、GGML、LLM、embedding 推理 → `kunpeng-llama-cpp-tuning`。
 - 搜推、搜索推荐、召回、排序、特征工程、DAG → `sra-dag-tuning`。
