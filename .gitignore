@@ -31,3 +31,7 @@ Thumbs.db
 
 # case 运行产物（entrypoint 写入，不入库）
 Plugins/app-tuner/skills/*/cases/*/results/
+
+# 临时目录与临时文件（mktemp / 图表产物，防止误提交）
+/tmp*/
+*.tmp

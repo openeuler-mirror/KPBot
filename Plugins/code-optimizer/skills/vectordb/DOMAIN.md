@@ -9,6 +9,8 @@ ANN 索引、向量库与检索服务的性能优化。与业务侧（搜推 DAG
 |---|---|
 | [`vsag-rabitq-optimization`](vsag-rabitq-optimization/SKILL.md) | VSAG HGraph RaBitQ 在 ARM 平台上的并发查询批处理迁移与优化：OpenBLAS 后端、DynamicQueryBatcher、RaBitQ/HGraph 计算路径，按环境与基线审计 → 后端迁移 → Batcher 实现 → 计算优化 → 编译与正确性/性能/覆盖率 → 社区提交分阶段推进 |
 
+**场景收益**（原仓库首页场景表条目）：优化并发查询组批、worker 生命周期、OpenBLAS/CBLAS 后端与 SIMD/SVE lookup，并改进 L2 计算、数据布局及临时缓冲区。
+
 本域后续迁入（逐个独立 PR，均只动各自的 `skills/vectordb/**`）：
 
 - 通用方法与编排：`vector-search-optimize`（CP0–CP7）、`vector-experiment-methodology`、`vector-ut-st-validation`、`vector-db-optimization-migration`
