@@ -30,6 +30,12 @@ while [ $# -gt 0 ]; do
 done
 [ -z "$PID" ] && { usage >&2; exit 3; }
 [[ "$PID" =~ ^[0-9]+$ ]] || { echo "FAIL: PID 须为数字" >&2; exit 3; }
+# -d / --annotate-timeout fail-closed 数值校验（纯正整数）：
+# GNU sleep 接受 8s/8.5 等写法会正常跑完采集，但 manifest 的 int() 转换会失败，
+# 必须在入口拦截而非静默产出缺失 manifest 的"成功"
+for _num in "$DURATION" "$ANN_TIMEOUT"; do
+    [[ "$_num" =~ ^[1-9][0-9]*$ ]] || { echo "FAIL: -d/--annotate-timeout 须为正整数（秒）: $_num" >&2; exit 3; }
+done
 # --tools fail-closed 校验：TOOLS 会拼入容器侧命令（PERF_ENV/PERF_BIN），拒绝 shell 元字符
 if ! [[ "$TOOLS" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
     echo "FAIL: --tools 须为绝对路径且仅含 [A-Za-z0-9._/-] 字符: $TOOLS" >&2
@@ -148,7 +154,9 @@ if [ -n "$CONTAINER" ]; then
 fi
 
 # ---------- manifest ----------
-python3 - "$OUT" "$PID" "$DURATION" "$EVENTS" "$DUMP" "$DUMP_SIZE_BEFORE" "$RESIDUE" "$HOT_SO" "$ANN_LINES" <<'PY'
+# 生成失败必须 fail-closed：manifest 是 SKILL.md 声明的核心产物（残留判据/热点清单），
+# 缺失时禁止打印「完成」并以 0 退出
+python3 - "$OUT" "$PID" "$DURATION" "$EVENTS" "$DUMP" "$DUMP_SIZE_BEFORE" "$RESIDUE" "$HOT_SO" "$ANN_LINES" <<'PY' || { echo "FAIL: manifest.json 生成失败（采集产物不完整）" >&2; exit 1; }
 import json, sys, glob, os
 out, pid, dur, events, dump, size_before, residue, hot, ann_lines = sys.argv[1:10]
 manifest = {
@@ -163,6 +171,7 @@ manifest = {
 }
 json.dump(manifest, open(os.path.join(out, "manifest.json"), "w"), indent=2, ensure_ascii=False)
 PY
+[ -s "$OUT/manifest.json" ] || { echo "FAIL: manifest.json 缺失或为空" >&2; exit 1; }
 
 echo "== 完成: $OUT =="
 echo "方法级热点: $OUT/report.txt"

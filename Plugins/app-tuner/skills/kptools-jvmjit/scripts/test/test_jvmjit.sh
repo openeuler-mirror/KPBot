@@ -70,6 +70,12 @@ bash "$S/scripts/check.sh" --container x -p '1;id' >/dev/null 2>&1; [ $? -eq 3 ]
 OUT=$(bash "$S/scripts/toolpack.sh" --container x --dest '/tmp/x;id' 2>&1 || true)
 echo "$OUT" | grep -q "须为绝对路径" && ok "toolpack.sh 拒绝含元字符 --dest" || bad "toolpack.sh 未拒绝危险 --dest"
 bash "$S/scripts/collect.sh" -p 1 --tools '/tmp/x;id' >/dev/null 2>&1; [ $? -eq 3 ] && ok "collect.sh 拒绝含元字符 --tools" || bad "collect.sh 未拒绝危险 --tools"
+# -d / --annotate-timeout 数值校验（GNU sleep 接受 8s/8.5 会绕过采集阶段，须入口拦截）
+for bad_d in 8s 8.5 0 -1; do
+    bash "$S/scripts/collect.sh" -p 1 -d "$bad_d" >/dev/null 2>&1
+    [ $? -eq 3 ] && ok "collect.sh 拒绝非正整数 -d $bad_d" || bad "collect.sh 未拒绝 -d $bad_d"
+done
+bash "$S/scripts/collect.sh" -p 1 --annotate-timeout 5s >/dev/null 2>&1; [ $? -eq 3 ] && ok "collect.sh 拒绝非整数 --annotate-timeout" || bad "collect.sh 未拒绝 --annotate-timeout 5s"
 
 # ---------- 2. 宿主机端到端 ----------
 # 解析 JDK 工具（优先 PATH，回退常见 JDK 目录，java/javac 同源避免版本错配）

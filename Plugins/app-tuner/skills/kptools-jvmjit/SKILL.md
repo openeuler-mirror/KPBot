@@ -80,7 +80,7 @@ bash scripts/collect.sh -p <PID> -d 8 --stop-jvm
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `-p <PID>` | 目标 JVM（容器模式为容器内 PID） | 必填 |
-| `-d <sec>` | 采样时长 | 8 |
+| `-d <sec>` | 采样时长（秒，必须为正整数） | 8 |
 | `-e <events>` | perf 事件 | `cycles,instructions` |
 | `-o <dir>` | 证据目录 | `./jvmjit-evidence/<时间戳>/` |
 | `--container <ctr>` | 容器名称，切换为容器内执行链 | 宿主机模式 |
@@ -88,7 +88,7 @@ bash scripts/collect.sh -p <PID> -d 8 --stop-jvm
 | `--call-graph` | 加 `-g --call-graph fp` 调用栈 | flat 模式 |
 | `--dump <path>` | 显式指定 jitdump 路径 | 自动发现（$HOME/.debug/jit/java-jit-*/jit-<PID>.dump） |
 | `--stop-jvm` | 采集后 `kill -TERM` 目标触发刷盘 | 关闭（生产禁用） |
-| `--annotate-timeout <sec>` | 指令级注解导出（annotate.txt）限时 | 10（保守值；实测 10MB/58k 样本 <45s 完成，大数据集/需完整注解时显式提高） |
+| `--annotate-timeout <sec>` | 指令级注解导出（annotate.txt）限时（秒，必须为正整数） | 10（保守值；实测 10MB/58k 样本 <45s 完成，大数据集/需完整注解时显式提高） |
 
 ## 约束
 
