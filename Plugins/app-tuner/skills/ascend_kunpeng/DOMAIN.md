@@ -1,4 +1,4 @@
-# A+K 域（Ascend NPU + Kunpeng CPU 异构协同）
+# Ascend + Kunpeng 域（A+K 异构协同）
 
 同一套部署里**同时**涉及昇腾 NPU 与鲲鹏 CPU 的问题：P/D 两侧环境一致性、Host 侧 KV/内存分层与 offload、
 NUMA 绑核与 NPU/HCCS 亲和、Host 侧预处理与 tokenizer 并行、RoCE 网卡亲和与 HCCL 联动。
@@ -20,7 +20,7 @@ NUMA 绑核与 NPU/HCCS 亲和、Host 侧预处理与 tokenizer 并行、RoCE �
 
 - 怀疑 **P/D 两侧环境不一致**（版本漂移、cpuset/cgroup 配额、HCCL 变量、跨机跨时间快照对比）→ `kptools-ascend-pd-env`。
 - 要在 A+K 上做**端到端调优**（PD 分离部署参数、Host 侧瓶颈归因、NUMA/亲和、HCCL 与 RoCE 联动）→ 待建主线 skill
-  `aplusk-pd-disaggregation-tuning`（从 SGLang-A+K 的实际调优过程沉淀，素材与压测口径需先确认）。
+  `ascend-kunpeng-pd-disaggregation-tuning`（从 SGLang-A+K 的实际调优过程沉淀，素材与压测口径需先确认）。
 
 ## 后续迁入 / 待议
 
@@ -31,4 +31,4 @@ NUMA 绑核与 NPU/HCCS 亲和、Host 侧预处理与 tokenizer 并行、RoCE �
 ## Review
 
 - owners: []（待指派，填写 GitCode 用户名）
-- 评审范围：`Plugins/app-tuner/skills/aplusk/**`
+- 评审范围：`Plugins/app-tuner/skills/ascend_kunpeng/**`
