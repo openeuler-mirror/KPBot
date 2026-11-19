@@ -1,0 +1,24 @@
+{
+  "name": "memoryhub",
+  "version": "1.0.0",
+  "description": "跨会话、跨 agent 的优化经验记忆 — 通过宿主提供的 MemoryHub 客户端在决策前召回历史经验、在评审后保存经确认的完整经验记录，支持 OpenViking、TencentDB Agent Memory 与 mem0 后端",
+  "author": {
+    "name": "Kunpeng Acceleration Team"
+  },
+  "homepage": "https://gitcode.com/openeuler/KPBot/tree/master/Plugins/public/memoryhub",
+  "license": "MulanPSL-2.0",
+  "keywords": [
+    "memory",
+    "experience",
+    "recall",
+    "cross-session",
+    "knowledge",
+    "openviking",
+    "tencentdb",
+    "mem0"
+  ],
+  "platforms": [
+    "claude",
+    "opencode"
+  ]
+}

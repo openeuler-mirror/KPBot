@@ -48,6 +48,18 @@
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["openwiki", "wiki", "documentation", "docs", "knowledge", "agent-docs", "sync", "mirror", "gitcode", "gitee", "github", "automation"]
+    },
+    {
+      "name": "memoryhub",
+      "description": "跨会话、跨 agent 的优化经验记忆 — 通过 MemoryHub 客户端在决策前召回历史经验、在评审后保存经确认的完整经验记录，支持 OpenViking、TencentDB Agent Memory 与 mem0 后端",
+      "author": {
+        "name": "Kunpeng Acceleration Team"
+      },
+      "category": "memory",
+      "source": "./Plugins/public/memoryhub",
+      "version": "1.0.0",
+      "platforms": ["claude", "opencode"],
+      "tags": ["memory", "experience", "recall", "cross-session", "knowledge", "openviking", "tencentdb", "mem0"]
     }
   ]
 }
