@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
-PLUGIN = PACKAGE.parents[1]
+PLUGIN = PACKAGE.parents[2]
 SPEC = importlib.util.spec_from_file_location("agent_case_supervisor", PACKAGE / "scripts/agent_case_supervisor.py")
 SUPERVISOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SUPERVISOR)

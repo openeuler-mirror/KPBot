@@ -15,18 +15,18 @@ RUN dnf install -y \
     && python3 --version
 
 # 整个技能包装入 staging；entrypoint 按 SKILL_MODE + INNER_SKILL 复现 install.sh 的嵌套发现逻辑
-COPY skills/kptools-agentenv-tuning/ /staging/pkg/
+COPY skills/agentic-infra/kptools-agentenv-tuning/ /staging/pkg/
 RUN rm -rf /staging/pkg/cases /staging/pkg/skills/*/cases \
     && chmod 700 /staging
 
-COPY skills/kptools-agentenv-tuning/skills/agentenv-kernel-hz/cases/agent-triage-clktck-not-hz/evidence/ /workspace/evidence/
-COPY skills/kptools-agentenv-tuning/skills/agentenv-kernel-hz/cases/agent-triage-clktck-not-hz/prompts/ /workspace/prompts/
-COPY skills/kptools-agentenv-tuning/skills/agentenv-kernel-hz/cases/agent-triage-clktck-not-hz/verify.sh /workspace/verify.sh
-COPY skills/kptools-agentenv-tuning/skills/agentenv-kernel-hz/cases/agent-triage-clktck-not-hz/entrypoint.sh /workspace/entrypoint.sh
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-cluster-tlbi/cases/agent-triage-binding-not-tlbi/evidence/ /workspace/evidence/
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-cluster-tlbi/cases/agent-triage-binding-not-tlbi/prompts/ /workspace/prompts/
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-cluster-tlbi/cases/agent-triage-binding-not-tlbi/verify.sh /workspace/verify.sh
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-cluster-tlbi/cases/agent-triage-binding-not-tlbi/entrypoint.sh /workspace/entrypoint.sh
 
 ENV PKG_NAME=kptools-agentenv-tuning \
-    INNER_SKILL=agentenv-kernel-hz \
-    EXPECTED_SKILL=agentenv-kernel-hz
+    INNER_SKILL=agentenv-cluster-tlbi \
+    EXPECTED_SKILL=agentenv-cluster-tlbi
 
 # The supervisor and grader remain root-owned; only opt/ is writable by the agent.
 RUN useradd -m analyzer \

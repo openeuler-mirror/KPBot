@@ -1,7 +1,7 @@
 # AgentENV 技能包
 
 AgentENV 沙箱在 openEuler/ARM 上的功能适配和性能调优，独立组织在
-`Plugins/app-tuner/skills/kptools-agentenv-tuning/`，包含一个入口及按需安装的专项 Skill。
+`Plugins/app-tuner/skills/agentic-infra/kptools-agentenv-tuning/`，包含一个入口及按需安装的专项 Skill。
 入口 `SKILL.md` 的 name 统一为 `kptools-agentenv-tuning`，不改各专项的名称。
 
 ```text

@@ -8,13 +8,11 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
 
 ## 成员
 
-（暂无已就位成员。本域目录下现仅有占位子目录——仅含 `.gitkeep`、尚无 `SKILL.md`，
-不可作为技能加载。）
+- [`kptools-agentenv-tuning`](kptools-agentenv-tuning/SKILL.md) — AgentENV 沙箱内核适配与调优入口，含 pvspinlock / kernel-hz / cluster-tlbi / snapshot-fs 四个专项子技能包
 
 ## 后续迁入（各自独立 PR）
 
-- `kptools-agentenv-tuning`（现居 `../kptools-agentenv-tuning/`）
-- `kptools-openeuler-agentenv`（现居 `../kptools-openeuler-agentenv/`）
+- `kptools-openeuler-agentenv`（现居 `../kptools-openeuler-agentenv/`，本域内目录已占位）
 - `cubesandbox-deployment`、`cubesandbox-bench-protocol`、`cubesandbox-lifecycle-bench`、
   `sandbox-timeline-profile`（现居本插件 `skills/` 顶层）
 

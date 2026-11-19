@@ -1,7 +1,7 @@
 # 用例：agent 级端到端 —— 容器内用 opencode 调用 agentenv-pvspinlock 完成 AgentENV 诊断
 #
 # 构建：
-#   docker build --network host -f skills/kptools-agentenv-tuning/skills/agentenv-pvspinlock/cases/agent-triage-host-only-evidence/Dockerfile \
+#   docker build --network host -f skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-pvspinlock/cases/agent-triage-host-only-evidence/Dockerfile \
 #       -t kpbot/app-tuner-agentenv-pvspinlock-triage:1.0-openeuler24.03 .
 #   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
 #   ./run_ab.sh --save results-ab
@@ -27,8 +27,8 @@ ab:
   uplift: checks_score_with - checks_score_without
 
 build:
-  context: ../../../../../..
-  dockerfile: skills/kptools-agentenv-tuning/skills/agentenv-pvspinlock/cases/agent-triage-host-only-evidence/Dockerfile
+  context: ../../../../../../..
+  dockerfile: skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-pvspinlock/cases/agent-triage-host-only-evidence/Dockerfile
 
 entrypoint: ["/workspace/entrypoint.sh"]
 

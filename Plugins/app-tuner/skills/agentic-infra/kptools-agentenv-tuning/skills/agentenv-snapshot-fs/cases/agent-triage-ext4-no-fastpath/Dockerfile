@@ -15,14 +15,14 @@ RUN dnf install -y \
     && python3 --version
 
 # 整个技能包装入 staging；entrypoint 按 SKILL_MODE + INNER_SKILL 复现 install.sh 的嵌套发现逻辑
-COPY skills/kptools-agentenv-tuning/ /staging/pkg/
+COPY skills/agentic-infra/kptools-agentenv-tuning/ /staging/pkg/
 RUN rm -rf /staging/pkg/cases /staging/pkg/skills/*/cases \
     && chmod 700 /staging
 
-COPY skills/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/evidence/ /workspace/evidence/
-COPY skills/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/prompts/ /workspace/prompts/
-COPY skills/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/verify.sh /workspace/verify.sh
-COPY skills/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/entrypoint.sh /workspace/entrypoint.sh
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/evidence/ /workspace/evidence/
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/prompts/ /workspace/prompts/
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/verify.sh /workspace/verify.sh
+COPY skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/entrypoint.sh /workspace/entrypoint.sh
 
 ENV PKG_NAME=kptools-agentenv-tuning \
     INNER_SKILL=agentenv-snapshot-fs \

@@ -1,20 +1,23 @@
-# 用例：agent 级端到端 —— 容器内用 opencode 调用 agentenv-cluster-tlbi 完成 AgentENV 诊断
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 agentenv-snapshot-fs 完成 AgentENV 诊断
 #
 # 构建：
-#   docker build --network host -f skills/kptools-agentenv-tuning/skills/agentenv-cluster-tlbi/cases/agent-triage-binding-not-tlbi/Dockerfile \
-#       -t kpbot/app-tuner-agentenv-tlbi-triage:1.0-openeuler24.03 .
+#   docker build --network host -f skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/Dockerfile \
+#       -t kpbot/app-tuner-agentenv-snapshotfs-triage:1.0-openeuler24.03 .
 #   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
 #   ./run_ab.sh --save results-ab
 #
-# 说明：tier agent。任务是诊断而非代码优化：agent 读取合成证据 evidence/，
-# 按结果契约写 opt/report.json；verify.sh 检查结论是否保持未知项为 unknown、
-# 不虚构功能/性能收益。with/without 唯一差异是 skill 接入与 prompt 是否提及 skill。
+# 说明：tier agent。任务是诊断而非代码优化：agent 读取合成证据 evidence/
+#（快照慢 + fsbench @4KB≈@16KB 固定开销主导 + kallsyms 无 ext4 iomap 符号 +
+# work_dir 在 ext4），考察能否识别 Ubuntu ext4 快路径为代码缺失（挂载参数
+# 不可开启）、work_dir 所在文件系统决定档位，并给出 XFS 迁移候选动作，
+# 按结果契约写 opt/report.json 且不虚构收益。
+# with/without 唯一差异是 skill 接入与 prompt 是否提及 skill。
 
-name: agent-triage-binding-not-tlbi
-skill: agentenv-cluster-tlbi
+name: agent-triage-ext4-no-fastpath
+skill: agentenv-snapshot-fs
 tier: agent
 
-image: kpbot/app-tuner-agentenv-tlbi-triage:1.0-openeuler24.03
+image: kpbot/app-tuner-agentenv-snapshotfs-triage:1.0-openeuler24.03
 model: deepseek/deepseek-v4-flash
 auth: runtime_mount           # auth.json 只读卷挂载至 /run/secrets/，不进镜像/命令行/环境变量
 
@@ -27,8 +30,8 @@ ab:
   uplift: checks_score_with - checks_score_without
 
 build:
-  context: ../../../../../..
-  dockerfile: skills/kptools-agentenv-tuning/skills/agentenv-cluster-tlbi/cases/agent-triage-binding-not-tlbi/Dockerfile
+  context: ../../../../../../..
+  dockerfile: skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-snapshot-fs/cases/agent-triage-ext4-no-fastpath/Dockerfile
 
 entrypoint: ["/workspace/entrypoint.sh"]
 
@@ -63,13 +66,13 @@ assert:
     expect: true
   - type: json_field
     file: results/result.json
-    field: binding_not_mechanism
+    field: ext4_path_missing
     expect: true
   - type: json_field
     file: results/result.json
-    field: requires_impl_evidence
+    field: xfs_or_tier_recommended
     expect: true
   - type: json_field
     file: results/result.json
-    field: no_pass_claim
+    field: no_mount_option_fix
     expect: true
