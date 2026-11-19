@@ -15,7 +15,7 @@ ASSERTIONS = {
         "结论为 imbalanced（verdict.json）",
         "至少命中 balancedness、在途请求、TTFT 三个信号",
         "报告给出证据表与阈值对照",
-        "报告给出交接命令：dynamic 模式 + 三个 eplb-config 参数",
+        "报告给出 dynamic 模板改动清单（env + --enable-eplb + 三个 eplb-config 参数）",
     ],
     2: [
         "结论为 borderline（verdict.json）",
@@ -113,7 +113,7 @@ def grade(eval_id, outputs, template=None):
         out.append(res(ASSERTIONS[3][2], causes >= 2, "命中 %d 类非专家因素" % causes))
         no_redundant = ("--redundant-experts" not in report and
                         "num_redundant_experts" not in report and
-                        "apply_eplb.py --mode dynamic" not in report)
+                        "--eplb-config.num_redundant_experts" not in report)
         out.append(res(ASSERTIONS[3][3], no_redundant, "未推荐加副本" if no_redundant else "仍推荐加副本/改模板"))
     elif eval_id == 4:
         dep = "balancedness" in report and has_any(report, ["只在", "只有", "依赖", "已开", "enable-eplb"])
@@ -145,7 +145,7 @@ def grade(eval_id, outputs, template=None):
         more = has_any(report, ["3 个窗口", "三个窗口", "至少 3", "至少3"]) and \
             ("metrics" in report or "/metrics" in report)
         out.append(res(ASSERTIONS[5][2], more, "给出补采要求" if more else "缺补采要求"))
-        no_action = "apply_eplb.py --mode dynamic" not in report
+        no_action = "--eplb-config.num_redundant_experts" not in report
         out.append(res(ASSERTIONS[5][3], no_action, "未给出开/不开结论" if no_action else "仍给了开启动命令"))
     return out
 

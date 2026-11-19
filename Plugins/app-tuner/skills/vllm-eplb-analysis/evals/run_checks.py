@@ -131,6 +131,65 @@ def main():
               and d["recommendation"]["action"] == "optimize_dynamic",
               (d or {}).get("indicators", {}).get("memory", {}).get("verdict", ""))
 
+        # --- P2-1: cumulative preemption counter must not gate ---
+        r, d = analyse(["--evidence", os.path.join(FIX, "imbalanced_cumulative_preemptions.json")])
+        check("只有累计换出次数时不判 no_headroom",
+              d and d["indicators"]["memory"]["verdict"] == "ample"
+              and any("累计换出" in n for n in d["notes"]),
+              json.dumps((d or {}).get("indicators", {}).get("memory", {})))
+        import shutil as _sh
+        base_text = open(os.path.join(FIX, "prometheus_sample.txt"), encoding="utf-8").read()
+        prev = os.path.join(tmp, "prev.txt")
+        open(prev, "w", encoding="utf-8").write(base_text)
+        same = os.path.join(tmp, "cur_same.txt")
+        open(same, "w", encoding="utf-8").write(base_text)
+        r, d = analyse(["--prometheus", same, "--prometheus-prev", prev])
+        check("两份快照差分为 0 时不判 no_headroom（累计值 >0 也不阻塞）",
+              d and d["indicators"]["memory"]["preemptions_delta"] == 0
+              and d["indicators"]["memory"]["verdict"] == "ample",
+              json.dumps((d or {}).get("indicators", {}).get("memory", {})))
+        cur = os.path.join(tmp, "cur_diff.txt")
+        open(cur, "w", encoding="utf-8").write(
+            base_text.replace('vllm:num_preemptions{model_name="dsv41",engine="2"} 0.0',
+                              'vllm:num_preemptions{model_name="dsv41",engine="2"} 4.0'))
+        r, d = analyse(["--prometheus", cur, "--prometheus-prev", prev])
+        check("两份快照差分 >0 时判 no_headroom",
+              d and d["indicators"]["memory"]["preemptions_delta"] == 4.0
+              and d["indicators"]["memory"]["verdict"] == "no_headroom",
+              json.dumps((d or {}).get("indicators", {}).get("memory", {})))
+
+        # --- P2-2: tight without affordable must not hand out an uncapped number ---
+        ev = {"balancedness": [0.78, 0.80, 0.79, 0.77], "rank_waiting": [20, 3, 4, 3, 3, 4, 3, 3],
+              "rank_running": [8] * 8, "rank_ttft_ms": [2200, 900, 920, 890, 910, 900, 905, 915],
+              "kv_cache_usage_pct": 88.0}
+        p = os.path.join(tmp, "tight_noad.json")
+        json.dump(ev, open(p, "w"))
+        r, d = analyse(["--evidence", p])
+        check("tight 但算不出 affordable -> 副本数待定",
+              d and d["recommendation"]["action"] == "optimize_with_cap"
+              and d["recommendation"]["handoff"]["redundant_experts"] is None
+              and "先测" in d["recommendation"]["next"],
+              json.dumps((d or {}).get("recommendation", {}).get("handoff")))
+        r, d = analyse(["--evidence", os.path.join(FIX, "imbalanced.json")])
+        check("memory=unknown 时交接明确要求先确认显存",
+              "显存" in d["recommendation"]["next"],
+              d["recommendation"]["next"][-60:])
+
+        # --- P1: handoff is self-contained (no external skill/script) ---
+        r, d = analyse(["--evidence", os.path.join(FIX, "imbalanced.json")])
+        ho = d["recommendation"]["handoff"]
+        check("handoff 携带模板改动清单且不引用外部技能",
+              "template_changes" in ho and "skill" not in ho
+              and any("--enable-eplb" in f for f in ho["template_changes"]["add_flags"]),
+              json.dumps(ho["template_changes"], ensure_ascii=False)[:120])
+        r, d = analyse(["--evidence", os.path.join(FIX, "borderline.json")])
+        probe = d["recommendation"]["template_changes"]
+        check("force 探针同样给出模板改动清单",
+              probe["env"].get("VLLM_USE_V2_MODEL_RUNNER") == "0"
+              and probe["unset_env"] == ["DYNAMIC_EPLB"]
+              and probe["additional_config"].get("enable_force_eplb") is True,
+              json.dumps(probe, ensure_ascii=False)[:120])
+
         # --- CLI contracts ---
         p = os.path.join(tmp, "out.json")
         r, d = analyse(["--evidence", os.path.join(FIX, "balanced.json"), "--out", p])

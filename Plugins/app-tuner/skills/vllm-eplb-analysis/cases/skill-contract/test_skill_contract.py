@@ -13,7 +13,6 @@ CASE_DIR = Path(__file__).resolve().parent
 SKILL_DIR = CASE_DIR.parents[1]
 APP_TUNER = SKILL_DIR.parents[1]
 REPO = SKILL_DIR.parents[3]
-SIBLING = SKILL_DIR.parent / "vllm-eplb-optimization"
 
 SCAN_DIRS = ("references", "scripts", "evals/fixtures")
 SCAN_FILES = ("SKILL.md", "evals/evals.json", "evals/eval_queries.json")
@@ -135,17 +134,30 @@ class TestScriptContract(unittest.TestCase):
         self.assertIn("checks passed", r.stdout)
 
 
-class TestLinkage(unittest.TestCase):
-    def test_analysis_points_to_optimization(self):
-        text = read(SKILL_DIR / "SKILL.md")
-        self.assertIn("vllm-eplb-optimization", text)
-        self.assertIn("apply_eplb.py", text)
+class TestSelfContained(unittest.TestCase):
+    def test_no_dangling_external_refs(self):
+        """The skill must not point at files or scripts that are not shipped with it."""
+        hits = []
+        for path in scanned_files():
+            text = read(path)
+            for token in ("vllm-eplb-optimization", "apply_eplb.py"):
+                if token in text:
+                    hits.append("%s: %s" % (path.relative_to(SKILL_DIR), token))
+        self.assertEqual(hits, [], "引用了未随技能交付的文件: %s" % hits)
 
-    def test_optimization_points_back(self):
-        if not SIBLING.is_dir():
-            self.skipTest("sibling skill not present")
-        text = read(SIBLING / "SKILL.md")
-        self.assertIn("vllm-eplb-analysis", text)
+    def test_handoff_is_self_contained(self):
+        import json as _json
+        import subprocess as _sp
+        r = _sp.run([sys.executable, str(SKILL_DIR / "scripts" / "analyze_eplb_metrics.py"),
+                     "--evidence", str(SKILL_DIR / "evals" / "fixtures" / "imbalanced.json")],
+                    capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rec = _json.loads(r.stdout)["recommendation"]
+        ho = rec["handoff"]
+        self.assertIn("template_changes", ho)
+        self.assertNotIn("skill", ho)
+        self.assertIn("--enable-eplb", ho["template_changes"]["add_flags"])
+        self.assertTrue(rec["next"])
 
 
 class TestRegistration(unittest.TestCase):

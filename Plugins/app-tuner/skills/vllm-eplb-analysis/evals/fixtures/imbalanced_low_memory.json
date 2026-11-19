@@ -38,8 +38,8 @@
     930
   ],
   "kv_cache_usage_pct": 98.0,
-  "preemptions": 12,
   "free_mem_gib": 0.4,
   "bytes_per_expert_gib": 2.4,
-  "ep_size": 16
+  "ep_size": 16,
+  "preemptions_delta": 12
 }

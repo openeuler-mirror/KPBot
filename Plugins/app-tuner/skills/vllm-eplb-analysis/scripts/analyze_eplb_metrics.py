@@ -16,6 +16,7 @@ Inputs (any mix):
   --evidence   normalised JSON (see references/eplb-metrics.md)
   --eplb-log   vLLM server log containing `EPLB step: ... balancedness=...` lines
   --prometheus `curl /metrics` text dump (per-engine labels are used)
+  --prometheus-prev  earlier snapshot, used only to diff cumulative counters
 
 Output: JSON verdict on stdout (and optionally --out file).
 
@@ -173,18 +174,31 @@ def hist_quantile(hist, q):
 
 
 # ---------------------------------------------------------------- indicators
-def memory_block(evidence, prom):
-    """Memory-headroom gate: can the service host redundant experts at all?"""
+def memory_block(evidence, prom, prom_prev=None):
+    """Memory-headroom gate: can the service host redundant experts at all?
+
+    vllm:num_preemptions is a Prometheus counter (cumulative since start), so a
+    single snapshot only says "this process has preempted at some point", not
+    "it is preempting now". Gate on the window delta; a lone cumulative value is
+    reported but never blocks.
+    """
     kv = []
     if evidence.get("kv_cache_usage_pct") is not None:
         kv = [float(evidence["kv_cache_usage_pct"])]
     else:
         for v in by_engine(prom, "vllm:kv_cache_usage_perc").values():
             kv.append(v * 100.0 if v <= 1.0 else v)
-    preempt = evidence.get("preemptions")
-    if preempt is None:
-        s = by_engine(prom, "vllm:num_preemptions")
-        preempt = sum(s.values()) if s else None
+
+    delta = evidence.get("preemptions_delta")
+    total = evidence.get("preemptions_total")
+    cur = by_engine(prom, "vllm:num_preemptions")
+    if total is None and cur:
+        total = sum(cur.values())
+    if delta is None and prom_prev is not None:
+        prev = by_engine(prom_prev, "vllm:num_preemptions")
+        if cur and prev:
+            delta = sum(cur.values()) - sum(prev.values())
+
     free_gib = evidence.get("free_mem_gib")
     per_expert = evidence.get("bytes_per_expert_gib")
     ep = evidence.get("ep_size")
@@ -195,15 +209,21 @@ def memory_block(evidence, prom):
 
     block = {
         "kv_cache_usage_pct": round(max(kv), 1) if kv else None,
-        "preemptions": preempt,
+        "preemptions_delta": delta,
+        "preemptions_total": total,
         "free_mem_gib": free_gib,
         "bytes_per_expert_gib": per_expert,
         "affordable_redundant": affordable,
+        "note": None,
     }
-    if not kv and preempt is None and free_gib is None:
+    if delta is None and total not in (None, 0):
+        block["note"] = ("只拿到累计换出次数（%d），无法判断当前是否仍在换出；"
+                         "请用两份 /metrics 快照（--prometheus 与 --prometheus-prev）做差分" % int(total))
+
+    if not kv and delta is None and free_gib is None:
         block["verdict"] = "unknown"
         return block
-    if ((kv and max(kv) >= 95) or (preempt is not None and preempt > 0) or
+    if ((kv and max(kv) >= 95) or (delta is not None and delta > 0) or
             (free_gib is not None and free_gib <= 0.5) or
             (affordable is not None and affordable <= 0)):
         block["verdict"] = "no_headroom"
@@ -224,7 +244,7 @@ def ratio_stats(values):
     return max(vals) / med
 
 
-def analyse(evidence, eplb_series, prom):
+def analyse(evidence, eplb_series, prom, prom_prev=None):
     params = dict(DEFAULTS)
     params.update(evidence.get("thresholds") or {})
     notes = []
@@ -311,7 +331,9 @@ def analyse(evidence, eplb_series, prom):
         if spread <= 5 and min(util) >= 80:
             notes.append("各 rank 利用率都接近打满且差异 <=5%：瓶颈更像整体算力/带宽，不是专家摆放")
 
-    memory = memory_block(evidence, prom)
+    memory = memory_block(evidence, prom, prom_prev)
+    if memory.get("note"):
+        notes.append(memory["note"])
     indicators["memory"] = memory
 
     usable = sum(1 for k in ("balancedness", "queue_skew", "ttft_skew", "prompt_skew")
@@ -327,7 +349,7 @@ def analyse(evidence, eplb_series, prom):
         action = "optimize_dynamic"
         if memory["verdict"] == "no_headroom":
             action = "free_memory_first"
-        elif memory["verdict"] == "tight" and memory.get("affordable_redundant") is not None:
+        elif memory["verdict"] == "tight":
             action = "optimize_with_cap"
     elif signals:
         verdict = "borderline"
@@ -345,6 +367,40 @@ def analyse(evidence, eplb_series, prom):
     }
 
 
+def _dynamic_changes(extra, window, interval):
+    """Self-contained edit list for the P-node launch template."""
+    flags = ["--enable-eplb"]
+    pending = None
+    if extra is None:
+        pending = ("--eplb-config.num_redundant_experts（先测显存余量再确定；"
+                   "必须是 ep_size 的整数倍）")
+    else:
+        flags.append("--eplb-config.num_redundant_experts %d" % extra)
+    flags += ["--eplb-config.window_size %d" % window,
+              "--eplb-config.step_interval %d" % interval]
+    return {
+        "env": {"VLLM_USE_V2_MODEL_RUNNER": "1", "DYNAMIC_EPLB": "true"},
+        "unset_env": [],
+        "add_flags": flags,
+        "additional_config": {},
+        "pending": pending,
+    }
+
+
+def _force_changes():
+    return {
+        "env": {"VLLM_USE_V2_MODEL_RUNNER": "0"},
+        "unset_env": ["DYNAMIC_EPLB"],
+        "add_flags": [],
+        "additional_config": {"enable_force_eplb": True},
+        "pending": None,
+    }
+
+
+TEMPLATE_NOTE = ("本交付只输出模板改动清单，不含一键改写脚本；改前请备份原模板，"
+                 "改后用 bash -n 校验，并确认 --additional-config 仍只有一个。")
+
+
 def recommend(action, indicators, evidence):
     mem = indicators.get("memory") or {}
     affordable = mem.get("affordable_redundant")
@@ -359,16 +415,17 @@ def recommend(action, indicators, evidence):
         return {
             "action": action,
             "reason": "可用指标不足或窗口太短，无法区分「真失衡」与「采样噪声」。",
-            "next": "打开 eplb_config.log_balancedness（interval 1）跑 >=3 个窗口；同时导出一份 /metrics 文本。",
+            "next": "打开 eplb_config.log_balancedness（interval 1）跑 >=3 个窗口；同时导出两份 /metrics 文本（间隔覆盖一个业务周期）。",
         }
     if action == "probe_ceiling_first":
         return {
             "action": action,
             "reason": "只有单一/不稳定信号。用 force EPLB 做上限探针，比直接上线 dynamic 更安全："
                       "force 与 off 差距大才说明失衡确实是瓶颈。",
-            "probe": {"skill": "vllm-eplb-optimization", "mode": "force",
-                      "note": "只作测量，不作上线配置；测完还原。"},
-            "next": "probe 显示 force 明显快于 off 后，再按 optimize_dynamic 执行。",
+            "template_changes": _force_changes(),
+            "note": TEMPLATE_NOTE,
+            "next": "按清单切到 force 压测 off vs force；差距明显再按 optimize_dynamic 的清单切回 dynamic，"
+                    "测完还原 off。",
         }
     if action == "free_memory_first":
         return {
@@ -377,28 +434,40 @@ def recommend(action, indicators, evidence):
                       "此时直接加副本大概率把长尾换成 OOM 或换出。",
             "memory": mem,
             "next": "先降 KV 压力（减小 max-model-len、降并发或缩短上下文），或把冗余专家数降到显存能容纳的量；"
-                    "再复跑本分析确认仍有失衡，才进入 dynamic。",
+                    "再复跑本分析确认仍有失衡，才按 dynamic 清单改模板。",
         }
 
     bal = (indicators.get("balancedness") or {}).get("median")
     suggested = 32 if (bal is not None and bal < 0.80) else 16
     extra = suggested
     capped = False
+    pending_memory = False
     if affordable is not None and affordable < extra:
         extra = max(0, int(affordable))
         capped = True
+    if action == "optimize_with_cap" and affordable is None:
+        extra = None
+        pending_memory = True
+
+    window = 1000
     handoff = {
-        "skill": "vllm-eplb-optimization",
         "mode": "dynamic",
         "redundant_experts": extra,
-        "window_size": 1000,
-        "step_interval": 1000,
+        "window_size": window,
+        "step_interval": window,
+        "template_changes": _dynamic_changes(extra, window, window),
+        "note": TEMPLATE_NOTE,
     }
     notes = ["按默认 1000 步窗口起步；若压测计划短于该周期，把 window_size/step_interval 调小到压测步数以内，"
              "否则不会触发重排。"]
     if capped:
         notes.append("按显存余量把冗余专家从 %d 压到 %d；每减少一个副本都会削弱削峰能力，"
                      "若收益不足，优先释放显存而不是继续加副本。" % (suggested, extra))
+    if pending_memory:
+        notes.append("显存余量偏紧但缺少数值证据：先测 free_mem_gib 与 bytes_per_expert_gib，"
+                     "按 affordable_redundant 确定冗余专家数（必须是 ep_size 的整数倍），不要直接套用 16/32。")
+    if mem.get("verdict") in ("unknown", None):
+        notes.append("当前没有显存证据：上线前必须先确认 KV 占用与剩余显存，否则可能 OOM 或频繁换出。")
     if action == "optimize_with_cap":
         return {
             "action": action,
@@ -430,7 +499,9 @@ def main():
     ap = argparse.ArgumentParser(description="Judge MoE expert-load imbalance from multiple signals")
     ap.add_argument("--evidence", help="normalised evidence JSON")
     ap.add_argument("--eplb-log", help="vLLM log with `EPLB step: ... balancedness=` lines")
-    ap.add_argument("--prometheus", help="text dump of vLLM /metrics")
+    ap.add_argument("--prometheus", help="text dump of vLLM /metrics (latest)")
+    ap.add_argument("--prometheus-prev",
+                    help="earlier /metrics snapshot; only used to diff cumulative counters")
     ap.add_argument("--out", help="write JSON verdict here")
     ap.add_argument("--expect", choices=["imbalanced", "borderline", "balanced", "inconclusive"],
                     help="exit 0 only if verdict matches (for CI)")
@@ -440,7 +511,8 @@ def main():
         die("ERROR: give at least one of --evidence / --eplb-log / --prometheus")
 
     evidence = load_evidence(args.evidence)
-    result = analyse(evidence, parse_eplb_log(args.eplb_log), parse_prometheus(args.prometheus))
+    result = analyse(evidence, parse_eplb_log(args.eplb_log),
+                     parse_prometheus(args.prometheus), parse_prometheus(args.prometheus_prev))
     text = json.dumps(result, ensure_ascii=False, indent=2)
     print(text)
     if args.out:

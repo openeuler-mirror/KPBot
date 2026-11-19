@@ -91,7 +91,8 @@ balancedness=0.7900, steps until the next rearrangement: 600
 | `rank_prompt_tokens` | float[] | 窗口内各 engine 处理的 prompt token 增量 |
 | `rank_util_pct` | float[] | 各 rank 设备利用率（可选，用于排除非专家瓶颈） |
 | `kv_cache_usage_pct` | float | KV cache 占用（0~100），可替代 `vllm:kv_cache_usage_perc` |
-| `preemptions` | int | 累计换出次数，可替代 `vllm:num_preemptions` |
+| `preemptions_delta` | int | 窗口内换出增量（门控用它） |
+| `preemptions_total` | int | 进程累计换出次数；只作参考，不参与门控 |
 | `free_mem_gib` | float | 剩余显存（GiB），可选 |
 | `bytes_per_expert_gib` | float | 每个冗余专家在每个 EP rank 上的增量显存（GiB），DeepSeekV3 约 2.4 |
 | `ep_size` | int | EP rank 数，用于把每 rank 余量换算成全局副本数 |
@@ -117,13 +118,18 @@ balancedness=0.7900, steps until the next rearrangement: 600
 
 ## 8. 显存余量（M0）
 
+**换出必须看增量，不能看累计值**：`vllm:num_preemptions` 是 Prometheus counter，自进程启动起只增不减。
+"历史上换出过一次"在长跑服务里很常见，不代表现在缺 KV。正确做法是隔一个业务周期采两份 `/metrics`，
+用 `--prometheus`（最新）与 `--prometheus-prev`（更早）做差分，或直接在证据里给 `preemptions_delta`。
+只有 `preemptions_total` 时脚本不会因此判无余量，只在报告里提示去补差分。
+
 **为什么不能看 设备剩余显存**：vLLM 启动时按 `gpu_memory_utilization` 预分配权重与 KV cache，之后
 设备 free 通常接近 0。真正决定"还能不能加副本"的是 KV cache 的紧张程度，以及你愿意为副本让出多少 KV。
 
 | 证据 | 来源 | 用法 |
 |---|---|---|
 | KV cache 占用 | `vllm:kv_cache_usage_perc`（gauge，0~1，按 engine） | 取各 engine 最大值；≥85% 偏紧，≥95% 无余量 |
-| 换出次数 | `vllm:num_preemptions`（counter，按 engine） | 只要在增长，说明 KV 已不足，判无余量 |
+| 换出增量 | `vllm:num_preemptions`（counter，按 engine），两份快照做差 | **增量 >0** 判无余量；只有一个累计值时不参与门控，只给提示 |
 | 剩余显存 | 启动日志 "Available KV cache memory"/设备工具 | 可选；启动后通常很小，只作辅助 |
 | 每副本成本 | 官方公式（见下）或实测 | 换算"这点余量最多放几个副本" |
 
@@ -150,9 +156,9 @@ affordable = floor(free_gib / bytes_per_expert_gib) × ep_size
 
 | memory.verdict | 条件 | 动作影响 |
 |---|---|---|
-| `no_headroom` | KV ≥95%，或已发生换出，或 free ≤0.5 GiB，或 affordable ≤0 | 动作改为 `free_memory_first`，不交接加副本 |
+| `no_headroom` | KV ≥95%，或窗口内换出增量 >0，或 free ≤0.5 GiB，或 affordable ≤0 | 动作改为 `free_memory_first`，不交接加副本 |
 | `tight` | KV ≥85%，或 affordable < 8 | 可开 dynamic，但冗余专家按 affordable 收敛（`optimize_with_cap`） |
-| `ample` | KV <85% 且无换出 | 按失衡强度给参数 |
+| `ample` | KV <85% 且窗口无换出 | 按失衡强度给参数 |
 | `unknown` | 未提供任何显存证据 | 不阻塞结论，交接时提示上线前确认 |
 
 ## 9. 代价与前置条件

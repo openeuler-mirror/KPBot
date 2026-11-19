@@ -48,7 +48,7 @@ metadata:
 
 | 结论 | 条件 | 该做什么 |
 |---|---|---|
-| `imbalanced` | ≥2 个信号，且失衡持续 | 交给 `vllm-eplb-optimization` 开 dynamic |
+| `imbalanced` | ≥2 个信号，且失衡持续 | 输出 dynamic 模板改动清单（见第四步） |
 | `borderline` | 只有 1 个信号，或信号多但不持续 | 先做 force 上限探针，再决定 |
 | `balanced` | 没有信号 | **不要开** EPLB |
 | `inconclusive` | 可用指标 < 2，或 balancedness 窗口 < 3 | 补采证据 |
@@ -95,7 +95,9 @@ EPLB 的收益来自冗余专家副本，而副本占的是 **KV cache 的空间
 
 1. **KV cache 占用**：`vllm:kv_cache_usage_perc`（0~1，按 engine）。长期 >85% 时加副本会先挤掉可用
    KV，长上下文请求最先受害。
-2. **是否已经在换出**：`vllm:num_preemptions` 只要在增长，说明 KV 已经不够用，此时加副本是火上浇油。
+2. **是否正在换出**：`vllm:num_preemptions` 是累计计数器，单看一个快照只能知道"历史上换出过"。
+   必须用两份 `/metrics` 快照做差分（`--prometheus` 与 `--prometheus-prev`），**窗口内增量 >0** 才说明
+   当前仍在换出；只有累计值时脚本只给提示、不参与门控。
 3. **每个副本的成本**：官方公式
    `NUM_MOE_LAYERS × BYTES_PER_EXPERT × (NUM_TOTAL_EXPERTS + NUM_REDUNDANT_EXPERTS) ÷ NUM_EP_RANKS`，
    DeepSeekV3 每多一个冗余专家（每 EP rank）约 2.4 GB。用它能算出这点余量最多放几个副本。
@@ -105,12 +107,15 @@ EPLB 的收益来自冗余专家副本，而副本占的是 **KV cache 的空间
 ```json
 {
   "kv_cache_usage_pct": 88.0,
-  "preemptions": 0,
+  "preemptions_delta": 0,
   "free_mem_gib": 3.0,
   "bytes_per_expert_gib": 2.4,
   "ep_size": 16
 }
 ```
+
+`preemptions_delta` 是窗口增量；如果只能拿到累计值，用 `preemptions_total` 标注，它会出现在报告里
+但不会把服务判成无余量。
 
 脚本据此给出 `memory.verdict`（`ample` / `tight` / `no_headroom` / `unknown`）与
 `affordable_redundant`（这点余量最多能放多少个冗余专家），并在 `imbalanced` 时决定是直接交接
@@ -173,30 +178,45 @@ python3 scripts/analyze_eplb_metrics.py --evidence evidence.json --out verdict.j
 
 脚本输出的 `verdict.json` 就是这个报告的事实底稿，结论与证据要能对上；不要在报告里补充脚本没观测到的数字。
 
-## 第四步：交接给优化技能
+## 第四步：按结论给出可执行的模板改动清单
 
-结论为 `imbalanced` 时，按 `recommendation.handoff` 执行：
+本技能只做诊断，输出的是**改哪个文件、加/删哪些行**，不含一键改写脚本。改之前一律先备份原模板，
+改完用 `bash -n` 校验，并确认 `--additional-config` 仍然只有一个。
 
-```bash
-python3 <skill>/scripts/apply_eplb.py --template <P节点 run_dp_template.sh> \
-    --mode dynamic --redundant-experts <N> --window-size <W> --step-interval <S>
-```
-
-结论为 `borderline` 时，先跑上限探针（只测量，不上线）：
+**`imbalanced`：改 P 节点 `run_dp_template.sh` 为 dynamic**
 
 ```bash
-python3 <skill>/scripts/apply_eplb.py --template <P节点模板> --mode force
-# 压测对比 off vs force；差距明显再切 dynamic，测完还原 off
+export VLLM_USE_V2_MODEL_RUNNER=1
+export DYNAMIC_EPLB="true"
+# 在 vllm serve 参数中，紧跟 --enable-expert-parallel 之后追加：
+    --enable-eplb \
+    --eplb-config.num_redundant_experts <N> \
+    --eplb-config.window_size <W> \
+    --eplb-config.step_interval <S> \
 ```
 
-结论为 `balanced` 时，不要动配置。把"为什么不该开"写进报告——这同样是有价值的交付。
+`<N>/<W>/<S>` 取自 `recommendation.handoff`；同一份数据也在 `handoff.template_changes`
+（`env` / `unset_env` / `add_flags` / `additional_config`）里，便于直接照做或接自动化。
+`<N>` 必须是 `ep_size` 的整数倍；若为 `null`，说明显存余量未知或偏紧，先测余量再定。
+
+**`borderline`：先做 force 上限探针（只测量，不上线）**
+
+```bash
+export VLLM_USE_V2_MODEL_RUNNER=0
+unset DYNAMIC_EPLB
+# 在原有 --additional-config JSON 里合并 "enable_force_eplb":true
+```
+
+压测 off vs force：差距明显再按上面的 dynamic 清单改，测完还原 `off`。
+
+**`balanced` / `inconclusive`**：不动配置，把结论与证据留档。
 
 显存相关的分支：
 
 - `recommendation.memory.verdict == "no_headroom"` → 不要加副本，先降 KV 压力（`max-model-len`、并发、
   上下文长度），或按 `affordable_redundant` 把副本数降到显存能容纳的量。
 - `optimize_with_cap` → 按 `handoff.redundant_experts` 执行；这个数值已经按余量压过，不要擅自加回去。
-
+  若它是 `null`，先测 `free_mem_gib` 与 `bytes_per_expert_gib` 再定值。
 
 ## 常见误判
 
@@ -205,11 +225,9 @@ python3 <skill>/scripts/apply_eplb.py --template <P节点模板> --mode force
 | balancedness 很低，但 TTFT 很均匀 | 专家 token 数倾斜被并行/流水掩盖；先查 rank 级延迟再决定 |
 | TTFT 长尾，但 balancedness 很高 | 瓶颈在排队、KV cache、通信或个别请求长度，不是专家摆放 |
 | 只在压测前 1~2 个窗口看到失衡 | 冷启动/预热，按 I5 持续性要求会自动降级为 borderline 或 balanced |
-| 混合在线流量下测不出收益 | 流量本身接近均衡；验证要用不均衡数据集（见优化技能的验证章节） |
+| 混合在线流量下测不出收益 | 流量本身接近均衡；验证要用重复长前缀构造的不均衡数据集 |
 | 所有 rank 利用率都 95%+ 且差异很小 | 整体算力打满，加副本不会变快 |
 
 ## 参考资料
 
 - `references/eplb-metrics.md`：指标定义、日志/metrics 字段来源（附 vLLM 源码位置）、阈值取值理由与校准方法
-- 机制原理（为什么冗余副本能削峰、放置目标为什么看逐 step 峰值）：同仓安装时见
-  `../vllm-eplb-optimization/references/eplb-algorithm.md`；单独安装本技能时，向用户索取该参考文件或直接按上文判定规则执行。
