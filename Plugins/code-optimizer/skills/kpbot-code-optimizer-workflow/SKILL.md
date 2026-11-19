@@ -43,12 +43,12 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 ```bash
 ls; ls -d */ 2>/dev/null
 grep -i -l -E '<场景指纹关键词>' CMakeLists.txt Makefile README* */CMakeLists.txt 2>/dev/null
-grep -i -r -l -m1 -E '<场景指纹关键词>' --include='*.{h,hpp,c,cc,cpp,py}' -maxdepth 2 . 2>/dev/null | head -20
+rg -i -l --max-depth 2 -g '*.h' -g '*.hpp' -g '*.c' -g '*.cc' -g '*.cpp' -g '*.py' -e '<场景指纹关键词>' . | head -20
 ```
 
 命中的场景加入候选集，记录命中文件路径作为证据。
 
-**Step 3 候选确认**：候选集非空 → 调用 AskUserQuestion 单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
+**Step 3 候选确认**：用户已明确指定场景或目标 skill 时，直接执行接管协议，沿用会话中已确认的资源范围和交互模式，无需重复选择。仅凭 attention、unique、ann 等通用词不能视为明确场景。只有多个候选影响执行路径且无法从上下文消歧时才提问；使用当前环境可用的提问工具，工具不可用时以普通文本提问。无候选且用户要求通用代码优化时直接进入默认主流水线；用户需要浏览场景时进入 Step 4。需要确认候选时 → 使用可用的交互方式单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
 - 用户选择某候选场景 → 执行接管协议
 - 用户选择「都不对，查看全部场景」或候选集为空 → 进入 Step 4
 

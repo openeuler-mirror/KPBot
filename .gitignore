@@ -7,6 +7,9 @@ npm-debug.log*
 # Python
 __pycache__/
 *.pyc
+/.test-tmp/
+/test-results.log
+/test-results-latest.log
 
 # OS
 .DS_Store
