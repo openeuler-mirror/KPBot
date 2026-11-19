@@ -10,6 +10,7 @@
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
 - **2026/11/17** — **code-optimizer** 新增 `parallel-accumulator` SKILL，覆盖归约循环的串行累加器并行化：识别单累加器延迟绑定（低 IPC + 低 cache miss），用多个独立累加器重叠依赖链隐藏浮点延迟，附三级改写模板（纯 C 多累加器 / NEON 单累加器 / NEON 多累加器）、`accumulator_plan.py` 累加器数量脚本、tier-A 契约用例、agent 端到端 A/B 用例，对标 Intel performance-patterns 的 parallel-accumulator。
+- **2026/11/16** — **app-tuner** 新增 `kptools-jvmjit` SKILL，覆盖 JVM 进程 perf 采样符号化分析（libperf-jvmti + perf inject --jit）：方法级热点、JIT 代码指令级注解导出（源码+汇编+逐指令周期占比）、容器内采集（权限检测 + 宿主机 perf 工具注入），含 dump 刷盘语义与 [JIT] 残留处理纪律，与外部工具 arthas（免重启方法级交互）/ kptools-devkit java-perf（火焰图全景）分层互补。（[!143](https://gitcode.com/openeuler/KPBot/pull/143)）
 - **2026/11/16** — **app-tuner** 新增 `model-precision-analysis` SKILL，覆盖模型优化后的精度回归验证：读取精度评测工具 `opendatas/output` 合并结果，按数值/选项字母/文本归一化抽取答案（单位、千分位、`\text{}`、截断识别），输出准确率对比、“对→错”回归题定位与达标判定，存在回归即以退出码 1 作为精度门禁（`--fail-on-regression` 为兼容别名），并接入加速卡/应用配置 skill 的 `validation_plan`。
 - **2026/11/06** — **code-optimizer** 新增 `dpdk-optimization` SKILL，覆盖 DPDK 数据面热路径代码优化：worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类判定）与分层代码杠杆库（热路径纪律、双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用），接入统一流水线场景路由，配套 app-tuner 的配置层调优。
 - **2026/11/06** — **app-tuner** 新增 `kptools-dpdk-tuning` SKILL，覆盖 DPDK 应用性能调优：现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延），面向鲲鹏 920 + hns3/Hi1822 主场景，不修改业务源码。
