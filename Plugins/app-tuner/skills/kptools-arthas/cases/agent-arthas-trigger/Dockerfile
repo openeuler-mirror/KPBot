@@ -35,8 +35,6 @@ RUN setpriv --reuid=arthas-agent --regid=arthas-agent --init-groups \
 ENV ARTHAS_BOOT_JAR=/opt/arthas/arthas-boot.jar
 
 COPY skills/kptools-arthas/ /staging/skill/
-# 容器内 SKILL.md 用 opencode/ 变体（叠加 agent 安全约束节，与主 SKILL.md 同源维护）
-COPY opencode/kptools-arthas/SKILL.md /staging/skill/SKILL.md
 RUN rm -rf /staging/skill/cases
 
 COPY skills/kptools-arthas/cases/agent-arthas-trigger/prompts/ /workspace/prompts/

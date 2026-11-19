@@ -106,3 +106,11 @@ bash scripts/collect.sh -p <PID> --preset cpu --shutdown
 
 - [Arthas 使用指南](references/arthas-guide.md) — 安装/离线、attach 机制、命令全景、输出解读、场景判定与出界路由
 - [与 java-perf/py-spy 分工](references/arthas-vs-java-perf.md) — 何时用哪个工具
+
+## 安全约束
+
+当你在容器化 A/B 用例（agent tier）中执行时，必须遵守以下硬性边界（与两臂 prompts 中的约束同源，docs/agent-case-security-notes.md 规则 1/8）：
+
+- 禁止读取凭证文件以及 /workspace 之外的任何文件（目标进程的确认与语言路由由 collect.sh 内部完成，无需自行读取 /proc）。
+- 禁止任何网络访问（模型 API 已由运行环境代为调用）。
+- 分析证据与产物只允许写入 /workspace 下的目录（如 ./arthas-evidence/）。
