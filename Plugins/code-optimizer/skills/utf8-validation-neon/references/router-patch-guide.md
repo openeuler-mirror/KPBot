@@ -12,7 +12,7 @@
 | 当前走 naive | `objdump -d <bin> --disassemble=utf8_range_IsValid` | 无 `bl <utf8_range>` 路由调用 |
 | NEON 实现存在 | `ls range-neon.c naive.c` | 两者齐备 |
 | 尾部依赖 | `grep -n "utf8_naive" range-neon.c` | 命中（<16 字节尾巴走 utf8_naive） |
-| 返回值语义 | `grep -n "return" range-neon.c \| tail` | 0=合法 / -1=非法，无位置信息 |
+| 返回值语义 | `grep -n "return" range-neon.c \| tail` | 0=合法；非 0=非法（SIMD 块内错误返回 -1，尾部经 `utf8_naive` 返回 >0 的 1-based 错误下标），判非法必须用 `!= 0` |
 
 ## 2. 完整补丁模板
 
@@ -20,7 +20,7 @@
 
 ```c
 #ifdef __aarch64__
-int utf8_range(const unsigned char *data, int len);  /* 0=合法, -1=非法 */
+int utf8_range(const unsigned char *data, int len);  /* 0=合法, 非0=非法（尾部错误为>0下标） */
 #endif
 ```
 
@@ -73,10 +73,11 @@ int utf8_range(const unsigned char *data, int len);  /* 0=合法, -1=非法 */
 | # | 红线 | 违反形态（实测案例） | 自查命令 |
 |---|---|---|---|
 | 1 | 路由块极性必须 `#ifdef __aarch64__` | 写成 `#ifndef`：aarch64 编译回 naive，反汇编与基线 **100% 一致**，零收益；非 aarch64 分支引用未声明符号 | `grep -A1 "__SSE4_1__" <target_file>` 下一行必须是 `#ifdef __aarch64__` |
-| 2 | `return_position=1` 不得调 `utf8_range()` | 0/-1 被当作前缀长度消费，结果语义错 | code review |
+| 2 | `return_position=1` 不得调 `utf8_range()` | 非 0 返回值被当作前缀长度消费，结果语义错 | code review |
 | 3 | 补丁引用的每个符号先查到定义 | 引用不存在的 `utf8_range_ValidateUTF8Native` → **链接失败**（undefined reference） | `grep -rn "<符号>" <repo>` 必须命中定义 |
 | 4 | naive.c 与 range-neon.c 同进构建 | `utf8_naive` 未定义 → 链接失败 | `nm <产物> \| grep utf8_naive` |
 | 5 | 提交前反汇编确认（注意 intrinsic 名 ≠ 反汇编助记符：vqtbl1q_u8→`tbl`、vld1q_u8→`ldr qN`） | 路由未生效 = 改动无效 | `objdump -d <bin> --disassemble=utf8_range_IsValid` 含 `bl <utf8_range>`；且 `--disassemble=utf8_range` 符号内含 `tbl` 等 NEON 助记符 |
+| 6 | 判非法必须用 `utf8_range(...) != 0` 语义 | 尾部（<16 字节）错误经 `utf8_naive` 返回 >0 的 1-based 错误下标而非 -1；写成 `== -1` / `< 0` 会放过尾部非法输入，形成静默校验绕过 | code review；模板 `== 0 ? 1 : 0` 为安全形态 |
 
 ## 5. 错误形态对照
 

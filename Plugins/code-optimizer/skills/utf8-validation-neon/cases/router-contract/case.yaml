@@ -28,19 +28,21 @@ env_requires:
   - aarch64
   - gcc/binutils
 
+# assert 中的 file 路径相对用例目录解析（与全仓 case.yaml 约定一致）；
+# 产物完整路径为 cases/router-contract/results/result.json。
 assert:
   - type: exit_code
     expect: 0
   - type: json_field
-    file: cases/router-contract/results/result.json
+    file: results/result.json
     field: success
     expect: true
   - type: json_field
-    file: cases/router-contract/results/result.json
+    file: results/result.json
     field: checks_failures
     expect: 0
   - type: json_field
-    file: cases/router-contract/results/result.json
+    file: results/result.json
     field: checks_ran
     op: gte
     expect: 8

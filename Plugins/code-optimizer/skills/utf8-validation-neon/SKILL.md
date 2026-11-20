@@ -58,9 +58,9 @@ description: 把捆绑 utf8_range.c 中仅以 __SSE4_1__ 门控的 SIMD 校验�
 ## 执行步骤
 
 1. **热点与现状确认**：perf 采样确认 `utf8_range_ValidateUTF8Naive`/`utf8_range_IsValid` 出现在解析路径热点；`objdump -d <binary> --disassemble=utf8_range_IsValid` 确认当前无 `bl <utf8_range>` 路由调用，证实 aarch64 走 naive。
-2. **实现选型与语义审计**：Read 库内 `range-neon.c`，确认入口签名与返回值语义（`int utf8_range(const unsigned char *data, int len)`，0=合法、-1=非法、**无位置信息**）；确认其 `<16` 字节尾部依赖 `naive.c` 的 `utf8_naive`，两者必须一起进构建；`len` 为 `int` 参数，评估 >2GB 输入的窄化风险。
+2. **实现选型与语义审计**：Read 库内 `range-neon.c`，确认入口签名与返回值语义（`int utf8_range(const unsigned char *data, int len)`，0=合法；**非 0=非法**——SIMD 块内错误返回 -1，`<16` 字节尾部经 `utf8_naive` 返回 >0 的 1-based 错误下标；无位置语义，判非法必须用 `!= 0`，禁止用 `== -1` / `< 0`）；确认其 `<16` 字节尾部依赖 `naive.c` 的 `utf8_naive`，两者必须一起进构建；`len` 为 `int` 参数，评估 >2GB 输入的窄化风险。
 3. **分发改写**：按 `references/router-patch-guide.md` 的模板改写 `utf8_range_Validate` 分发结构（头部声明 + `#ifndef __SSE4_1__` 内嵌 `#ifdef __aarch64__` 路由块），并把 `range-neon.c`、`naive.c` 加入同一构建目标。
-4. **陷阱自查**：逐项核对补丁指南中的红线清单（极性、位置语义、符号存在性、尾部依赖、块边界）。
+4. **陷阱自查**：逐项核对补丁指南中的红线清单（极性、位置语义、返回值判定、符号存在性、尾部依赖、块边界）。
 5. **fuzz 交叉验证**：用 `scripts/checker.c` 编出基线/优化两个二进制，输出 diff 必须为空。
 6. **A/B 基准**：用 `scripts/validate_bench.c` 分别对基线与优化版各跑 ≥3 进程（绑核、5 样本中位），原始 CSV 归档。
 7. **输出结果**：按下方契约输出 `utf8_route_result`。
@@ -155,9 +155,10 @@ protobuf-27.3（AArch64 384 核，`-O3 -DNDEBUG`，绑核、3 进程 × 5 样本
 ## 规则
 
 1. **极性红线**：路由块必须 `#ifdef __aarch64__`。写成 `#ifndef` 时目标平台编译回 naive = 指令级 no-op（实测反汇编与基线 100% 一致、零收益），且非目标平台分支引用未声明符号。提交前必须 objdump 确认 IsValid 含 `bl <utf8_range>` 路由调用、`utf8_range` 符号内含 `tbl` 等 NEON 助记符（注意 intrinsic 名 vqtbl1q_u8/vld1q_u8 对应助记符 `tbl`/`ldr qN`）。
-2. **位置语义红线**：`return_position=1` 严禁调 `utf8_range()`——0/-1 返回值当"前缀长度"用即语义错误；只允许 naive 回退或另行实现前缀定位。
-3. **符号先查后用**：补丁中每个被调函数先 `grep -rn` 到定义。实测教训：引用不存在的 `utf8_range_ValidateUTF8Native` 直接导致链接失败。
-4. **不手写 SIMD**：库内有现成 NEON 实现必须复用；没有则拒绝并移交向量化。
-5. **无证据不宣称**：没有 fuzz 逐位一致 + 没有绑核 A/B 原始数据（≥3 进程 × 5 样本中位），不得报告收益；原始数据归档到技能目录。
-6. **负结果记账**：ASCII 无变化、rp=1 无变化是预期行为，写入报告但不视为回归；真正的回归是 rp=0 多字节 < 2x 或 fuzz 不一致。
-7. **源码树零污染**：验证期所有改动在临时工作区副本上进行，确认后才回写用户源码树。
+2. **位置语义红线**：`return_position=1` 严禁调 `utf8_range()`——非 0 返回值当"前缀长度"用即语义错误；只允许 naive 回退或另行实现前缀定位。
+3. **返回值语义红线**：判非法必须用 `utf8_range(...) != 0`。SIMD 块内错误返回 -1，但 `<16` 字节尾部经 `utf8_naive` 返回 >0 的 1-based 错误下标；`== -1` / `< 0` 判定会放过尾部非法输入，形成静默的 UTF-8 校验绕过。
+4. **符号先查后用**：补丁中每个被调函数先 `grep -rn` 到定义。实测教训：引用不存在的 `utf8_range_ValidateUTF8Native` 直接导致链接失败。
+5. **不手写 SIMD**：库内有现成 NEON 实现必须复用；没有则拒绝并移交向量化。
+6. **无证据不宣称**：没有 fuzz 逐位一致 + 没有绑核 A/B 原始数据（≥3 进程 × 5 样本中位），不得报告收益；原始数据归档到技能目录。
+7. **负结果记账**：ASCII 无变化、rp=1 无变化是预期行为，写入报告但不视为回归；真正的回归是 rp=0 多字节 < 2x 或 fuzz 不一致。
+8. **源码树零污染**：验证期所有改动在临时工作区副本上进行，确认后才回写用户源码树。
