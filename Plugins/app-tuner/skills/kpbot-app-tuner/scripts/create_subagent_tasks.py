@@ -17,7 +17,7 @@ SUBSKILL_CATALOG = {
     "accelerator-optimization": "candidate-accelerator",
     "hardware-upgrade-analysis": "candidate-hardware-upgrade",
     "other-optimization": "candidate-other",
-    "io-memory-network-bottleneck-analysis": "candidate-bottleneck-prescreen",
+    "io-optimization": "candidate-bottleneck-prescreen",
     "database-workload-analysis": "candidate-database-workload",
     "vllm-ascend-profiling": "candidate-vllm-ascend-profiling",
     "ceph-optimization": "candidate-ceph",

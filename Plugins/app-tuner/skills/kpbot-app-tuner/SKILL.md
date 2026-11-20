@@ -320,7 +320,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
 | GPU/NPU 等计算卡 skill | `subskills/accelerator-optimization/SKILL.md` |
 | 更换高规格硬件 | `subskills/hardware-upgrade-analysis/SKILL.md` |
 | Other 优化 skill | `subskills/other-optimization/SKILL.md` |
-| 非 CPU 瓶颈预筛 | `subskills/io-memory-network-bottleneck-analysis/SKILL.md` |
+| 非 CPU 瓶颈预筛与 IO/内存专项证据 | `subskills/io-optimization/SKILL.md` |
 | 数据库专项 | `subskills/database-workload-analysis/SKILL.md`，由应用配置 skill 按需引用 |
 | Ceph 存储调优 skill | `subskills/ceph-optimization/SKILL.md` |
 | vLLM Ascend NPU profiling | `subskills/vllm-ascend-profiling/SKILL.md`，由加速卡 skill 按需引用（NPU+vLLM 场景 Stage-1 环境诊断/TTFT profiling 采集） |

@@ -175,7 +175,7 @@ Step 0 产出的物理拓扑:
 - `hardware-upgrade-analysis`
 - `other-optimization`
 
-`io-memory-network-bottleneck-analysis` 是前置瓶颈预筛，不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 默认由 `accelerator-optimization` 按需引用（NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling 采集），证据命中下表信号时不进入主覆盖集合，在 `accelerator-optimization` 的执行序列内追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进 `accelerator-optimization` 任务包（证据已单独点名时不重复下发）。
+`io-optimization` 承担前置瓶颈预筛与磁盘/内存专项证据采集（系统参数动作由 os-optimization 唯一产出），预筛阶段不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 默认由 `accelerator-optimization` 按需引用（NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling 采集），证据命中下表信号时不进入主覆盖集合，在 `accelerator-optimization` 的执行序列内追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进 `accelerator-optimization` 任务包（证据已单独点名时不重复下发）。
 
 ## 停止规则
 

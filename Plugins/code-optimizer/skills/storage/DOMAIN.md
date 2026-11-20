@@ -10,7 +10,7 @@
 |---|---|---|
 | `sra-dag-tuning`（方法总表 4.8 / 1.20 / 6.2 与 3.x 节） | 磁盘 IO 调度器与文件系统、在线特征存储、分级存储、`libaio`/`io_uring` 批量提交示例 | 它们是搜推 DAG 全栈方法里的**一层**，脱离业务链路没有独立使能流程 |
 | `use-analysis` | USE 分析法里的磁盘 IO 使用率/饱和度/错误率检查（`iostat`/`vmstat`） | 它是跨资源的**排查器**，不承担某一层的优化方法 |
-| `Plugins/app-tuner/skills/kpbot-app-tuner/subskills/io-memory-network-bottleneck-analysis`、`hardware-upgrade-analysis` | 磁盘 IO 瓶颈分支、`fio`/IOPS 选型 | 是 `kpbot-app-tuner` 主框架的**子技能**，独立成 skill 会切断主框架的候选路由 |
+| `Plugins/app-tuner/skills/kpbot-app-tuner/subskills/io-optimization`、`hardware-upgrade-analysis` | 磁盘 IO 瓶颈分支、`fio`/IOPS 选型 | 是 `kpbot-app-tuner` 主框架的**子技能**，独立成 skill 会切断主框架的候选路由 |
 
 压缩层（`openzl-compression-tuning`、`openzl-bench-protocol`）属于数据格式 codec 吞吐，**不属于本域**。
 
