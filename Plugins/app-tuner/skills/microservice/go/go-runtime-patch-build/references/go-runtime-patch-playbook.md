@@ -1,28 +1,21 @@
 # Go Runtime 补丁与重编译 Playbook
 
-本文件约束 `microservice-go-syncpool-optimization` 的补丁应用、工具链构建、服务重编译、二进制等价门控和回退。所有命令在目标节点执行，执行前确认已获得重编译授权。
+本文件约束 Go runtime 补丁的构建、服务重编译、二进制等价门控和回退。所有命令在目标节点执行，执行前确认已获得重编译授权。具体补丁的行为、开关键名和参数由调用方 skill 定义，本文件不绑定任何单一补丁。
 
-## 1. 补丁来源与组成
+## 1. 补丁来源
 
-本 skill 不保存、不生成补丁内容。补丁由内部私有制品提供，执行时通过 `--patch-file` 参数或 `KPBOT_SYNCPOOL_PATCH` 环境变量指定本地路径；路径只写入本轮执行记录，不写入仓库。
+本 skill 不保存、不生成补丁内容。补丁由内部私有制品提供，执行时通过 `--patch-file` 参数或 `KPBOT_GO_RUNTIME_PATCH` 环境变量指定本地路径；路径只写入本轮执行记录，不写入仓库。
 
-补丁包含四类行为，具体实现由补丁维护者负责：
+补丁路径必须是本轮授权的本地文件，记录 sha256 并与调用方提供的期望值比对；不一致时停止。不从网络下载后直接执行，先落盘、校验，再应用。
 
-| 行为 | 说明 |
-|---|---|
-| 开关注册 | 让 runtime 在进程启动时解析 `GODEBUG=poolretain` 与 `GODEBUG=poolprealloc` |
-| 回收旁路 | `poolretain` 非 0 时，GC 阶段跳过 `sync.Pool` 清理，其它清理不受影响 |
-| 创建预热 | `poolprealloc` 非 0 时，池的 per-P 本地缓存首次创建时预分配对象，并带内置安全上限 |
-| 单元测试 | 覆盖预分配、上限、无 `New`、覆盖值和 Get/Put 复用 |
-
-补丁文件不得提交到 KPBot 仓库。所有补丁应用和工具链构建都在隔离构建根目录（如 `/opt/go-syncpool-build`）进行，基线 `$GOROOT` 保持只读。
+补丁文件不得提交到 KPBot 仓库。所有补丁应用和工具链构建都在隔离构建根目录（如 `/opt/go-runtime-build`）进行，基线 `$GOROOT` 保持只读。
 
 ## 2. Step 0：Go 基线记录
 
 ```bash
 BASELINE_GOROOT="${GOROOT:-$(go env GOROOT)}"
 BASELINE_GO="$BASELINE_GOROOT/bin/go"
-BUILD_ROOT=/opt/go-syncpool-build
+BUILD_ROOT=/opt/go-runtime-build
 
 go version
 cat "$BASELINE_GOROOT/VERSION"
@@ -36,9 +29,29 @@ sha256sum <go-src-tarball>
 
 ## 3. 创建隔离构建根目录并校验补丁
 
+删除或覆盖前校验 `BUILD_ROOT`：
+
 ```bash
-rm -rf "$BUILD_ROOT"
+BUILD_ROOT_REAL="$(realpath -m "$BUILD_ROOT")"
+BASELINE_GOROOT_REAL="$(realpath -m "$BASELINE_GOROOT")"
+case "$BUILD_ROOT_REAL" in
+  ""|"/"|"$BASELINE_GOROOT_REAL"|"$HOME") echo "unsafe BUILD_ROOT: $BUILD_ROOT_REAL" >&2; exit 1 ;;
+  /usr|/usr/*|/etc|/etc/*|/var|/var/*|/boot|/boot/*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*)
+    echo "refusing system directory BUILD_ROOT: $BUILD_ROOT_REAL" >&2; exit 1 ;;
+esac
+case "$BUILD_ROOT_REAL/" in
+  "$BASELINE_GOROOT_REAL"/*) echo "refusing BUILD_ROOT inside baseline GOROOT" >&2; exit 1 ;;
+esac
+if [ -L "$BUILD_ROOT" ]; then
+  echo "refusing symlink BUILD_ROOT: $BUILD_ROOT" >&2
+  exit 1
+fi
+if [ -e "$BUILD_ROOT" ]; then
+  [ -f "$BUILD_ROOT/.kpbot-build-root" ] || { echo "refusing unmarked BUILD_ROOT: $BUILD_ROOT_REAL" >&2; exit 1; }
+  rm -rf -- "$BUILD_ROOT"
+fi
 cp -a "$BASELINE_GOROOT" "$BUILD_ROOT"
+: > "$BUILD_ROOT/.kpbot-build-root"
 chmod -R u+w "$BUILD_ROOT"
 
 if git -C "$BUILD_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -48,6 +61,9 @@ else
 fi
 ```
 
+- `BUILD_ROOT` 必须是本轮记录的非空绝对路径，realpath 后不得为 `/`、基线 `$GOROOT`、用户主目录或系统目录，也不得位于基线 GOROOT 内。
+- 已存在的目录只有在带 `.kpbot-build-root` 标记时才清理；无标记、符号链接或越界目标一律停止，不自动删除。
+- 标记文件只用于识别本轮创建的构建目录，不要手工创建或复用。
 - 补丁只应用到 `$BUILD_ROOT`，基线 `$BASELINE_GOROOT` 保持只读。
 - 构建根目录需要与基线工具链等量的磁盘空间；空间不足时停止本轮。
 - 通过：继续应用。
@@ -81,11 +97,26 @@ GOROOT_BOOTSTRAP="$BASELINE_GOROOT" ./make.bash
 要求：
 
 - bootstrap 使用基线工具链（`$BASELINE_GOROOT`），避免依赖外部版本；
+- 构建前检查磁盘余量，至少为基线工具链的 1.2 倍；不足时停止；
+- 用 `timeout` 限制构建和单测（例如 `timeout 30m ./make.bash`、`timeout 10m "$BUILD_ROOT/bin/go" test ...`）；超时终止并交回阶段、耗时和日志位置；
 - 构建日志完整保存；
 - 新工具链产物 hash 与版本字符串记录到结果；
 - 基线 `$BASELINE_GOROOT/bin/go` 不修改、不覆盖，供回退使用。
 
 Windows 环境使用 `make.bat`，流程相同。
+
+## 5.1 标准库单测门
+
+构建完成后、服务重编译前，运行补丁影响的标准库包官方单测和补丁自带单测：
+
+```bash
+"$BUILD_ROOT/bin/go" test sync -run 'TestPool' -count=1
+"$BUILD_ROOT/bin/go" test -race sync -run 'TestPool' -count=1   # 仅功能验证
+```
+
+- 本家族补丁至少覆盖 `TestPool`；补丁新增的单测一并运行。
+- `-race` 只用于功能验证，不参与性能测量。
+- 单测失败时停止，不进入服务重编译或 A/B。
 
 ## 6. 服务重编译
 
@@ -104,7 +135,7 @@ sha256sum <new-binary>
 
 ## 7. 二进制等价门控
 
-本轮只能改变 Go 工具链和 `sync.Pool` 补丁。以下项目必须逐项记录并保持一致：
+本轮只能改变 Go 工具链和 runtime 补丁。以下项目必须逐项记录并保持一致：
 
 - 业务源码 commit；
 - 构建命令与编译参数；
@@ -128,10 +159,14 @@ sha256sum <new-binary>
 export GOROOT="$BASELINE_GOROOT"
 "$BASELINE_GO" version
 sha256sum "$BASELINE_GO"
-# 3) 撤销补丁并删除构建根目录
-#    可选：保留构建根时先撤销补丁（非 git 源码树用 patch -R -p1）
-git -C "$BUILD_ROOT" apply -R <patch-file> 2>/dev/null || true
-rm -rf "$BUILD_ROOT"
+# 3) 撤销补丁并删除构建根目录（复用 §3 的 BUILD_ROOT 守卫）
+if [ -f "$BUILD_ROOT/.kpbot-build-root" ]; then
+  # 可选：保留构建根时先撤销补丁（非 git 源码树用 patch -R -p1）
+  git -C "$BUILD_ROOT" apply -R <patch-file> 2>/dev/null || true
+  rm -rf -- "$BUILD_ROOT"
+else
+  echo "skip unmarked BUILD_ROOT: $BUILD_ROOT" >&2
+fi
 # 4) 恢复基线二进制后重启服务
 <restore baseline binary or rebuild with baseline GOROOT>
 <restart service>
@@ -148,5 +183,11 @@ sha256sum <baseline-binary>
 - 直接在基线 `$GOROOT` 打补丁或执行 `make.bash`：会覆盖基线工具链，回退不可逆；必须使用隔离构建根目录。
 - `make.bash` 失败：bootstrap 版本不满足要求，或源码树被改动，检查构建日志。
 - 新工具链能构建但服务启动失败：检查 cgo、动态库和 `GOROOT` 是否混用。
-- 性能无可观测变化：确认新二进制确实由新工具链构建（`go version -m`），且 `GODEBUG` 已生效。
-- 内存持续上涨：`poolretain` 无上限，检查池对象大小和调用方是否长时间不 `Put`。
+- 性能无可观测变化：确认新二进制确实由新工具链构建（`go version -m`），且补丁开关已生效。
+
+## 10. 停止与交回
+
+- 基线、补丁、授权、磁盘、单测任一不满足：停止本轮，交回 `status`、`reason`、`missing`、`stage`、`log_path` 和最小恢复命令。
+- 构建根目录守卫失败：交回 `blocked_build_root`、实际 realpath，并说明未执行清理。
+- 构建或单测超时：交回 `blocked_timeout`、阶段、耗时上限和日志位置，不无限重试。
+- 正常完成：交回工具链/二进制身份、标准库单测证据、二进制等价门控和可独立执行的 `reverse_cmd`。
