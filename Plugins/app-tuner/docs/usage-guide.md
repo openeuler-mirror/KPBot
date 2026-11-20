@@ -75,7 +75,7 @@ mysql/mysql_sysbench_test.md，不确定的先找我确认
 | `application-config-optimization` | 线程、连接池、缓存参数调整 |
 | `compiler-optimization` | 编译选项、LTO、PGO 评估 |
 | `performance-library-selection` | malloc、memcpy 等性能库替换 |
-| `accelerator-optimization` | GPU/NPU 等计算卡瓶颈分析 |
+| `accelerator-optimization` | HPRE/KAE 密码加速卡卸载分析（GPU/NPU 通用计算卡由 vllm-ascend-profiling / hardware-upgrade-analysis 承接） |
 | `hardware-upgrade-analysis` | 更高规格硬件建议和容量边界判断 |
 | `other-optimization` | 既有 skill 无法覆盖的专项分析 |
 

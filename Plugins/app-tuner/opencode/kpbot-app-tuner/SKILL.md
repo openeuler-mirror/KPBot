@@ -316,15 +316,15 @@ node scripts/dynamic_workflow_manager.js record-execution \
 | BIOS 优化 skill | `subskills/bios-optimization/SKILL.md` |
 | OS 优化 skill | `subskills/os-optimization/SKILL.md` |
 | 编译优化 skill | `subskills/compiler-optimization/SKILL.md` |
-| GPU/NPU 等计算卡 skill | `subskills/accelerator-optimization/SKILL.md` |
+| 加速卡 skill（HPRE/KAE 密码卸载） | `subskills/accelerator-optimization/SKILL.md` |
 | UADK 硬件加速 skill | `subskills/uadk-accelerator-optimization/SKILL.md` |
 | 更换高规格硬件 | `subskills/hardware-upgrade-analysis/SKILL.md` |
 | Other 优化 skill | `subskills/other-optimization/SKILL.md` |
 | 非 CPU 瓶颈预筛与 IO/内存专项证据 | `subskills/io-optimization/SKILL.md` |
 | 数据库专项 | `subskills/database-workload-analysis/SKILL.md`，由应用配置 skill 按需引用 |
 | Ceph 存储调优 skill | `subskills/ceph-optimization/SKILL.md` |
-| vLLM Ascend NPU profiling | `subskills/vllm-ascend-profiling/SKILL.md`，由加速卡 skill 按需引用（NPU+vLLM 场景 Stage-1 环境诊断/TTFT profiling 采集） |
-| 模型精度验证 | `../model-precision-analysis/SKILL.md`，由加速卡/应用配置 skill 在量化、精度策略、图或算子变更后按需引用；不进入候选列表、不修改环境，只输出精度回归结论 |
+| vLLM Ascend NPU profiling | `subskills/vllm-ascend-profiling/SKILL.md`，由 `gpu_npu_bottleneck` 路由直接派发，或由加速卡 skill 在 NPU+vLLM 委托场景按需引用（Stage-1 环境诊断/TTFT profiling 采集） |
+| 模型精度验证 | `../model-precision-analysis/SKILL.md`，由应用配置 skill 在量化、精度策略、图或算子变更后按需引用；不进入候选列表、不修改环境，只输出精度回归结论 |
 
 ## Framework Ownership Boundary
 

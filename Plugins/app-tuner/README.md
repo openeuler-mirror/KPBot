@@ -110,7 +110,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `performance-library-selection` | 性能库选型(malloc/memcpy/压缩/加密) |
 | `compiler-optimization` | 编译优化(版本/架构参数/LTO/PGO/向量化) |
 | `application-config-optimization` | 应用配置(线程/队列/批量/缓存/连接) |
-| `accelerator-optimization` | GPU/NPU 加速卡利用率分析 |
+| `accelerator-optimization` | 密码加速卡优化: HPRE/KAE 密码卸载(UADK/ASF) |
 | `hardware-upgrade-analysis` | 硬件规格升级建议 |
 | `io-optimization` | 非 CPU 瓶颈预筛 + 磁盘/内存专项证据采集 |
 | `database-workload-analysis` | 数据库专项分析(MySQL/InnoDB) |
