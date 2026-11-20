@@ -124,6 +124,18 @@ todowrite({ todos: [{ content: "性能对比", status: "pending", priority: "hig
 
 条件：编译成功，且 `prepare-project.baseline.metrics` 不为 null
 
+#### 3.0a 独立重复与波动门控
+
+执行前读取 [重复测量契约](references/repeated-measurement.md)。使用 `baseline.measurement_plan`；旧上下文没有计划时先补齐。每个性能命令/工作负载按计划形成完整的 baseline/candidate 重复序列，短测试默认每组 5 次，预算或用户限制按契约降级。原步骤 3.1/3.2 是**单次执行**流程，应在该序列内逐次调用；一次启动、一个后台 task 或 benchmark 内循环均不能替代整组独立重复。
+
+同一时段在安全隔离的父状态与候选之间交替 AB/BA，或按预声明随机区组顺序运行，先完成上一进程再启动下一次。不能恢复基线或只能使用历史基线时记录不可配对/漂移风险，不伪造 pair_id。所有测试命令及其全部工作负载都应完成；任何硬性验收项未决都不能以其他项通过覆盖。
+
+根据 raw 生成 `performance.measurement_summary`（局部结果放 local_performance），可使用 `scripts/summarize_repeats.py`，多文件先按契约解析/reshape。保留 `measurement_plan`、尝试清单及引用；填写 `measurement_quality` 的状态、理由、计划/实际次数、可比性、漂移与噪声检查。对每项指标报告 n、mean ± sample SD、median、[min,max]，不只给 speedup。
+
+仅在重复计划完整且证据支持区分噪声与收益时，继续按既有业务阈值验收。单次、无有效波动估计、明显漂移、未解决失败或收益无法区分噪声时，对应 verdict=inconclusive、status=unverified，不因 speedup >= 1.1 自动通过，也不因一次 speedup < 1 自动 regression。达到默认次数或 CV 较小不自动证明可靠；不以 ±SD 代替置信区间。既有正确性失败优先级保持不变。
+
+超出预算或进一步诊断必须走原 ValidateExperiment/DesignExperiment 路由，不在 Verify 内无界加跑直到通过。统计工具不产出验收 verdict，协调者须检查实际证据与理由。
+
 #### 3.0 执行模式选择
 
 从 prepareProject.verification_commands.performance 取得完整命令列表，按原顺序串行执行；每条命令保留参数、工作负载、目标环境与独立 raw 结果路径。同步与后台仅是执行方式差异，都必须消费同一完整列表，不能用单一 test_method 替代。列表为空且没有可确认的既定系统 benchmark 时记录 system_acceptance=not_run、status=unverified。
@@ -134,7 +146,8 @@ for perf_command in prepareProject.verification_commands.performance:
     baseline_duration <= 600 → 同步（步骤 3.1）
     baseline_duration > 600 → 后台并轮询（步骤 3.2）
     保存本条 command/exit_code/raw_results/完整性检查
-全部命令完成后 → 步骤 3.3 汇总完整系统验收
+上述单次流程按 measurement_plan 对各组重复；保留全部尝试
+全部计划完成后 → 步骤 3.3 汇总完整系统验收
 ```
 
 #### 3.1 同步模式（短测试）
@@ -164,7 +177,7 @@ higher（吞吐/QPS 越高越好）：speedup = optimized_metric / baseline_metr
 lower（时间/延迟越低越好）：speedup = baseline_metric / optimized_metric
 ```
 
-两值必须是有限正数；零、NaN/Inf、缺失指标、未知 direction、不同输入/构建或未完成命令均给 speedup=null、相应 verdict=inconclusive。保留重复次数和噪声范围，不能凭单次波动宣称可靠退化。局部与系统指标分别计算，不拿最佳 case 当总体收益。以用户 numeric_constraints / 约定验收线判断，未给性能提升线时默认完整系统 speedup >= 1.1 才 passed；可靠 speedup < 1 为 regression，其余不足为 unverified。新诊断动作应回 ValidateExperiment 设计、扣预算后执行。
+两值必须是有限正数；零、NaN/Inf、缺失指标、未知 direction、不同输入/构建或未完成命令均给 speedup=null、相应 verdict=inconclusive。保留重复次数和噪声范围，不能凭单次波动宣称可靠退化。局部与系统指标分别计算，不拿最佳 case 当总体收益。先通过步骤 3.0a 的波动证据门控，再以用户 numeric_constraints / 约定验收线判断，未给性能提升线时默认完整系统 speedup >= 1.1 才 passed；可靠 speedup < 1 为 regression，其余不足为 unverified。新诊断动作应回 ValidateExperiment 设计、扣预算后执行。
 
 #### 3a0. asm/throughput 类优化的常规验收补强
 
@@ -305,6 +318,9 @@ todowrite({ todos: [{ content: "输出结果", status: "completed", priority: "h
   "commands": [{"command": "<用户约定命令>", "exit_code": 0}],
   "local_performance": {},
   "performance": {
+    "measurement_plan": {},
+    "measurement_summary": [],
+    "measurement_quality": {"status": "sufficient", "reasons": ["填写实际完成计划、可比性和收益/噪声判断证据，不照抄示例"]},
     "direction": "higher",
     "execution_mode": "sync|background",
     "background_task_id": null,

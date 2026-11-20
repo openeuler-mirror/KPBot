@@ -257,10 +257,18 @@ todowrite({ todos: [{ content: "建立基线", status: "pending", priority: "hig
    - 记录 `tests_pass: true/false`
    - 测试框架不可用时记录 `tests_pass: null`
 
+### 重复测量计划（性能命令执行前）
+
+读取已安装 `verify-optimization/references/repeated-measurement.md` 并建立 `baseline.measurement_plan`，保存每项指标的独立单元、预热/重置、重复次数、顺序、预算、提取统计量和验收判据。从实际安装位置定位兄弟 skill；独立安装时不可用则遵守下述最低要求，不跳过测量。
+
+短测试无用户覆盖且预算可负担时，默认计划每组 5 次独立运行；昂贵任务遵循已有预算，明确实际次数及限制。一次进程内循环不算多次独立实验。正式基线逐次保存 raw、命令/退出码、run_id、目标/构建/工作负载身份，报告 n、均值 ± 样本标准差、median 和 [min,max]；n=1 的标准差未知，不填零。发现明显波动须在本阶段摘要主动报告，不等用户追问。
+
+先确认下方验收条件与命令，再执行性能测试。预算/目标不允许重复时保留探索性结果和缺口，不伪造稳定基线。保留父状态可还原快照，供 Verify 在候选就绪后进行同条件交错复测；前期基线与复测基线分批记录。
+
 3. **性能基线**（仅当 `build_ok == true` 且 `target_machine.available == true`，并确认当前执行机器与目标身份匹配）：
    - 检查项目是否有 benchmark 脚本或目标（Grep `benchmark`、`perf`、`--bench`）
-   - 如果有，运行 benchmark 并记录指标
-   - 如果没有，对目标函数所在可执行文件用 `time` / `perf stat` 获取粗略指标
+   - 如果有，按 measurement_plan 独立重复运行 benchmark 并记录每次指标
+   - 如果没有，按测量计划对目标函数所在可执行文件用 `time` / `perf stat` 获取粗略指标，标明测量范围；粗略进程级指标不能替代项目系统验收
    - 无法获取时记录 `metrics: null`
    - 目标机器不可用、身份未知或当前机器不匹配时，不运行 benchmark、`time` 或 `perf stat`；记录 `metrics: null` 和目标证据缺口，不把开发机数据写入基线
 
@@ -364,6 +372,10 @@ todowrite({ todos: [{ content: "架构分析", status: "completed", priority: "h
     }
   },
   "baseline": {
+    "measurement_plan": {},
+    "measurement_summary": [],
+    "measurement_quality": {"status": "inconclusive", "reasons": ["待实际测量后填写"]},
+    "measurement_evidence_refs": [],
     "build_ok": true,
     "tests_pass": true,
     "metrics": {

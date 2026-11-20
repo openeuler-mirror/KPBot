@@ -20,6 +20,8 @@ diagnostic experiment designer
 ## 输出要求
 读取 `${context.orchestrator_skill_dir}/references/experiment-contract.md`，按契约 输出记录：观察依据、claim、alternative、support_if、refute_if；明确目标执行路径、输入与构建条件、controlled、changed、命令及超时。
 
+性能实验继承 prepareProject.baseline.measurement_plan 的独立单元、预热、顺序及噪声规则；在 controlled 和判据中记录本实验的重复计划与预算。不同假设实验数不等于同一配置重复数。每次实际执行继续经过原预算预留机制，不能把重复隐藏在无界脚本中绕过次数/超时上限。
+
 每个实验回答一个问题；可仅观察或做受控候选变更。无需为每个问题采集全部工具。
 
 已有可比原始证据时引用它，避免重复执行。只有目标身份、构建、工作负载和证据范围均可比时才复用；引用必须是 `${context.run_dir}` 内已存在普通文件的相对路径，并保留 `scope`、`kind` 和 `source`。理论估算标为 `estimate`，不能写成实测，也不能单独据此宣称假设已支持或反驳。

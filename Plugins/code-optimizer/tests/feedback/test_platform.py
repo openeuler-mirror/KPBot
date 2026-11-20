@@ -14,6 +14,10 @@ REQUIRED = [
     'references/experiment-contract.md',
     'scripts/experiment_record.py',
     'scripts/experiment_feedback.py',
+    '../verify-optimization/references/repeated-measurement.md',
+    '../verify-optimization/scripts/summarize_repeats.py',
+    '../verify-optimization/cases/repeated-measurement-contract/run.py',
+    '../verify-optimization/cases/repeated-measurement-contract/test_repeated_measurement.py',
 ]
 
 # Explicit module list prevents recursively loading this installation test.
@@ -82,7 +86,17 @@ class PlatformTests(unittest.TestCase):
                 )
                 for relative in REQUIRED:
                     self.assertTrue((installed / relative).is_file(), relative)
-                scripts = installed / 'scripts'
+                case = installed.parent / 'verify-optimization/cases/repeated-measurement-contract'
+                run = subprocess.run([sys.executable, '-B', '-S', str(case / 'run.py')],
+                                     cwd=project, capture_output=True, text=True)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                import json
+                report = json.loads((case / 'results/result.json').read_text(encoding='utf-8'))
+                self.assertTrue(report['success'])
+                for name in ('prepare-project', 'verify-optimization', 'kpbot-code-optimizer'):
+                    source = REPO / 'Plugins/code-optimizer' / ('opencode' if tool == 'opencode' else 'skills') / name / 'SKILL.md'
+                    self.assertEqual((installed.parent / name / 'SKILL.md').read_bytes(), source.read_bytes())
+                scripts = installed / 'scripts' 
                 env = dict(os.environ, PYTHONPATH=str(scripts), PYTHONDONTWRITEBYTECODE='1')
                 try:
                     result = subprocess.run(
