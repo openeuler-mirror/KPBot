@@ -22,7 +22,7 @@
 2. 有可复现的基线口径：`fio` 三档（4K 随机读 IOPS/时延、顺序带宽、混合读写 70/30）+ 设备型号/固件/文件系统/挂载参数；
    没有基线先立 issue 写方法论，不先落 skill；
 3. 与邻域的边界：结论落在**业务代码**归 `code-optimizer` 现有 skill 或 `microservice/`；落在**业务配置**归 `app-tuner`；
-   落在 **HBM→Host→SSD 分层**归 `aplusk/`（跨 NPU/CPU 的存储分层由该域裁定）；落在**向量索引落盘/预取**归 `vectordb/`。
+   落在 **HBM→Host→SSD 分层**归 `ascend_kunpeng/`（跨 NPU/CPU 的存储分层由该域裁定）；落在**向量索引落盘/预取**归 `vectordb/`。
 
 ## 候选成员方向（未立项，等素材）
 

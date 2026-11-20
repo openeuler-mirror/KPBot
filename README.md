@@ -1,7 +1,7 @@
 # KPBot
 
 [![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](LICENSE)
-[![Scenarios: 19](https://img.shields.io/badge/Scenarios-19-brightgreen.svg)](#optimization-scenarios)
+[![Scenarios: 18](https://img.shields.io/badge/Scenarios-18-brightgreen.svg)](#optimization-scenarios)
 
 面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code 和 OpenCode 提供专业的性能分析与优化插件。
 
@@ -10,6 +10,7 @@
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
 - **2026/11/17** — **code-optimizer** 新增 `parallel-accumulator` SKILL，覆盖归约循环的串行累加器并行化：识别单累加器延迟绑定（低 IPC + 低 cache miss），用多个独立累加器重叠依赖链隐藏浮点延迟，附三级改写模板（纯 C 多累加器 / NEON 单累加器 / NEON 多累加器）、`accumulator_plan.py` 累加器数量脚本、tier-A 契约用例、agent 端到端 A/B 用例，对标 Intel performance-patterns 的 parallel-accumulator。
+- **2026/11/16** — **app-tuner** 新增 `kptools-jvmjit` SKILL，覆盖 JVM 进程 perf 采样符号化分析（libperf-jvmti + perf inject --jit）：方法级热点、JIT 代码指令级注解导出（源码+汇编+逐指令周期占比）、容器内采集（权限检测 + 宿主机 perf 工具注入），含 dump 刷盘语义与 [JIT] 残留处理纪律，与外部工具 arthas（免重启方法级交互）/ kptools-devkit java-perf（火焰图全景）分层互补。（[!143](https://gitcode.com/openeuler/KPBot/pull/143)）
 - **2026/11/16** — **app-tuner** 新增 `model-precision-analysis` SKILL，覆盖模型优化后的精度回归验证：读取精度评测工具 `opendatas/output` 合并结果，按数值/选项字母/文本归一化抽取答案（单位、千分位、`\text{}`、截断识别），输出准确率对比、“对→错”回归题定位与达标判定，存在回归即以退出码 1 作为精度门禁（`--fail-on-regression` 为兼容别名），并接入加速卡/应用配置 skill 的 `validation_plan`。
 - **2026/11/06** — **code-optimizer** 新增 `dpdk-optimization` SKILL，覆盖 DPDK 数据面热路径代码优化：worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类判定）与分层代码杠杆库（热路径纪律、双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用），接入统一流水线场景路由，配套 app-tuner 的配置层调优。
 - **2026/11/06** — **app-tuner** 新增 `kptools-dpdk-tuning` SKILL，覆盖 DPDK 应用性能调优：现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延），面向鲲鹏 920 + hns3/Hi1822 主场景，不修改业务源码。
@@ -33,7 +34,7 @@
 
 **app-tuner** 在不修改业务源码的前提下，通过系统与 OS 配置、运行环境、编译参数、性能库替换和应用参数进行调优；**code-optimizer** 通过修改源码优化算法、数据结构、算子和框架执行路径。两者可以围绕同一业务场景协同使用。
 
-当前按下表业务场景去重统计，共覆盖 **19 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
+当前按下表业务场景去重统计，共覆盖 **18 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
 
 <!-- 增删场景时同步更新顶部 Scenarios 徽章及上方场景数。 -->
 
@@ -47,8 +48,7 @@
 | [GEMM / BRGEMM 框架集成 @ 鲲鹏](Plugins/code-optimizer/skills/brgemm-optimization/SKILL.md) | **code-optimizer**：面向 oneDNN adapter、ONNX Runtime EP 与自研 runtime，优化 PackB/PrePack、blocked layout、scratch、parallel-K、分块和 primitive cache。 |
 | [PyTorch Embedding lookup @ ARM CPU](Plugins/code-optimizer/skills/parallel-unique-pytorch/SKILL.md) | **code-optimizer**：针对 raw_id → unique → hashmap → gather 链路，使用并行排序与 OpenMP 优化 Host 侧去重，并注册兼容 `torch.compile` 的自定义算子。 |
 | [向量数据库与向量检索](Plugins/code-optimizer/skills/vector-search-optimize/SKILL.md) | **code-optimizer**：使用通用 CP0–CP7 执行环境调查、基线、候选优化与复验，并按目标路由到 Faiss 或 DiskANN 专项工作流。 |
-| [VSAG HGraph RaBitQ 向量检索 @ ARM/SVE](Plugins/code-optimizer/skills/vsag-rabitq-optimization/SKILL.md) | **code-optimizer**：优化并发查询组批、worker 生命周期、OpenBLAS/CBLAS 后端与 SIMD/SVE lookup，并改进 L2 计算、数据布局及临时缓冲区。 |
-| [搜索推荐 DAG @ 鲲鹏](Plugins/code-optimizer/skills/sra-dag-tuning/SKILL.md) | **code-optimizer**：优化召回、粗排、精排和重排中的关键路径并行、批量打分、Top-K、特征缓存与锁竞争；可结合 **app-tuner** 完成绑核、系统配置和性能库调优。 |
+| [Agent 记忆系统 / 图数据库后端 @ 鲲鹏 / x86_64](Plugins/code-optimizer/skills/agent-memory-db-optimization/SKILL.md) | **code-optimizer**：以 LLM 缓存回放冻结确定性负载，把 ingest/search 耗时拆成客户端、驱动、服务端三段，再按 top-down 与缓存缺失率建模，分层实施载荷瘦身、解码下沉、读路径多副本扩展与服务端解码快路径；要求缓存 0 未命中 + 图规模校验和 + 结果等价，负结果入台账。 |
 | [哈希表与特征 / KV 查表 @ 鲲鹏](Plugins/code-optimizer/skills/hashmap-optimization/SKILL.md) | **code-optimizer**：从查询链路与负载特征出发，区分计算、带宽和延迟瓶颈，通过数据布局与查询实现等改动优化查表热点。 |
 | [MySQL / InnoDB OLTP @ 鲲鹏](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/database-workload-analysis/SKILL.md) | **app-tuner**：结合 sysbench 与数据库内部指标，调优 NUMA/IRQ 亲和性、buffer pool、线程与表缓存、OS 参数及 PGO 编译配置。 |
 | [Spark / Flink 大数据处理 @ ARM](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/bigdata-playbook.md) | **app-tuner**：根据物理机或容器的 CPU、内存配额，调整 executor、TaskManager、并行度、内存与框架参数，并结合性能库选型优化运行环境。 |
@@ -58,6 +58,11 @@
 | [分配路径 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/allocation-path-optimization/SKILL.md) | **code-optimizer**：针对"每操作都在申请/释放"的热点，用每操作申请字节、峰值活字节与分配器对照实验定位成本，把仅元数据对象的分配下限改为精确申请，并识别抖动、成对释放与内核回收（brk/trim/页回收）成本；配分配计数探针做确定性核对。 |
 | [热点路径机制开销 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/hot-path-overhead-elimination/SKILL.md) | **code-optimizer**：针对"函数算法已足够短、成本来自调用与分派机制"的热点，用实测分布与反汇编证据消除调用边界开销、叶子入口栈帧、通用例程调用与无消费者的记账，并以 guard 完备性对照表约束 fallback。 |
 | [C/C++ 性能库与热点代码 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/kpbot-code-optimizer/SKILL.md) | **code-optimizer**：覆盖 NEON/SVE/SME 向量化、循环展开、分支消除、操作融合、预取、访存布局、精度变换与汇编优化；部分知识型 SKILL 已扩展 Rust 支持。 |
+
+> 已按领域归并的 skill 不再在本表逐条列出，其成员、收益与域内路由见对应域目录的 `DOMAIN.md`：
+> [sra](Plugins/code-optimizer/skills/sra/DOMAIN.md) · [vectordb](Plugins/code-optimizer/skills/vectordb/DOMAIN.md) ·
+> [agentic-infra](Plugins/code-optimizer/skills/agentic-infra/DOMAIN.md) · [microservice](Plugins/code-optimizer/skills/microservice/DOMAIN.md) ·
+> [storage](Plugins/code-optimizer/skills/storage/DOMAIN.md)。本表因此只在**场景层**变更时才需要改动，避免每个新 skill 都来抢同一张表。
 
 ## 🧩 插件列表
 
@@ -258,6 +263,7 @@ code-optimizer 在 Claude Code 中安装 **102 个** skill，在 OpenCode 中安
 - `special-case-optimization` — 特例快路径
 - `compiler-flag-tuning` — 编译选项调优
 - `hashmap-optimization` — 哈希表四阶段优化流程（链路识别→瓶颈建模→仿真测试→杠杆实施）
+- `agent-memory-db-optimization` — Agent 记忆系统/图数据库后端五阶段优化（冻结确定性负载→三段归因→瓶颈建模→分层杠杆→跨架构复测）
 - `openzl-compression-tuning` — OpenZL 压缩内核调优（熵 codec 根表/位流优化、熵选型、无损逐字节门禁、归因方法论与负结果档案）
 - `openzl-bench-protocol` — OpenZL unitBench 基准协议（场景注册、KV 数据准备、多机部署复测、topdown 采集，含 3 个脚本）
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）

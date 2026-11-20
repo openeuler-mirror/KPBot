@@ -107,7 +107,9 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
+| [`kptools-arthas`](skills/kptools-arthas/SKILL.md) | Java 进程性能分析(Arthas 批处理只读采集：trace/watch/monitor/tt 方法级耗时分解与入参观察、thread 高 CPU/阻塞/锁竞争分析、memory/GC 状态、JVM 运行时性能参数、ognl 查询)，含性能分析剧本、采集纪律与 agent 级 with/without A/B 用例 |
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
+| `kptools-jvmjit` | JVM JIT 符号化 perf 采样分析(libperf-jvmti + perf inject --jit：方法级热点、JIT 代码指令级注解导出 annotate.txt 源码+汇编+逐指令周期占比、容器内采集与工具注入 toolpack)，含 dump 刷盘语义与 [JIT] 残留处理纪律 |
 | `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键基准(计划哈希确认、只读预检、NUMA/TAP/代理准备、create/density/Snapshot/dirty_page/Rollback/Clone/Pause-Resume 全矩阵、差集清理与证据归档) |
@@ -118,6 +120,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | `nginx-optimization` | Nginx 场景专属调优(http/https × 长/短连接四场景、L1 环境/L2 配置/L3 鲲鹏加速分层、IRQ-worker 布局、KAL OpenSSL/KAE 加速、火焰图热点对策与压测验证纪律)，含 evals 评测集与 agent 级 with/without A/B 用例集(场景决策、调优循环纪律) |
+| [`redis-optimize`](skills/redis-optimize/SKILL.md) | Redis 场景专属调优(实例发现、网卡 NUMA 定位、进程绑核、多队列中断绑核、ntuple 按端口分流、redis.conf/OS 参数与 redis-benchmark 验证纪律)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 | [`kptools-dpdk-tuning`](skills/kptools-dpdk-tuning/SKILL.md) | DPDK 应用性能调优(诊断+顾问双模式) — 现象驱动的分层排查与硬件+场景驱动的分层配置建议，覆盖 BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延，不修改业务源码；需要改码的优化移交 code-optimizer 的 `dpdk-optimization` |
 
 ### 独立诊断 skill

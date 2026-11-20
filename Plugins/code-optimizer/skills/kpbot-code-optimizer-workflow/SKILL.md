@@ -31,8 +31,9 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 | 10 | DPDK 数据面代码优化 | `dpdk-optimization` | dpdk 代码、数据面、转发性能、收发包、热路径、PPS 低、l3fwd、rte_ring、mbuf | `rte_eth_rx_burst`/`rte_` 符号、`RTE_PKTMBUF_HEADROOM`；Makefile/meson 依赖 libdpdk |
 | 11 | folly 异步链路优化 | `folly-future-optimization` | folly、future、promise、then 回调、SharedPromise、FunctionTraits、Core 构造 | `folly/futures/` 源码树；`folly::` 命名空间；`FOLLY_FUTURE` 宏；链接 libfolly |
 | 12 | protobuf 序列化库优化 | `protobuf-optimization` | protobuf、proto 反序列化、消息合并、MapMergeFrom、MiniParse、arena 分配 | `src/google/protobuf/` 源码树；`libprotobuf`；`TcParser`/`MapMergeFrom` 符号 |
-| 13 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
-| 14 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 13 | Agent 记忆系统 / 图数据库后端优化 | `agent-memory-db-optimization` | Agent 记忆、长期记忆、记忆后端、记忆系统、记忆检索、memory agent、memory backend、知识图谱数据库、图数据库、Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee、Neo4j、Bolt、Cypher、pgvector、Qdrant、Chroma、LanceDB | `graphiti_core/` 或 `graphiti/` 源码树；memory service 入口（add_episode/retrieve_memory 类）；`neo4j`/Bolt 驱动依赖；`pgvector`/`qdrant`/`chroma`/`lancedb` 后端依赖；Cypher 查询模板 |
+| 14 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
+| 15 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 ### 路由流程
 
@@ -43,12 +44,12 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 ```bash
 ls; ls -d */ 2>/dev/null
 grep -i -l -E '<场景指纹关键词>' CMakeLists.txt Makefile README* */CMakeLists.txt 2>/dev/null
-grep -i -r -l -m1 -E '<场景指纹关键词>' --include='*.{h,hpp,c,cc,cpp,py}' -maxdepth 2 . 2>/dev/null | head -20
+rg -i -l --max-depth 2 -g '*.h' -g '*.hpp' -g '*.c' -g '*.cc' -g '*.cpp' -g '*.py' -e '<场景指纹关键词>' . | head -20
 ```
 
 命中的场景加入候选集，记录命中文件路径作为证据。
 
-**Step 3 候选确认**：候选集非空 → 调用 AskUserQuestion 单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
+**Step 3 候选确认**：用户已明确指定场景或目标 skill 时，直接执行接管协议，沿用会话中已确认的资源范围和交互模式，无需重复选择。仅凭 attention、unique、ann 等通用词不能视为明确场景。只有多个候选影响执行路径且无法从上下文消歧时才提问；使用当前环境可用的提问工具，工具不可用时以普通文本提问。无候选且用户要求通用代码优化时直接进入默认主流水线；用户需要浏览场景时进入 Step 4。需要确认候选时 → 使用可用的交互方式单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
 - 用户选择某候选场景 → 执行接管协议
 - 用户选择「都不对，查看全部场景」或候选集为空 → 进入 Step 4
 

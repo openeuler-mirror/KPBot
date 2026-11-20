@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-arthas",
+  "evals": [
+    {
+      "id": "AR-E01",
+      "query": "这个 Java 服务接口慢，分析一下 handle 方法最耗时的方法段",
+      "expected": "触发 kptools-arthas，先语言路由判定，再 trace '#cost > N' -n 限次采集，证据指出最耗时段"
+    },
+    {
+      "id": "AR-E02",
+      "query": "Java 进程 CPU 高，查一下哪个方法在烧 CPU",
+      "expected": "thread -n 5 定位高 CPU 线程 → 栈定位方法；需要全景时路由 java-perf"
+    },
+    {
+      "id": "AR-E03",
+      "query": "并发吞吐上不去，线程大量 BLOCKED，看下谁持锁",
+      "expected": "thread --state BLOCKED + thread -b 找持锁者，交叉印证锁对象，量化临界区瓶颈"
+    },
+    {
+      "id": "AR-E04",
+      "query": "线上 GC 频繁，老年代降不下来，是不是泄漏",
+      "expected": "dashboard/memory 看 GC 与空间 → forceGc 前后对比判别泄漏 vs 高分配；heapdump 前先与业务确认"
+    },
+    {
+      "id": "AR-E05",
+      "query": "看下线上 JVM 当前生效的堆大小和 GC 器参数",
+      "expected": "vmopt/sysprop 采集运行时生效值（以运行值为准，非启动脚本）"
+    }
+  ]
+}

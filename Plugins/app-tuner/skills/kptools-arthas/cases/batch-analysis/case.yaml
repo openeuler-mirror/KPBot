@@ -1,0 +1,23 @@
+# 用例：Arthas 批处理性能分析（对应 evals AR-E01 接口慢 / AR-E03 锁竞争的核心能力）
+# 依据 docs/case-spec.md（tier B，host-runtime：宿主机直接执行）。
+# 前置（env_requires）：宿主机 JDK 11+（java/javac）+ arthas-boot.jar
+#（collect.sh 标准路径未命中时 deploy.sh 联网安装；无网络需预置 ARTHAS_BOOT_JAR 并预热）。
+# 环境不满足时 entrypoint 退出 3 并说明（环境不满足，非用例失败）。
+
+name: batch-analysis
+skill: kptools-arthas
+tier: B
+image: host-runtime
+entrypoint: ["./entrypoint.sh"]
+
+env_requires:
+  - 宿主机 JDK 11+（java/javac 可用）
+  - arthas-boot.jar（标准路径 / $ARTHAS_BOOT_JAR / 联网经 deploy.sh 安装）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: evidence_passed
+    expect: true

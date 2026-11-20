@@ -66,6 +66,7 @@ class NoStackStepDetectTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), str(trace), "--json", *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=30,
         )
         self.assertEqual(run.returncode, 0, run.stderr)
@@ -116,6 +117,7 @@ class NoStackStepDetectTests(unittest.TestCase):
                 [sys.executable, str(REPORT_SCRIPT), str(path), "--out", str(out)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=30,
             )
             self.assertEqual(run.returncode, 0, run.stderr)

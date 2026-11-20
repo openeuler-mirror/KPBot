@@ -74,6 +74,7 @@ mysql/mysql_sysbench_test.md，不确定的先找我确认
 | `network-optimization` | 网卡、中断、协议栈调优 |
 | `application-config-optimization` | 线程、连接池、缓存参数调整 |
 | `compiler-optimization` | 编译选项、LTO、PGO 评估 |
+| `microservice-go-syncpool-optimization` | Go 微服务 sync.Pool 颠簸，补丁重编译 Go runtime |
 | `performance-library-selection` | malloc、memcpy 等性能库替换 |
 | `accelerator-optimization` | GPU/NPU 等计算卡瓶颈分析 |
 | `hardware-upgrade-analysis` | 更高规格硬件建议和容量边界判断 |

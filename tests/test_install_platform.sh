@@ -67,7 +67,7 @@ check_agentenv_package() {
         'grep -qx "name: kptools-agentenv-tuning" "$skills/kptools-agentenv-tuning/SKILL.md"'
     check "app-tuner handoff resolves" \
         '[ -r "$skills/kpbot-app-tuner/../kptools-agentenv-tuning/SKILL.md" ]'
-    for source_skill in "$ROOT"/Plugins/app-tuner/skills/kptools-agentenv-tuning/skills/agentenv-*/SKILL.md; do
+    for source_skill in "$ROOT"/Plugins/app-tuner/skills/agentic-infra/kptools-agentenv-tuning/skills/agentenv-*/SKILL.md; do
         [ -f "$source_skill" ] || continue
         name="$(basename "$(dirname "$source_skill")")"
         found=$((found + 1))

@@ -1,6 +1,6 @@
 ---
 name: kpbot-code-optimizer
-description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表、embedding lookup 去重、OpenZL 压缩内核、媒体库、folly future/promise 异步链路、protobuf 序列化库优化和 UTF-8 校验 NEON 路由等专项优化。
+description: 鲲鹏性能优化流水线与场景路由入口。用于 C/C++/Rust 性能优化、热点分析与向量化，以及向量数据库和向量检索、Faiss、DiskANN、pgvector、VSAG、TF 推理、ONNX Runtime attention、llama.cpp、搜推 DAG、BRGEMM/GEMM、哈希表、embedding lookup 去重、OpenZL 压缩内核、媒体库、folly future/promise 异步链路、protobuf 序列化库优化和 UTF-8 校验 NEON 路由等专项优化。
 ---
 
 # 鲲鹏性能优化流水线
@@ -34,15 +34,18 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 7 | 哈希表优化 | `hashmap-optimization` | hashmap、哈希表、hash table、bucket、开放寻址 | 自研哈希表实现；robin_hood / absl::flat_hash_map 封装热点 |
 | 8 | embedding lookup 去重优化 | `parallel-unique-pytorch` | unique、去重、embedding lookup、torch unique | `np.unique` / `torch.unique` 热点；`TORCH_LIBRARY` 扩展 |
 | 9 | OpenZL 压缩内核优化 | `openzl-compression-tuning` | openzl、压缩、huffman、fse、熵编码、熵解码、codec 内核、压缩内核 | `src/openzl/` 源码树；`ZS_Huf*` / `openzl` 符号；`unitBench` 目录；`addBits` / `lookBits` 位流函数 |
-| 10 | 向量数据库与向量检索优化 | `vector-search-optimize` | 向量数据库、向量检索、ANN、Faiss、DiskANN、IVFPQ、FastScan、PQFS、HNSW、RaBitQ、TurboQuant、Vamana | 向量索引或检索服务入口；`faiss/`、`faiss::`、`diskann-disk` 或 `diskann-benchmark` 等库指纹 |
+| 10 | 向量数据库与向量检索优化 | `vector-search-optimize` | 向量数据库、向量检索、pgvector、PostgreSQL 向量、ANN、Faiss、DiskANN、IVFPQ、FastScan、PQFS、HNSW、RaBitQ、TurboQuant、Vamana | 向量索引或检索服务入口；`faiss/`、`faiss::`、`diskann-disk` 或 `diskann-benchmark` 等库指纹 |
 | 11 | DPDK 数据面代码优化 | `dpdk-optimization` | dpdk 代码、数据面、转发性能、收发包、热路径、PPS 低、l3fwd、rte_ring、mbuf | `rte_eth_rx_burst`/`rte_` 符号、`RTE_PKTMBUF_HEADROOM`；Makefile/meson 依赖 libdpdk |
 | 12 | 媒体库优化 | `multimedia-code-optimizer` | 媒体库、图像视频算子、视频编解码、色彩转换、图像缩放、图像滤波 | 图像视频处理项目中的 YUV/RGB 转换、缩放、滤波或编解码算子 |
 | 13 | folly 异步链路优化 | `folly-future-optimization` | folly、future、promise、then 回调、SharedPromise、FunctionTraits、Core 构造 | `folly/futures/` 源码树；`folly::` 命名空间；`FOLLY_FUTURE` 宏；链接 libfolly |
 | 14 | protobuf 序列化库优化 | `protobuf-optimization` | protobuf、proto 反序列化、消息合并、MapMergeFrom、MiniParse、arena 分配 | `src/google/protobuf/` 源码树；`libprotobuf`；`TcParser`/`MapMergeFrom` 符号 |
-| 15 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
-| 16 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 15 | Agent 记忆系统 / 图数据库后端优化 | `agent-memory-db-optimization` | Agent 记忆、长期记忆、记忆后端、记忆系统、记忆检索、memory agent、memory backend、知识图谱数据库、图数据库、Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee、Neo4j、Bolt、Cypher、pgvector、Qdrant、Chroma、LanceDB | `graphiti_core/` 或 `graphiti/` 源码树；memory service 入口（add_episode/retrieve_memory 类）；`neo4j`/Bolt 驱动依赖；`pgvector`/`qdrant`/`chroma`/`lancedb` 后端依赖；Cypher 查询模板 |
+| 16 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
+| 17 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
-**向量检索接管**：优化对象已明确落在向量数据库或检索路径时，直接加载 `vector-search-optimize`，传递用户目标、已知库名、源码、基准、数据和已有实验状态。由它识别执行层级，选择 Faiss、DiskANN 专项或通用 CP0–CP7。只有明确指向 VSAG 的专项任务才直达 VSAG 路由。共享算法名先交给通用入口查明实际后端。延续用户给出的资源范围和交互模式。
+**向量检索接管**：优化对象已明确落在向量数据库或检索路径时，直接加载 `vector-search-optimize`，传递用户目标、已知库名、源码、基准、数据和已有实验状态。由它识别执行层级，选择 Faiss、DiskANN、pgvector 专项或通用 CP0–CP7。只有明确指向 VSAG 的专项任务才直达 VSAG 路由。共享算法名先交给通用入口查明实际后端。延续用户给出的资源范围和交互模式。
+
+**记忆后端接管**：优化对象明确是 Agent 记忆 / 知识图谱后端（Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee 或自研记忆服务，后端为 Neo4j/FalkorDB/pgvector/Qdrant/Chroma/LanceDB 等）时，直接加载 `agent-memory-db-optimization`；框架层是 Python/TS 还是 C++/Go/Rust/JVM 都适用，由它先判运行时再选杠杆。同一条链路里若还牵涉向量索引库（Faiss/DiskANN/VSAG）内部实现，按实测热点归属：客户端、驱动、图查询与载荷回传统一交本 skill，索引库内部算法优化交对应向量 skill。
 
 ### 路由流程
 
@@ -53,12 +56,12 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 ```bash
 ls; ls -d */ 2>/dev/null
 grep -i -l -E '<场景指纹关键词>' CMakeLists.txt Makefile README* */CMakeLists.txt 2>/dev/null
-grep -i -r -l -m1 -E '<场景指纹关键词>' --include='*.{h,hpp,c,cc,cpp,py}' -maxdepth 2 . 2>/dev/null | head -20
+rg -i -l --max-depth 2 -g '*.h' -g '*.hpp' -g '*.c' -g '*.cc' -g '*.cpp' -g '*.py' -e '<场景指纹关键词>' . | head -20
 ```
 
 命中的场景加入候选集，记录命中文件路径作为证据。
 
-**Step 3 候选确认**：候选集非空 → 调用 AskUserQuestion 单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
+**Step 3 候选确认**：用户已明确指定场景或目标 skill 时，直接执行接管协议，沿用会话中已确认的资源范围和交互模式，无需重复选择。仅凭 attention、unique、ann 等通用词不能视为明确场景。只有多个候选影响执行路径且无法从上下文消歧时才提问；使用当前环境可用的提问工具，工具不可用时以普通文本提问。无候选且用户要求通用代码优化时直接进入默认主流水线；用户需要浏览场景时进入 Step 4。需要确认候选时 → 使用可用的交互方式单选展示候选场景（question 文本中附识别证据：命中关键词/指纹文件），并固定附加选项「性能库开发（默认主流水线）」：
 - 用户选择某候选场景 → 执行接管协议
 - 用户选择「都不对，查看全部场景」或候选集为空 → 进入 Step 4
 
