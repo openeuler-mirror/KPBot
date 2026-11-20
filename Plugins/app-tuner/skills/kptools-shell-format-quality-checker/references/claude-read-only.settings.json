@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "disableBypassPermissionsMode": "disable",
+    "allow": ["Read", "Skill"],
+    "deny": ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "Agent", "mcp__*"]
+  }
+}
