@@ -7,10 +7,17 @@ npm-debug.log*
 # Python
 __pycache__/
 *.pyc
+/.test-tmp/
+/test-results.log
+/test-results-latest.log
 
 # OS
 .DS_Store
 Thumbs.db
+
+# KPBot 本地安装产物 / 运行现场（项目级 skills、host 快照、runs）
+.kpbot/
+.opencode/
 
 # Editor
 *.swp
@@ -24,3 +31,7 @@ Thumbs.db
 
 # case 运行产物（entrypoint 写入，不入库）
 Plugins/app-tuner/skills/*/cases/*/results/
+
+# 临时目录与临时文件（mktemp / 图表产物，防止误提交）
+/tmp*/
+*.tmp

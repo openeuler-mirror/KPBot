@@ -1,0 +1,64 @@
+{
+  "skill_name": "redis-optimize",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "一台双路鲲鹏服务器，NUMA node 0 有 0-31 核，node 1 有 32-63 核；业务网卡 eth2 的 PCI 设备 numa_node=1；机器上跑 4 个 redis-server 实例，端口 6379/6380/6381/6382，当前都在 0-63 全核上运行。请给出完整的绑核、网卡队列、中断、ntuple 规划与执行命令，并说明每步验证方法和风险。不要执行任何修改。",
+      "expected_output": "用 ps/ss/taskset -pc 发现实例并建立 PID-端口-亲和性表；通过 /sys/class/net/eth2/device/numa_node 或 /sys/bus/pci/devices/<bdf>/numa_node 确认网卡属于 node 1（lspci 辅助交叉确认）；4 个实例分别绑到 node 1 内的 4 个不同核（如 32/33/34/35），用 taskset -cp 逐实例设置；先 ethtool -l 查上限，再 ethtool -L eth2 combined 4；重读 /proc/interrupts 取 4 个队列 IRQ，逐队列用 smp_affinity_list 绑到对应实例核；ntuple 用 flow-type tcp4 dst-port <port> action 0..3，action 与端口一一对应；验证 effective_affinity_list、中断增量、ethtool -n；风险包括 -L 可能 down/up 断流、irqbalance 覆盖、队列改动导致 IRQ 重编号，必须先快照并可回滚。",
+      "files": [],
+      "expectations": [
+        "明确用 ps/ss 发现实例，并用 taskset -pc 读取当前亲和性，而不是假设",
+        "网卡 NUMA 通过 /sys/class/net/<eth>/device/numa_node 或 /sys/bus/pci/devices/<bdf>/numa_node 确认，lspci 仅作交叉确认",
+        "4 个实例绑定到 node 1 内的 4 个不同核（不跨 node、不重叠），给出 taskset -cp 命令",
+        "先 ethtool -l 查最大队列，再 ethtool -L eth2 combined 4；顺序是先改队列后读 IRQ",
+        "每个队列 IRQ 逐队列绑定到不同核，并给出 effective_affinity_list 或中断增量验证方法",
+        "ntuple 规则 action 从 0 开始依次递增，dst-port 与实例端口一一对应，且说明 action 必须小于队列数",
+        "指出 ethtool -L 可能触发网卡 down/up、瞬断业务，以及 irqbalance 必须停用/恢复",
+        "要求变更前快照、变更后复测、失败可回滚；没有实际执行修改"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "在虚拟机里按 Redis 调优教程执行 ethtool -L eth0 combined 4 和 ethtool --config-ntuple eth0 flow-type tcp4 dst-port 6379 action 0，两条命令都报 Operation not supported。业务确实跨机访问这个 Redis。接下来怎么处理？不要执行破坏性操作。",
+      "expected_output": "先确认网卡与驱动能力（ethtool -i、ethtool -l、ethtool -k、ethtool -n），判断 virtio/veth 或云网卡不支持可调队列/ntuple 属于预期；不要反复重试或强行 down/up。若虚拟化侧已配置多队列，可保留现状；软中断集中的话用 RPS/RFS 按哈希分散（不能按端口定向），并复测跨核 cache 影响；向用户说明 ntuple 端口分流在该网卡不可用，不能伪造生效。同时确认压测客户端在另一台机器、流量确实经过该网卡。",
+      "files": [],
+      "expectations": [
+        "先做能力探测（ethtool -i/-l/-k/-n），识别 virtio/veth/云网卡不支持该功能，而不是继续硬试",
+        "明确说明 ntuple 按端口分流在该网卡不可用，不能声称已生效",
+        "给出 RPS/RFS 兜底方案，并说明它只能按哈希分散、不能按端口指定核",
+        "说明虚拟队列可能需要虚拟化侧/QEMU 配置，不能只改 guest 内 ethtool",
+        "确认流量路径（跨机、非 loopback）后再判断优化是否适用",
+        "没有建议未确认的 down/up 或其他破坏性操作"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "一台机器上两个 Redis 实例都监听 6379，但 bind 分别是 192.0.2.11 和 192.0.2.12。请给出 ntuple 分流方案、队列/中断映射和验证方法，并说明网卡不支持时的退化方案。不要执行修改。",
+      "expected_output": "仅 dst-port 6379 无法区分两个实例，需要用 dst-ip + dst-port 组合规则：dst-ip 192.0.2.11 dst-port 6379 action 0，dst-ip 192.0.2.12 dst-port 6379 action 1；队列数至少 2，每个实例绑不同核，队列 IRQ 一一对应；用 ethtool -n 确认字段与 action 生效，分别对两个 IP:PORT 压测并观察对应队列 IRQ 增量落核；若驱动不支持 dst-ip+dst-port 组合，则退化为 RSS 哈希分流并说明无法按实例定向。",
+      "files": [],
+      "expectations": [
+        "指出仅 dst-port 无法区分同端口的两个实例，必须使用 dst-ip + dst-port",
+        "给出两条规则的 action 0/1 与 192.0.2.11/192.0.2.12 的明确对应关系",
+        "队列数至少为 2，且实例、队列、IRQ、核一一对应",
+        "用 ethtool -n 检查规则字段与 action，并按 IP:PORT 分别压测验证 IRQ 增量",
+        "说明不支持组合字段时的退化方案（RSS 哈希、接受混流），不虚构定向能力",
+        "没有执行修改"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "生产环境的 Redis 服务器，我通过 eth0 SSH 登录，准备把 eth0 的队列数从 1 改成 4，并把中断绑到 4 个核上，同时给 Redis 配 ntuple 分流。请给出操作步骤、风险控制与回滚方案。不要执行任何命令。",
+      "expected_output": "先做只读发现与快照（ethtool -i/-l/-n/-k、/proc/interrupts、irq masks、irqbalance 状态、taskset、redis.conf、sysctl）；风险重点是 ethtool -L 在部分驱动上需要网卡 down/up，会瞬断 SSH/业务，必须准备 BMC/串口或维护窗口并取得确认；停 irqbalance 后手工绑 IRQ，改队列后重读 /proc/interrupts；ntuple 在队列与中断之后按端口逐条配置，action 0..3 与实例对应；每层单变量复测；回滚顺序为删 ntuple → 恢复 combined → 恢复 IRQ 掩码/irqbalance → 恢复 taskset 与 redis.conf，并复验。",
+      "files": [],
+      "expectations": [
+        "变更前做完整快照（队列数、ntuple 规则、IRQ 掩码、irqbalance 状态、进程亲和性、redis.conf、sysctl）",
+        "明确指出 ethtool -L 可能要求网卡 down/up 并瞬断 SSH/业务，需 BMC/串口或维护窗口和用户确认",
+        "执行顺序为：改队列 → 重读 /proc/interrupts → 绑 IRQ → 配 ntuple，且 ntuple action 从 0 开始",
+        "停用 irqbalance 并记录原状态，结束时恢复",
+        "每层优化单变量复测，只保留有增益的变更",
+        "回滚有明确顺序（删 ntuple → 恢复队列数 → 恢复 IRQ/irqbalance → 恢复 taskset/配置）并复验",
+        "没有实际执行任何命令"
+      ]
+    }
+  ]
+}

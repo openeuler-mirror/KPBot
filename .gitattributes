@@ -1,0 +1,6 @@
+# 脚本与模板必须在任何平台以 LF 检出（Windows autocrlf 会破坏 shell 与生成脚本）
+Plugins/**/*.py text eol=lf
+Plugins/**/*.sh text eol=lf
+install.sh text eol=lf
+tests/*.py text eol=lf
+tests/*.sh text eol=lf

@@ -87,6 +87,20 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 
 ## 技能分类
 
+### 领域分组
+
+`skills/` 顶层仍是平铺 skill；按领域归并的 skill 收在 `skills/<域>/` 下，域目录带 `DOMAIN.md`（范围、成员登记、域内路由、reviewer）。安装时一律展开为 `<tool>/skills/<skill>/`，Claude Code 与 OpenCode 侧的可见性与平铺时完全一致。目录约定见 `docs/STANDARDS.md` 的「领域分组」。
+
+| 领域 | 目录 | 范围 | 当前成员 |
+|---|---|---|---|
+| 搜推（SRA） | [`skills/sra/`](skills/sra/DOMAIN.md) | 搜推 DAG 全栈优化方法总表 | `sra-dag-tuning` |
+| 向量数据库 / 检索 | [`skills/vectordb/`](skills/vectordb/DOMAIN.md) | ANN 索引与向量库（Faiss / DiskANN 子域陆续并入） | `vsag-rabitq-optimization` |
+| Agentic Infra | [`skills/agentic-infra/`](skills/agentic-infra/DOMAIN.md) | microVM 沙箱与 AgentENV 的创建路径 | `cubesandbox-create-optimize` |
+| 微服务 | [`skills/microservice/`](skills/microservice/DOMAIN.md) | 服务进程性能（改实现侧；配置调优在 app-tuner 同名域） | `go-pprof-analysis` |
+| 存储 | [`skills/storage/`](skills/storage/DOMAIN.md) | 块层 / 文件系统 / NVMe / 分布式存储（占位，0 成员） | — |
+
+新增 skill 请登记在所属域的 `DOMAIN.md`，不要改本文件的技能总表，也不要改 `skills/kpbot-code-optimizer/SKILL.md` 的全局路由表——共享行会让并行 PR 必然冲突。
+
 ### 分析类 (Analysis)
 | 技能 | 描述 |
 |------|------|
@@ -135,7 +149,7 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 ### 向量数据库与向量检索
 
-`kpbot-code-optimizer` 将检索优化任务交给 [`vector-search-optimize`](skills/vector-search-optimize/SKILL.md)。该入口定义一套 [通用 CP0–CP7](skills/vector-search-optimize/references/cp0-cp7.md)，按实际库和执行层级路由。Faiss、DiskANN 复用各自的角色、构建入口和实验状态。其他引擎和数据库服务层可直接使用通用流程。
+`kpbot-code-optimizer` 将检索优化任务交给 [`vector-search-optimize`](skills/vector-search-optimize/SKILL.md)。该入口定义一套 [通用 CP0–CP7](skills/vector-search-optimize/references/cp0-cp7.md)，按实际库和执行层级路由。Faiss、DiskANN、pgvector 复用各自的角色、构建入口和实验状态。其他引擎和数据库服务层可直接使用通用流程。
 
 #### Faiss
 
@@ -166,10 +180,29 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 
 三个技能复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`。安装和运行方式见 [DiskANN 快速入门](skills/diskann-optimize/quickstart.md)。
 
+#### pgvector
+
+pgvector 专项由 [`pgvector-optimize`](skills/pgvector-optimize/SKILL.md) 编排，覆盖 HNSW/IVFFlat 索引、vector / halfvec / bit / sparsevec 距离内核与精确最近邻。安装器同时注册五个专业子 Agent。
+
+| 技能 | 职责 |
+|------|------|
+| [`pgvector-optimize`](skills/pgvector-optimize/SKILL.md) | CP0–CP7 编排、五角色交接与实验状态管理 |
+| `pgvector-analyzer` / `pgvector-profiler` | 源码取证、性能采样与基线与复验证据 |
+| `pgvector-candidate-planner` / `pgvector-implementer` / `pgvector-reviewer` | 候选计划、实现、构建测试与独立验收 |
+
+状态契约 `kpbot-pgvector-opt-run.v1` 由 `init_run` / `validate_state` / `validate_handoff` 校验。复用 `vector-experiment-methodology` 与 `vector-ut-st-validation`，初始化与运行方式见 [pgvector 快速入门](skills/pgvector-optimize/references/quickstart.md)。
+
 ### 向量数据库 (Vector DB)
 | 技能 | 描述 |
 |------|------|
 | `vector-db-optimization-migration` | 向量数据库/检索库跨版本优化迁移（引擎中立流程、Faiss/DiskANN 按需路由、资产分型、分层 patch、G0–G5 等价性门禁、同窗 ABBA） |
+
+### Agent 记忆系统与图数据库 (Memory / Graph DB)
+| 技能 | 描述 |
+|------|------|
+| [`agent-memory-db-optimization`](skills/agent-memory-db-optimization/SKILL.md) | Agent 记忆系统/图数据库后端（Graphiti、Neo4j、Zep/Mem0）五阶段优化：冻结确定性 LLM/embedding 负载 → 客户端/驱动/服务端三段归因 → top-down 与缓存缺失率瓶颈建模 → 分层杠杆（载荷瘦身、PackStream 解码下沉、时序水合下沉、读路径多副本扩展、服务端解码快路径）→ 矩阵复测与跨架构对照；门禁为 0 缓存未命中 + 图规模校验和 + 结果逐字节等价。 |
+
+服务端优化对象是 Neo4j 等图数据库的读路径与存储解码，不是向量索引库内部算法：索引库（Faiss/DiskANN/VSAG）内部优化仍走上面的向量检索入口。
 
 ### 媒体库优化 (Media)
 | 技能 | 描述 |
@@ -179,11 +212,12 @@ DiskANN 专项由 [`diskann-optimize`](skills/diskann-optimize/SKILL.md) 编排�
 支持指定函数、循环或局部代码片段优化，也可依据已有 Top-down／perf 报告确定优化目标。当前适配 Claude Code，可直接调用，或从 `kpbot-code-optimizer` 的“媒体库优化”进入。
 
 ### Pipeline 类 (Workflow)
+
+> `cubesandbox-create-optimize` 已归入 [Agentic Infra 域](skills/agentic-infra/DOMAIN.md)，成员与职责见该域 `DOMAIN.md`。
 | 技能 | 描述 |
 |------|------|
 | `kpbot-code-optimizer` | 优化 Pipeline 编排 |
 | `kpbot-code-optimizer-workflow` | 优化 Pipeline 工作流 |
-| [cubesandbox-create-optimize](skills/cubesandbox-create-optimize/SKILL.md) | 面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口 |
 | `drive-claude-optimize-pipeline` | 驱动 Claude 执行优化 Pipeline |
 | `batch-drive-optimize-pipeline` | 批量驱动优化 Pipeline |
 | `interactive-optimizer` | 交互式优化器 |

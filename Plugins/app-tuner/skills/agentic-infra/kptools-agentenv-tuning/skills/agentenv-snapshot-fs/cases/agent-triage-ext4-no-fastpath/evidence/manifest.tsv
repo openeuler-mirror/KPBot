@@ -1,0 +1,6 @@
+file	state	exit_code
+environment.txt	available	0
+kernel-config.txt	unknown	1
+kallsyms.txt	available	0
+fs-types.txt	available	0
+fsbench.txt	available	0

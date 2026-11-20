@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-jvmjit",
+  "evals": [
+    {
+      "id": "JJ-E01",
+      "query": "perf 采出来的 Java 进程热点全是 unknown 和裸地址，符号怎么解决",
+      "expected": "触发 kptools-jvmjit：检查 -agentpath 先决 → perf record -k 1 → inject --jit → report 方法级符号；缺 agent 给重启指引"
+    },
+    {
+      "id": "JJ-E02",
+      "query": "docker 容器里的 Java 服务怎么用 perf 做指令级分析",
+      "expected": "容器模式：check 容器权限（--cap-add PERFMON/SYS_ADMIN）→ toolpack 注入 → 容器内 record/inject/report，产物回传宿主"
+    },
+    {
+      "id": "JJ-E03",
+      "query": "看下这个热点方法 JIT 之后的机器码，确认 C2 有没有把它向量化",
+      "expected": "report 定位热点 jitted ELF → objdump 反汇编判读 NEON/SVE 指令；未向量化则移交 code-optimizer"
+    },
+    {
+      "id": "JJ-E04",
+      "query": "报告里有大量 [JIT] 开头的行，是采样失败了吗",
+      "expected": "判定为 dump 滞后而非故障：测试环境 --stop-jvm / 生产等优雅重启刷盘后对同一 raw.data 重新 inject"
+    },
+    {
+      "id": "JJ-E05",
+      "query": "优化前后各采一轮，对比 JIT 代码的变化作为收益证据",
+      "expected": "两轮 collect 对比 report 占比 + jitted ELF 反汇编，产出结构性证据（如 NEON 指令出现/占比变化）"
+    }
+  ]
+}

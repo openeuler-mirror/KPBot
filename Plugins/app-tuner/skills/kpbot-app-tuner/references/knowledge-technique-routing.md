@@ -14,6 +14,7 @@
 | L2 Application Config: Ceph（OS 系统层参数、ceph.conf、PG 分布/balancer、OSD 绑核） | 场景为 Ceph 存储集群或瓶颈归因于 OSD/存储集群 | `ceph-optimization`，按需 `network-optimization`、`cpu-affinity-optimization`、`bios-optimization` |
 | L3 Performance Libraries: libc string、BiSheng Stringlibs、jemalloc、tcmalloc、KQMalloc | 热点落在 malloc/free、memcpy/memset/string、allocator 或高性能库可替换 | `performance-library-selection`，按需 `compiler-optimization` |
 | L4 Compiler: Architecture Flags、CRC and LSE、GCC/LLVM/BiSheng、PGO、LTO、Function Alignment、Loop Vectorization、MySQL Patch | 编译选项、代码生成、profile-guided、平台编译器或源码补丁相关 | `compiler-optimization` |
+| L3/L4 Go Runtime: sync.Pool 保留与预分配、GODEBUG=poolretain/poolprealloc、Go runtime 补丁重编译 | Go 微服务 GC 频繁、堆内存颠簸、Pool 两代缓存被清空、允许重编译 runtime | `microservice-go-syncpool-optimization` |
 | L5 Source Code: Zero Copy and Batching、Data Structure Alignment/Slimming、Operator Fusion、Scheduling、Deep Copy to Shallow Copy | 热点需要源码/算法/数据结构配套，不是单纯系统参数 | `other-optimization`，按需 `application-config-optimization` 或 `compiler-optimization` |
 | L6 Microarchitecture: Software Prefetch、HHA DDR、L2/L3 Cache Isolation | PMU 指向 cache、DDR、frontend/backend、微架构资源隔离 | `cpu-affinity-optimization`、`os-optimization`、`bios-optimization` |
 | Foundations: PMU、NUMA、CPU Affinity | 证据采集、瓶颈归因和拓扑解释 | 主流程环境诊断、`cpu-affinity-optimization`、相关子 skill |

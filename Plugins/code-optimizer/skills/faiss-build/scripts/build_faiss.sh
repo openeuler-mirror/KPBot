@@ -124,23 +124,31 @@ if [ "$run_dir" = "/" ] || [ "$run_dir" = "$repo" ]; then
   exit 3
 fi
 
-mkdir -p "$run_dir"
-
-if [ "$clean" = "true" ] && { [ -e "$build_dir" ] || [ -L "$build_dir" ]; }; then
-  rm -rf -- "$build_dir"
+if ! source_commit="$(git -C "$repo" rev-parse HEAD)"; then
+  echo "Cannot identify Faiss source commit; refusing to build" >&2
+  exit 4
 fi
-
-source_commit="$(git -C "$repo" rev-parse HEAD)"
 dirty="false"
-dirty_files=""
-if [ -n "$(git -C "$repo" status --porcelain --untracked-files=normal)" ]; then
+if ! dirty_files="$(git -C "$repo" status --porcelain --untracked-files=normal)"; then
+  echo "Cannot verify Faiss worktree status; refusing to build" >&2
+  exit 4
+fi
+if [ -n "$dirty_files" ]; then
   dirty="true"
-  dirty_files="$(git -C "$repo" status --porcelain --untracked-files=normal)"
 fi
 
 if [ "$mode" = "baseline" ] && [ "$dirty" = "true" ]; then
   echo "Baseline mode requires a clean worktree; refusing to build dirty sources" >&2
   exit 4
+fi
+
+mkdir -p "$run_dir"
+rm -f -- "$run_dir/BUILD-MANIFEST.json" "$run_dir/compile-definitions.txt" "$run_dir/libfaiss.sha256"
+: > "$run_dir/cmake-configure.log"
+: > "$run_dir/build.log"
+
+if [ "$clean" = "true" ] && { [ -e "$build_dir" ] || [ -L "$build_dir" ]; }; then
+  rm -rf -- "$build_dir"
 fi
 
 cmakelists_sha256="$(sha256sum "$repo/faiss/CMakeLists.txt" | awk '{print $1}')"

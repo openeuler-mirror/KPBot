@@ -1,0 +1,50 @@
+# 用例：agent 级触发率 —— Java 接口慢性能分析（目标 DemoApp 已启动，PID 见 prompt）
+# 依据 docs/case-spec.md；with/without 唯一变量是 skill 有无；断言 trace 中 skill 被调用。
+# DemoApp 内置：api-worker 线程调 handle（parse 40ms + io 120ms + compute），
+# lock-holder/lock-waiter 演示 BLOCKED，cpu-burner 演示高 CPU 线程。
+
+name: agent-arthas-trigger
+skill: kptools-arthas
+tier: agent
+
+image: kpbot/app-tuner-agent-agent-arthas-trigger:1.0-openeuler24.03
+model: opencode/glm-5.3-flash-free
+auth: env_injection         # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不做 -v 挂载
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: trigger
+  uplift: with 触发 / without 不触发（skill 未接入时不可能触发）
+
+build:
+  context: ../../../..
+  dockerfile: skills/kptools-arthas/cases/agent-arthas-trigger/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时挂载；run_ab.sh fail-closed + realpath 白名单 + ELF 魔数校验）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不挂载；
+    entrypoint 解码到 agent 隔离 HOME 下 600 权限、运行后即删）
+  - 容器默认 bridge 网络访问模型 API（DOCKER_RUN_ARGS 仅白名单参数，--network host 被拒绝）；
+    arthas 完整包已在镜像构建期以非 root 用户预热（含 arthas-core.jar 缓存断言）
+
+env_vars:
+  MODEL: opencode/glm-5.3-flash-free
+  SKILL_MODE: with
+  ARTHAS_BOOT_JAR: /opt/arthas/arthas-boot.jar
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: trigger
+    expect: true

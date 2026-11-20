@@ -36,6 +36,7 @@ skills/kpbot-app-tuner/
     cpu-affinity-optimization/SKILL.md + scripts/
     performance-library-selection/SKILL.md + scripts/ + references/
     compiler-optimization/SKILL.md + scripts/ + references/
+    microservice-go-syncpool-optimization/SKILL.md + references/
     application-config-optimization/SKILL.md + scripts/ + references/
     accelerator-optimization/SKILL.md
     hardware-upgrade-analysis/SKILL.md

@@ -1,0 +1,7 @@
+# Synthetic fixture; result of: df -T
+Filesystem                    Type    Size  Used  Avail  Use%  Mounted on
+/dev/mapper/ubuntu--vg-root   ext4    400G   80G   320G   20%   /
+tmpfs                         tmpfs   64M    1M    63M    2%    /run
+# AgentENV config/default.toml:
+# work_dir = "/var/lib/aenv/aenv-work"
+# → /var/lib/aenv/aenv-work 位于 ext4 根文件系统

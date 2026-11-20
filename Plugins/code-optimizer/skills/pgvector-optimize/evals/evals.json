@@ -1,0 +1,268 @@
+{
+  "schema_version": "kpbot-pgvector-optimize-evals.v1",
+  "note": "结构化行为样例，供人工或目标平台评估路由、边界与交付行为。JSON结构校验不代表已运行模型行为评估。",
+  "cases": [
+    {
+      "case_id": "route-hnsw",
+      "prompt": "我要优化 pgvector HNSW 索引的查询 QPS，完整走一次优化流程",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "hnsw",
+      "must_use": [
+        "pgvector-optimize"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "CP0 init_run 建 state",
+        "algorithm=hnsw，热点归因到 HnswSearchLayer/HnswLoadElementImpl/距离内核"
+      ]
+    },
+    {
+      "case_id": "route-ivfflat-build",
+      "prompt": "优化 IVFFlat 索引构建（k-means 训练阶段）耗时",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "ivfflat",
+      "must_use": [
+        "pgvector-optimize"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "algorithm=ivfflat",
+        "热点归因到 ElkanKmeans/InitCenters"
+      ]
+    },
+    {
+      "case_id": "route-distance-kernel",
+      "prompt": "优化 vector 类型的 L2 距离计算内核性能",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "distance-kernel",
+      "must_use": [
+        "pgvector-optimize"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "确认实际编译宏（OPTFLAGS/PG_CFLAGS/自动向量化/target_clones）",
+        "以距离内核为热点对象"
+      ]
+    },
+    {
+      "case_id": "entry-single-point",
+      "prompt": "hnsw.ef_search 的默认值和取值范围是多少？",
+      "expected_route": "direct-answer",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [
+        "pgvector-optimize/workflows/optimize-workflow.md"
+      ],
+      "expected_behavior": [
+        "单点问题直接回答，不建 state 不走 workflow"
+      ]
+    },
+    {
+      "case_id": "entry-investigation",
+      "prompt": "帮我调查 HNSW 查询的调用链和距离分派，暂时不做优化",
+      "expected_route": "pgvector-analyzer",
+      "expected_algorithm": "hnsw",
+      "must_use": [
+        "pgvector-analyzer"
+      ],
+      "must_not_use": [
+        "pgvector-optimize/workflows/optimize-workflow.md"
+      ],
+      "expected_behavior": [
+        "调查类派 analyzer，产出 SOURCE-EVIDENCE.md，不进 CP2+"
+      ]
+    },
+    {
+      "case_id": "entry-clarify",
+      "prompt": "pgvector 慢",
+      "expected_route": "clarify",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "先从上下文识别源码、索引类型和性能目标",
+        "仅对影响下一步且无法推断的关键信息提问"
+      ]
+    },
+    {
+      "case_id": "negative-unknown-target",
+      "prompt": "优化 PostgreSQL 的 B-tree 索引构建性能",
+      "expected_route": "clarify",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [
+        "pgvector-optimize/workflows/optimize-workflow.md"
+      ],
+      "expected_behavior": [
+        "不在 pgvector 覆盖范围内：说明范围并询问意图，不建 workflow state"
+      ]
+    },
+    {
+      "case_id": "local-report-delivery",
+      "prompt": "完成 HNSW 查询对照后，将报告和原始数据保存在实验目录。",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "hnsw",
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "产物写入run_dir并交付路径和结论",
+        "不自动发布或修改通用技能记录"
+      ]
+    },
+    {
+      "case_id": "history-external-provided",
+      "prompt": "提供一份已有 pgvector 实验记录，规划新候选时参考。",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [
+        "pgvector-candidate-planner"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "记录history_policy.mode=external与source",
+        "核对资料条件和当前证据后使用，不将旧结果作为当前实测"
+      ]
+    },
+    {
+      "case_id": "history-none-honest",
+      "prompt": "没有已有实验记录，开始优化 HNSW 查询。",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "hnsw",
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "history_policy.mode=none",
+        "依据当前源码和测量继续，不虚构已有结果或要求先补齐实验档案"
+      ]
+    },
+    {
+      "case_id": "commit-gate-authorized",
+      "prompt": "验收通过的话直接在本地提交（不要 push）",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "ACCEPT/ACCEPT_WITH_NOTES → 协调者执行本地 git commit",
+        "完整 SHA 写 state.json result.candidate_commit（committed_by=coordinator）",
+        "不 push 不 PR/MR"
+      ]
+    },
+    {
+      "case_id": "commit-gate-unauthorized",
+      "prompt": "先不要提交，只给我验收结果",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "ACCEPT 但未授权 → candidate_commit.status=not_authorized",
+        "交付时列出待提交清单"
+      ]
+    },
+    {
+      "case_id": "rework-loop",
+      "prompt": "reviewer 说距离裁剪改动可能改变排序，要求返工到实现阶段",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [
+        "pgvector-reviewer",
+        "pgvector-implementer"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "REWORK 非终态：return_to=CP4",
+        "state 中 stage4 及后续重置 pending",
+        "rework_events 追加记录",
+        "CP7 不 completed"
+      ]
+    },
+    {
+      "case_id": "cp4-review-not-requested",
+      "prompt": "实现候选时不需要额外做独立代码审查，直接实现完进构建和测试",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [
+        "pgvector-implementer"
+      ],
+      "must_not_use": [],
+      "expected_behavior": [
+        "未请求独立 diff 审查时 Implementer 仍正常实现、自审、交付",
+        "state decisions 记录 CP4_SKIPPED_NOT_REQUESTED（仅表示未请求独立审查）",
+        "CP4 completed 正常进入 CP5"
+      ]
+    },
+    {
+      "case_id": "frozen-field-guard",
+      "prompt": "降低 ivfflat.probes 后，仍把新的 QPS 当作原配置下的实现优化收益。",
+      "expected_route": "reject-request",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "ivfflat.probes / hnsw.ef_search 是 frozen:true 查询参数：拒绝以调参冒充实现收益",
+        "解释冻结字段可比性规则"
+      ]
+    },
+    {
+      "case_id": "multi-target-split",
+      "prompt": "同时优化 HNSW 和 IVFFlat 两个索引类型",
+      "expected_route": "clarify",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "按目标（algorithm）拆分独立实验",
+        "已有优先级则沿用，无法判断且影响执行时再确认顺序"
+      ]
+    },
+    {
+      "case_id": "capability-detection",
+      "prompt": "当前是关闭了 HALFVEC_DISPATCH 的 x86 构建，分析 halfvec L2 距离。",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "distance-kernel",
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "先确认真实编译宏和实际执行的内核（scalar vs F16C/AVX512）",
+        "不预设 SIMD 分派存在"
+      ]
+    },
+    {
+      "case_id": "resource-change",
+      "prompt": "测量期间 Postgres 的 max_parallel_workers 配置发生变化，继续测试。",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "停止本任务旧资源上的执行并保留记录",
+        "新资源契约建立独立实验，旧新时间不混合"
+      ]
+    },
+    {
+      "case_id": "metric-detection",
+      "prompt": "测试程序的 QPS 聚合公式与另一个副本不同。",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": null,
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "核对当前计时范围、工作量和公式",
+        "不复制另一副本的聚合口径"
+      ]
+    },
+    {
+      "case_id": "recall-quality-gate",
+      "prompt": "限长距离裁剪后，能用更低的 ef_search 得到同样 QPS 就算通过吗？",
+      "expected_route": "pgvector-optimize/workflows/optimize-workflow.md",
+      "expected_algorithm": "hnsw",
+      "must_use": [],
+      "must_not_use": [],
+      "expected_behavior": [
+        "冻结 ef_search 等查询参数，不通过调参冒充实现收益",
+        "质量门槛为 Recall@K 不下降（或另行声明权衡）"
+      ]
+    }
+  ]
+}

@@ -434,7 +434,16 @@ skills:
 | 层级 | 目录 | 用途 | 内容示例 |
 | --- | --- | --- | --- |
 | 领域根目录 | `skills/` | KPBot Skills 鲲鹏领域软件开发/优化/问题定位等 skills | — |
+| 领域分组 | `skills/<域>/` | 按领域归并 skill 的源码分组，安装时展开为平铺目录；一个分组对应一个 review 归属 | `skills/<域>/` |
+| 领域分组说明 | `skills/<域>/DOMAIN.md` | 该域的范围、成员登记表、域内路由、reviewer；缺失则整组不参与安装 | `skills/<域>/DOMAIN.md` |
 | Skill 内 | `references/` | 按需加载的知识文档 | API 指南、最佳实践、约束说明 |
 | Skill 内 | `assets/` | 输出时使用的静态资源 | 模板文件、图标 |
 | Skill 内 | `scripts/` | 可执行脚本 | 数据生成、验证脚本 |
 | Team 内 | `workflows/` | teams 流程配置文件 | 任务提示词、数据流定义、错误处理指南 |
+
+### 领域分组
+
+- 判定规则：含 `SKILL.md` 的目录是 skill；含 `DOMAIN.md` 的目录是领域分组（可再嵌一层子域）；两者都没有的目录不参与安装，`install.sh` 会对「有子 skill 却缺 `DOMAIN.md`」的目录告警。
+- 安装布局恒为 `<tool>/skills/<skill-name>/`：Claude Code 与 OpenCode 只发现一层，分组只存在于源码树，不改变工具侧可见性。
+- 新增 skill 登记在所属域的 `DOMAIN.md`，不要改 `skills/kpbot-code-optimizer/SKILL.md` 的全局路由表或插件 `README.md` 的总表——共享行会让并行 PR 必然冲突。
+- 评审归属按路径判定：改动落在 `skills/<域>/**` 内，由该域 reviewer 评审；跨域改动（路由入口、`install.sh`、`README.md`）另行指定。

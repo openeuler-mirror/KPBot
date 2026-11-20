@@ -1,6 +1,6 @@
 ---
 name: vector-search-optimize
-description: 编排向量数据库与向量检索的 CP0–CP7 优化流程。用于 ANN 索引、向量库、检索服务的性能诊断、基线、候选优化及复验。按实际目标路由到 Faiss、DiskANN 专项工作流，其他引擎或服务层沿用通用流程。
+description: 编排向量数据库与向量检索的 CP0–CP7 优化流程。用于 ANN 索引、向量库、检索服务的性能诊断、基线、候选优化及复验。按实际目标路由到 Faiss、DiskANN、pgvector 专项工作流，其他引擎或服务层沿用通用流程。
 ---
 
 # 向量检索优化
@@ -12,6 +12,7 @@ description: 编排向量数据库与向量检索的 CP0–CP7 优化流程。�
    | --- | --- |
    | Faiss 库、明确的 Faiss 索引或算子 | 加载 `faiss-optimize` |
    | DiskANN 库、明确的 DiskANN 磁盘索引或内存图 | 加载 `diskann-optimize` |
+   | pgvector 扩展、PostgreSQL 向量索引（HNSW/IVFFlat）或距离内核 | 加载 `pgvector-optimize` |
    | VSAG 专项任务 | 加载现有 `vsag-rabitq-optimization` |
    | 其他引擎、向量数据库服务层或跨引擎对照 | 执行 [通用 CP0–CP7](references/cp0-cp7.md) |
 

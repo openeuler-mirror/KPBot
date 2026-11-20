@@ -210,6 +210,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
     - 场景为 Ceph 存储集群（RBD/RGW/CephFS）或瓶颈证据落在 OSD/存储集群路径（OSD 进程 CPU 高、PG 分布不均、存储 IO 瓶颈）时，把 `ceph-optimization` 加入候选列表。
     - topdown 或 perf stat 显示 L1 icache miss 高时，把 `compiler-optimization` 加入候选列表，重点分析 PGO/LTO。
     - **`compiler-optimization` 排最后**：当 `compiler-optimization` 进入候选列表（evidence_candidate 或 coverage）时，它必须排在候选列表**最末位**，晚于所有其他候选 skill。原因：编译级改造（PGO/LTO、重编译、融合策略）会重建二进制，干扰后续其他 skill 的现场 A/B 收益归因，需在其他运行时类手段（应用配置、性能库、加速卡、OS）验证完毕后再执行。`scripts/dynamic_workflow_manager.js set-candidates` 会归一化该顺序，`references/candidate-skill-list.md` 执行顺序节也强制该规则；用户显式推翻该默认时以用户指令为准并在 trace 记录。
+    - Go 微服务场景出现 `runtime.mallocgc`、`runtime.gcDrain`、`sync.(*Pool).Get`/`Put` 等热点，且 heap profile 呈 `alloc_space` 高、`inuse_space` 低时，把 `microservice-go-syncpool-optimization` 加入候选列表，按锁定的 Go 基线和单变量 A/B 验证补丁与两个 GODEBUG 开关。
     - 线程切换高且 L3/LLC cache miss 高时，把 `cpu-affinity-optimization` 加入候选列表（当证据触发时，理由为证据命中；未触发时，理由为强制基线检查）。
     - 候选列表完成后，必须追加未命中的主优化 skill 作为 coverage 阶段，确保最终所有主优化 skill 都有分析、执行验证或阻塞结论。
     - 使用 `scripts/create_subagent_tasks.py` 生成任务包后，主 agent 必须按 `references/subagent-orchestration.md` 为 `candidate_skill_list` 中每个 skill 启动独立分析 subagent；禁止由主 agent 直接代替所有子 skill 分析并手写结果。OpenCode 使用 `task` 工具分发：分析 subagent 使用统一 agent 类型 `subagent_type: "analyzer"`（从任务包 `subskill_name` 字段确定要加载的 skill，所有分析 agent 共用这一类型），执行验证 subagent 使用 `subagent_type: "executor"`。
@@ -312,6 +313,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
 | BIOS 优化 skill | `subskills/bios-optimization/SKILL.md` |
 | OS 优化 skill | `subskills/os-optimization/SKILL.md` |
 | 编译优化 skill | `subskills/compiler-optimization/SKILL.md` |
+| Go 微服务 sync.Pool 运行时优化 skill | `subskills/microservice-go-syncpool-optimization/SKILL.md` |
 | GPU/NPU 等计算卡 skill | `subskills/accelerator-optimization/SKILL.md` |
 | 更换高规格硬件 | `subskills/hardware-upgrade-analysis/SKILL.md` |
 | Other 优化 skill | `subskills/other-optimization/SKILL.md` |

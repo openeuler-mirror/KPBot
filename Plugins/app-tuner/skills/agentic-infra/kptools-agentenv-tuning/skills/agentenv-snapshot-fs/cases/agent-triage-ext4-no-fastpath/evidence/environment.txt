@@ -1,0 +1,12 @@
+# Synthetic fixture for case testing; not real environment data.
+collected_at_utc=2026-01-01T00:00:00Z
+os=Linux
+architecture=aarch64
+kernel=6.8.0-142-fixture.aarch64
+hostname=fixture-host-05
+collector_uid=1000
+boot_id=fixture-boot-id-0006
+declared_role=host
+role_verified=false
+distro=Ubuntu 24.04 (fixture)
+Feature availability and performance require separate verification.
