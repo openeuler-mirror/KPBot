@@ -9,7 +9,7 @@
 
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
-- **2026/11/19** — **code-optimizer** 新增 `generic-timer-optimization` SKILL，覆盖 aarch64 热路径时钟读取优化：把自旋等待/轮询/超时判定循环内每轮的 `Clock::now()`/`clock_gettime` vDSO 读取替换为直接读 ARM 通用定时器（`mrs cntvct_el0` + 循环外一次 `cntfrq_el0`），含锚点保域、tick 域比较、分步换算防溢出三类模板与溢出边界/`asm volatile` 防 CSE 不变量，附 `mrs` 编译验证契约与微基准/语义/端到端验证步骤，源自 folly Spin.h 真实优化案例。
+- **2026/11/19** — **code-optimizer** 新增 `generic-timer-optimization` SKILL，覆盖 aarch64 热路径时钟读取优化：把自旋等待/轮询/超时判定循环内每轮的 `Clock::now()`/`clock_gettime` vDSO 读取替换为直接读 ARM 通用定时器（`mrs cntvct_el0` + 循环外一次 `cntfrq_el0`），含锚点保域、tick 域比较、分步换算防溢出三类模板与溢出边界/`asm volatile` 防 CSE 不变量，附 `mrs` 编译验证契约与微基准/语义/端到端验证步骤，源自 folly Spin.h 真实优化案例，附 tier-A 契约用例。
 - **2026/11/17** — **code-optimizer** 新增 `parallel-accumulator` SKILL，覆盖归约循环的串行累加器并行化：识别单累加器延迟绑定（低 IPC + 低 cache miss），用多个独立累加器重叠依赖链隐藏浮点延迟，附三级改写模板（纯 C 多累加器 / NEON 单累加器 / NEON 多累加器）、`accumulator_plan.py` 累加器数量脚本、tier-A 契约用例、agent 端到端 A/B 用例，对标 Intel performance-patterns 的 parallel-accumulator。
 - **2026/11/16** — **app-tuner** 新增 `kptools-jvmjit` SKILL，覆盖 JVM 进程 perf 采样符号化分析（libperf-jvmti + perf inject --jit）：方法级热点、JIT 代码指令级注解导出（源码+汇编+逐指令周期占比）、容器内采集（权限检测 + 宿主机 perf 工具注入），含 dump 刷盘语义与 [JIT] 残留处理纪律，与外部工具 arthas（免重启方法级交互）/ kptools-devkit java-perf（火焰图全景）分层互补。（[!143](https://gitcode.com/openeuler/KPBot/pull/143)）
 - **2026/11/16** — **app-tuner** 新增 `model-precision-analysis` SKILL，覆盖模型优化后的精度回归验证：读取精度评测工具 `opendatas/output` 合并结果，按数值/选项字母/文本归一化抽取答案（单位、千分位、`\text{}`、截断识别），输出准确率对比、“对→错”回归题定位与达标判定，存在回归即以退出码 1 作为精度门禁（`--fail-on-regression` 为兼容别名），并接入加速卡/应用配置 skill 的 `validation_plan`。
@@ -270,7 +270,7 @@ code-optimizer 在 Claude Code 中安装 **103 个** skill，在 OpenCode 中安
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
 - `hot-path-overhead-elimination` — 热点路径机制开销消除（主导结果内联、叶子入口、值频率分派、无消费者记账跳过）
 - `parallel-accumulator` — 串行累加器并行化（多累加器展开、NEON 向量累加器，重叠依赖链隐藏浮点延迟）
-- `generic-timer-optimization` — 通用定时器时钟读取优化（cntvct_el0/cntfrq_el0 替换自旋循环内 Clock::now()/clock_gettime，锚点保域、tick 域比较、防溢出换算）
+- `generic-timer-optimization` — 通用定时器时钟读取优化（cntvct_el0/cntfrq_el0 替换自旋循环内 Clock::now()/clock_gettime，锚点保域、tick 域比较、防溢出换算，含 tier-A 契约用例）
 
 **Pipeline/编排类**
 - `kpbot-code-optimizer` — 完整优化 Pipeline（Subagent 编排）
