@@ -1,6 +1,6 @@
 ---
 name: generic-timer-optimization
-description: 在 aarch64 热路径（自旋等待、轮询、超时判定循环）中用 ARM 通用定时器寄存器（mrs cntvct_el0 + cntfrq_el0）直接读取时间，替换循环内每轮迭代的 Clock::now()/clock_gettime vDSO 调用，消除时间检查开销。适用于 apply-optimization 调用。
+description: 在 aarch64 热路径（自旋等待、轮询、超时判定循环）中用 ARM 通用定时器寄存器（mrs cntvct_el0 + cntfrq_el0）直接读取时间，替换循环内每轮迭代的 Clock::now()/clock_gettime vDSO 调用，消除时间检查开销。适用于自旋/轮询循环被时钟读取主导的热点——反汇编中循环体内 vDSO clock_gettime 调用或 seqlock 读取占比高。独立调用的叶子 skill，不由 apply-optimization 结构化流水线分派，用于需要独立、交互式时钟读取优化的场景。
 ---
 
 # 通用定时器时钟读取优化
@@ -305,4 +305,4 @@ asm volatile("mrs %0, cntvct_el0": "=r"(ticks));
 - **无符号减法处理回绕**：全程使用 uint64，不用有符号数
 - **先算溢出边界再选变体**：`(ticks_diff * 1e9) < 2^64` 不满足时用 3c/3b
 - **不改变对外时钟语义契约**：只影响读取成本，不改变超时/deadline 判定的量纲与时钟回退保护逻辑
-- 源码替换由上游 `apply-optimization` 统一执行，本 Skill 只返回代码文本
+- 本 skill 只返回优化后代码文本，源码替换由调用方自行负责
