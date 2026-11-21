@@ -132,3 +132,38 @@ pthread 句柄而非内核 TID、无 `os.gettid`、ctypes 不可用——线程�
 remount,size=40G /dev/shm`，重启失效）、`/usr/lib64/aicpu_kernels/`
 不存在（依赖 AICPU 预装目录的路径会失败，需 mkdir）。见
 `kptools-cannlab-env` pitfalls #9/#10。
+
+### B-19 CPU_AFFINITY_CONF 主线程静默失效（torchtitan 默认编排，重磅）
+
+- **症状**：主线程亲和性全程全核漫游（如 `{0-39}`），**无报错、无告警日志**；
+  同时 acl_thread→核1、release_thread→核2 照常自绑定——观测到"绑核生效了"
+  实为只有保留线程绑了，**主线程漏绑**（torchtitan 真实训练 100 步周期采样
+  + Chrome trace 证实：默认配置下 837 个算子事件全落在未绑定的主线程）
+- **根因**（torch_npu 2.14.0.dev20260918，NPUAffinityController.cpp 实测）：
+  lazy_bind（默认）下主线程**不自绑**（`StartMainThreadBind` 中主线程直接
+  return，L564-567），唯一绑定路径是 `pt_autograd_[0-9]+` 线程在首次
+  backward 时代绑（L571 正则门控；该设计为防主线程过早自绑、子线程继承
+  窄掩码，见 Ascend/pytorch#2224）。而 **torchtitan 上游 PR #3565** 为配合
+  spmd_types/TLS DeviceMesh 默认调用 `_disable_autograd_multithreading()`
+  ——backward 在主线程内联执行，`pt_autograd_*` 线程从不 dispatch 设备
+  算子 → 代绑链路永不触发。**run_train.sh 默认 `CPU_AFFINITY_CONF=1`
+  即受影响**
+- **确诊**：
+  - plog：`ASCEND_GLOBAL_LOG_LEVEL=0` 后查 `"set main_thread affinity"`
+    记录条数（失效时全程 **0 条**；正常时有
+    `StartMainThreadBind:584 ... thread name: pt_autograd_0`）
+  - 线程 dump（或直接用 `kptools-affinity-trace` 采样）：主线程
+    `Cpus_allowed_list` 全核 + `pt_autograd_*` 线程全核浮动即中招
+  - 最小复现：`torch.autograd.set_multithreading_enabled(False)` 开关
+    对照（同脚本双臂）
+- **替代路径也不可用**：eager 模式（`lazy_bind:0`）虽能绑主线程，但多
+  rank 下存在掩码继承污染/主线程互撞单核（Ascend/pytorch#5554）——关闭
+  autograd MT 的编排下两条路径均失效
+- **修复**：`fix-main-bind-universal.patch`（NPUAffinityController.cpp
+  单文件 +89/-2：主线程限频探测 `/proc/self/task/*/comm` 中 pt_autograd
+  存在性——引擎设备线程首次 backward 时创建、与 MT 开关无关——命中后
+  自绑；已在 2×910/CANN 9.2.0 节点构建 wheel 验证：mode1/2 正确绑定、
+  mode0 完全惰性、MT-ON 原路径无回归、dataloader worker 无继承污染）；
+  跟踪 Ascend/pytorch **#5555**
+- **验证脚本设计坑**：探针限频 1 次/秒——最小复现脚本步间需 ≥2s 延时，
+  否则 3 步 <1s 跑完探针来不及触发（修复验证时实测踩过）

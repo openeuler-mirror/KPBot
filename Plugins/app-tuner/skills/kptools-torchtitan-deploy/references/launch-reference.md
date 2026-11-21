@@ -24,7 +24,7 @@ ASCEND_SET_ENV_PATH（显式指定，推荐）
 | `TORCHINDUCTOR_NPU_BACKEND` | `ascendc` | Inductor 编译后端（AscendC AutoFuse 的入口开关） |
 | `PYTORCH_NPU_ALLOC_CONF` | `expandable_segments:True` | NPU 显存分配策略（减少碎片） |
 | `CUDA_DEVICE_MAX_CONNECTIONS` | `1` | 限制多流并发依赖（对齐 GPU 语义的兼容开关） |
-| `CPU_AFFINITY_CONF` | `1`（可覆盖） | NPU 侧 CPU 亲和配置 |
+| `CPU_AFFINITY_CONF` | `1`（可覆盖） | torch_npu CPU 绑核总开关：`0`=关闭（完全惰性）；`1`=按设备切片分核段（mode1）；`2`=官方角色映射（main/acl/release/hccl_watchdog/other 各指定核，`2,force:N` 可强制）。**注意**：lazy_bind（默认）下主线程绑定的唯一机制是 `pt_autograd_*` 线程首次 backward 时代绑——torchtitan 默认关闭 autograd MT（上游 PR #3565），代绑链路永不触发，**主线程静默失效**（acl/release 线程照常绑定，极具迷惑性）。确诊与修复见 pitfalls B-19 |
 | `TASK_QUEUE_ENABLE` | `2` | host 侧算子下发队列模式（hostbound 场景关键） |
 | `HCCL_CONNECT_TIMEOUT` | `3600`（秒） | HCCL 建连超时——大 EP 建图慢是**预期**，勿调小 |
 | `STREAMS_PER_DEVICE` | `32` | 每设备流数 |

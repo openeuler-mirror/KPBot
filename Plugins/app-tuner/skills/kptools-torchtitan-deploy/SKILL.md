@@ -98,6 +98,7 @@ COMM_MODE=gloo bash scripts/run_train.sh ...
 | 多机起不来 | 网卡选择（docker0）/ NODE_IPS 顺序 | launch-reference |
 | 编译路径异常/D2H 结果错 | 异步 DeviceCopy/FlexAttention 已由仓内 workaround 处理，先核对版本 | pitfalls A-3/A-4 |
 | 首 dispatch 瞬间 fatal | 910B3 sync-start 20 块硬件地板（并行度/kernel 同步启动需求超限） | pitfalls B-16 |
+| 主线程全核漫游 / 绑核"看似生效"但主线程漏绑 | CPU_AFFINITY_CONF 在 torchtitan（默认关 autograd MT）下主线程静默失效 | pitfalls B-19 |
 | 确定性训练结果仍不确定 | 只开 torch 开关不够，需 HCCL_DETERMINISTIC + CLOSE_MATMUL_K_SHIFT 双变量 | pitfalls A-6 |
 
 ## 约束

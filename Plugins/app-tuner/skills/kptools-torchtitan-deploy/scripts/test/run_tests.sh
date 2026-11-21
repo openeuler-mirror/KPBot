@@ -68,8 +68,8 @@ check_in "T6e 低精度仅 A5/950 门槛" "Ascend 950" "$SK"
 # ============================================================ T7 pitfalls 分组与条目
 na=$(grep -c '^### A-' "$PIT")
 nb=$(grep -c '^### B-' "$PIT")
-if [ "$na" -ge 10 ] && [ "$nb" -ge 8 ]; then
-  ok "T7a pitfalls 分组条目 A=$na B=$nb（≥10+8）"
+if [ "$na" -ge 10 ] && [ "$nb" -ge 9 ]; then
+  ok "T7a pitfalls 分组条目 A=$na B=$nb（≥10+9）"
 else
   bad "T7a pitfalls 条目不足 A=$na B=$nb"
 fi
@@ -82,6 +82,13 @@ for k in "DT_INT64" "gather_lowering_dtypes" "HCCL_DETERMINISTIC" \
   check_in "T8 坑事实 [$k]" "$k" "$PIT"
 done
 check_in "T8b B-16 确诊方法" "require_sync_start" "$PIT"
+
+# ============================================================ T8c B-19 CPU_AFFINITY_CONF 静默失效
+for k in "pt_autograd" "5555" "set main_thread affinity" "PR #3565"; do
+  check_in "T8c B-19 关键事实 [$k]" "$k" "$PIT"
+done
+check_in "T8d B-19 确诊 plog 开关" "ASCEND_GLOBAL_LOG_LEVEL=0" "$PIT"
+check_in "T8e B-19 修复补丁" "fix-main-bind-universal.patch" "$PIT"
 
 # ============================================================ T9 分界路由
 for r in "kptools-cannlab-env" "train-metrics" "tool-perf-collect"; do
