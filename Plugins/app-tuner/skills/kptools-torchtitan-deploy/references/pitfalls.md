@@ -164,6 +164,9 @@ remount,size=40G /dev/shm`，重启失效）、`/usr/lib64/aicpu_kernels/`
   存在性——引擎设备线程首次 backward 时创建、与 MT 开关无关——命中后
   自绑；已在 2×910/CANN 9.2.0 节点构建 wheel 验证：mode1/2 正确绑定、
   mode0 完全惰性、MT-ON 原路径无回归、dataloader worker 无继承污染）；
-  跟踪 Ascend/pytorch **#5555**
+  跟踪 Ascend/pytorch **#5555**。
+  **过渡规避方案**：fork 的 affinity 扩展（feature-auto-affine / MR 1100，
+  配置方法见 launch-reference §7）开 `turbo:` 后由扩展主动武装绑定
+  main 并守护兜底——可规避本问题但**未从根源修复 torch_npu**
 - **验证脚本设计坑**：探针限频 1 次/秒——最小复现脚本步间需 ≥2s 延时，
   否则 3 步 <1s 跑完探针来不及触发（修复验证时实测踩过）

@@ -13,7 +13,8 @@ description: >
   地板/NNAL 顺序/网卡选择）的踩坑实录。当用户需要部署/安装 torchtitan-npu、
   torchtitan 在昇腾上跑不起来、启动脚本报错、--module --config 配置怎么写、
   torchrun/HCCL 建连超时、编译报 DT_INT64 或 Triton 探测错误、版本配套
-  怎么选、torchao-npu 低精度训练部署、多机 NODE_IPS 启动时触发。
+  怎么选、torchao-npu 低精度训练部署、多机 NODE_IPS 启动、CPU_AFFINITY_CONF
+  / turbo 亲和扩展（feature-auto-affine / MR 1100）配置时触发。
 license: MulanPSL-2.0
 compatibility: 昇腾训练硬件（Atlas 800T A3 等）；目标环境需配套软件栈（见版本表）；cannlab 分设环境上操作链路见 kptools-cannlab-env
 metadata:

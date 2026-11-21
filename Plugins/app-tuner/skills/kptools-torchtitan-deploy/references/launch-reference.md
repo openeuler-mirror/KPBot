@@ -100,3 +100,62 @@ step/loss/tps/tflops/mfu/elapsed_time_per_step ...
   报错（`extensions/experiment/torchft/process_group.py`）
 - HCCL 可能在返回 Work 前阻塞（含建连），设备恢复不自动恢复 HCCL——
   容错恢复链路设计要显式处理这个边界
+
+## 7. affinity 扩展配置（feature-auto-affine / MR 1100，未合入 master）
+
+> 状态：**fork `torchtitan-npu-fork` 的 feature-auto-affine 分支**，
+> 上游 MR [1100](https://gitcode.com/cann/torchtitan-npu/merge_requests/1100)
+> 评审中——master 上**没有**此功能，需使用 fork 分支。可**规避**（非根治）
+> pitfalls B-19 的主线程静默失效。
+
+### 7.1 配置入口与总开关
+
+配置入口仍是 `CPU_AFFINITY_CONF`（torch_npu 与扩展共用，**二者正交**）：
+官方参数原样透传给 torch_npu，扩展只新增 `turbo:` 子选项的识别——
+
+| 写法 | 含义 |
+|------|------|
+| `CPU_AFFINITY_CONF=1` 或 `2`（无 turbo） | 扩展**完全不介入**，官方语义原样生效（零动作零干扰） |
+| `1,turbo:auto` | assist 模式 + 自动探测频率分层 |
+| `2,turbo:0-7` 或 `turbo:0,1,2` | full 模式 + 手工指定高频核集合 |
+| `...,turbo:off` | 显式关闭扩展（等价默认） |
+
+turbo 子项就是**扩展总开关**；其余官方子选项（`mode:N`/`npu_affine`/
+`lazy_bind`/`force`/`bind_irq`/`npu<N>:<range>`）全部留给 torch_npu 解析。
+
+### 7.2 模式语义（mode × turbo 组合）
+
+| CONF | 行为 | 实测绑核终态（2×NPU DP） |
+|------|------|------------------------|
+| `1,turbo:*`（assist） | main 绑本 rank 设备切片，两阶段中的 early 域绑定即终态 | rank0 main=[0-19]、rank1 main=[20-39]（按卡均分）；acl 等线程按官方分片 |
+| `2,turbo:*`（full） | 拓扑探测 → rank 隔离核规划 → 四保留线程绑定（main > acl > release > hccl_watchdog 优先级，turbo 高频核优先关键线程）→ daemon 周期兜底 | rank0 main=0/acl=2/rel=4/wd=6，rank1 main=1/acl=3/rel=5/wd=7，其余线程共享域内其他核 |
+
+### 7.3 两阶段挂载与五模块
+
+- **两阶段**（`TrainerEx.__init__` 挂载）：
+  - `early_start()`：模型/optimizer/HCCL 内存分配**之前**，把 main + 全部
+    已存在线程（taskset -a 语义）绑到设备域——目的不是隔离而是
+    **first-touch NUMA 本地性**（tokenizer/初始化内存不散到别的 node）。
+    此阶段设备身份用 `ASCEND_RT_VISIBLE_DEVICES` 重映射或 `LOCAL_RANK`
+    （`set_device` 还没跑，`current_device()` 每个 rank 都返回 0）
+  - `finalize()`：Trainer init 尾部精绑 + 启动 daemon；mode 1 到此为止
+  - `stop()`：训练收尾停 daemon
+- **五模块**（`torchtitan_npu/extensions/affinity/`）：
+  `__init__`（CONF 解析+编排）→ `topology`（4 层探测：cgroup cpuset →
+  DCMI → sysfs PCI → npu-smi）→ `planner`（rank 跨步互斥域 + 频率排序）→
+  `binder`（官方 API → 重绑四保留线程 → 掩码读回验证）→ `daemon`
+  （掩码状态分类救援：改绑的 worker/继承窄掩码的子线程/新生全浮线程；
+  热身期 1s/轮、稳态 5s/轮；3-strike 断路器）
+- **永不影响训练**：任何亲和异常只记日志并自禁用，绝不抛出
+
+### 7.4 验证
+
+- 单测：`python3.12 -m pytest tests/unit_tests/extensions/affinity/test_affinity.py -q`
+  （56 用例，CANNLAB A3 实测通过）
+- 功能基准（deepseek_v4 mini debugmodel，10 组配置各 150 步）：门控
+  正确性——无 turbo 的各组与基线**逐位一致**且日志输出
+  `extension disabled (turbo off; official semantics only)`；
+  `2,lazy_bind:0` 双 main 撞核 0、34 线程挤两核（steptime 682ms 惨案）
+  → 加 `turbo:auto` 恢复 rank 隔离（239ms）
+- turbo 分层收益需有高频核的异构环境验证（A3 单 NUMA 无 turbo 核，
+  实测差异在会话噪声 ±4% 内）

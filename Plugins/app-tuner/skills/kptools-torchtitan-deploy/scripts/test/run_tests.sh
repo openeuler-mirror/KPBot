@@ -110,6 +110,15 @@ check_in "T11c 单进程调试开关" "COMM_MODE" "$LCH"
 check_in "T11d 8 卡示例脚本" "deepseek_v4_flash_8p_cpt_4k_a3.sh" "$SK"
 check_in "T11e TorchFT store prefix" "store prefix" "$LCH"
 
+# ============================================================ T12 affinity 扩展（launch-reference §7）
+check_in "T12a 总开关 turbo 子选项" "turbo:" "$LCH"
+for k in "turbo:auto" "turbo:off" "MR 1100" "feature-auto-affine" \
+         "assist" "full" "first-touch" "early_start"; do
+  check_in "T12b 扩展事实 [$k]" "$k" "$LCH"
+done
+check_in "T12c B-19 交叉引用扩展" "launch-reference §7" "$PIT"
+check_in "T12d 五模块路径" "extensions/affinity" "$LCH"
+
 # ============================================================ 汇总
 echo
 echo "===== $PASS passed, $FAIL failed ====="
