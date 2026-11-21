@@ -61,14 +61,28 @@ if [[ ! -x "${PARSE_BIN}" ]]; then
   exit 1
 fi
 
-# 解析语料路径
+# 解析语料路径（覆盖源码树根、构建目录与 benchmark 子目录的 jsonexamples）
 _resolve_json() {
   local f="$1"
-  [[ -f "$f" ]] && { echo "$f"; return; }
-  [[ -f "${REPO_ROOT}/${f}" ]] && { echo "${REPO_ROOT}/${f}"; return; }
-  [[ -f "${BUILD_DIR}/${f}" ]] && { echo "${BUILD_DIR}/${f}"; return; }
-  [[ -f "${BUILD_DIR}/jsonexamples/${f}" ]] && { echo "${BUILD_DIR}/jsonexamples/${f}"; return; }
-  echo "错误: JSON 文件未找到: $f" >&2
+  local base
+  base="$(basename "$f")"
+  local cand
+  for cand in \
+    "$f" \
+    "${REPO_ROOT}/${f}" \
+    "${REPO_ROOT}/jsonexamples/${f}" \
+    "${REPO_ROOT}/jsonexamples/${base}" \
+    "${BUILD_DIR}/${f}" \
+    "${BUILD_DIR}/jsonexamples/${f}" \
+    "${BUILD_DIR}/jsonexamples/${base}" \
+    "${BUILD_DIR}/benchmark/jsonexamples/${f}" \
+    "${BUILD_DIR}/benchmark/jsonexamples/${base}"; do
+    if [[ -f "$cand" ]]; then
+      echo "$cand"
+      return
+    fi
+  done
+  echo "错误: JSON 文件未找到: $f（已尝试源码树根/构建目录的 jsonexamples/；可直接传绝对路径）" >&2
   exit 1
 }
 JSON_PATH="$(_resolve_json "${JSON}")"

@@ -65,10 +65,13 @@ perf annotate -i perf.data --stdio -s <stage1_symbol> | head -80
 
 ```bash
 perf record -e arm_spe/branch_filter=0,load_filter=1,store_filter=1/ -o spe.data -- <parse_cmd>
-perf script -F cpu,op,pc,event,issue_lat,total_lat,vaddr,paddr,data_source -i spe.data > spe-ldst.csv
-scripts/spe_ldst.py spe-ldst.csv --bin build-Release/benchmark/dom/parse --op LD --top 20
+perf script -F cpu,op,pc,event,issue_lat,total_lat,vaddr,paddr,data_source -i spe.data > spe-ldst.txt
+scripts/spe_ldst.py spe-ldst.txt --bin build-Release/benchmark/dom/parse --op LD --top 20
 ```
 
+- `perf script -F` 输出是**空格分隔文本**，字段顺序即 `-F` 顺序：`cpu op pc event issue_lat total_lat vaddr paddr data_source`；`spe_ldst.py` 按此 9 列契约回退映射。
+- 也接受带 `op`/`pc` 表头的逗号 CSV（如 spe-parser 产物，列顺序可任意）；`#` 横幅/注释行自动跳过。
+- 无表头且列顺序非文档 9 列时，用 `--columns cpu,op,pc,...` 显式指定，否则脚本会明确报错而不是静默产出空结果。
 - 关注 `total_lat` 的**分布尾部**（p99/max），不是均值；单条高延迟 LD 在均值里会被稀释。
 - 对高延迟 PC 做 `objdump -d --start-address/--stop-address` 定向反汇编，检查是否有跨宽度的 NEON store→load。
 - SPE 需要硬件支持 + 内核配置 + perf 版本；不可用时降级为 Top-down 的 hazard 事件 + 静态反汇编。

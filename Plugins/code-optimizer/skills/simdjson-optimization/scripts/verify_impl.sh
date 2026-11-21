@@ -15,8 +15,9 @@ usage() {
 检查项 (针对 arm64):
   1. 存在 simdjson::arm64:: 符号
   2. stage1 含 NEON 指令 umaxv (is_ascii 水平归约)
-  3. 含 NEON 查表 vqtbl1q / 或向量 OR 指令 (classify/reduce)
+  3. 含 NEON 比较/查表/向量逻辑指令 (classify/reduce)
 失败任一即判定 "实现未生效", 退出非零。
+IMPL 仅允许字母/数字/下划线；非法值直接退出 2。
 EOF
   exit 0
 }
@@ -32,6 +33,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# 安全校验：实现名仅允许字母/数字/下划线。IMPL 会被写入 bash -c 命令文本，
+# 白名单是防命令注入的第一道闸门（配合 check() 用环境变量传模式，见下）。
+if ! [[ "$IMPL" =~ ^[A-Za-z0-9_]+$ ]]; then
+  echo "错误: 非法实现名: ${IMPL}（仅允许字母/数字/下划线）" >&2
+  exit 2
+fi
+
 if [[ -z "$JSON" ]]; then
   # 默认找构建目录下的 twitter.json
   BIN_DIR="$(cd "$(dirname "${BIN}")" && pwd)"
@@ -44,7 +52,9 @@ fi
 check() {
   local desc="$1" snippet="$2"
   echo "--- ${desc}"
-  if BIN="$BIN" bash -c "$snippet" > /dev/null 2>&1; then
+  # snippet 为静态命令文本；BIN 与 IMPL_PATTERN 只经环境变量注入 inner shell，
+  # 不作为命令文本拼接，避免外部输入被二次解析执行。
+  if BIN="$BIN" IMPL_PATTERN="simdjson::${IMPL}::" bash -c "$snippet" > /dev/null 2>&1; then
     echo "PASS"
   else
     echo "FAIL"
@@ -53,12 +63,12 @@ check() {
 }
 
 if [[ "$IMPL" == "arm64" ]]; then
-  check "符号 simdjson::arm64::" "nm -C \"\$BIN\" | grep -q 'simdjson::arm64::'"
-  check "NEON umaxv 指令 (is_ascii 归约)" "objdump -d \"\$BIN\" | grep -q 'umaxv'"
-  check "NEON 比较/查表/向量逻辑指令" "objdump -d \"\$BIN\" | grep -qE 'cmeq|tbl|orr.*\\.16b|eor.*\\.16b|addp'"
+  check "符号 simdjson::arm64::" 'nm -C "$BIN" | grep -q -- "$IMPL_PATTERN"'
+  check "NEON umaxv 指令 (is_ascii 归约)" 'objdump -d "$BIN" | grep -q -- "umaxv"'
+  check "NEON 比较/查表/向量逻辑指令" 'objdump -d "$BIN" | grep -qE "cmeq|tbl|orr.*\\.16b|eor.*\\.16b|addp"'
 else
   echo "警告: 未内置对实现 ${IMPL} 的核验规则，仅检查符号" >&2
-  check "符号 simdjson::${IMPL}::" "nm -C \"\$BIN\" | grep -q 'simdjson::${IMPL}::'"
+  check "符号 simdjson::${IMPL}::" 'nm -C "$BIN" | grep -q -- "$IMPL_PATTERN"'
 fi
 
 # 运行时确认：用 parse -a <impl> 跑最小输入，检查不报 fallback/未知实现错误

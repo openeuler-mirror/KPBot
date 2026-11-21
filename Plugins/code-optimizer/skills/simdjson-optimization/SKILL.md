@@ -79,7 +79,10 @@ scripts/build.sh -t RelWithDebInfo     # perf 符号化与反汇编
 3. **建立三组基线**：同一命令跑 3 次，取均值，记录 7 列输出的后 6 列：
 
 ```bash
-scripts/bench.sh -a arm64 -j twitter.json -n 200 -R 3
+# 推荐显式绝对路径，避免依赖语料查找；默认查找覆盖 <repo>/jsonexamples/ 与构建目录
+scripts/bench.sh -a arm64 -j "$(pwd)/jsonexamples/twitter.json" -n 200 -R 3
+# 或在源码树根目录直接使用默认语料（自动解析到 <repo>/jsonexamples/twitter.json）：
+scripts/bench.sh -a arm64 -n 200 -R 3
 ```
 
 基线必须落盘（建议 `perf_data/baseline_<date>.tsv`），后续所有 A/B 都与它同口径比较。实测参考值（A 层，twitter.json）：
@@ -131,9 +134,11 @@ scripts/topdown.sh -p <parse_pid> -t 10        # 或 -c "numactl ... ./parse ...
 
 ```bash
 perf record -e arm_spe/branch_filter=0,load_filter=1,store_filter=1/ -o spe.data -- <parse_cmd>
-perf script -F cpu,op,pc,event,issue_lat,total_lat,vaddr,paddr,data_source -i spe.data > spe-ldst.csv
-scripts/spe_ldst.py spe-ldst.csv --bin ./benchmark/dom/parse --op LD --top 20
+perf script -F cpu,op,pc,event,issue_lat,total_lat,vaddr,paddr,data_source -i spe.data > spe-ldst.txt
+scripts/spe_ldst.py spe-ldst.txt --bin ./benchmark/dom/parse --op LD --top 20
 ```
+
+`spe_ldst.py` 自动兼容三类输入：`perf script -F ...` 的空格分隔文本（字段顺序即 `-F` 顺序）、带 `op`/`pc` 表头的逗号 CSV（如 spe-parser 产物）、以及 `--columns cpu,op,pc,...` 显式指定列顺序的无表头文件；`perf script` 开头的 `#` 横幅行会被跳过。列映射不匹配时会明确报错并提示 `--columns`，不会静默产出空结果。
 
 判读：`total_lat` 显著高于同函数其它 load 的 PC，就是阶段 3d 的候选；再 `objdump -d` 对照该 PC 附近是否有 16B NEON store 后跟 16B load。
 
@@ -317,11 +322,11 @@ objdump -d build-Release/benchmark/dom/parse | grep -c 'str[[:space:]]*q.*\[sp' 
 | 脚本 | 用途与用法 |
 |---|---|
 | `scripts/build.sh` | 开发者模式构建。`build.sh [-t Release\|RelWithDebInfo\|Debug] [-b build_dir] [-r repo] [--clean]`；默认 `-D SIMDJSON_DEVELOPER_MODE=ON`，`-j$(nproc)` |
-| `scripts/bench.sh` | 运行 `benchmark/dom/parse` 多轮并聚合。`bench.sh [-a arm64] [-j twitter.json] [-n 200] [-R 5] [-b build_dir] [--perf-stat] [--numa N]`；输出每轮与中位的 stage1/stage2/all c/b 与 GB/s，落盘 `perf_data/bench_<ts>.tsv` |
+| `scripts/bench.sh` | 运行 `benchmark/dom/parse` 多轮并聚合。`bench.sh [-a arm64] [-j twitter.json] [-n 200] [-R 5] [-b build_dir] [--perf-stat] [--numa N]`；语料自动解析源码树根/构建目录/`benchmark/` 下的 `jsonexamples/`，也可传绝对路径；输出每轮与中位的 stage1/stage2/all c/b 与 GB/s，落盘 `perf_data/bench_<ts>.tsv` |
 | `scripts/func_test.sh` | 功能验证。`func_test.sh [-b build_dir] [-i arm64] [-L label] [-R regex]`；默认依次跑 `dom`、`ondemand`、`per_implementation`，任一失败退出非零 |
 | `scripts/verify_impl.sh` | 核验 arm64 实现确实编入并被使用。`verify_impl.sh <binary>`；检查 `simdjson::arm64::` 符号、`umaxv`/`eor` 等 NEON 指令、`SIMDJSON_FORCE_IMPLEMENTATION` 生效 |
 | `scripts/topdown.sh` | Kunpeng 920 Top-down/PMU 采集（分组避免 multiplexing），覆盖 `LD_CANCEL_MISALIGN`/`LD_CANCEL_FWD_HZD`/`memstall_*`/`ST_*`/向量 ptag stall。`topdown.sh -t 10 -p PID` 或 `-c "<cmd>"` |
-| `scripts/spe_ldst.py` | SPE LD/ST CSV 聚合：按 PC 统计 count/mean/p99/max `total_lat`，可 `--bin` 用 `addr2line` 映射符号与源码行。`spe_ldst.py <csv> --bin parse --op LD --top 20` |
+| `scripts/spe_ldst.py` | SPE LD/ST 聚合：按 PC 统计 count/mean/p99/max `total_lat`，可 `--bin` 用 `addr2line` 映射符号与源码行。自动识别 `perf script -F` 空格文本（9 列契约）/带 `op`、`pc` 表头的 CSV/`--columns` 指定列；`#` 横幅行跳过。`spe_ldst.py <输入> --bin parse --op LD --top 20 [--columns cpu,op,pc,...]` |
 
 ## 协作
 
