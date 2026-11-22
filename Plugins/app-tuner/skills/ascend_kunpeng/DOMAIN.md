@@ -15,18 +15,21 @@ NUMA 绑核与 NPU/HCCS 亲和、Host 侧预处理与 tokenizer 并行、RoCE �
 | Skill | 职责 |
 |---|---|
 | [`kptools-ascend-pd-env`](kptools-ascend-pd-env/SKILL.md) | 采集并对比 vLLM-Ascend P/D 容器环境：内核、cgroup 配额、CPU/NUMA 拓扑、CANN 与驱动版本、npu-smi 快照、进程命令行与环境变量、Python 包清单。单容器出单环境报告，多容器或搭配已有采集包则自动对比并标差异——用于排查 P/D 两侧环境不一致、CANN/驱动/torch_npu/vLLM 版本漂移、HCCL/ASCEND 变量不同、cpuset/cgroup 配额不同 |
+| [`kptools-ascend-profiling-analysis`](kptools-ascend-profiling-analysis/SKILL.md) | 昇腾 NPU profiling trace 的深度分析：`build_index` / `query` 工作流解析 chrome trace，拆 step、算子级耗时、AI Core / AICPU / HCCL 占比与空泡，配合 `calltree` 与 HTML 报告定位 P/D 两侧的算子与通信瓶颈；自带 vLLM-Ascend trace 的解析知识与 agent 级 A/B 用例 |
 
 ## 域内路由
 
 - 怀疑 **P/D 两侧环境不一致**（版本漂移、cpuset/cgroup 配额、HCCL 变量、跨机跨时间快照对比）→ `kptools-ascend-pd-env`。
+- 已有 NPU **profiling trace，要拆 step / 算占比 / 找空泡与通信瓶颈** → `kptools-ascend-profiling-analysis`。
 - 要在 A+K 上做**端到端调优**（PD 分离部署参数、Host 侧瓶颈归因、NUMA/亲和、HCCL 与 RoCE 联动）→ 待建主线 skill
   `ascend-kunpeng-pd-disaggregation-tuning`（从 SGLang-A+K 的实际调优过程沉淀，素材与压测口径需先确认）。
 
 ## 后续迁入 / 待议
 
 - A+K 主线优化 skill（上面那条）。
-- 6 个纯昇腾采集技能（`kptools-ascend-smi` / `-hccn` / `-profiling` / `-profiling-analysis` /
-  `-profiling-analysis-nostack`）落在本域还是独立成 `ascend/` 采集域，另开 PR 讨论。
+- 4 个纯昇腾**采集**技能（`kptools-ascend-smi` / `-hccn` / `-profiling` / `-profiling-analysis-nostack`）
+  落在本域还是独立成 `ascend/` 采集域，另开 PR 讨论；其中 `-profiling-analysis` 因是**分析主线**已先入本域，
+  与 `-nostack`（无栈 trace 变体）分属分析与采集两侧。
 
 ## Review
 
