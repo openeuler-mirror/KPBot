@@ -493,7 +493,7 @@ OpenCode 不需要 sandbox 配置。确保以下工具可用：
 
 在首次初始化 RUN 时，把 `context.run_dir` 设为 `<repo.path>/optimization_reports/run_<run_id>` 的绝对路径；恢复沿用旧 run_id 和 RUN。解析**当前加载的已安装 SKILL.md** 所在目录为 context.orchestrator_skill_dir，以此得到绝对 `scripts/experiment_record.py` / `scripts/experiment_feedback.py` 路径并存 context.record_script / context.feedback_script。共享模板和 references 也从该目录读取，不以目标项目 CWD 解析 helper。若缺失安装文件则 blocked，不调用目标仓库中的同名脚本。
 
-收集阶段保留用户 target_machine、verification_commands、numeric_constraints 和 diagnostic_budget 覆盖；PrepareProject 模板按对应 context 字段原样接收。其输出完整保存为 context.prepareProject，不能在下游只传 repo/baseline 而丢弃验收命令。
+收集阶段保留用户 target_machine、verification_commands、numeric_constraints 和 diagnostic_budget 覆盖；PrepareProject 模板按对应 context 字段原样接收。其输出 baseline 中的 measurement_plan、measurement_summary、measurement_quality 和 measurement_evidence_refs 必须完整保留到候选验证、重验证与最终汇总；不要只传一个 baseline_metric。Verify 报告波动未决但 status=verified 时拒绝交付并要求更正证据/结论，不能依赖旧 CLI 仅校验布尔字段来证明统计可靠。其输出完整保存为 context.prepareProject，不能在下游只传 repo/baseline 而丢弃验收命令。
 
 ### Phase 1：创建任务列表
 
@@ -859,7 +859,7 @@ for sub_task in sub_tasks:
 
 从 `context.round_results` 提取各轮数据，按 `prompts/partials/final-summary.md` 的诊断摘要格式向用户汇总。
 
-汇总仅列假设、实验次数、关键证据、转向原因与最终状态；原始日志和兼容的轮次统计留在结果文件。本期保存实验记录，方法库后续建设。
+汇总列假设、实验次数、关键证据、转向原因与最终状态，并主动展示每项主要性能指标的独立次数、基线/候选均值 ± 样本标准差及 min/max、波动未决原因；原始日志和兼容的轮次统计留在结果文件。本期保存实验记录，方法库后续建设。
 
 ## 模板变量填充规则
 

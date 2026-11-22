@@ -19,6 +19,10 @@ project preparation expert
 - 数值约束：${context.numeric_constraints}
 - 诊断预算覆盖（可选）：${context.diagnostic_budget}
 
+## 测量要求
+
+建立基线前按 prepare-project 的重复测量计划执行；保留 baseline.measurement_plan / measurement_summary / measurement_quality / measurement_evidence_refs。主动报告独立次数与波动，单次内循环不能算独立重复。用户提供的测试预算和次数优先，不能只返回一个平均值。
+
 ## 执行
 使用 Skill tool，skill 名称为 `prepare-project`
 参数：
@@ -97,6 +101,10 @@ project preparation expert
     "call_chains": {}
   },
   "baseline": {
+    "measurement_plan": {},
+    "measurement_summary": [],
+    "measurement_quality": {"status": "inconclusive", "reasons": ["待实际测量后填写"]},
+    "measurement_evidence_refs": [],
     "build_ok": true,
     "tests_pass": true,
     "metrics": {}
