@@ -1,0 +1,25 @@
+{
+  "P": {
+    "status": "completed",
+    "exit_code": 0,
+    "paths": [
+      "p-out/采集/",
+      "p-out/采集.tar.gz"
+    ],
+    "failed": [],
+    "never_started": []
+  },
+  "D": {
+    "status": "interrupted",
+    "exit_code": 130,
+    "paths": [
+      "d-out/采集/SUMMARY.txt",
+      "d-out/采集/decode-1/inventory.json"
+    ],
+    "failed": [],
+    "never_started": [
+      "npu_smi",
+      "python_profiles"
+    ]
+  }
+}

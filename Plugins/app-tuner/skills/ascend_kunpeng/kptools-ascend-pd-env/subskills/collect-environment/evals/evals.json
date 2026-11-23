@@ -12,6 +12,14 @@
       "prompt": "只采容器 engine-2 的环境，后面要和旧 D 比。engine-2 的角色我还没确认。",
       "expected_output": "先确认 engine-2 的角色，不根据名称或后续对比用途标成 D。不采其他容器，不把不完整采集当完整快照。",
       "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "只留档：P 的采集完成，D 中途收到 Ctrl-C。P 输出在 p-out/，D 的 d-out/ 留下摘要和部分探针结果。请分别交代两侧状态、现有产物和缺采项，不补采。",
+      "expected_output": "P 报完成及实际目录或归档；D 报中断，引用已有产物和明确缺采项，不声称保留了未生成的压缩包，不对比。",
+      "files": [
+        "evals/fixtures/partial-collection.json"
+      ]
     }
   ]
 }
