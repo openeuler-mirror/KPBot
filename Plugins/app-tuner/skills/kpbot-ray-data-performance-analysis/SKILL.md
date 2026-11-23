@@ -28,9 +28,16 @@ description: 分析 Ray Data ETL、预处理和批推理流水线的吞吐、耗
 脚本路径相对本 skill 安装目录，Python 3.10+，仅标准库。输出文件不得覆盖已有证据；使用新路径。
 
 ```bash
-python3 scripts/inspect_environment.py --out <evidence>/environment.json
-python3 scripts/record_run.py --out <新运行目录> --timeout 300 -- <用户命令及参数>
-python3 scripts/compare_runs.py <baseline.json> <candidate.json> --out <新比较文件>
+python3 scripts/inspect_environment.py --out results/environment.json
+python3 scripts/record_run.py --out results/record-001 --timeout 300 -- python3 -c 'print("timing-demo")'
+```
+
+上面第二条是自包含的计时演示；正式测量时替换为用户授权的前台命令。仅当已有两份符合测量契约的实际记录时执行比较，将变量设为本次记录的路径：
+
+```bash
+: "${BASELINE_JSON:?set BASELINE_JSON to the actual baseline record}"
+: "${CANDIDATE_JSON:?set CANDIDATE_JSON to the actual candidate record}"
+python3 scripts/compare_runs.py "$BASELINE_JSON" "$CANDIDATE_JSON" --out results/comparison.json
 ```
 
 `record_run.py` 不经 shell 解释参数；确需 shell 的用户命令可显式传 `bash <脚本>`。运行目录默认以属主专用 `0700` 创建，`stdout.log`、`stderr.log`、`run.json` 以 `0600` 创建；日志和命令仍可能含敏感信息，分享前检查脱敏；工具不采集环境变量全集、凭据或业务数据。
