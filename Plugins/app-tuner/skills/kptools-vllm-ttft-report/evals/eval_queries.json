@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-vllm-ttft-report",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "TTFT-01",
+      "prompt": "已有 Prefill 日志，不发请求，生成 TTFT HTML",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-02",
+      "prompt": "向运行中的 P/D 实例发一次请求并写交接单，不出图",
+      "should_trigger": false
+    }
+  ]
+}
