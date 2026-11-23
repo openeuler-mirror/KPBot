@@ -12,6 +12,26 @@ import subprocess
 import time
 
 
+def private_binary(path):
+    """Create an owner-only binary file, ignoring a permissive umask."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    descriptor = os.open(path, flags, 0o600)
+    if hasattr(os, "fchmod"):
+        os.fchmod(descriptor, 0o600)
+    return os.fdopen(descriptor, "wb")
+
+
+def private_text(path):
+    """Create an owner-only UTF-8 text file, ignoring a permissive umask."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    descriptor = os.open(path, flags, 0o600)
+    if hasattr(os, "fchmod"):
+        os.fchmod(descriptor, 0o600)
+    return os.fdopen(descriptor, "w", encoding="utf-8")
+
+
 def stop_process(process):
     if os.name == "posix":
         try:
@@ -36,13 +56,15 @@ def record(command, directory, timeout):
         raise ValueError("command must not be empty")
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be finite and positive")
-    directory.mkdir(parents=True, exist_ok=False)
+    directory.mkdir(parents=True, exist_ok=False, mode=0o700)
+    if os.name == "posix":
+        os.chmod(directory, 0o700)
     result = {
         "schema_version": 1,
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "command": command,
         "cwd": str(Path.cwd()),
-        "timing_scope": "full_subprocess_including_startup_and_exit",
+        "timing_scope": "popen_start_to_process_exit",
         "timeout_seconds": timeout,
         "elapsed_seconds": None,
         "returncode": None,
@@ -52,13 +74,16 @@ def record(command, directory, timeout):
         "correctness": "unknown",
         "error": None,
     }
-    start = time.perf_counter()
+    start = None
     process = None
     try:
         with (
-            (directory / "stdout.log").open("xb") as stdout,
-            (directory / "stderr.log").open("xb") as stderr,
+            private_binary(directory / "stdout.log") as stdout,
+            private_binary(directory / "stderr.log") as stderr,
         ):
+            # Start after log creation so slow evidence storage does not
+            # inflate the measured command time.
+            start = time.perf_counter()
             process = subprocess.Popen(
                 command,
                 stdout=stdout,
@@ -71,24 +96,29 @@ def record(command, directory, timeout):
                 result["timed_out"] = True
                 stop_process(process)
                 result["returncode"] = process.returncode
+            result["elapsed_seconds"] = time.perf_counter() - start
     except KeyboardInterrupt:
         result["interrupted"] = True
         if process is not None:
             stop_process(process)
             result["returncode"] = process.returncode
+        if start is not None:
+            result["elapsed_seconds"] = time.perf_counter() - start
     except (OSError, subprocess.SubprocessError) as error:
         result["error"] = str(error)
         if process is not None and process.poll() is None:
             stop_process(process)
+        if start is not None:
+            result["elapsed_seconds"] = time.perf_counter() - start
     finally:
-        result["elapsed_seconds"] = time.perf_counter() - start
         result["success"] = (
             result["returncode"] == 0
             and not result["timed_out"]
             and not result["interrupted"]
             and result["error"] is None
         )
-        with (directory / "run.json").open("x", encoding="utf-8") as output:
+        # JSON finalization happens after the timer stops.
+        with private_text(directory / "run.json") as output:
             json.dump(
                 result, output, ensure_ascii=False, indent=2, allow_nan=False
             )

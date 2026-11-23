@@ -1,5 +1,5 @@
 name: ray-data-analyze-records
-skill: ray-data-performance-analysis
+skill: kpbot-ray-data-performance-analysis
 tier: A
 
 # Run from this skill directory. Python 3.10+, standard library only.

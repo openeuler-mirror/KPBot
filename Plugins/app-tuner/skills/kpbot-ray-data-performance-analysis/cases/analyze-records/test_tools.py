@@ -6,9 +6,11 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -362,6 +364,59 @@ class RunnerTests(unittest.TestCase):
             )
             self.assertEqual(result["correctness"], "unknown")
             self.assertGreater(result["elapsed_seconds"], 0)
+
+    def test_owner_only_modes_despite_permissive_umask(self):
+        previous = os.umask(0)
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "run"
+                result = runner.record(
+                    [sys.executable, "-c", "print('ok')"], root, 10
+                )
+                self.assertTrue(result["success"])
+                self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+                for name in ("stdout.log", "stderr.log", "run.json"):
+                    self.assertEqual(
+                        stat.S_IMODE((root / name).stat().st_mode),
+                        0o600,
+                        name,
+                    )
+        finally:
+            os.umask(previous)
+
+    def test_elapsed_excludes_log_setup_and_json_write(self):
+        original_binary = runner.private_binary
+        original_text = runner.private_text
+        delay = 0.3
+
+        def slow_binary(path):
+            time.sleep(delay)
+            return original_binary(path)
+
+        def slow_text(path):
+            time.sleep(delay)
+            return original_text(path)
+
+        runner.private_binary = slow_binary
+        runner.private_text = slow_text
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "run"
+                wall_start = time.perf_counter()
+                result = runner.record(
+                    [sys.executable, "-c", "import time;time.sleep(0.1)"],
+                    root,
+                    10,
+                )
+                wall = time.perf_counter() - wall_start
+        finally:
+            runner.private_binary = original_binary
+            runner.private_text = original_text
+        self.assertTrue(result["success"])
+        # Two log opens and the run.json write each sleep; only the child
+        # runtime belongs in elapsed_seconds.
+        self.assertGreaterEqual(wall, 3 * delay + 0.1)
+        self.assertLess(result["elapsed_seconds"], 2 * delay)
 
     def test_failed_command_and_stderr(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,5 +1,5 @@
 ---
-name: ray-data-performance-analysis
+name: kpbot-ray-data-performance-analysis
 description: 分析 Ray Data ETL、预处理和批推理流水线的吞吐、耗时、资源使用与执行瓶颈。用户提供 Dataset 代码、运行日志、stats 或 profile，或希望采集性能基线时使用；支持离线证据分析和用户指定命令的现场测量。
 ---
 
@@ -17,7 +17,7 @@ description: 分析 Ray Data ETL、预处理和批推理流水线的吞吐、耗
 ## 工作方法
 
 1. **确定测量契约**：记录业务目标、输入规模/分布/身份、输出正确性约束、计时范围（启动/读取/计算/写出）、指标单位和方向。确认真实推理或模拟负载、冷/热缓存及资源范围；只追问影响结论的缺项。
-2. **按需取证**：离线模式先列出现有证据。现场可执行 `python3 scripts/inspect_environment.py --out <新文件>`；它不导入 Ray、不连接集群。用当前版本的公开接口收集 `ds.explain()`、终结操作后的 `ds.stats()`，保留原文和版本。不为采集再次执行惰性 Dataset；先明确哪次执行被测。详见 [采集指南](references/collection.md)。
+2. **按需取证**：离线模式先列出现有证据。现场可执行 `python3 scripts/inspect_environment.py --out <新文件>`；它不导入 Ray、不连接集群。用当前版本的公开接口收集 `ds.explain()`、终结操作后的算子统计。Ray 2.52 中对尚未执行的 `ds` 调用 `materialize()` 后，原对象的 `ds.stats()` 可能仍为空串；应以 `measured = ds.materialize()` 后再读 `measured.stats()` 取得同一轮统计，保留原文和版本。不为采集再次执行惰性 Dataset；先明确哪次执行被测。详见 [采集指南](references/collection.md)。
 3. **建立执行画像**：把源码的逻辑阶段与实际融合后的 operator 对应，记录 task/actor、输入输出、batch/block、并发和资源请求。不将累加的 task CPU/墙钟时间当成端到端耗时，也不把重叠阶段时间相加成占比。
 4. **提出可证伪判断**：结合阶段统计、任务状态、系统或采样栈区分 I/O、计算、调度、内存、数据表示转换和写出成本。参照 [诊断方法](references/diagnosis.md)，每项附证据位置、替代解释和最小区分实验；低 CPU、线程数多、spill 或热点函数名单独都不足以证明主因。
 5. **只做所需验证**：需要测量时，先短跑再选择合适重复次数；多轮配对或交错对照，并保存原始样本。已有用户 harness 优先使用；可选 `scripts/record_run.py` 包装一条命令，脚本只测量一次完整子进程运行，吞吐由核验后的工作量换算。输出行数可能因 filter/expand 改变，不能一律要求输入输出相等。比较契约见 [记录与比较](references/measurement.md)。
@@ -33,7 +33,7 @@ python3 scripts/record_run.py --out <新运行目录> --timeout 300 -- <用户�
 python3 scripts/compare_runs.py <baseline.json> <candidate.json> --out <新比较文件>
 ```
 
-`record_run.py` 不经 shell 解释参数；确需 shell 的用户命令可显式传 `bash <脚本>`。日志和命令可能含敏感信息，保留在用户指定目录，分享前检查脱敏；工具不采集环境变量全集、凭据或业务数据。
+`record_run.py` 不经 shell 解释参数；确需 shell 的用户命令可显式传 `bash <脚本>`。运行目录默认以属主专用 `0700` 创建，`stdout.log`、`stderr.log`、`run.json` 以 `0600` 创建；日志和命令仍可能含敏感信息，分享前检查脱敏；工具不采集环境变量全集、凭据或业务数据。
 
 比较输入由用户 harness 或 Agent 按 [测量契约](references/measurement.md) 整理，不能假装工具能自动理解任意 benchmark 输出。未知条件、失败运行、未验证正确性或不同的对照条件都会阻止工具计算收益。
 
@@ -46,6 +46,6 @@ python3 scripts/compare_runs.py <baseline.json> <candidate.json> --out <新比�
 
 ## 安装后的验证
 
-纯逻辑用例：`bash cases/analyze-records/run.sh`，结果为 cases/analyze-records/results/result.json；它不依赖 Ray。真实 Ray 用例：在独立 Python 3.11 虚拟环境安装 `ray[data]==2.52.0 numpy==2.1.3 pyarrow==19.0.1`，再执行 `bash cases/real-ray/run.sh`。需要 Linux、GNU timeout、至少 2 CPU 和足够共享内存。用例启动自己的本地 Ray，执行六轮 256 行 ETL，核对精确结果，保存计划、stats、环境和对照结果；退出时关闭本次 Ray。结果位于 results/real-ray/result.json，应 success=true、verified_rounds=6。两项用例均使用尚未存在的结果文件/目录，保留旧证据时换一个新的技能副本运行，不覆盖历史结果。
+纯逻辑用例：`bash cases/analyze-records/run.sh`，结果为 cases/analyze-records/results/result.json；它不依赖 Ray。真实 Ray 用例：在隔离的 Python 3.11 环境（独立 venv 或专用容器均可）安装 `ray[data]==2.52.0 numpy==2.1.3 pyarrow==19.0.1`，再执行 `bash cases/real-ray/run.sh`。需要 Linux、GNU coreutils timeout（支持 `--kill-after`）、至少 2 CPU 和足够共享内存；缺少这些前置时入口先做依赖探测，写出 `env_not_satisfied` 原因并以退出码 3 结束，表示环境不满足而非用例失败。入口会校验 `timeout --version` 确为 GNU coreutils，BusyBox 等非 GNU 实现同样按环境不满足处理。用例启动自己的本地 Ray，执行六轮 256 行 ETL，核对精确结果，保存计划、stats、环境和对照结果；退出时关闭本次 Ray。结果位于 results/real-ray/result.json，应 success=true、verified_rounds=6。两项用例均使用尚未存在的结果文件/目录，保留旧证据时换一个新的技能副本运行，不覆盖历史结果。
 
 这验证真实执行与测量工具链，不证明 Agent 能自动识别任意业务主因。如何将这些产物交给分析流程，见[真实证据演练](references/worked-example.md)。

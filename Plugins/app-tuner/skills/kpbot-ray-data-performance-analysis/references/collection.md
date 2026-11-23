@@ -7,13 +7,13 @@
 | 证据 | 如何取得 | 能说明什么 / 限制 |
 |---|---|---|
 | 代码与执行计划 | 读取用户代码；当前版本支持时 `ds.explain()` | 逻辑/物理阶段；不证明实际热点 |
-| Dataset stats | 一次真实终结操作完成后 `print(ds.stats())`，保存原文 | 各 operator 执行统计；文本格式会变化，不建立固定正则解释器 |
+| Dataset stats | 一次真实终结操作完成后读取算子统计：`measured = ds.materialize()`，再保存 `measured.stats()` 原文 | 各 operator 执行统计；文本格式会变化，不建立固定正则解释器。Ray 2.52 中原惰性 `ds.stats()` 在 materialize 后可能仍为空串，不能据此重跑 |
 | 环境快照 | `inspect_environment.py` 在实际运行 Python 环境中执行 | 当前节点平台、包版本、affinity、cgroup 和共享内存；不是持续监控 |
 | 实际执行资源 | 已连接 driver 中按需记录 `ray.cluster_resources()`、`ray.available_resources()` | Ray 逻辑调度资源；快照不等于物理利用率，禁止为采集隐式 `ray.init()` |
 | 系统/worker 时间序列 | 复用已有 nmon、pidstat、容器监控、GPU 厂商工具 | 写明采样间隔、PID/节点、单位和 CPU 百分比口径；单 worker 不代表全体 |
 | 调用栈或计数器 | 对已确认的 worker 按需使用 py-spy/perf | 记录采样窗口、工具版本与权限；缺权限时交付现有分析，不改全局安全配置 |
 
-Ray Data 是惰性执行；`count()`、`materialize()`、迭代或 sink 都可能引入执行。不要为取 stats 先跑一次 count 再把第二次当冷启动基线。区分构图、初始化、执行、输出落盘和清理的时间范围。
+Ray Data 是惰性执行；`count()`、`materialize()`、迭代或 sink 都可能引入执行。需要同一轮算子统计时写 `measured = ds.materialize()`，随后读取 `measured.stats()`；不要对原惰性 `ds` 读 stats，也不要为取 stats 重跑。不要为取 stats 先跑一次 count 再把第二次当冷启动基线。区分构图、初始化、执行、输出落盘和清理的时间范围。
 
 ## 环境工具的解释
 
