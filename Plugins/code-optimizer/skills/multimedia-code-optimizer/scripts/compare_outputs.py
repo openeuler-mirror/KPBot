@@ -4,6 +4,10 @@
 默认**精确比较**：向量化的第一原则是不改结果，容差会掩盖真正的 bug。浮点归约顺序
 无法保持时才用 `--mode tolerance`，且必须在报告里写明理由和误差界。
 
+目录模式下两侧的文件集合必须完全一致：任何只在一侧存在的输出文件都会让脚本返回
+`file_set_mismatch` 并以退出码 1 结束。缺一侧说明那条用例根本没参与比较，
+“没比过”不能记成“比过且相同”。
+
 用法:
     python3 compare_outputs.py --ref out/ref.bin --simd out/simd.bin
     python3 compare_outputs.py --ref out/ref/ --simd out/simd/
@@ -82,21 +86,42 @@ def main(argv=None):
 
     pairs = []
     if os.path.isdir(args.ref) and os.path.isdir(args.simd):
-        names = sorted(os.listdir(args.ref))
-        for name in names:
-            rp = os.path.join(args.ref, name)
-            sp = os.path.join(args.simd, name)
-            if os.path.isfile(rp):
-                if not os.path.isfile(sp):
-                    print(json.dumps({"success": False,
-                                      "error_message": "missing_counterpart",
-                                      "file": name}, ensure_ascii=False, indent=2))
-                    return 1
-                pairs.append((name, rp, sp))
-        if not pairs:
+        ref_names = sorted(n for n in os.listdir(args.ref)
+                           if os.path.isfile(os.path.join(args.ref, n)))
+        simd_names = sorted(n for n in os.listdir(args.simd)
+                            if os.path.isfile(os.path.join(args.simd, n)))
+        if not ref_names and not simd_names:
             print(json.dumps({"success": False, "error_message": "no_files_in_ref_dir",
                               "path": args.ref}, ensure_ascii=False, indent=2))
             return 2
+
+        # 对称比较：两侧文件集合不等就拒绝判定。只遍历 ref 会漏掉“SIMD 侧多出一个
+        # 输出文件”（基线崩溃/被跳过），那种情况下该用例其实从未与基线比对过。
+        only_ref = sorted(set(ref_names) - set(simd_names))
+        only_simd = sorted(set(simd_names) - set(ref_names))
+        if only_ref or only_simd:
+            print(json.dumps({
+                "success": False,
+                "error_message": "file_set_mismatch",
+                "ref_dir": args.ref,
+                "simd_dir": args.simd,
+                "files_only_in_ref": only_ref,
+                "files_only_in_simd": only_simd,
+                "hint": "两侧用例集合必须一致；缺一侧说明那条用例没有真正参与比较，"
+                        "不能给出 identical 判定",
+                "verdict": "not_comparable",
+            }, ensure_ascii=False, indent=2))
+            return 1
+
+        for name in ref_names:
+            pairs.append((name, os.path.join(args.ref, name),
+                          os.path.join(args.simd, name)))
+    elif os.path.isdir(args.ref) or os.path.isdir(args.simd):
+        print(json.dumps({"success": False, "error_message": "dir_file_mismatch",
+                          "ref": args.ref, "simd": args.simd,
+                          "hint": "两侧必须同为目录或同为文件"},
+                         ensure_ascii=False, indent=2))
+        return 2
     else:
         pairs.append((os.path.basename(args.ref), args.ref, args.simd))
 

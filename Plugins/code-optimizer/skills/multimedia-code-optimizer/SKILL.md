@@ -117,4 +117,3 @@ optimize：
 - `summary/README.md`：向量化方法库导航，summary 模式维护、optimize 模式读取。
 - `scripts/`：`workflow_state.py` 管 origin 的流程状态；`init_summary.py`、`merge_summary.py`、`scan_simd.py`、`validate_summary.py` 属 summary；`check_env.py`、`init_workspace.py`、`scan_candidates.py`、`compare_outputs.py`、`run_ab_bench.py`、`render_report.py` 属 optimize。
 - `assets/bench/` 与 `assets/templates/`：optimize 模式的裸机基准夹具与记录模板。
-- `cases/`：`cases/summary-mode-integrity/`、`cases/optimize-mode-integrity/` 两个 Tier-A 用例；`evals/evals.json` 记录路由样例。

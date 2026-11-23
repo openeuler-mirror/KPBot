@@ -212,6 +212,9 @@ grep -rn "<函数基名>" <项目>/source/*/asm-primitives* <项目>/source/*aar
 python3 <skill>/scripts/compare_outputs.py --ref <基线输出> --simd <新输出>
 ```
 
+目录模式要求两侧文件集合完全一致：只在一侧存在的输出文件会让脚本返回
+`file_set_mismatch` 并失败——那条用例根本没参与比较，不能被记成通过。
+
 不一致时先排查夹具（运行时 VL、LTO 合并调用、输入未重置、`_x` 的未定义 lane），再怀疑算法。**不通过就不进性能测试**，更不写回。
 
 **5.6 性能门控**
@@ -224,6 +227,10 @@ python3 <skill>/scripts/run_ab_bench.py --cmd "<运行命令>" --alt-cmd "<翻�
 ```
 
 - 通过线 1.05。低于 5% 的差异在真实负载里会被访存和调度淹没。
+- `run_ab_bench.py` 会强制有效轮数下限（默认 `min(reps, max(2, ceil(reps/2)))`）：
+  不足时 `verdict: insufficient_measurements`、退出码 3；任一轮失败同样不给通过结论。
+  墙钟口径（`--method wall`，或 `auto` 下测得非确定性）还要求 A/B 区间不重叠，
+  否则加速比必须 >= 1.10 才算 faster。
 - 同一函数最多试 **2 种手法**；仍不达标就回滚，`status: rejected`，写清两次实测数字。
 - 发现 GCC 已经自动向量化且手写版本没有优势时，正确答案是**放弃并记录**，而不是换一个更弱的基线把数字做漂亮。
 

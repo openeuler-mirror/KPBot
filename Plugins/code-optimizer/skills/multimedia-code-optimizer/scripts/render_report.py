@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """把 process/*/record.json 聚合成最终报告 simd_optimization_report.md。
 
-脚本只负责机械部分（表格、统计、环境、参考方法），判断性的段落留 TODO 标记，
-由人/Agent 补写。这样重跑脚本不会覆盖已经写好的结论。
+脚本只负责机械部分（表格、统计、环境、参考方法）；判断性的段落来自
+other/report-notes.md，按 `## 标题` 注入，所以报告可以反复重新生成。
+
+生成物首行写入机器可读标记 `<!-- generated-by: render_report.py -->`，用来判断
+既有报告是不是本脚本生成的：有标记就整体重写；没有标记且内容非空，则认为报告被
+手改过或来自模板，拒绝覆盖并提示加 --force。手写内容放 other/report-notes.md，
+不要直接改生成的报告。
 
 用法:
     python3 render_report.py --workspace /path/to/simd_optimization_result
-    python3 render_report.py --workspace ... --force   # 覆盖已有的手写内容
+    python3 render_report.py --workspace ... --force   # 覆盖任何已存在的报告
 """
 
 import argparse
@@ -15,6 +20,8 @@ import glob
 import json
 import os
 import sys
+
+GENERATED_MARKER = "<!-- generated-by: render_report.py -->"
 
 STATUS_ORDER = {"verified": 0, "validated": 1, "correct_only": 2,
                 "unverified": 3, "rejected": 4}
@@ -277,7 +284,7 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--workspace", required=True)
     ap.add_argument("--force", action="store_true",
-                    help="覆盖已存在的报告（默认只覆盖脚本生成的部分）")
+                    help="强制覆盖已存在的报告（包括手改过的内容）")
     args = ap.parse_args(argv)
 
     workspace = os.path.realpath(os.path.expanduser(args.workspace))
@@ -296,6 +303,8 @@ def main(argv=None):
     verified = sum(1 for r in records
                    if r.get("status") in ("verified", "validated"))
     lines = [
+        GENERATED_MARKER,
+        "",
         "# SIMD 优化报告",
         "",
         "| 项 | 值 |",
@@ -321,15 +330,20 @@ def main(argv=None):
     lines += section_next(notes)
 
     report_path = os.path.join(workspace, "simd_optimization_report.md")
-    if os.path.exists(report_path) and not args.force:
+    regenerated = os.path.exists(report_path)
+    if regenerated and not args.force:
         with open(report_path, "r", encoding="utf-8") as fh:
             old = fh.read()
-        if "<!-- TODO(手写): 结论" not in old and old.strip():
+        # 只看机器标记：脚本自己生成的报告（含注入了 report-notes.md 内容的）都能重写，
+        # 没有标记的非空报告才判为手改产物。用 TODO 文本猜手写状态会把“正常生成的报告”
+        # 误判成手改，导致文档承诺的重复生成必然失败。
+        if old.strip() and GENERATED_MARKER not in old:
             print(json.dumps({
                 "success": False,
-                "error_message": "report_exists_with_handwritten_content",
+                "error_message": "report_exists_without_generated_marker",
                 "report_path": report_path,
-                "hint": "先备份或加 --force；脚本会覆盖整份报告",
+                "hint": "既有报告没有生成标记，视为手改内容：把手写段落移到 "
+                        "other/report-notes.md，或加 --force 覆盖整份报告",
             }, ensure_ascii=False, indent=2))
             return 1
 
@@ -339,6 +353,7 @@ def main(argv=None):
     print(json.dumps({
         "success": True,
         "report_path": report_path,
+        "regenerated": regenerated,
         "functions": len(records),
         "verified": verified,
         "rejected": sum(1 for r in records if r.get("status") == "rejected"),

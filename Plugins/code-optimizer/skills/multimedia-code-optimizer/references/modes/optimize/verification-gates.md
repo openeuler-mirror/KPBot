@@ -43,6 +43,10 @@
 此时必须在 `record.json` 里写清最大绝对/相对误差和理由，并在最终报告里标为
 "非位精确"。
 
+目录模式（`--ref out/ref/ --simd out/simd/`）要求两侧文件集合完全一致：任何只在
+一侧存在的输出文件都会让 `compare_outputs.py` 返回 `file_set_mismatch` 并失败。
+缺一侧说明那条用例根本没参与比较——"没比过"不能被记成"比过且相同"。
+
 不一致时按这个顺序排查，不要一上来就改算法：
 
 1. **运行时 VL 是不是 256**（`cntb`，不要用被常量折叠的 `svcntb`）。
@@ -108,6 +112,14 @@ speedup = median(ref_ns) / median(simd_ns)
 
 1.05 不是随便定的：低于 5% 的差异在真实负载里会被访存、调度、缓存效应淹没，留下
 一份更难维护的代码换不到可感知的收益，不划算。
+
+`run_ab_bench.py` 会强制执行上面的条件和样本量要求：
+
+- 有效轮数下限默认 `min(reps, max(2, ceil(reps/2)))`，可用 `--min-rounds` 覆盖；
+  不足时给 `verdict: insufficient_measurements` 并以退出码 3 结束。
+- 墙钟口径（`--method wall`，或 `auto` 下各轮离散度超过 0.1%）要求 A/B 的
+  `[min, max]` 区间不重叠，否则加速比必须 >= 1.10 才算 `faster`。
+- 任何一轮失败（超时、崩溃、没有 `TIME` 行、VL 不匹配）都不给通过结论。
 
 ### 失败了怎么办
 
