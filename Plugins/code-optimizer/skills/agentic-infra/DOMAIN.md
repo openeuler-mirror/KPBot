@@ -19,6 +19,12 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 
 路由：多阶段联调/组合消融走本 skill；单阶段（创建路径、rootfs、预连接）后续各自成 skill 后直接进对应条目。
 
+### CubeMaster persistence
+
+| Skill | Purpose |
+|---|---|
+| [`cubesandbox-async-spec-write`](cubesandbox-async-spec-write/SKILL.md) | Move eligible create-time spec UPSERTs into a bounded queue while preserving write and delete ordering within one Master process. |
+
 ## Review
 
 - owners: []（待指派，填写 GitCode 用户名）
