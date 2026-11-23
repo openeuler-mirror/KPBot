@@ -1,0 +1,54 @@
+{
+  "skill_name": "perf-optimization-report",
+  "evals": [
+    {
+      "id": 0,
+      "name": "evidence-inventory-first",
+      "prompt": "优化实验做完了，数据都在实验机上，我直接开始写报告吧？",
+      "expected_output": "先盘点证据清单（八类：变更本体/构建身份/功能门禁/性能口径/深挖证据/profiling/安全屏障/环境指纹），缺什么补什么，报告不能开天窗；同一目录落 experiment_summary.txt 实验总账，报告所有数字从总账对账；实验没做完就写报告是本末倒置，确认对照实验、profiling、验证用例都齐了再动笔。",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "authoritative-caliber-precedence",
+      "prompt": "这次标定测得收益 -4.1%，但历史 CI 权威口径是 +4.30% CI[3.30,5.50]，报告里该报哪个数？",
+      "expected_output": "权威口径为主量级，本次标定作为收敛证据并列呈现，注明各自协议差异（哪次是历史 CI、哪次是本次标定）；不用单次新测量推翻口径更老的成体系数据；两个数字都要带口径三要素（轮数+清理协议+统计量）。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "cost-model-gap-attribution",
+      "prompt": "成本模型算出来每次请求直接省 1.3ms，但实测每请求省了 14ms，差这么多是不是测错了？",
+      "expected_output": "差值必须归因，不能假装没看见：直接节省 ~1.3ms/req（单次调用消解成本估算）vs 实测 ~14ms/req（100 并发负载下 5 轮均值——争用放大下全链路收益），差值归因为争用放大（被消除的调用处在锁/连接池/GC 争用路径上）（被消除的调用处在锁/连接池/GC 争用路径上，消除后全链路受益）；在报告 3.4 节给出两栏对比 + 放大倍数 + 归因，这是与普通报告拉开差距的维度；若给不出归因，怀疑测量对象错误而不是硬编解释。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "traces-not-raw",
+      "prompt": "我用脚本解析 pprof -raw 的输出来折叠火焰图，出来的帧全是看不懂的名字，哪里错了？",
+      "expected_output": "-raw 的位置列是数字 location ID 不是符号名，解析它必出垃圾帧（实证事故：第一批 SVG 全废）；折叠源必须用 go tool pprof -traces（叶子帧在前、块间虚线分隔），再用 fold_traces.py 折叠（块内逆序/单位归一/inline 剥离）；喂 -raw 格式进 fold_traces.py 会走 exit 1 空解析拒绝，这是契约不是 bug。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "profile-window-matching",
+      "prompt": "负载跑 7.5 秒，我采了 30 秒的 CPU profile，应该也够用吧？",
+      "expected_output": "窗口应与负载时长匹配（负载 7.5s 采 ~10s）：30s 窗口的后 22s 是空闲 GC 噪声，稀释了信号；条件允许应缩窗重采；条件不允许就如实披露稀释问题；折叠后还要过三道校验门（权重门：collapsed 总权重 ≈ pprof 头部 Total samples；帧门：top 帧与 -top 对账；语义门：预期消失/保留的函数逐项确认）。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "discarded-protocol-honesty",
+      "prompt": "中途有一版测量协议因为轮间没清理被我们否决了，报告里还要提它吗？感觉不太好看。",
+      "expected_output": "必须如实披露：废协议写明否决原因（轮间无清理、串扰），这是可信度而非污点；被否决的协议数据不入仓（中间产物裁剪纪律），但否决原因要在观测口径章节交代；防同类问题：每轮间完整清理，报告数字带轮数+清理协议+统计量三要素。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "repo-relative-paths-only",
+      "prompt": "报告里证据路径我直接写实验机的绝对路径，读的人自己替换一下不就行了？",
+      "expected_output": "不行：报告只引仓内相对路径，绝不出现机器本地路径（家目录、盘符绝对路径）——报告要能被任何 clone 的人读懂；证据五类入仓（patch/experiment_summary/火焰图/reports/脚本），中间产物（pprof 原始 .pb.gz、折叠中间态、废协议轮次）不入仓；清单即复现手册，按 scripts/ 顺序能重跑出 reports/ 的数字。",
+      "files": []
+    }
+  ]
+}

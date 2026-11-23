@@ -1,0 +1,8 @@
+{
+  "skill": "binary-compile-forensics",
+  "case": "skill-integrity",
+  "pass": true,
+  "checks": 17,
+  "sensitive_findings": [],
+  "failures": []
+}
