@@ -16,12 +16,16 @@ description: >
 2. 在父 skill 目录运行现有比较器，先传旧 D，再传新 D；输出目录须为空或不存在。
 
 ```bash
-python3 scripts/compare.py <旧D采集包> <新D采集包> --out <D前后对比目录>
+python3 scripts/compare.py <旧D采集包> <新D采集包> --require-process-args --out <D前后对比目录>
 ```
 
 3. 检查 `对比结果.json`：应有两个环境和一个组合，且组合中的 `left`、`right`
    分别指向旧 D、新 D。以来源和采集时间为准；同一快照的目录和压缩包不能
-   充当两侧。包读取失败或组合不符时，报告原因。
+   充当两侧。若 `comparisons[0].comparable` 为 `false`，将整组记为
+   「无法比较」，引用失败侧 `environments[].error`；退出码 0 或零差异不代表相同。
+4. 核对两侧的进程采集状态及实际 `processes[].args`。任一侧跳过、失败、未开始，
+   或没有服务进程参数时，把这组参数记为「无法比较」，不统计为配置变化；
+   Docker 启动默认值不能替代进程实参。
 
 ## 输出
 

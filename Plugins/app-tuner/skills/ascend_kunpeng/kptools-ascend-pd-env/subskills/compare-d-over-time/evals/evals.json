@@ -12,6 +12,12 @@
       "prompt": "帮我比新旧 D。我给的旧包元数据标了 P，但容器名叫 vllm-d。",
       "expected_output": "明确指出角色证据冲突，先请用户核对正确快照；不按容器名自动改标为 D，不直接出漂移结论。",
       "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "旧 D 没找到服务进程，processes 为 skipped；新 D 有实际 --kv-transfer-config。帮我判断变化。",
+      "expected_output": "旧 D 在左、新 D 在右，实际启动参数无法比较，不计为新增配置；其他可比较项仍可报告。",
+      "files": []
     }
   ]
 }
