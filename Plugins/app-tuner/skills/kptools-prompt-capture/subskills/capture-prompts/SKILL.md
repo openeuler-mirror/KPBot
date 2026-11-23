@@ -9,15 +9,17 @@ description: >
 ## 操作流程
 
 1. 确认指定 proxy 已接入且健康。按 [配置说明](../../references/capture-and-analysis.md#配置准备) 确定绝对配置路径、时长、保存位置、磁盘预算和会话范围。默认仅采元数据；prompt 全文、输出全文和 golden 分别确认，golden 还须有后端兼容性证据。
-2. 使用 proxy 所用的 Python 解释器，在相同容器或 PID 命名空间准备配置。新配置按需使用 `init` 与 `load`，已有配置先用 `show` 核对，保留不属于本轮的设置。活动窗口或 worker 归属不清时先确认，不接管已有任务。会话预设的自动跟踪数是每个 worker 的配额，不保证会话完整。
-3. 按本次授权窗口开启采集。以下 `$S` 为父 skill 目录，`$CFG` 为配置绝对路径，`$DURATION` 为已确认的正秒数。
+2. 使用 proxy 所用的 Python 解释器，在相同容器或 PID 命名空间准备配置。新配置按需使用 `init` 与 `load`。开启前用 `show` 逐项对照授权：普通请求看 `text_rate`、`output`、`gold_rate`；跟踪会话看 `follow_sessions`、`follow_new`、`follow_output`、`follow_gold`。跟踪会话会记录请求全文，即使 `text_rate=0`。配置超出授权时不执行 `on`，先准备已确认的配置再核对；不接管其他任务的活动窗口。
+3. 按本次授权窗口开启采集。仅采元数据时，用 `--metadata-only` 在写配置前再次检查。以下 `$S` 为父 skill 目录，`$CFG` 为配置绝对路径，`$DURATION` 为已确认的正秒数。
 
 ```bash
-$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration "$DURATION"
+$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration "$DURATION" --metadata-only
 $PY "$S/scripts/capturectl.py" --config "$CFG" status --json
 ```
 
 检查预期 worker 数、版本、有效开关和实际文件增长。返回码 4 表示尚未确认生效，不能只依据配置文件判断。到期或发生持续写盘错误、预算不足时，对本轮采集执行 `off`，再查状态。等待在途记录及写盘收尾；超时记录缺失，不重启 proxy。
+
+确有正文权限时，按确认范围设置普通采样或会话跟踪，再不带 `--metadata-only` 启动。自动跟踪数是每个 worker 的配额，不保证会话完整。
 
 ## 输出
 

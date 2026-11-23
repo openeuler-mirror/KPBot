@@ -47,9 +47,11 @@ $PY "$S/scripts/capturectl.py" --config /data/pc/capture.json set out_dir=/data/
 授权部署和健康检查通过后：
 
 ```bash
-$PY "$S/scripts/capturectl.py" --config /data/pc/capture.json on --duration 600
+$PY "$S/scripts/capturectl.py" --config /data/pc/capture.json on --duration 600 --metadata-only
 $PY "$S/scripts/capturectl.py" --config /data/pc/capture.json status --json
 ```
+
+开启前用 `show` 核对已确认的配置。仅采元数据时，`text_rate`、`gold_rate`、`follow_new` 均为 0，`follow_sessions` 为空，`follow_gold` 为 false，`output` 和 `follow_output` 不得为 `text`。`--metadata-only` 遇到冲突会退出且不写配置。有正文权限时按授权分别设置普通采样、会话跟踪、输出与 golden，再去掉该参数。
 
 `on` 的 `--duration` 必须为有限正数，单位为秒。控制器将其换算为绝对截止时间，采集模块逐请求检查，并在后台更新有效 enabled 状态。终端断开不影响截止检查，proxy 重启也不延长时限。配置文件中的 enabled 可能仍为 true，实际状态以各 worker 的 enabled 为准。截止时间依赖系统时钟，时钟异常时需重新核对并在报告中说明。
 

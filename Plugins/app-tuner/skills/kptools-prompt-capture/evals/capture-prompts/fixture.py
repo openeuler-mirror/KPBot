@@ -33,7 +33,7 @@ def status(cfg):
 
 def verify():
     with TemporaryDirectory() as temporary, instance(Path(temporary)) as (cfg, port):
-        cli("--config", cfg, "on", "--duration", 4).check_returncode()
+        cli("--config", cfg, "on", "--duration", 4, "--metadata-only").check_returncode()
         if not status(cfg)["workers"][0]["enabled"]:
             raise SystemExit("capture did not become effective")
         if request(port, session="inside-window")[0] != 200:

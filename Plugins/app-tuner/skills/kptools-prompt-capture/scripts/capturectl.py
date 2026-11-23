@@ -45,10 +45,14 @@ def main() -> int:
     parser.add_argument("cmd", choices=("init", "show", "status", "load", "set", "on", "off"))
     parser.add_argument("values", nargs="*")
     parser.add_argument("--duration", type=float, help="on: required capture window in seconds")
+    parser.add_argument("--metadata-only", action="store_true",
+                        help="on: refuse configuration that enables text, session following or golden")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     if not math.isfinite(args.timeout) or args.timeout < 0:
         parser.error("--timeout must be finite and nonnegative")
+    if args.metadata_only and args.cmd != "on":
+        parser.error("--metadata-only is only valid with on")
     path = args.config.resolve()
     if args.cmd == "init":
         if path.exists():
@@ -94,6 +98,12 @@ def main() -> int:
     elif args.cmd == "off":
         patch = {"enabled": False}
     new = capture_validate({**current, **patch})
+    if args.metadata_only:
+        fields = ["text_rate", "gold_rate", "follow_sessions", "follow_new", "follow_gold"]
+        conflicts = [field for field in fields if new[field]]
+        conflicts += [field for field in ("output", "follow_output") if new[field] == "text"]
+        if conflicts:
+            parser.error("metadata-only capture conflicts with: " + ", ".join(conflicts))
     if new["enabled"] and new["stop_at_unix"] <= time.time():
         parser.error("deadline expired; off first, configure, then on --duration")
     write_config(path, new)

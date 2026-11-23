@@ -240,6 +240,22 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout)["applied"], "no_workers")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
+    def test_metadata_only_refuses_old_text_settings_before_opening_window(self):
+        settings = {"text_rate": 1, "gold_rate": 1, "output": "text",
+                    "follow_sessions": ["previous-session"], "follow_new": 1,
+                    "follow_output": "text", "follow_gold": True}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "capture.json"
+            for field, value in settings.items():
+                with self.subTest(field=field):
+                    config(path, **{field: value})
+                    before = path.read_bytes()
+                    result = cli("--config", path, "on", "--duration", 10, "--metadata-only")
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("metadata-only capture conflicts with: " + field, result.stderr)
+                    self.assertEqual(path.read_bytes(), before)
+            self.assertFalse((path.parent / "data").exists())
+
     def test_no_automatic_remote_code_retry(self):
         calls = []
 

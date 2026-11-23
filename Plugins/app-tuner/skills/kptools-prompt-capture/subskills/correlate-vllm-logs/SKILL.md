@@ -9,14 +9,19 @@ description: >
 ## 操作流程
 
 1. 确认已有 `analyze.py` 生成的 `requests.csv`，以及对应窗口的 P 日志、D 日志或两者。关联键是 proxy 实际发给 vLLM 的请求 ID，不是采集内部 UUID。缺少请求表时可从已有采集分段生成，不需要再次采集。
-2. 核对日志是否含兼容的 `TTFT_DEBUG` 行和请求 ID。只传已有侧的日志，可为同一侧传入多个实例文件：
+2. 核对日志是否含兼容的 `TTFT_DEBUG` 行和请求 ID。只有一侧日志时，省略另一侧的整个选项。选用对应命令：
 
 ```bash
+# 只有 P 日志
 python3 "$S/scripts/join_vllm_log.py" --requests "$AN/requests.csv" \
-  --p-log "$P_LOG" --d-log "$D_LOG" --out "$JOIN"
+  --p-log "$P_LOG" --out "$JOIN"
+
+# 只有 D 日志
+python3 "$S/scripts/join_vllm_log.py" --requests "$AN/requests.csv" \
+  --d-log "$D_LOG" --out "$JOIN"
 ```
 
-`$S` 为父 skill 目录，`$JOIN` 为新的受限目录。部分旧日志的 Tokenizer 行没有请求 ID，只能统计日志自身分布，不能按请求归因。没有兼容日志时说明缺项，不改动 proxy 或 vLLM。
+两侧都有日志时同时传入 `--p-log` 和 `--d-log`；同一选项可接多个实例文件。`$S` 为父 skill 目录，`$JOIN` 为新的受限目录。部分旧日志的 Tokenizer 行没有请求 ID，只能统计日志自身分布，不能按请求归因。没有兼容日志时说明缺项，不改动 proxy 或 vLLM。
 
 ## 输出
 

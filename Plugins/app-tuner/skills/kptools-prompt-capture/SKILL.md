@@ -142,9 +142,11 @@ $PY "$S/scripts/capturectl.py" --config "$CFG" load "$S/assets/macro.json"
 服务正常后按用户确认的时长开启采集：
 
 ```bash
-$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration <采集秒数>
+$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration <采集秒数> --metadata-only
 $PY "$S/scripts/capturectl.py" --config "$CFG" status --json
 ```
+
+上例仅采元数据。开启前按 [采集控制说明](references/capture-and-analysis.md#采集控制) 核对普通请求与跟踪会话的有效配置；超出本轮权限时先调整已确认的配置，不开启采集。
 
 核对预期 worker 数、配置版本、有效开关状态及数据写入情况。配置写入成功不代表采集已生效。到期后采集模块停止接收新请求的记录；达到磁盘预算或出现持续采集错误时执行 `off` 并报告。会话数未达到目标时，仍按约定时间结束。
 
