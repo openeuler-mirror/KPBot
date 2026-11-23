@@ -51,3 +51,5 @@ bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --r
 需要吞吐上限测试时按实验计划调整限速；先估算总数据量并检查磁盘。topic 清理只作用于本次创建的测试资源。
 
 若自动检查脚本位于 skill 目录而 Kafka 解压在别处，`--kafka-dir` 传相对当前调用目录的发行包位置，例如 `../experiment/kafka`。脚本直接使用该目录的 bin，不要求安装到系统 PATH。Java、Bash 与网络需在执行检查脚本的同一环境可用。存在认证时用 `--client-config` 提供真实的连接配置文件，文件由集群连接信息生成，不是示例附件。
+
+自动检查的 `--timeout` 是每个客户端进程的总等待上限（含 JVM 启动）；消费者的 `--timeout-ms` 同步换算为毫秒，最低为 1 毫秒。较慢的 broker 或 JVM 启动应增加该参数；任一步超时均保留日志并报告失败。上面的手工消费示例使用独立的 10 秒空闲等待。

@@ -25,6 +25,7 @@ class KafkaCheckTests(unittest.TestCase):
             ["--kafka-dir", "kafka", "--output", str(self.output)]
         )
         self.calls = []
+        self.budgets = []
         self.messages = ""
         self.bad_messages = False
         self.fail_at = None
@@ -41,6 +42,7 @@ class KafkaCheckTests(unittest.TestCase):
             attempts = 0
 
             def communicate(self, input=None, timeout=None):
+                test.budgets.append(timeout)
                 self.attempts += 1
                 if index == test.timeout_at and self.attempts == 1:
                     raise subprocess.TimeoutExpired("kafka", timeout)
@@ -113,6 +115,26 @@ class KafkaCheckTests(unittest.TestCase):
             side_effect=FileNotFoundError("bash missing"),
         ):
             self.assertEqual(module.check(self.args)["status"], "failed")
+
+    def test_timeout_propagates_to_consumer_and_processes(self):
+        for seconds in (5, 60, 0.05, 0.0001):
+            with self.subTest(seconds=seconds):
+                self.args.timeout = seconds
+                self.args.output = self.output / str(seconds)
+                self.calls.clear()
+                self.budgets.clear()
+                self.assertEqual(self.run_check()["status"], "passed")
+                argv = self.calls[-1]
+                self.assertEqual(
+                    argv[argv.index("--timeout-ms") + 1],
+                    str(max(1, int(seconds * 1000))),
+                )
+                self.assertEqual(self.budgets, [seconds] * 4)
+
+    def test_consumer_timeout_reports_failure_and_retains_logs(self):
+        self.timeout_at = 3
+        self.assertEqual(self.run_check()["status"], "failed")
+        self.assertTrue((self.output / "03.stderr").exists())
 
     def test_consumer_is_bounded(self):
         self.run_check()

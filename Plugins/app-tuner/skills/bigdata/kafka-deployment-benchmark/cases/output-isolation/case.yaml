@@ -1,0 +1,8 @@
+name: output-isolation
+skill: kafka-deployment-benchmark
+tier: A
+entrypoint: ["python3", "cases/output-isolation/test_output_isolation.py"]
+env_requires: ["git"]
+assert:
+  - type: exit_code
+    expect: 0

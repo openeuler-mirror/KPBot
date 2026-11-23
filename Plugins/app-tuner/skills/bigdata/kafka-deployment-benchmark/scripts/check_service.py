@@ -129,7 +129,7 @@ def check(args):
                 "--max-messages",
                 "3",
                 "--timeout-ms",
-                "10000",
+                str(max(1, int(args.timeout * 1000))),
             ],
             config_flag="--consumer.config",
         )
