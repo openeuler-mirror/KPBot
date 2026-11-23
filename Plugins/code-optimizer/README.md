@@ -94,7 +94,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | 领域 | 目录 | 范围 | 当前成员 |
 |---|---|---|---|
 | 搜推（SRA） | [`skills/sra/`](skills/sra/DOMAIN.md) | 搜推 DAG 全栈优化方法总表 | `sra-dag-tuning` |
-| 向量数据库 / 检索 | [`skills/vectordb/`](skills/vectordb/DOMAIN.md) | ANN 索引与向量库（Faiss / DiskANN 子域陆续并入） | `vsag-rabitq-optimization` |
+| 向量数据库 / 检索 | [`skills/vectordb/`](skills/vectordb/DOMAIN.md) | ANN 索引与向量库（Faiss 子域已并入，DiskANN 陆续并入） | `vsag-rabitq-optimization`、`faiss/`（子域） |
 | Agentic Infra | [`skills/agentic-infra/`](skills/agentic-infra/DOMAIN.md) | microVM 沙箱与 AgentENV 的创建路径 | `cubesandbox-create-optimize` |
 | 微服务 | [`skills/microservice/`](skills/microservice/DOMAIN.md) | 服务进程性能（改实现侧；配置调优在 app-tuner 同名域） | `go-pprof-analysis` |
 | 存储 | [`skills/storage/`](skills/storage/DOMAIN.md) | 块层 / 文件系统 / NVMe / 分布式存储（占位，0 成员） | — |
@@ -153,7 +153,7 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 #### Faiss
 
-Faiss 专项由 [`faiss-optimize`](skills/faiss-optimize/SKILL.md) 编排。
+Faiss 专项由 [`faiss-optimize`](skills/vectordb/faiss/faiss-optimize/SKILL.md) 编排。
 
 | 技能 | 职责 |
 |------|------|
@@ -167,6 +167,8 @@ Faiss 专项由 [`faiss-optimize`](skills/faiss-optimize/SKILL.md) 编排。
 | `vector-experiment-methodology` / `vector-ut-st-validation` | 交错性能对照、正确性验证与报告契约 |
 
 安装沿用现有 `install.sh`，同时注册五个 Faiss 角色。运行产物保存在独立目录；算法、版本、数据和资源限制由当前任务决定。
+
+Faiss 技能族收在 [`skills/vectordb/faiss/`](skills/vectordb/faiss/DOMAIN.md) 子域下；完整成员清单与路由见该子域的 `DOMAIN.md`，此处不逐项重复。
 
 #### DiskANN
 
