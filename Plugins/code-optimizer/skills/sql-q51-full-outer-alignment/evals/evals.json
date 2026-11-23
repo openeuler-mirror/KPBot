@@ -1,0 +1,53 @@
+{
+  "skill_name": "sql-q51-full-outer-alignment",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "one-sided-duplicate",
+      "prompt": "Web 对同一 item/date 有两行，门店只有一行。是否只有双方都重复才需要拒绝 UNION ALL 分组对齐？",
+      "expected_output": "任一侧重复即可改变多重匹配和输出重数。双侧各自验证唯一非空；此例保留全外连接，并按完整行多重集验收。",
+      "files": [],
+      "assertions": [
+        "拒绝单侧重复",
+        "核对双方约束",
+        "比较重数"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "null-key-and-null-amount",
+      "prompt": "双方键可能为 NULL，渠道累计值也可能为 NULL。我准备按键分组，并先删掉累计值 NULL 的行。",
+      "expected_output": "键 NULL 在普通等值连接和分组中行为不同，未证明时回退。金额 NULL 不代表渠道不存在，保留已存在的全 NULL 或单侧记录及原始列。",
+      "files": [],
+      "assertions": [
+        "区分键 NULL 与金额 NULL",
+        "保留单侧及全 NULL 记录",
+        "保留原连接回退"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "alignment-before-window",
+      "prompt": "我想在各渠道累计 SUM 前就 UNION ALL，并用最后非 NULL 值填充结果，省掉后置 MAX。",
+      "expected_output": "该候选只在分支累计完成后对齐，不能沿用证明前移。后置 MAX 保留历史峰值，负金额时不能用最后值替代，原始缺侧列仍为 NULL。",
+      "files": [],
+      "assertions": [
+        "固定累计完成后边界",
+        "不以填充代替 MAX",
+        "保留原始渠道输出"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "unknown-types-and-authorization",
+      "prompt": "只允许分析原执行实现，键唯一性还没确认。可以先把 SQL 中 NULL 写成任意整数类型，直接测改写速度吗？",
+      "expected_output": "先保留原连接，按已授权层级分析。需要允许重写、可靠键守卫、实际渠道类型和错误证明；只通过 SQLite 不能声称真实引擎或性能通过。",
+      "files": [],
+      "assertions": [
+        "不越过修改范围",
+        "不猜测类型和键约束",
+        "明确未测项"
+      ]
+    }
+  ]
+}
