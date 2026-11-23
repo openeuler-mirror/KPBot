@@ -21,7 +21,7 @@ def snapshot(path, request_id):
         raise ValueError(f"missing TTFT base package (KPBot !181): {REPORT_SCRIPTS / 'report.py'}")
     sys.path.insert(0, str(REPORT_SCRIPTS))
     try:
-        from report import list_requests
+        from report import REQUIRED, list_requests
     except ImportError as exc:
         raise ValueError("installed TTFT base does not provide report.list_requests (KPBot !181)") from exc
     finally:
@@ -29,9 +29,12 @@ def snapshot(path, request_id):
     before = path.stat()
     requests = dict(list_requests(path))
     digest = hashlib.sha256()
+    marker = REQUIRED[0][0].encode("utf-8")
+    breakdown_count = 0
     with path.open("rb") as log:
-        for chunk in iter(lambda: log.read(1024 * 1024), b""):
-            digest.update(chunk)
+        for line in log:
+            digest.update(line)
+            breakdown_count += line.count(marker)
     after = path.stat()
     if (before.st_ino, before.st_size, before.st_mtime_ns) != (
         after.st_ino, after.st_size, after.st_mtime_ns
@@ -39,7 +42,7 @@ def snapshot(path, request_id):
         raise ValueError("Prefill log changed during collection; provide a stable snapshot")
     if request_id not in requests:
         raise ValueError("request_id has no BREAKDOWN evidence in the Prefill log")
-    if sum(requests.values()) != 1:
+    if breakdown_count != 1:
         raise ValueError("report requires exactly one BREAKDOWN; provide a single-request snapshot")
     return str(path), digest.hexdigest()
 
