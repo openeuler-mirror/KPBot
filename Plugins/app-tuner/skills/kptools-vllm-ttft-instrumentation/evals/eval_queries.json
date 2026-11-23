@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-vllm-ttft-instrumentation",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "TTFT-01",
+      "prompt": "只预检 vLLM 主仓的 TTFT 插桩，不改源码",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-02",
+      "prompt": "只预检 vLLM-Ascend 插桩，不碰 vLLM 主仓",
+      "should_trigger": false
+    }
+  ]
+}
