@@ -31,10 +31,12 @@ Flink + GlutenFlink（gluten-flink + velox4j + velox 向量化执行栈）开发
 | [`flink-velox-toolchain-check`](flink-velox-toolchain-check/SKILL.md) | 编译工具链：PATH 上找 git / cmake / gcc / g++ / mvn 并取版本；缺的给 openEuler 包名（g++ → gcc-c++、mvn → maven） |
 | [`flink-velox-build-tools-check`](flink-velox-build-tools-check/SKILL.md) | 构建辅助工具：ninja / ccache / autoconf / automake / libtool / flex / bison / python3 / patchelf（ninja → ninja-build） |
 | [`flink-velox-cpp-deps-check`](flink-velox-cpp-deps-check/SKILL.md) | C++ 依赖两层：13 个包管理器级库按头文件探测（给 -devel 包名）；源码级库清单解析自 velox checkout 自带 setup 脚本，按 /usr/local 探测 |
+| [`flink-velox-jdk-check`](flink-velox-jdk-check/SKILL.md) | Java：JDK 17 在不在、JAVA_HOME 是否指向它、Flink 守护进程实际 Java 与重启会选的 Java（conf env.java.home → JAVA_HOME → PATH，env.java.home 只读 Flink 实际读的那份配置）；本安装的每个守护进程逐个判定；goal=build 要求 17，native 只接受 8 / 11 / 17 |
+| [`flink-velox-flink-dist-check`](flink-velox-flink-dist-check/SKILL.md) | Flink 发行版：安装定位（FLINK_HOME / PATH / 默认目录）、stock 脚本齐全、lib 下递归只有一个 flink-dist jar、版本在 1.19 版本线（只比 major.minor；REST 地址只取自 Flink 实际读的那份配置，jar 名 → MANIFEST 回退）、conf 存在、REST 地址解析 |
+| [`flink-velox-source-repos-check`](flink-velox-source-repos-check/SKILL.md) | 源码仓：velox / velox4j / gluten 各自存在、标志文件齐全、经 git 读分支与 HEAD（远端地址脱敏后输出）并与基线分支对比（偏离只提示）；仓库根 --repos-dir → GFV_REPOS_DIR → 向上找 repos/，单仓可用 VELOX_HOME 等指定 |
 
 ## 其它成员（分 PR 提交，合入后移入上表）
 
-- 审中 !320：`flink-velox-jdk-check`（Java）、`flink-velox-flink-dist-check`（Flink 发行版）、`flink-velox-source-repos-check`（源码仓）
 - 规划中：统筹 `flink-velox-env-check`（按 goal 调度各项检查、聚合裁决与唯一 next_step；等各具体项检查合入后提交）
 
 ## 与其它域的边界

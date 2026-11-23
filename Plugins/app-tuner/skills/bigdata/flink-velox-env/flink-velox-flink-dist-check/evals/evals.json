@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-flink-dist-check",
+  "evals": [
+    {
+      "id": "multiple-dist-jars",
+      "query": "Flink 启动报 Multiple flink-dist*.jar found，看看 lib 里怎么回事",
+      "expected": "触发本 skill：跑 scripts/flink_dist_check.py，dist-jars 项列出全部 flink-dist jar（按名序）并判 fail，next_step 只留安装版本的那个 jar 后重启（重启须用户同意）"
+    },
+    {
+      "id": "version-line",
+      "query": "这台机器的 Flink 是不是 1.19 版本，装在哪",
+      "expected": "触发本 skill：flink.version / found_via / version_source 作答；只比 major.minor，1.19.2 与 1.19.3 都算在版本线上"
+    },
+    {
+      "id": "incomplete-install",
+      "query": "FLINK_HOME 指的目录里缺 bin/sql-client.sh，是不是装得不全",
+      "expected": "触发本 skill：files 项点名缺失的 stock 脚本与 dist jar，next_step 重新解包或指向完整安装"
+    },
+    {
+      "id": "not-jdk",
+      "query": "Flink 守护进程用的是哪个 Java",
+      "expected": "不触发：守护进程 Java 属 flink-velox-jdk-check"
+    },
+    {
+      "id": "not-lib-state",
+      "query": "lib 里是 native 构建还是 GFV 构建",
+      "expected": "不触发：lib 构建状态属 flink-velox-lib-state-check（规划中）"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check"
+    },
+    {
+      "id": "not-install",
+      "query": "把 Flink 1.19 装上，再把多余的 jar 删了重启集群",
+      "expected": "不触发：本 skill 只读；安装与重启属同族安装/切换类 skill（规划中），next_step 是交给它们的工单"
+    }
+  ]
+}

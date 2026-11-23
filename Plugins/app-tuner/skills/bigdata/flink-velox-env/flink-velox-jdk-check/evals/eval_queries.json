@@ -1,0 +1,49 @@
+{
+  "skill_name": "flink-velox-jdk-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-unsupported-class-version",
+      "prompt": "Flink 报 UnsupportedClassVersionError，守护进程用的哪个 Java",
+      "should_trigger": true,
+      "note": "判据类触发词：UnsupportedClassVersionError、守护进程 Java"
+    },
+    {
+      "id": "q-jdk17",
+      "prompt": "JDK 17 装了没，JAVA_HOME 对不对",
+      "should_trigger": true,
+      "note": "场景入口类触发词：JDK 17 装了没、JAVA_HOME 对不对"
+    },
+    {
+      "id": "q-restart-java",
+      "prompt": "重启之后 Flink 会用哪个 java 版本",
+      "should_trigger": true,
+      "note": "重启将选的 Java：conf env.java.home / JAVA_HOME / PATH"
+    },
+    {
+      "id": "q-toolchain",
+      "prompt": "cmake、gcc、mvn 装了没",
+      "should_trigger": false,
+      "note": "编译工具链 → flink-velox-toolchain-check"
+    },
+    {
+      "id": "q-flink-dist",
+      "prompt": "Flink 版本是不是 1.19，bin 和 lib 齐不齐",
+      "should_trigger": false,
+      "note": "Flink 发行版 → flink-velox-flink-dist-check"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-restart",
+      "prompt": "重启 Flink 集群",
+      "should_trigger": false,
+      "note": "重启 → 切换类 skill（规划中）；本 skill 只读"
+    }
+  ]
+}

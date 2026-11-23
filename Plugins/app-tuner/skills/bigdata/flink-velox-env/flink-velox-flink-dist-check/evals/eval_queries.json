@@ -1,0 +1,49 @@
+{
+  "skill_name": "flink-velox-flink-dist-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-multiple-dist-jars",
+      "prompt": "Flink 报 Multiple flink-dist*.jar found，lib 里怎么回事",
+      "should_trigger": true,
+      "note": "判据类触发词：Multiple flink-dist*.jar found、flink-dist"
+    },
+    {
+      "id": "q-version-line",
+      "prompt": "Flink 装了没，是不是 1.19 版本，FLINK_HOME 对不对",
+      "should_trigger": true,
+      "note": "场景入口类触发词：Flink 装了没、Flink 版本、是不是 1.19"
+    },
+    {
+      "id": "q-incomplete",
+      "prompt": "Flink 目录里缺 start-cluster.sh，是不是装不全",
+      "should_trigger": true,
+      "note": "安装完整性：stock 脚本缺失"
+    },
+    {
+      "id": "q-jdk",
+      "prompt": "Flink 守护进程跑的是哪个 Java",
+      "should_trigger": false,
+      "note": "守护进程 Java → flink-velox-jdk-check"
+    },
+    {
+      "id": "q-lib-state",
+      "prompt": "lib 里是 native 还是 GFV 的 jar",
+      "should_trigger": false,
+      "note": "lib 构建状态 → flink-velox-lib-state-check（规划中）"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-install",
+      "prompt": "把 Flink 1.19.2 装上并重启集群",
+      "should_trigger": false,
+      "note": "安装/重启 → 同族安装/切换类 skill（规划中）；本 skill 只读"
+    }
+  ]
+}
