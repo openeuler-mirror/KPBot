@@ -1,0 +1,2 @@
+{"Timestamp":"2026-01-01T00:00:00.950Z","LogContent":"RollbackSnapshot_rsp:{\"sandbox_id\":\"sb-rb-001\",\"ext_info\":{\"snapshot-rollback\":62,\"job-validate\":5,\"runtime-ref\":2}}"}
+{"Timestamp":"2026-01-01T00:00:01.950Z","LogContent":"RollbackSnapshot_rsp:{\"sandbox_id\":\"sb-rb-002\",\"ext_info\":{\"snapshot-rollback\":74,\"job-validate\":6,\"runtime-ref\":2}}"}

@@ -1,0 +1,12 @@
+{"Timestamp":"2026-01-01T00:00:00.000Z","Action":"Rollback","CalleeAction":"RollbackSnapshot","InstanceId":"sb-rb-001","CostTime":40,"LogContent":"rollback snapshot"}
+{"Timestamp":"2026-01-01T00:00:01.000Z","Action":"Rollback","CalleeAction":"RollbackSnapshot","InstanceId":"sb-rb-002","CostTime":46,"LogContent":"rollback snapshot"}
+{"Timestamp":"2026-01-01T00:00:00.005Z","Action":"Rollback","CalleeAction":"DeleteVm","InstanceId":"sb-rb-001","CostTime":8,"LogContent":"delete vm"}
+{"Timestamp":"2026-01-01T00:00:01.006Z","Action":"Rollback","CalleeAction":"DeleteVm","InstanceId":"sb-rb-002","CostTime":10,"LogContent":"delete vm"}
+{"Timestamp":"2026-01-01T00:00:00.015Z","Action":"Rollback","CalleeAction":"RestoreVm","InstanceId":"sb-rb-001","CostTime":20,"LogContent":"restore vm"}
+{"Timestamp":"2026-01-01T00:00:01.018Z","Action":"Rollback","CalleeAction":"RestoreVm","InstanceId":"sb-rb-002","CostTime":26,"LogContent":"restore vm"}
+{"Timestamp":"2026-01-01T00:00:00.035Z","Action":"Rollback","CalleeAction":"RestoreMemory","InstanceId":"sb-rb-001","CostTime":18,"LogContent":"restore memory"}
+{"Timestamp":"2026-01-01T00:00:01.044Z","Action":"Rollback","CalleeAction":"RestoreMemory","InstanceId":"sb-rb-002","CostTime":22,"LogContent":"restore memory"}
+{"Timestamp":"2026-01-01T00:00:00.038Z","Action":"Rollback","CalleeAction":"ResetVm","InstanceId":"sb-rb-001","CostTime":5,"LogContent":"reset vm"}
+{"Timestamp":"2026-01-01T00:00:01.047Z","Action":"Rollback","CalleeAction":"ResetVm","InstanceId":"sb-rb-002","CostTime":5,"LogContent":"reset vm"}
+{"Timestamp":"2026-01-01T00:00:00.043Z","Action":"Rollback","CalleeAction":"ConnectAgent","InstanceId":"sb-rb-001","CostTime":4,"LogContent":"connect agent"}
+{"Timestamp":"2026-01-01T00:00:01.052Z","Action":"Rollback","CalleeAction":"ConnectAgent","InstanceId":"sb-rb-002","CostTime":4,"LogContent":"connect agent"}
