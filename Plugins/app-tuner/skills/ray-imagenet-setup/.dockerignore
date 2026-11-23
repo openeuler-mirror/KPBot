@@ -1,6 +1,0 @@
-/results/
-/experiment/
-/.venv/
-/cases/*/results/
-__pycache__/
-*.pyc
