@@ -60,6 +60,18 @@ class ClientCheckTests(unittest.TestCase):
             (self.output / "00.stderr").read_text(), "connection refused"
         )
 
+    def test_empty_version_fails_even_on_zero_exit(self):
+        def empty_version(argv, **kwargs):
+            value = self.client(argv, **kwargs)
+            if "version()" in argv[-1]:
+                value.stdout = "\n"
+            return value
+
+        with patch.object(module.subprocess, "run", side_effect=empty_version):
+            result = module.check(self.args)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("version()", result["error"])
+
     def test_wrong_aggregate_fails_even_on_zero_exit(self):
         def wrong(argv, **kwargs):
             value = self.client(argv, **kwargs)
@@ -107,7 +119,15 @@ class ClientCheckTests(unittest.TestCase):
             module.check(self.args)
         self.assertIn("db-host", self.calls[0])
         self.assertIn("19000", self.calls[0])
+        self.assertIn("--protocol=TCP", self.calls[0])
         self.assertEqual(self.calls[0][1], "--defaults-extra-file=client.conf")
+
+    def test_mysql_uses_tcp_instead_of_default_socket(self):
+        with patch.object(module.subprocess, "run", side_effect=self.client):
+            module.check(self.args)
+        for argv in self.calls:
+            self.assertIn("--protocol=TCP", argv)
+            self.assertNotIn("--socket", argv)
 
     def test_empty_or_unhealthy_nodes_fail(self):
         for text in ("Host\tAlive\n", "Host\tAlive\nnode\tfalse\n"):

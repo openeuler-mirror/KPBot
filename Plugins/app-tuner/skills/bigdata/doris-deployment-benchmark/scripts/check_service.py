@@ -37,6 +37,12 @@ def parser():
     result.add_argument("--user", default="root")
     result.add_argument("--client", default="mysql")
     result.add_argument(
+        "--protocol",
+        default="TCP",
+        choices=("TCP", "SOCKET", "PIPE", "MEMORY"),
+        help="MySQL connection protocol; use TCP so --port is honored",
+    )
+    result.add_argument(
         "--config", type=Path, help="client authentication configuration file"
     )
     result.add_argument("--timeout", type=positive_timeout, default=30)
@@ -59,6 +65,7 @@ def check(args):
         if args.config:
             argv += [f"--defaults-extra-file={args.config}"]
         argv += [
+            f"--protocol={args.protocol}",
             "--host",
             args.host,
             "--port",
@@ -95,7 +102,10 @@ def check(args):
         one = query("SELECT 1").strip().splitlines()
         if not one or one[-1] != "1":
             raise ValueError("SELECT 1 returned an unexpected result")
-        result["version_output"] = query("SELECT version()").strip()
+        version = query("SELECT version()").strip()
+        if not version:
+            raise ValueError("SELECT version() returned an empty result")
+        result["version_output"] = version
         alive_rows(query("SHOW FRONTENDS"), ("Join", "Alive"))
         alive_rows(query("SHOW BACKENDS"), ("Alive",))
         sql = (

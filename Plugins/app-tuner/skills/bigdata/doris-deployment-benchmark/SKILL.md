@@ -22,12 +22,15 @@ Python 3.10+，并安装场景指南指定的官方客户端。以下命令在 s
 ```text
 python3 scripts/check_service.py --host localhost --port 9030 --user root --output results/smoke-001
 python3 cases/client-check/test_client_check.py
+python3 cases/import-gate/test_import_gate.py
+python3 cases/tpch-dbgen/test_tpch_dbgen.py
+python3 cases/stream-load-https/test_stream_load_https.py
 python3 cases/tool-fetch/test_tool_fetch.py
 ```
 
-`check_service.py --help` 列出连接、客户端和超时参数。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。
+`check_service.py --help` 列出连接、客户端和超时参数；它始终用 `--protocol=TCP` 连接，避免 localhost 默认走 socket。离线测试验证客户端调用、结果校验、导入验收、HTTPS 重定向与摘要校验的失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。
 
-公开 TPC-H 工具还可用 `scripts/fetch_tpch_tools.py` 按 commit 完整下载并校验，适用于 Git 传输不可用的网络；具体命令见场景指南。
+公开 TPC-H 工具还可用 `scripts/fetch_tpch_tools.py` 按 commit 完整下载并校验，适用于 Git 传输不可用的网络。生成器 ZIP 必须先用 `scripts/build_tpch_dbgen.py` 按钉定摘要校验再解压和 make；Stream Load 的默认上游脚本用明文 HTTP，跨网段或共享网络改用 `scripts/stream_load_https.py` 校验 FE/BE 证书并在验证重定向后发送凭据。具体命令见场景指南。
 
 运行产物隔离测试需 Git：`python3 cases/output-isolation/test_output_isolation.py`。随附忽略规则覆盖示例结果、实验与源码目录；自定义输出位置需自行检查 Git 状态，凭据始终保存在工作树外或通过环境注入。
 
