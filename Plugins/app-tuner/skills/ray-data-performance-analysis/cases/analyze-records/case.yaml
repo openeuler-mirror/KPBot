@@ -1,0 +1,25 @@
+name: ray-data-analyze-records
+skill: ray-data-performance-analysis
+tier: A
+
+# Run from this skill directory. Python 3.10+, standard library only.
+# All inputs are synthetic; no Ray, private benchmark, dataset or ISA dependency.
+# Does not evaluate Agent reasoning or actual Ray execution/performance.
+entrypoint: [bash, cases/analyze-records/run.sh]
+env_requires: []
+env_vars: {}
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: cases/analyze-records/results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: cases/analyze-records/results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: cases/analyze-records/results/result.json
+    field: errors
+    expect: 0
