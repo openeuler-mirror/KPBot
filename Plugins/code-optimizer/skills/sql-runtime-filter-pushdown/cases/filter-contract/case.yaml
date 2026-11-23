@@ -1,0 +1,19 @@
+name: filter-contract
+skill: sql-runtime-filter-pushdown
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: false_negatives
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: outer_preserved_rows
+    expect: 7
