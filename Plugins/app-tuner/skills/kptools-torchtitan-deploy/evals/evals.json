@@ -16,7 +16,7 @@
     {
       "id": 3,
       "prompt": "编译报 DT_INT64 not supported，全图编译中止了。",
-      "expected_output": "按 pitfalls A-1：这是 torch_npu gather 白名单缺陷，仓内补丁 gather_lowering_dtypes.py 自动生效；报错复现的第一嫌疑是版本配套错位导致补丁未装上或被绕过——先核版本表与 pip 安装状态，不要先去改模型代码；引用真实输出，不编造。",
+      "expected_output": "按 pitfalls A-1：此为 torch_npu gather 融合路径对 int64 的 AscendC 推断支持问题；仓内未见对应补丁（master 全树无 gather_lowering 相关文件），第一嫌疑是版本配套错位导致行为漂移——先核版本表与 torch_npu 配套，不要先改模型代码；引用真实输出，不编造。",
       "files": []
     }
   ]

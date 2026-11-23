@@ -63,27 +63,15 @@ NGPU=1 bash scripts/run_train.sh \
   --training.local-batch-size 1 --training.seq-len 2048 --training.steps 5
 ```
 
-④ 的默认资产：
+④ 的默认资产与覆盖方式：
 
-| 资产 | 默认 | 覆盖变量 |
-|------|------|---------|
-| tokenizer | `tests/assets/deepseek_v3` | `HF_ASSETS_PATH` |
-| 数据集 | `tests/assets/c4_test` | `DATASET` / `DATASET_PATH` |
+| 资产 | 默认 | 覆盖方式（CLI 参数） |
+|------|------|---------------------|
+| tokenizer | `tests/assets/deepseek_v3` | `--hf-assets-path <目录>` |
+| 数据集 | `tests/assets/c4_test` | `--dataloader.dataset <名>` + `--dataloader.dataset-path <目录>` |
+
+> ⚠️ `run_train.sh` **不读取** `HF_ASSETS_PATH`/`DATASET`/`DATASET_PATH`
+> 环境变量（上游 quickstart 明文声明）——export 这些变量会**静默失效**。
+> 环境变量形式仅被 `examples/deepseek_v4/debug/*.sh` 示例脚本消费。
 
 看到逐步 step/loss/tps/tflops/mfu 输出即部署成功。
-
-## 5. cannlab 分设环境上的适配注记
-
-cannlab NPU Pod 与 master 分支的天然配套关系：
-
-| 项 | Pod 实况 | master 要求 |
-|----|---------|------------|
-| CANN | 9.2.0（`~/Ascend/cann`，随同步） | 9.2.0 ✓ |
-| python | 镜像预置的构建版 Python 3.12（非系统 python，路径见环境文档） | 3.12.x ✓ |
-| torch/torch_npu | 构建 python 自带 | 2.14.0 配套 ✓ |
-
-- 操作链路（传代码/执行/回收）按 `kptools-cannlab-env` 的纪律走
-- ⚠️ **不要**把 `~/pyfix312` 加进构建 python 的 PYTHONPATH（SIGSEGV，见
-  cannlab-env pitfalls #5）；python 解释器固定用构建版路径
-- 装 torchao-npu 等额外包时注意 pip 陷阱（user site 残缺包/镜像覆盖，
-  见 cannlab-env pitfalls #6）

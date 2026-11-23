@@ -1,22 +1,14 @@
 ---
 name: kptools-torchtitan-deploy
 description: >
-  torchtitan-npu 部署手册与踩坑指导：torchtitan 的昇腾（Ascend）后端扩展
-  插件在 NPU 上的安装、配置与启动排障。覆盖版本配套表（master: PyTorch/
-  torch_npu 2.14.0 + CANN 9.2.0 + Python 3.12 + Triton Ascend 3.2.1）、
-  昇腾软件栈六件套（驱动/固件/Toolkit/Kernel/NNAL/PyTorch）安装、三步源码
-  安装与 torchao-npu 可选件、新配置系统（--module/--config，2026-05 重构后
-  弃用 --job.config_file TOML）、run_train.sh 单机/多机启动与环境变量逐项
-  说明（TORCHINDUCTOR_NPU_BACKEND/HCCL 超时/多流/显存）、单卡 debugmodel
-  冒烟验证、以及基于源码补丁证据（DT_INT64 编译中止/roofline CUDA 探测/
-  异步 D2H/确定性双变量/FSDP 逐参数精度等）和实战环境（910B3 sync-start
-  地板/NNAL 顺序/网卡选择）的踩坑实录。当用户需要部署/安装 torchtitan-npu、
+  torchtitan-npu（torchtitan 的昇腾后端扩展插件）部署手册与踩坑指导：
+  安装、配置系统、启动与排障。当用户需要部署/安装 torchtitan-npu、
   torchtitan 在昇腾上跑不起来、启动脚本报错、--module --config 配置怎么写、
   torchrun/HCCL 建连超时、编译报 DT_INT64 或 Triton 探测错误、版本配套
-  怎么选、torchao-npu 低精度训练部署、多机 NODE_IPS 启动、CPU_AFFINITY_CONF
-  / turbo 亲和扩展（feature-auto-affine / MR 1100）配置时触发。
+  怎么核对、torchao-npu 低精度训练部署、多机 NODE_IPS 启动、CPU_AFFINITY_CONF
+  / turbo 亲和扩展配置时触发。
 license: MulanPSL-2.0
-compatibility: 昇腾训练硬件（Atlas 800T A3 等）；目标环境需配套软件栈（见版本表）；cannlab 分设环境上操作链路见 kptools-cannlab-env
+compatibility: 昇腾训练硬件（Atlas 800T A3 等）；目标环境需配套软件栈（见版本表）；远程环境操作链路由环境操作手册承接（kptools-cannlab-env，MR #199 评审中）
 metadata:
   skill_type: debugging
   category: deployment
@@ -33,14 +25,16 @@ backend 注册）。部署它的第一道坑不是代码，是**版本配套**�
 
 ## 版本配套表（部署前必查）
 
-| torchtitan-npu | torchtitan | PyTorch | torch_npu | CANN | Python | Triton Ascend |
-|----------------|-----------|---------|-----------|------|--------|---------------|
-| master | main | 2.14.0(daily) | 2.14.0(daily) | **9.2.0** | **3.12.x** | 3.2.1 |
+| torchtitan-npu | 上游 TorchTitan | PyTorch | torch_npu | CANN | Python | Triton Ascend |
+|----------------|----------------|---------|-----------|------|--------|---------------|
+| master | 0.3.0（requirements.txt 固定） | 2.14.0+cpu | 2.14.0 (release) | **9.3.0(1021)** | **3.12.x** | 3.2.1 |
 | v0.2.2-dev | v0.2.2 | 2.10.0 | 2.10.0 | **9.0.0** | **3.11.x** | 3.2.1 |
 
-- 混搭（如 CANN 9.0 环境 + master 分支）是未定义行为，报错形态千奇百怪
-  ——排障第一步永远是核对这张表
-- cannlab NPU Pod（CANN 9.2.0 + 构建 python 3.12.9）与 master 分支天然配套
+- **本表为文档时点快照，一切以上游 `docs/user-guides/installation.md`
+  版本配套表为准**——上游升级频繁（如 2026-11-10 曾整体升 CANN/torch_npu），
+  排障前先到上游核当前数字
+- 混搭（如 CANN 9.2.0 环境 + 升级后的 master）是未定义行为，报错形态
+  千奇百怪且不指向版本本身——排障第一步永远是核对这张表
 
 ## 部署工作流
 
@@ -61,7 +55,10 @@ NGPU=1 bash scripts/run_train.sh \
 ```
 
 - tokenizer/数据集有内置默认（`tests/assets/deepseek_v3` 与 `c4_test`），
-  冒烟无需下载真实模型；覆盖用 `HF_ASSETS_PATH` / `DATASET` / `DATASET_PATH`
+  冒烟无需下载真实模型；覆盖用 CLI 参数 `--hf-assets-path` /
+  `--dataloader.dataset` / `--dataloader.dataset-path`（**环境变量
+  HF_ASSETS_PATH/DATASET 等仅被 examples 示例脚本消费，run_train.sh
+  不读取，export 后静默失效**）
 - 看到逐步 loss 输出（step/loss/tps/tflops/mfu/elapsed_time_per_step）
   即部署成功；指标解读由所在部署环境的训练指标工具承接
 
@@ -99,15 +96,15 @@ COMM_MODE=gloo bash scripts/run_train.sh ...
 | 多机起不来 | 网卡选择（docker0）/ NODE_IPS 顺序 | launch-reference |
 | 编译路径异常/D2H 结果错 | 异步 DeviceCopy/FlexAttention 已由仓内 workaround 处理，先核对版本 | pitfalls A-3/A-4 |
 | 首 dispatch 瞬间 fatal | 910B3 sync-start 20 块硬件地板（并行度/kernel 同步启动需求超限） | pitfalls B-16 |
-| 主线程全核漫游 / 绑核"看似生效"但主线程漏绑 | CPU_AFFINITY_CONF 在 torchtitan（默认关 autograd MT）下主线程静默失效 | pitfalls B-19 |
+| 主线程全核漫游 / 绑核"看似生效"但主线程漏绑 | CPU_AFFINITY_CONF 在 torchtitan（默认关 autograd MT）下主线程静默失效 | pitfalls B-18 |
 | 确定性训练结果仍不确定 | 只开 torch 开关不够，需 HCCL_DETERMINISTIC + CLOSE_MATMUL_K_SHIFT 双变量 | pitfalls A-6 |
 
 ## 约束
 
 - 本 skill 管部署/配置/启动/排障；**链路操作**（怎么把代码传到 NPU Pod）
-  归 `kptools-cannlab-env`，**上板性能与 profiling 分析**归
-  `kptools-ascend-profiling-analysis`，训练指标解读由所在部署环境的
-  指标工具承接（仓内暂无对应 skill）
+  归 `kptools-cannlab-env`（MR #199 评审中，合入前暂由所在环境手册承接），
+  **上板性能与 profiling 分析**归 `kptools-ascend-profiling-analysis`，
+  训练指标解读由所在部署环境的指标工具承接（仓内暂无对应 skill）
 - 低精度训练（all_block_fp8 等 recipe）**仅 A5（Ascend 950）硬件**支持，
   A3 上开 `--extension.quantization.*` 会直接失败
 - PyPI 安装暂未提供（主线待 torchtitan 稳定版），只支持源码安装

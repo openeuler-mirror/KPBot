@@ -32,21 +32,25 @@ for s in "版本配套表" "部署工作流" "启动速查" "常见错误路由"
   check_in "T2 章节 [$s]" "$s" "$SK"
 done
 
-# ============================================================ T3 版本表关键数字（两行配套全存在）
+# ============================================================ T3 版本表（上游快照 + 权威引用声明）
 miss=0
-for v in "2.14.0(daily)" "9.2.0" "3.12.x" "2.10.0" "9.0.0" "3.11.x" "3.2.1"; do
+for v in "0.3.0" "2.14.0+cpu" "2.14.0 (release)" "9.3.0(1021)" "3.12.x" \
+         "2.10.0" "9.0.0" "3.11.x" "3.2.1"; do
   grep -qF "$v" "$SK" || { bad "T3 版本表缺 [$v]"; miss=1; }
 done
-[ "$miss" -eq 0 ] && ok "T3 版本配套表两行齐全（master + v0.2.2-dev）"
+[ "$miss" -eq 0 ] && ok "T3a 版本配套表两行齐全（master 快照 + v0.2.2-dev）"
+check_in "T3b 快照声明（以上游为准）" "docs/user-guides/installation.md" "$SK"
+check_in "T3c 快照措辞" "本表为文档时点快照" "$SK"
 
 # ============================================================ T4 启动环境变量（launch-reference）
 miss=0
 for v in "TORCHINDUCTOR_NPU_BACKEND" "PYTORCH_NPU_ALLOC_CONF" \
+         "CUDA_DEVICE_MAX_CONNECTIONS" \
          "CPU_AFFINITY_CONF" "TASK_QUEUE_ENABLE" "HCCL_CONNECT_TIMEOUT" \
          "STREAMS_PER_DEVICE" "MULTI_STREAM_MEMORY_RESERVE" "LOG_RANK"; do
   grep -qF "$v" "$LCH" || { bad "T4 环境变量缺 [$v]"; miss=1; }
 done
-[ "$miss" -eq 0 ] && ok "T4 run_train.sh 八个环境变量逐项存在"
+[ "$miss" -eq 0 ] && ok "T4 run_train.sh 九个环境变量逐项存在（含 CUDA_DEVICE_MAX_CONNECTIONS）"
 for v in "NODE_IPS" "HCCL_SOCKET_IFNAME" "HCCL_IF_BASE_PORT" "GLOO_SOCKET_IFNAME" \
          "HCCL_EXEC_TIMEOUT" "docker0"; do
   check_in "T4b 多机要素 [$v]" "$v" "$LCH"
@@ -62,45 +66,62 @@ check_in "T5d 扩展字段挂载" "extension.<group>.*" "$LCH"
 check_in "T6a NNAL source 顺序警示" "source /usr/local/Ascend/cann/set_env.sh" "$INS"
 check_in "T6b 三步安装" "pip install -e ." "$INS"
 check_in "T6c torchao-npu" "experiments/torchao-npu" "$INS"
-check_in "T6d 冒烟默认资产覆盖变量" "HF_ASSETS_PATH" "$INS"
-check_in "T6e 低精度仅 A5/950 门槛" "Ascend 950" "$SK"
+check_in "T6d 冒烟覆盖用 CLI 参数" "--hf-assets-path" "$INS"
+check_in "T6e 环境变量静默失效警示" "不读取" "$INS"
+check_in "T6f CLI 数据集参数" "--dataloader.dataset" "$INS"
+check_in "T6g 低精度仅 A5/950 门槛" "Ascend 950" "$SK"
 
 # ============================================================ T7 pitfalls 分组与条目
 na=$(grep -c '^### A-' "$PIT")
 nb=$(grep -c '^### B-' "$PIT")
-if [ "$na" -ge 10 ] && [ "$nb" -ge 9 ]; then
-  ok "T7a pitfalls 分组条目 A=$na B=$nb（≥10+9）"
+if [ "$na" -ge 10 ] && [ "$nb" -ge 8 ]; then
+  ok "T7a pitfalls 分组条目 A=$na B=$nb（≥10+8）"
 else
   bad "T7a pitfalls 条目不足 A=$na B=$nb"
 fi
 check_in "T7b A 组定义存在" "源码补丁即证据" "$PIT"
-check_in "T7c B 组定义存在" "实战环境组" "$PIT"
 
-# ============================================================ T8 关键坑事实（可溯源）
-for k in "DT_INT64" "gather_lowering_dtypes" "HCCL_DETERMINISTIC" \
-         "CLOSE_MATMUL_K_SHIFT" "sync-start" "policy_overrides"; do
-  check_in "T8 坑事实 [$k]" "$k" "$PIT"
+# ============================================================ T8 坑事实（可溯源）
+for k in "DT_INT64" "HCCL_DETERMINISTIC" \
+         "CLOSE_MATMUL_K_SHIFT" "sync-start" "policy_overrides" \
+         "torchtitan_npu/patches/torch_npu/inductor_runtime_estimation.py" \
+         "torchtitan_npu/patches/torch_npu/device_copy.py" \
+         "torchtitan_npu/extensions/torchtitan/eager_flex.py" \
+         "torchtitan_npu/patches/torch_npu/determinism.py" \
+         "torchtitan_npu/patches/torch/distributed/fsdp/" \
+         "torchtitan_npu/extensions/torchtitan/ep_process_group.py" \
+         "torchtitan_npu/extensions/torchtitan/experiments/torchft/process_group.py"; do
+  check_in "T8 坑事实/真实路径 [$k]" "$k" "$PIT"
 done
 check_in "T8b B-16 确诊方法" "require_sync_start" "$PIT"
+check_in "T8c A-1 诚实化（未见仓内补丁）" "仓内未见对应补丁" "$PIT"
 
-# ============================================================ T8c B-19 CPU_AFFINITY_CONF 静默失效
-for k in "pt_autograd" "5555" "set main_thread affinity" "PR #3565"; do
-  check_in "T8c B-19 关键事实 [$k]" "$k" "$PIT"
-done
-check_in "T8d B-19 确诊 plog 开关" "ASCEND_GLOBAL_LOG_LEVEL=0" "$PIT"
-check_in "T8e B-19 修复补丁" "fix-main-bind-universal.patch" "$PIT"
+# ============================================================ T8d A 组路径形态断言（防路径再断裂）
+badpaths=$(grep -oE '`(patches|extensions|workaround)/[^`]+`' "$PIT" 2>/dev/null | sort -u)
+if [ -z "$badpaths" ]; then
+  ok "T8d A 组全部路径带 torchtitan_npu/ 包前缀（无裸 patches/extensions 路径）"
+else
+  bad "T8d A 组存在无包前缀路径: $badpaths"
+fi
 
-# ============================================================ T9 分界路由（真实存在的 skill）
-for r in "kptools-cannlab-env" "kptools-ascend-profiling-analysis"; do
-  check_in "T9 路由 [$r]" "$r" "$SK"
+# ============================================================ T9 分界路由（真实存在的 skill + 在审标注）
+for r in "kptools-ascend-profiling-analysis" "MR #199"; do
+  check_in "T9 路由/在审标注 [$r]" "$r" "$SK"
 done
-for ghost in "train-metrics" "tool-perf-collect" "tool-perf-analysis"; do
-  if grep -qF "$ghost" "$SK" "$(dirname "$SK")/evals"/*.json 2>/dev/null; then
-    bad "T9 幽灵 skill 仍被引用: $ghost"
+for ghost in "train-metrics" "tool-perf-collect" "tool-perf-analysis" \
+             "kptools-affinity-trace" "feature-auto-affine" "torchtitan-npu-fork"; do
+  if grep -qF "$ghost" "$SK" "$INS" "$LCH" "$PIT" \
+       "$(dirname "$SK")/evals"/*.json 2>/dev/null; then
+    bad "T9 幽灵 skill/fork 痕迹仍被引用: $ghost"
   else
-    ok "T9 幽灵 skill 已清除 [$ghost]"
+    ok "T9 已清除 [$ghost]"
   fi
 done
+# evals: TD-12 应为正例（绑核失效是 B-18 核心场景）
+check_in "T9b TD-12 正例" "\"TD-12\", \"prompt\": \"分析训练进程的线程绑核\", \"should_trigger\": true" \
+  "$(dirname "$SK")/evals/eval_queries.json"
+check_in "T9c TD-12 note 指向仓内真实 skill" "kptools-proc-collector" \
+  "$(dirname "$SK")/evals/eval_queries.json"
 
 # ============================================================ T10 敏感信息自检
 leak=$(grep -hoE '[a-f0-9]{32,}' "$SK" "$INS" "$LCH" "$PIT" 2>/dev/null | sort -u)
@@ -117,14 +138,20 @@ check_in "T11c 单进程调试开关" "COMM_MODE" "$LCH"
 check_in "T11d 8 卡示例脚本" "deepseek_v4_flash_8p_cpt_4k_a3.sh" "$SK"
 check_in "T11e TorchFT store prefix" "store prefix" "$LCH"
 
-# ============================================================ T12 affinity 扩展（launch-reference §7）
+# ============================================================ T12 affinity 扩展（master 现状）
 check_in "T12a 总开关 turbo 子选项" "turbo:" "$LCH"
-for k in "turbo:auto" "turbo:off" "MR 1100" "feature-auto-affine" \
-         "assist" "full" "first-touch" "early_start"; do
+for k in "turbo:auto" "turbo:off" "MR 1100" "已随" \
+         "已合入 master" "start()" "affinity.stop()" \
+         "extensions/torchtitan/trainer.py" "extensions/affinity"; do
   check_in "T12b 扩展事实 [$k]" "$k" "$LCH"
 done
-check_in "T12c B-19 交叉引用扩展" "launch-reference §7" "$PIT"
-check_in "T12d 五模块路径" "extensions/affinity" "$LCH"
+check_in "T12c B-18 交叉引用扩展" "launch-reference §7" "$PIT"
+# fork 特有细节应已移除
+if grep -qE "early_start|finalize\(\)" "$LCH"; then
+  bad "T12d fork 特有两阶段 API 仍残留"
+else
+  ok "T12d fork 特有两阶段 API 已移除（master 为 start/stop）"
+fi
 
 # ============================================================ 汇总
 echo
