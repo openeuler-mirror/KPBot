@@ -1,0 +1,73 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-fusion",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "对比融合前后这两份 trace，看看哪些算子被合并了",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "融合有没有生效？算子数量少了几个",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "帮我找出 3 个旧 kernel 变成 1 个新 kernel 的证据",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "融合带来的收益怎么归因，kernel 时长省了多少",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "候选版本里是不是出现了拆分而不是融合",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "这两份 profiling 的 kernel 序列差异和合并置信度",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "这两份 profiling 优化前后步耗时差多少",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "算子种类、调用次数和 shape 怎么变了",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-opstats（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "设备气泡窗口在哪个时间段",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-bubble（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "H2D 拷贝带宽和同步占比变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-h2d-d2h（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "流并发度有什么变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-stream（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "分析这份带 python_function 的 trace 调用栈",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis"
+    }
+  ]
+}
