@@ -3,10 +3,16 @@
 大数据**框架层**的性能调优：Spark / Flink 在 ARM（鲲鹏）上的参数推荐、资源计算与基准执行协议；
 后续可扩展到 Hive / ClickHouse / Doris / Kafka 等组件。
 
-## 现状：知识存在，但没有独立 skill
+## 独立成员
 
-本域目前**没有可独立安装的 skill**，大数据相关内容全部寄生在 `kpbot-app-tuner` 主框架的子技能里，
-不随 `install.sh` 安装（`subskills/` 不单独安装），也没有独立的 review 归属：
+| Skill | 职责 |
+|---|---|
+| [`clickhouse-deployment-benchmark`](clickhouse-deployment-benchmark/SKILL.md) | 部署、健康检查、正确性验证与性能基准 |
+
+## 现有 Spark / Flink 知识
+
+Spark / Flink 相关内容仍位于 `kpbot-app-tuner` 主框架的子技能里，
+不随 `install.sh` 安装（`subskills/` 不单独安装），具体资源如下：
 
 | 位置 | 内容 |
 |---|---|
