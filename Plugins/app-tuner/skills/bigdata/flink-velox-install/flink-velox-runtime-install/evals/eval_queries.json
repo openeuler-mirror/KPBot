@@ -1,0 +1,43 @@
+{
+  "skill_name": "flink-velox-runtime-install",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-install-flink",
+      "prompt": "安装 Flink 1.19 运行时到 /opt/flink",
+      "should_trigger": true,
+      "note": "场景入口类触发词：安装 Flink、装运行时、/opt/flink"
+    },
+    {
+      "id": "q-download-tgz",
+      "prompt": "从华为云下载 flink 的 tgz 并校验 sha512 解压",
+      "should_trigger": true,
+      "note": "动作细节类触发词：下载 flink tgz、sha512"
+    },
+    {
+      "id": "q-install-nexmark",
+      "prompt": "把 nexmark 的 jar 构建出来放进 Flink lib，铺好 run_query.sh 可运行树",
+      "should_trigger": true,
+      "note": "nexmark 安装：nexmark jar、run_query.sh、NEXMARK_HOME"
+    },
+    {
+      "id": "q-check-only",
+      "prompt": "Flink 装了没，是什么版本（只查）",
+      "should_trigger": false,
+      "note": "纯检查 → flink-velox-flink-dist-check"
+    },
+    {
+      "id": "q-build-env",
+      "prompt": "装 cmake、maven、JDK 17 并克隆 velox 源码",
+      "should_trigger": false,
+      "note": "构建环境 → flink-velox-build-env-prepare"
+    },
+    {
+      "id": "q-stack-build",
+      "prompt": "编译 gluten-flink 部署进 lib",
+      "should_trigger": false,
+      "note": "编译部署 → flink-velox-stack-build（规划中）"
+    }
+  ]
+}

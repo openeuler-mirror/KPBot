@@ -22,10 +22,10 @@ Flink + GlutenFlink（gluten-flink + velox4j + velox 向量化执行栈）环境
 | skill | 定位 |
 |---|---|
 | [`flink-velox-build-env-prepare`](flink-velox-build-env-prepare/SKILL.md) | 准备构建环境：克隆 velox / velox4j / gluten，dnf 装 28 个 openEuler 包（工具链、构建工具、C++ 库、JDK 17），按 velox setup 脚本装源码级 C++ 库进 /usr/local（脚本来源与 sha256 留档）；克隆先落独占临时目录、已有的目录一律不删，经 sudo 时克隆以原用户执行；verify 调 env 家族五个检查 |
+| [`flink-velox-runtime-install`](flink-velox-runtime-install/SKILL.md) | 安装 Flink 运行时与 nexmark：官方 Flink 1.19.x tgz（镜像下载、sha512 恒取 archive.apache.org）解压到 /opt/flink-<版本> + /opt/flink 软链 + 全注释 conf 补最小键；克隆 nexmark 源码、mvn 构建 nexmark-flink jar 进 lib、铺 /opt/nexmark 可运行树；verify 调 flink-dist-check 与 nexmark-check |
 
 ## 其它成员（分 PR 提交，合入后移入上表）
 
-- `flink-velox-runtime-install`：安装 Flink 运行时与 nexmark；审中 !323
 - `flink-velox-stack-build`：编译并部署 GlutenFlink 构建；审中 !324
 - `flink-velox-cluster-switch`：在 native 与 GlutenFlink 之间切换并重启集群；审中 !325
 

@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-runtime-install",
+  "evals": [
+    {
+      "id": "install-flink-first-time",
+      "query": "新机器上把 Flink 1.19 装到 /opt/flink，先看看会下载什么、装到哪，再执行",
+      "expected": "触发本 skill：plan 列出镜像 / 归档 URL、sha512 校验、解压、软链、最小 conf；用户同意后 sudo apply --yes；幂等、失败即停"
+    },
+    {
+      "id": "fix-flink-dist-check",
+      "query": "flink-dist-check 报 Flink not found，把运行时装上",
+      "expected": "触发本 skill：这正是 flink-dist-check 的修复动作；apply 后 verify 复查"
+    },
+    {
+      "id": "install-nexmark",
+      "query": "要跑 nexmark 基准，把 nexmark 的 jar 和可运行树装好",
+      "expected": "触发本 skill：nexmark-jar（克隆 nexmark 源码、mvn 构建、jar 进 Flink lib）与 nexmark-tree（铺 /opt/nexmark）；缺 mvn / JDK 时 BLOCKED 并指向 build-env-prepare"
+    },
+    {
+      "id": "not-check-only",
+      "query": "看看这台机器 Flink 装了没、什么版本（不要装）",
+      "expected": "不触发 apply：纯检查诉求路由到 flink-velox-flink-dist-check（本 skill 的 plan 也只读，但检查类是该家族的职责）"
+    },
+    {
+      "id": "not-build-env",
+      "query": "把 cmake、maven、JDK 17 这些构建依赖装上，再克隆 velox 源码",
+      "expected": "不触发：构建环境属 flink-velox-build-env-prepare"
+    },
+    {
+      "id": "not-stack-build",
+      "query": "编译 gluten-flink 并把 jar 部署进 Flink lib",
+      "expected": "不触发：编译部署属 flink-velox-stack-build（规划中）"
+    },
+    {
+      "id": "not-other-version",
+      "query": "装 Flink 1.18.1",
+      "expected": "触发本 skill 但拒绝：只接受 1.19 版本线，plan / apply 退出 2 并说明"
+    }
+  ]
+}
