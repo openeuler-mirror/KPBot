@@ -1,0 +1,43 @@
+{
+  "skill_name": "flink-velox-cluster-switch",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-restart",
+      "prompt": "重启 Flink 集群让新部署的 jar 生效",
+      "should_trigger": true,
+      "note": "场景入口类触发词：重启集群、让新构建生效"
+    },
+    {
+      "id": "q-switch-native",
+      "prompt": "切到 native 侧，把 gluten jar 移出 lib 再重启",
+      "should_trigger": true,
+      "note": "切换类触发词：切 native、切 GFV、移出 jar"
+    },
+    {
+      "id": "q-switch-back",
+      "prompt": "从备份把 GFV 的 jar 切回来",
+      "should_trigger": true,
+      "note": "回切：lib.gfv-backup、--to gfv"
+    },
+    {
+      "id": "q-check-only",
+      "prompt": "集群加载的是哪套 jar，和 lib 一致吗",
+      "should_trigger": false,
+      "note": "只读 → flink-velox-cluster-check"
+    },
+    {
+      "id": "q-stack-build",
+      "prompt": "重新编译 gluten-flink 部署进 lib",
+      "should_trigger": false,
+      "note": "编译部署 → flink-velox-stack-build"
+    },
+    {
+      "id": "q-lib-state",
+      "prompt": "lib 里是 native 还是 GFV 构建",
+      "should_trigger": false,
+      "note": "lib 分类 → flink-velox-lib-state-check"
+    }
+  ]
+}
