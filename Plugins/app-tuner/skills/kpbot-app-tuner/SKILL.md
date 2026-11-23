@@ -206,6 +206,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
     - **`cpu-affinity-optimization` 始终作为第一优先级候选 skill**：无论采集信号是否命中，`cpu-affinity-optimization` 必须始终位于 `candidate_skill_list` 首位（`priority=highest`），在所有其他候选 skill 之前执行。它是唯一不受信号阈值约束的强制候选 skill。
     - **`performance-library-selection` 先于 `os-optimization`**：当两者同时进入候选列表（evidence_candidate 或 coverage）时，`performance-library-selection` 必须排在 `os-optimization` 之前。库替换会改变 malloc 路径，是 OS 大页/GLIBC_TUNABLES 调优的前置依赖；`scripts/dynamic_workflow_manager.js set-candidates` 会自动归一化该顺序，`references/candidate-skill-list.md` 执行顺序节也强制该规则。
     - 热点 DSO/so 中存在高占比第三方库时，把 `performance-library-selection` 加入候选列表。
+    - 密码学/压缩算法热点（AES/SM4/DES/SM3/SHA/MD5/HMAC/RSA/DH/deflate/inflate 等符号聚合占比 ≥0.5%）时，把 `uadk-accelerator-optimization` 加入候选列表；其候选动作与 `performance-library-selection` 的 crypto/compression 候选互斥，按互斥方案全量验证规则选优。
     - 网络相关热点函数占比高时，把 `network-optimization` 加入候选列表。
     - 场景为 Ceph 存储集群（RBD/RGW/CephFS）或瓶颈证据落在 OSD/存储集群路径（OSD 进程 CPU 高、PG 分布不均、存储 IO 瓶颈）时，把 `ceph-optimization` 加入候选列表。
     - topdown 或 perf stat 显示 L1 icache miss 高时，把 `compiler-optimization` 加入候选列表，重点分析 PGO/LTO。
@@ -318,6 +319,7 @@ node scripts/dynamic_workflow_manager.js record-execution \
 | 编译优化 skill | `subskills/compiler-optimization/SKILL.md` |
 | Go 微服务 sync.Pool 运行时优化 skill | `subskills/microservice-go-syncpool-optimization/SKILL.md` |
 | GPU/NPU 等计算卡 skill | `subskills/accelerator-optimization/SKILL.md` |
+| UADK 硬件加速 skill | `subskills/uadk-accelerator-optimization/SKILL.md` |
 | 更换高规格硬件 | `subskills/hardware-upgrade-analysis/SKILL.md` |
 | Other 优化 skill | `subskills/other-optimization/SKILL.md` |
 | 非 CPU 瓶颈预筛 | `subskills/io-memory-network-bottleneck-analysis/SKILL.md` |

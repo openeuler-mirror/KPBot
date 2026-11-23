@@ -39,6 +39,7 @@
 | 采集信号 | 判定方式 | 加入候选 skill |
 |---|---|---|
 | 高热点第三方库 | `hotspot_dso_rank` 中第三方 `.so` 占比达到阈值，或热点函数落在 malloc/memcpy/压缩/加密/CRC 等外部库 | `performance-library-selection` |
+| 密码学/压缩算法热点 | `hotspot_function_rank` 中 AES/SM4/DES/SM3/SHA/MD5/HMAC/RSA/DH/deflate/inflate 等符号聚合占比达到阈值 | `uadk-accelerator-optimization`，与 `performance-library-selection` 的 crypto/compression 候选互斥竞争，按互斥方案全量验证选优 |
 | 网络相关热点高 | `hotspot_function_rank` 中 TCP/UDP/socket/epoll/softirq/NAPI/SKB/netfilter/NIC driver 等符号占比达到阈值 | `network-optimization` |
 | L1 icache miss 高 | topdown 或 perf stat 中 L1 icache miss 比例达到阈值 | `compiler-optimization`，重点分析 PGO/LTO、布局、内联、代码尺寸和目标架构选项 |
 | Go 微服务 GC/sync.Pool 颠簸 | pprof 热点含 `runtime.mallocgc`、`runtime.gcDrain`、`sync.(*Pool).Get`/`Put`；`alloc_space` 高而 `inuse_space` 低；GC 次数偏高；允许重编译 Go runtime | `microservice-go-syncpool-optimization`，按 Go 基线应用补丁并验证 `poolretain`/`poolprealloc` |
@@ -51,6 +52,7 @@
 默认阈值可由脚本参数覆盖：
 
 - 第三方库热点：单个 DSO 或聚合占比 `>= 5%`。
+- 密码学/压缩算法热点：相关符号聚合占比 `>= 0.5%`。
 - 网络热点：网络相关符号聚合占比 `>= 3%`。
 - L1 icache miss：`L1-icache-load-misses / L1-icache-loads >= 5%`，或 topdown 前端/取指指标明确为 high。
 - L3/LLC miss：`LLC-load-misses / LLC-loads >= 5%`。
