@@ -19,10 +19,13 @@ mv kafka_2.13-4.1.0 kafka
 
 ## 完整消息验证
 
-创建专用测试 topic，名称每轮唯一。分区与副本按实际 broker 数量设置，以下单分区单副本仅用于隔离 smoke test：
+创建专用测试 topic，名称每轮唯一。分区按实际 broker 数量设置；副本默认继承 broker 的 `default.replication.factor`（省略 `--replication-factor`），仅单节点实验显式指定 `--replication-factor 1`。集群要求 `min.insync.replicas=2` 时，测试 topic 副本数不得小于该值，否则后续 `acks=all` 写入会失败：
 
 ```bash
-bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic kpbot-smoke-001 --partitions 1 --replication-factor 1
+# 多节点：省略副本数，继承 broker 默认
+bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic kpbot-smoke-001 --partitions 1
+# 单节点实验：与上条二选一，显式指定 1
+# bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic kpbot-smoke-001 --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic kpbot-smoke-001
 printf 'kpbot-1\nkpbot-2\nkpbot-3\n' | bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic kpbot-smoke-001
 bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic kpbot-smoke-001 --from-beginning --max-messages 3 --timeout-ms 10000
@@ -32,24 +35,33 @@ bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic kpbot-sm
 
 ## 有限生产压测
 
-预先创建独立压测 topic 并记录分区、副本和 ISR，例如在该次实验中执行：
+预先创建独立压测 topic 并记录分区、副本和 ISR。topic 名每轮唯一；副本数同样默认继承 broker 默认，单节点实验显式 `--replication-factor 1`，多节点不得低于集群 `min.insync.replicas`：
 
 ```bash
-bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic kpbot-bench-001 --partitions 1 --replication-factor 1
+bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic kpbot-bench-001 --partitions 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic kpbot-bench-001
 ```
 
-topic 名需随实验更换；不要将副本数设置得超过可用 broker 数量。使用发行包自带的 [producer performance 工具](https://github.com/apache/kafka/blob/4.1.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)，在同版本工具帮助中核对参数：
+topic 名需随实验更换；不要将副本数设置得超过可用 broker 数量。使用发行包自带的 [producer performance 工具](https://github.com/apache/kafka/blob/4.1.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)，在同版本工具帮助中核对参数。每次实验使用新的结果目录；目录已存在时 `mkdir` 直接失败，不覆盖也不追加旧日志。预热与每个测量轮次分别写入独立文件：
 
 ```bash
 mkdir -p results
-bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > results/round-1.log 2>&1
+EXP=results/bench-001   # 每次实验换新编号
+mkdir "$EXP" || { echo "结果目录 $EXP 已存在；换新编号后重试" >&2; exit 1; }
+
+# 预热：少量消息，单独文件
+bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 10000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/warmup-1.log" 2>&1
+
+# 测量轮次：每轮独立文件，不覆盖
+bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/round-1.log" 2>&1
+bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/round-2.log" 2>&1
+bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/round-3.log" 2>&1
 ```
 
 先完成少量消息 smoke，再预热并进行三轮，每轮独立输出文件。保留工具报告的实际发送成功数、错误、records/s、MB/s 与延迟，不能仅凭退出码判断投递完整。消费端另行记录测试前后各分区 offset 增量并核对消息数量。固定消息大小、分区/副本、acks、压缩、批量、生产者数量和限速；不同投递语义不作直接收益比较。
 
 需要吞吐上限测试时按实验计划调整限速；先估算总数据量并检查磁盘。topic 清理只作用于本次创建的测试资源。
 
-若自动检查脚本位于 skill 目录而 Kafka 解压在别处，`--kafka-dir` 传相对当前调用目录的发行包位置，例如 `../experiment/kafka`。脚本直接使用该目录的 bin，不要求安装到系统 PATH。Java、Bash 与网络需在执行检查脚本的同一环境可用。存在认证时用 `--client-config` 提供真实的连接配置文件，文件由集群连接信息生成，不是示例附件。
+若自动检查脚本位于 skill 目录而 Kafka 解压在别处，`--kafka-dir` 传相对当前调用目录的发行包位置，例如 `../experiment/kafka`。脚本直接使用该目录的 bin，不要求安装到系统 PATH。Java、Bash 与网络需在执行检查脚本的同一环境可用。存在认证时用 `--client-config` 提供真实的连接配置文件，文件由集群连接信息生成，不是示例附件。该文件只允许连接与认证项：脚本会按 Java `.properties` 规则（含转义与续行）解析，发现 `group.id` 时在创建任何 topic 之前拒绝执行，避免验证消费者加入业务消费组；脚本自身为每轮分配唯一消费组。
 
-自动检查的 `--timeout` 是每个客户端进程的总等待上限（含 JVM 启动）；消费者的 `--timeout-ms` 同步换算为毫秒，最低为 1 毫秒。较慢的 broker 或 JVM 启动应增加该参数；任一步超时均保留日志并报告失败。上面的手工消费示例使用独立的 10 秒空闲等待。
+自动检查的 `--timeout` 是每个客户端进程的总等待上限（含 JVM 启动）；消费者的 `--timeout-ms` 同步换算为毫秒，最低为 1 毫秒。较慢的 broker 或 JVM 启动应增加该参数；任一步超时均保留日志并报告失败。上面的手工消费示例使用独立的 10 秒空闲等待。`--replication-factor` 默认省略以继承 broker 默认，单节点实验传 `1`；集群要求 `min.insync.replicas=2` 时不要传 `1`。

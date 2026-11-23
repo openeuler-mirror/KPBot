@@ -17,15 +17,15 @@ description: 部署或验证 Apache Kafka，运行健康检查、正确性验证
 
 ## 随附测试
 
-Python 3.10+、Linux/Bash 和目标 Kafka 版本所需的 JDK，并安装场景指南指定的官方客户端。以下命令在 skill 根目录执行；相对路径均相对当前调用目录。脚本输出新结果目录，拒绝覆盖旧证据。Kafka 验证会创建测试 topic 并写入三条消息，在已授权测试环境中运行。
+Python 3.10+、Linux/Bash 和目标 Kafka 版本所需的 JDK，并安装场景指南指定的官方客户端。以下命令在 skill 根目录执行；相对路径均相对当前调用目录。脚本输出新结果目录，拒绝覆盖旧证据；压测同样为每次实验创建新结果目录，预热与各测量轮次写入独立文件。Kafka 验证会创建测试 topic 并写入三条消息，在已授权测试环境中运行。
 
 ```text
 python3 scripts/check_service.py --kafka-dir kafka --bootstrap localhost:9092 --output results/smoke-001
 python3 cases/client-check/test_client_check.py
 ```
 
-`check_service.py --help` 列出连接、客户端和超时参数。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。
+`check_service.py --help` 列出连接、客户端、超时与副本参数。`--client-config` 仅接受连接/认证项，含 `group.id` 时脚本在创建任何 topic 之前以退出码 2 拒绝，并为每轮消费者分配唯一组；`--replication-factor` 默认继承 broker 默认，单节点实验显式传 `1`。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。
 
 运行产物隔离测试需 Git：`python3 cases/output-isolation/test_output_isolation.py`。随附忽略规则覆盖示例结果、实验与源码目录；自定义输出位置需自行检查 Git 状态，凭据始终保存在工作树外或通过环境注入。
 
-检查脚本退出码：0 表示验证通过，1 表示客户端调用或结果验证失败，2 表示命令参数错误或无法创建输出目录（包括目录已存在）；换新目录后重试，不覆盖旧证据。case.yaml 的入口为各 case 的 run.sh，会生成该 case 的 results/result.json，记录 success、测试数、失败数与错误数。
+检查脚本退出码：0 表示验证通过，1 表示客户端调用或结果验证失败，2 表示命令参数错误、无法创建输出目录（包括目录已存在）或 `--client-config` 含有 `group.id`；换新目录或移除该配置项后重试，不覆盖旧证据。case.yaml 的入口为各 case 的 run.sh，会生成该 case 的 results/result.json，记录 success、测试数、失败数与错误数。
