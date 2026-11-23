@@ -2,7 +2,7 @@
 
 ## 部署与版本
 
-先确认 broker/client 版本、JDK、CPU 架构、节点、端口和磁盘。已有集群直接验证；新建隔离实例按 [官方 Quick Start](https://kafka.apache.org/41/getting-started/quickstart/) 选择目标版本。在 KRaft 模式按该版本文档生成 cluster ID 并初始化新的日志目录，随后启动 broker。存量数据目录不重复 format。ZooKeeper 模式按其版本文档先启动 ZooKeeper，再启动 broker，不混用两种配置。
+先确认 broker/client 版本、JDK、CPU 架构、节点、端口和磁盘。已有集群直接验证；新建隔离实例按 [官方 Quick Start](https://kafka.apache.org/41/getting-started/quickstart/) 选择目标版本。在 KRaft 模式按该版本文档生成 cluster ID 并初始化新的日志目录，随后启动 broker。存量数据目录不重复 format。Kafka 4.0 起已移除 ZooKeeper，本文 4.1.x 新建实例只使用 KRaft，参见[官方 4.0 升级说明](https://kafka.apache.org/40/getting-started/upgrade/)。存量 3.x ZooKeeper 集群须按其对应版本文档验证，不使用 4.x 发行包启动 ZooKeeper。
 
 listeners 是监听地址，advertised.listeners 必须能从实际客户端访问。保存 broker 配置、集群模式与节点 ID。下面命令在 Kafka 发行包根目录执行，bootstrap-server 替换成目标地址；认证配置通过对应工具的配置文件参数传入。
 
