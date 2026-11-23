@@ -9,9 +9,11 @@ description: 在 AArch64 平台上分析并优化 Lance 的 BP 解码，通过 N
 
 ## 与现有技能配合
 
-本技能负责 BP 布局和 NEON 适用条件。Rust intrinsics 或 C ABI 接入需要时参考同插件的 `rust-native-simd-integration`；短内核配对测量可参考 `kernel-paired-benchmark`，查询归因可参考 `kernel-business-performance-validation`。这些是可选辅助，本技能不依赖源包中未导入的 Lance 编排技能。
+本技能负责 BP 布局和 NEON 适用条件。向量实现可参考同插件的 `apply-vectorization`；Rust/C 接入的内存、编译和分派要求见本文第 4、5 步及[内核边界补充](references/native-contract.md)。短内核配对测量可参考 `kernel-paired-benchmark`，查询归因可参考 `kernel-business-performance-validation`。这些是可选辅助。
 
 移植前读取[接入检查](references/integration-checklist.md)，补齐本次版本的位宽分派表、物理读写范围和逐层验证状态。本文中的历史路径及 benchmark 名称均需在目标提交重新核对。
+
+首次操作可从[固定提交的最小复现流程](references/pinned-reproduction.md)开始：区分上游原生基线和另行提供的候选补丁，串联构建特性、开关、测试及预期命中位宽。
 
 ## 输入
 
@@ -147,8 +149,8 @@ case      u64_bw23_1024
 先核对 Cargo.toml 中的 target 和特性。若该版本提供 bitpacking 特性，可从仓库根目录用下面的入口列出用例；原版和候选的启用特性仍按第 4 步核对，不凭这个命令认定已进入 NEON。
 
 ```sh
-cargo bench --locked -p lance-encoding --bench decoder --profile release-with-debug --features bitpacking -- 'decode_inline_bitpacking_unchunk/' --list
-cargo bench --locked -p lance-encoding --bench decoder --profile release-with-debug --features bitpacking -- 'decode_inline_bitpacking_unchunk/'
+cargo bench --locked -p lance-encoding --bench decoder --features bitpacking -- 'decode_inline_bitpacking_unchunk/' --list
+cargo bench --locked -p lance-encoding --bench decoder --features bitpacking -- 'decode_inline_bitpacking_unchunk/'
 ```
 
 确认列出的用例非空，且不是表示特性关闭的占位用例后再测量。预热和测量参数按第 9 步的协议设置，原版与候选都通过相同的测试入口运行。
@@ -161,7 +163,7 @@ cargo bench --locked -p lance-encoding --bench decoder --profile release-with-de
 
 沿用用户确认的 CPU/NUMA、线程、缓存和频率策略。先检查目标核心空闲与真实拓扑，不能把历史 CPU8、CPU9 的关系当作所有机器的条件。
 
-使用仓库规定的 release-with-debug。尽量在同一构建中切换实现；不同构建要保存补丁、编译参数和加载库差异。保持相同输入、工作量、包装逻辑和计时范围，不混入行布局或其他算法改动。
+按目标仓库实际定义的 Cargo profile 执行。上面命令使用 `cargo bench` 默认的 bench profile；只有 Cargo.toml 已定义相应自定义 profile 时才显式选择它。尽量在同一构建中切换实现；不同构建要保存补丁、编译参数和加载库差异。保持相同输入、工作量、包装逻辑和计时范围，不混入行布局或其他算法改动。
 
 看到结果前确定预热、采样、轮次和顺序。各轮交替或平衡原版与候选顺序，保留原始样本、异常和运行状态。数据生成、独立结果检查放在约定计时范围外。
 

@@ -60,6 +60,18 @@
         "正确性位宽和候选位宽分开",
         "识别全局编译的部署限制"
       ]
+    },
+    {
+      "eval_name": "pinned-reproduction-feature-boundary",
+      "prompt": "按固定提交示例只克隆了 Lance 上游，运行 --features experimental-bp-neon 提示特性不存在。可以当作 NEON 已禁用并继续报原版对候选成绩吗？",
+      "expected_output": "该特性属于示例候选补丁，不是上游特性。缺补丁则 awaiting_candidate_patch；只跑默认 bench profile 的原版，不伪造候选命中或成绩。先核对候选元数据、非空测试和逐位宽审计。",
+      "assertions": [
+        "区分上游 bitpacking 和候选补丁特性",
+        "不使用未定义 profile",
+        "缺补丁不报告候选成绩"
+      ],
+      "id": 5,
+      "files": []
     }
   ]
 }
