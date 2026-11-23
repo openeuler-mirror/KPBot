@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import os
 import subprocess
 import sys
 import tempfile
@@ -9,8 +10,9 @@ import unittest
 
 
 SKILLS = Path(__file__).resolve().parents[3]
-HANDOFF = SKILLS / 'kptools-vllm-ttft-collect/scripts/handoff.py'
-TTFT = SKILLS / 'kptools-vllm-ttft/scripts/ttft.py'
+HANDOFF = Path(os.environ.get('TTFT_HANDOFF', SKILLS / 'kptools-vllm-ttft-collect/scripts/handoff.py')).resolve()
+TTFT = Path(os.environ.get('TTFT_CLI', SKILLS / 'kptools-vllm-ttft/scripts/ttft.py')).resolve()
+MISSING = [str(path) for path in (HANDOFF, TTFT, TTFT.with_name('report.py')) if not path.is_file()]
 LOG = (
     '[TTFT][QUEUE] req=selected initial_queue_valid=true reason=available '
     'preemptions=0 queued_events=1 scheduled_events=1 queue_wait_s=0.1\n'
@@ -22,6 +24,7 @@ LOG = (
 )
 
 
+@unittest.skipIf(MISSING, 'missing TTFT dependencies: ' + ', '.join(MISSING))
 class HandoffContract(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
