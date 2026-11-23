@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# mock vmstat — 行为由 $MOCK_SCENARIO 控制。$16 = %wa，$7/$8 = si/so。
+# 输出两行数据：首行是 since-boot 生命周期均值（wa=1、so=5、bi/bo 大），
+# 第二行才是采样窗口值——与 procps 真实行为一致，用于看守
+# detect_bottleneck.sh / 采集脚本跳过 since-boot 首行的窗口口径
+# （旧 NR>2 会把首行计入：disk_io 场景 wa 被稀释成 8、so 均值 2.8）。
+scenario="${MOCK_SCENARIO:-idle}"
+wa=1.00
+so=0.60
+[ "${scenario}" = "disk_io" ] && wa=15.00
+
+emit_headers() {
+  echo "procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----"
+  echo " r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st"
+}
+
+emit_headers
+if [ "${scenario}" = "vmstat_boot_only" ]; then
+  # DURATION=1 真实形态：仅 since-boot 一行，采样窗口为空
+  echo " 1  0      0 65536000 131072 131072    0    5  3437 24267 191301 15  2  1 97 1.00 0"
+else
+  # since-boot 生命周期均值行
+  echo " 1  0      0 65536000 131072 131072    0    5  3437 24267 191301 15  2  1 97 1.00 0"
+  # 采样窗口行（场景相关值）
+  echo " 0  0      0 65536000 131072 131072    0   ${so}     0     0  100  200  3  1 95 ${wa} 0"
+fi

@@ -30,7 +30,7 @@ REQUIRED_SUBSKILLS = (
     "cpu-affinity-optimization",
     "database-workload-analysis",
     "hardware-upgrade-analysis",
-    "io-memory-network-bottleneck-analysis",
+    "io-optimization",
     "microservice-go-syncpool-optimization",
     "network-optimization",
     "os-optimization",

@@ -98,7 +98,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `application-config-optimization` | 应用配置(线程/队列/批量/缓存/连接) |
 | `accelerator-optimization` | GPU/NPU 加速卡利用率分析 |
 | `hardware-upgrade-analysis` | 硬件规格升级建议 |
-| `io-memory-network-bottleneck-analysis` | 非 CPU 瓶颈预筛 |
+| `io-optimization` | 非 CPU 瓶颈预筛 + 磁盘/内存专项证据采集 |
 | `database-workload-analysis` | 数据库专项分析(MySQL/InnoDB) |
 | `other-optimization` | 其他优化方向兜底 |
 
