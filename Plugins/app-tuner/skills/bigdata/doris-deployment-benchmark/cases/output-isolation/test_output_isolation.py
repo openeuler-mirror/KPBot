@@ -31,9 +31,9 @@ class OutputIsolationTests(unittest.TestCase):
                 generated = (
                     "results/smoke/result.json",
                     "experiment/tpch-tools/conf/doris-cluster.conf",
+                    "experiment/tpch-tools/result.csv",
                     "cases/client-check/results/log",
-                    "doris-source/tools/tpch-tools/conf/doris-cluster.conf",
-                    "clickhouse-source/generated",
+                    "doris-source/tools/tpch-tools/bin/result/query-1.out",
                     "scripts/__pycache__/cached.pyc",
                 )
                 for name in (

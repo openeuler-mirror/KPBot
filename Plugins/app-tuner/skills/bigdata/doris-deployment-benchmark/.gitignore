@@ -3,4 +3,3 @@
 /cases/*/results/
 __pycache__/
 /doris-source/
-/clickhouse-source/
