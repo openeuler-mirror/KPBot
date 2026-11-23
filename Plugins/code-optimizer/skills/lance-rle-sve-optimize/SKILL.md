@@ -9,7 +9,7 @@ description: 在 AArch64 平台上分析并优化 Lance 的 RLE 解码，通过 
 
 ## 与现有技能配合
 
-本技能负责 RLE 表示、SVE 展开和错误前缀协议。Rust/C 的构建隔离与分派可参考 `rust-native-simd-integration`；配对实验可参考 `kernel-paired-benchmark`，完整查询归因可参考 `kernel-business-performance-validation`。这些是可选辅助，不要求安装源包中的其他 Lance 技能。
+本技能负责 RLE 表示、SVE 展开和错误前缀协议。向量实现可参考同插件的 `apply-vectorization`；Rust/C 接入的初始化、错误和指令分派要求见本文第 5、6 步及[原生协议补充](references/native-contract.md)。配对实验可参考 `kernel-paired-benchmark`，完整查询归因可参考 `kernel-business-performance-validation`。这些是可选辅助。
 
 移植前读取[接入检查](references/integration-checklist.md)，分别记录入口模式、次数宽度、子缓冲布局、向量长度及实际验证状态。
 
@@ -40,10 +40,10 @@ description: 在 AArch64 平台上分析并优化 Lance 的 RLE 解码，通过 
 rust/lance-encoding/src/encodings/physical/rle.rs
 rust/lance-encoding/src/compression.rs
 rust/lance-encoding/src/encodings/logical/primitive/
-rust/lance-encoding/build.rs
+rust/lance-encoding/Cargo.toml
 ```
 
-若已有 C 文件或 Rust 适配模块，同步查看编译条件、链接对象和调用点。记录实际程序、加载库和源码身份。
+若候选补丁新增 C 文件、构建脚本或 Rust 适配模块，同步查看它们的编译条件、链接对象和调用点；不要假定上游原生提供这些文件。记录实际程序、加载库和源码身份。
 
 ### 2. 核对RLE表示及原有行为
 
@@ -58,6 +58,8 @@ RLE 用一个值和对应次数表示相同值的连续段，例如：
 核对值与次数是否一一对应、次数是否允许为零、请求值数的来源，以及重复次数不足或超过预期输出时的处理。
 
 分别确认实际入口的严格模式与 clamp 模式。严格模式下超出预期输出的 run 可能需要报错；clamp 模式可能按现有约定只写剩余需要的值。必须保持当前语义，不能把所有入口统一处理，也不在新公共边界上偷偷修正无效数据。
+
+对接时用[strict/clamp 与初始化前缀示例](references/native-contract.md#具体输入输出示例)逐项核对超量、写满、不足和写入前拒绝；示例约定与真实入口不同的部分按当前实现修正。
 
 检查两个子缓冲是否为 Flat。Flat 只有相应准备或视图处理，没有实质子解压；压缩子缓冲可能再调用 BP 等算法，需要另外覆盖。
 
@@ -81,7 +83,7 @@ RLE 用一个值和对应次数表示相同值的连续段，例如：
 1. 读取当前值与次数，完成原有检查，按入口语义算出本段实际应写数量。
 2. 将当前值广播到向量寄存器，使各通道得到相同的值。
 3. 按剩余数量生成谓词，只启用本批允许写入的位置。
-4. 写入有效通道并推进输出位置；本段未完成则继续，完成后处理下一个值。
+4. 写入有效通道并推进输出位置；本段未完成则继续。对本文固定提交的 clamp 入口，当前 run 的原始次数大于写入前剩余量时，截断写满后退出整个 run 循环；恰好相等时继续检查后续 run，不能仅按输出已满提前成功返回。
 
 每次容纳的值数由执行线程的实际 SVE 长度和元素位宽决定。历史机器上的“32 字节向量，一次 8 个 u32 或 4 个 u64”只能作为该环境信息，不能写死为算法条件。
 
@@ -183,8 +185,8 @@ case      i64_runs/rle/<encoded_bytes>B
 确认当前提交确实注册了 scheme_comparison target 后，可以从仓库根目录使用下列入口列出及执行用例。候选编译特性和运行开关按第 3、6、8 步核对；仅运行该命令不能证明 SVE 已启用。
 
 ```sh
-cargo bench --locked -p lance-encoding --bench scheme_comparison --profile release-with-debug -- 'scheme_comparison_decode/i64_runs/rle/' --list
-cargo bench --locked -p lance-encoding --bench scheme_comparison --profile release-with-debug -- 'scheme_comparison_decode/i64_runs/rle/'
+cargo bench --locked -p lance-encoding --bench scheme_comparison -- 'scheme_comparison_decode/i64_runs/rle/' --list
+cargo bench --locked -p lance-encoding --bench scheme_comparison -- 'scheme_comparison_decode/i64_runs/rle/'
 ```
 
 列出的用例必须非空，完整名字以实际输出为准。若旧基线没有该 target，先明确本轮是适配官方用例还是自建测试，不直接添加后再称为旧版本原有 benchmark。
@@ -205,7 +207,7 @@ cargo bench --locked -p lance-encoding --bench scheme_comparison --profile relea
 
 定义 mixed 规则，例如次数 1～255、末段按目标数量截断。值与次数使用独立固定随机流，两侧使用逐字节相同输入；数据生成和独立逐值校验放在计时范围外。
 
-使用用户确认的 CPU/NUMA、线程、缓存和频率，先查资源空闲和拓扑。采用仓库规定的 release-with-debug；尽量同构建切换原版/候选，不同构建需保存差异。
+使用用户确认的 CPU/NUMA、线程、缓存和频率，先查资源空闲和拓扑。按目标仓库实际定义的 Cargo profile 执行；上述命令使用默认 bench profile，不要求未定义的自定义 profile。尽量同构建切换原版/候选，不同构建需保存差异。
 
 事前确定预热、采样、轮次和先后顺序。同轮同场景配对比较，交替或平衡顺序，保存失败尝试、离群值与全部原始样本。Criterion 样本和内部调用次数分别报告。
 
@@ -264,4 +266,4 @@ RLE变快、decode_batch不明显 查调度器初始化、任务提交、内存�
 - 只要求源码或现有结果分析时，不自行启动远端压测或发布修改。
 - 正文包含完整流程；evals/evals.json 的场景定义不等于 ARM 内核、回退和业务已经验收。
 
-附带的中文补充材料为[计时与矩阵补充](references/scope-and-matrix.md)和[原生协议补充](references/native-contract.md)，用于复核细节；执行所需的关键步骤和约束已经写入以上正文。
+附带的中文补充材料为[计时与矩阵补充](references/scope-and-matrix.md)和[原生协议补充](references/native-contract.md)。在 `cases/prefix-contract/` 执行 `python3 run.py` 可核对 strict/clamp、初始化前缀及截断后停止的标量契约例子；这是合成模型，不代表 Rust/C 或 SVE 实机通过。

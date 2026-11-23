@@ -62,6 +62,30 @@
         "拒绝次数宽度伪装",
         "不外推单类型单向量长度结果"
       ]
+    },
+    {
+      "eval_name": "strict-clamp-prefix-example",
+      "prompt": "按 run 检查、超量 run 写入前拒绝的接口：values=[7,9]、lengths=[2,4]、N=5。strict 和 clamp 的状态、initialized 与输出分别是什么？u64 的 initialized 是否为字节数？",
+      "expected_output": "strict 报错，initialized=2，已写[7,7]；clamp 成功，initialized=5，输出[7,7,9,9,9]。计数单位为元素，u64 不能写成40；失败前缀不发布为成功 Vec，先全量校验的接口可能在写前报错且前缀0。",
+      "assertions": [
+        "区分 strict 错误前缀2与 clamp成功5",
+        "明确示例前提与元素计数",
+        "失败不暴露未初始化数据"
+      ],
+      "id": 5,
+      "files": []
+    },
+    {
+      "id": 6,
+      "eval_name": "clamp-stop-after-overflow",
+      "prompt": "固定提交中 values=[7,9]、N=2。clamp 对 lengths=[3,0] 与 [2,0] 是否都成功？",
+      "expected_output": "[3,0] 截断首段后退出而成功；[2,0] 恰好写满后仍继续检查，遇零次数报错。候选保持这个错误及停止顺序，不能统一按已写满退出或全量预扫描。",
+      "files": [],
+      "assertions": [
+        "区分大于剩余量与恰好相等",
+        "保持跳过与检查后续 run 的差别",
+        "不把部分前缀当成功输出"
+      ]
     }
   ]
 }
