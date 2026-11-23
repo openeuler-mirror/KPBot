@@ -7,12 +7,23 @@ import json
 import pathlib
 import shutil
 import tarfile
+from collections import Counter
 
 SUPPORTED_SCHEMA = 1
 
 
 class LoadError(Exception):
     pass
+
+
+def _checked_child(parent, candidate):
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError) as e:
+        raise LoadError('cannot resolve %s: %s' % (candidate, e))
+    if parent not in resolved.parents:
+        raise LoadError('path escapes %s: %s' % (parent, candidate))
+    return resolved
 
 
 def _read_json(path):
@@ -102,14 +113,16 @@ def load_bundle(label, source, workdir):
 
     Raises LoadError with a readable reason; callers record it per bundle.
     """
-    root = open_source(source, workdir)
+    root = open_source(source, workdir).resolve()
     incomplete = None
-    meta_file = root / 'collection_meta.json'
+    meta_file = _checked_child(root, root / 'collection_meta.json')
     if meta_file.is_file():
         try:
             meta = _read_json(meta_file)
         except (OSError, ValueError) as e:
             raise LoadError('unreadable collection_meta.json: %s' % e)
+        if not isinstance(meta, dict):
+            raise LoadError('collection_meta.json must be a JSON object')
         schema = meta.get('schema')
         if schema != SUPPORTED_SCHEMA:
             raise LoadError('unsupported collector schema %r (expected %d)'
@@ -126,20 +139,38 @@ def load_bundle(label, source, workdir):
                       '采集可能是被硬中断的')
     containers = []
     names = meta.get('targets') or []
-    if not names:
-        raise LoadError('collection_meta.json 里没有采集对象')
-    for name in names:
-        folder = root / safe_name(name)
-        entry = {'container': name, 'folder': folder, 'inventory': None,
+    if not isinstance(names, list) or not names or any(not isinstance(n, str) or not n for n in names):
+        raise LoadError('collection_meta.json has no valid targets')
+    folders = meta.get('folders', {})
+    if not isinstance(folders, dict):
+        raise LoadError('folders must be a JSON object')
+    locations = [folders.get(name, safe_name(name)) for name in names]
+    counts = Counter(location for location in locations if isinstance(location, str))
+    for name, location in zip(names, locations):
+        entry = {'container': name, 'folder': None, 'inventory': None,
                  'docker': {}, 'error': None}
-        inv = folder / 'inventory.json'
+        containers.append(entry)
+        try:
+            if (not isinstance(location, str) or location in ('', '.', '..')
+                    or pathlib.Path(location).name != location or counts[location] != 1):
+                raise LoadError('invalid or ambiguous object folder: %r' % location)
+            folder = root / location
+            if folder.is_symlink():
+                raise LoadError('object folder is a symbolic link: %s' % location)
+            folder = _checked_child(root, folder)
+            entry['folder'] = folder
+            inv = _checked_child(folder, folder / 'inventory.json')
+            err = _checked_child(folder, folder / 'ERROR.txt')
+            dsafe = _checked_child(folder, folder / 'docker_inspect_safe.json')
+        except LoadError as e:
+            entry['error'] = str(e)
+            continue
         if inv.is_file():
             try:
                 entry['inventory'] = _read_json(inv)
             except (OSError, ValueError) as e:
                 entry['error'] = 'unreadable inventory.json: %s' % e
         else:
-            err = folder / 'ERROR.txt'
             reason = ''
             if err.is_file():
                 try:
@@ -147,13 +178,11 @@ def load_bundle(label, source, workdir):
                 except OSError:
                     reason = ''
             entry['error'] = reason.splitlines()[0] if reason else 'inventory.json is missing'
-        dsafe = folder / 'docker_inspect_safe.json'
         if dsafe.is_file():
             try:
                 entry['docker'] = _read_json(dsafe)
             except (OSError, ValueError):
                 entry['docker'] = {}
-        containers.append(entry)
     return {'label': label, 'source': str(source), 'root': root,
             'meta': meta, 'containers': containers,
             'incomplete': incomplete}

@@ -12,6 +12,16 @@
       "prompt": "旧采集包标的是 PD，里面有三个容器，帮我分析 P 侧。",
       "expected_output": "先确认包内哪个容器是 P；不按容器名猜，不把三个容器合成一份分析。",
       "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "离线分析这份旧 PD 包，只看 stream-p，我确认它是 P。以 files 中 collection_meta.json 所在目录为包根。",
+      "expected_output": "使用非同名 folders 映射读取 archive-01/inventory.json，仅报告 P 的 --max-num-seqs=256 和后备 pip list 采到的 vLLM 0.9.1；不引用 D 的 --max-num-seqs=64。torch_npu 未列出，不因 importlib.metadata 超时把 vLLM 标为缺采。",
+      "files": [
+        "evals/fixtures/legacy/collection_meta.json",
+        "evals/fixtures/legacy/archive-01/inventory.json",
+        "evals/fixtures/legacy/archive-02/inventory.json"
+      ]
     }
   ]
 }
