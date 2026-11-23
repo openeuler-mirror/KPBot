@@ -31,11 +31,11 @@ torch_npu 版本、HCCL 环境变量、cpuset、启动参数），表现出来�
 
 命中下表的专项时，先打开对应的 `SKILL.md`，再按其中的流程执行；下节的默认命令
 只用于通用请求。需要多个步骤时，按实际输入逐步选择。若对应文件不存在，报告该专项
-不可用，尤其不要用通用多包对比代替指定配对。
+不可用；只有用户明确接受通用任务时才继续，不用多包对比代替指定配对。
 
 | 用户要做什么 | 子 skill 文件 |
 |-------------|---------------|
-| 按 P/D 角色分别留档，或留档时明确说角色待确认 | `subskills/collect-environment/SKILL.md` |
+| 按 P/D 角色单独留档，或需要标角色但尚未确认 | `subskills/collect-environment/SKILL.md` |
 | 分析指定 P 或 D 的一份环境快照 | `subskills/analyze-environment/SKILL.md` |
 | 以旧 P 为基线对比新 P | `subskills/compare-p-over-time/SKILL.md` |
 | 以旧 D 为基线对比新 D | `subskills/compare-d-over-time/SKILL.md` |
@@ -48,8 +48,10 @@ torch_npu 版本、HCCL 环境变量、cpuset、启动参数），表现出来�
 
 ## 工作流程
 
-1. 检查环境：`bash scripts/discover.sh`
-2. 采集并分析：`bash scripts/collect.sh <对象> [更多对象...]`
+1. 输入中有现场容器时，才运行 `bash scripts/discover.sh`。只有已有采集包时跳过
+   Docker 自检，直接进入下一步。
+2. 通用采集或只读对比：`bash scripts/collect.sh <对象> [更多对象...]`。仅做
+   不区分角色的存档时，每次只传一个容器，不触发自动对比。
 3. 打开输出目录里的 HTML 报告；要定位具体差异看 `对比/对比结果.json` 或 `对比摘要.md`
 4. 字段含义、跳过原因、故障排查见 `references/pd-env-guide.md`
 

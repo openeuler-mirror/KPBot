@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "汇总已有的 P、D 单环境分析和 P/D 对比；两侧都没有升级前的快照。",
+      "prompt": "汇总已有的 P、D 单环境分析和 P/D 对比；这次确认两侧都没有做前后对比。",
       "expected_output": "引用三份实际产物，把 P、D 的前后对比标为未执行；不要求补采，不称历史无差异，不复制原始环境变量。",
       "files": []
     },
@@ -18,6 +18,12 @@
       "prompt": "这次只剩旧 P 和新 P 的对比结果（evals/fixtures/p-history.json），原采集包已经清理，其他组没跑。帮我生成环境汇总报告。",
       "expected_output": "引用现有 JSON，保留旧 P 到新 P 的 CANN 版本变化；其他组标为未执行，不请求补采或重跑比较器。",
       "files": ["evals/fixtures/p-history.json"]
+    },
+    {
+      "id": 4,
+      "prompt": "只收到一份 P 分析；D 有没有执行我不清楚，不用重跑。请汇总。",
+      "expected_output": "引用 P 分析，D 和其他未提供产物且没有执行记录的项写未提供结果／执行状态未知，不推断未执行。",
+      "files": []
     }
   ]
 }

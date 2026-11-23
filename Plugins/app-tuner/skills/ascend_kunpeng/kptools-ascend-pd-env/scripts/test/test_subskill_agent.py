@@ -67,16 +67,17 @@ def collect_role(work):
 
 
 def collect_only(work):
-    scripts = work / ENTRY / 'scripts'
-    (scripts / 'discover.sh').write_text("printf '%s\\n' DOCKER_OK\n", encoding='utf-8')
-    (scripts / 'collect.sh').write_text(
+    scripts = work / ENTRY / 'subskills/collect-environment/scripts'
+    (scripts / 'collect_role.sh').write_text(
         'set -eu\n'
-        'test "$#" = 5 && test "$2" = --role && test "$4" = --out || exit 1\n'
+        'test "$#" = 5 || exit 1\n'
         'mkdir -p "$5/采集"\n'
-        'printf \'{"targets":["%s"],"role":"%s"}\\n\' "$1" "$3" > "$5/采集/collection_meta.json"\n'
+        'printf \'{"targets":["%s"],"role":"%s"}\\n\' "$3" "$4" > "$5/采集/collection_meta.json"\n'
         'printf "采集完成\\n" > "$5/采集/SUMMARY.txt"\n'
         'tar -czf "$5/采集.tar.gz" -C "$5" 采集\n', encoding='utf-8')
-    _, commands = run(work, '同一宿主机上，prefill-1 是 P，decode-1 是 D。请只采集留档，'
+    _, commands = run(work, '同一宿主机 node-fixture 上，prefill-1 是 P，decode-1 是 D。'
+                      '本题使用模拟 collect_role.sh，已确认 socket 为 /var/run/docker.sock、'
+                      'Docker 节点为 node-fixture，直接交给模拟脚本校验。请只采集留档，'
                       'P 输出到 p-out/，D 输出到 d-out/（相对于当前测试目录）。',
                       'collect-environment')
     assert all('compare.py' not in cmd for cmd in commands), commands
@@ -108,19 +109,44 @@ def role_conflict(work):
 
 
 def check_pair(work, child, prompt, roles):
-    run(work, prompt + '请把对比产物保存到 report/（相对于当前测试目录）。', child)
+    _, commands = run(work, prompt + '请把对比产物保存到 report/（相对于当前测试目录）。', child)
     report = json.loads((work / 'report/对比结果.json').read_text(encoding='utf-8'))
     environments = report['environments']
     assert [(entry['role'], pathlib.Path(entry['source']).name) for entry in environments] == roles, report
     assert [(pair['left'], pair['right']) for pair in report['comparisons']] == [
         (environments[0]['id'], environments[1]['id'])], report
+    return report['comparisons'][0], commands
+
+
+def expect_change(pair, category, name, before, after):
+    assert pair['comparable'] and any(
+        (item['category'], item['name'], item['left'], item['right']) ==
+        (category, name, before, after) for item in pair['differences']), pair
 
 
 def p_history_pair(work):
     bundle(work, 'old', 'engine', 'P', day=23)
     bundle(work, 'new', 'engine', 'P')
-    check_pair(work, 'compare-p-over-time', '以旧 P（old/）为基线对比新 P（new/）。',
-               [('P', 'old'), ('P', 'new')])
+    path = work / 'new/engine/inventory.json'
+    data = json.loads(path.read_text(encoding='utf-8'))
+    argv = data['processes'][0]['args']
+    argv[argv.index('--max-num-seqs') + 1] = '512'
+    path.write_text(json.dumps(data), encoding='utf-8')
+    pair, _ = check_pair(work, 'compare-p-over-time', '以旧 P（old/）为基线对比新 P（new/）。',
+                         [('P', 'old'), ('P', 'new')])
+    expect_change(pair, '启动参数', '--max-num-seqs', '256', '512')
+
+
+def d_history_pair(work):
+    bundle(work, 'old', 'engine', 'D', day=23)
+    bundle(work, 'new', 'engine', 'D')
+    path = work / 'new/engine/docker_inspect_safe.json'
+    data = json.loads(path.read_text(encoding='utf-8'))
+    data['limits']['Memory'] = 2147483648
+    path.write_text(json.dumps(data), encoding='utf-8')
+    pair, _ = check_pair(work, 'compare-d-over-time', '以旧 D（old/）为基线对比新 D（new/）。',
+                         [('D', 'old'), ('D', 'new')])
+    expect_change(pair, '基础信息', '容器内存限制(字节)', '1073741824', '2147483648')
 
 
 def pd_pair(work):
@@ -128,6 +154,19 @@ def pd_pair(work):
     bundle(work, 'd', 'engine', 'D')
     check_pair(work, 'compare-p-and-d', '只对比 P（p/）和 D（d/）两份现有快照。',
                [('P', 'p'), ('D', 'd')])
+
+
+def offline_generic_pair(work):
+    bundle(work, 'one', 'engine', 'other', day=23)
+    bundle(work, 'two', 'engine-alt', 'other')
+    _, commands = run(work, '通用离线对比 one/ 和 two/ 这两个已有采集包，'
+                      '不指定 P/D 角色，产物放到 report/。环境没有 Docker。')
+    assert not any('discover.sh' in cmd or re.search(r'\bdocker\s+(?:info|version|exec)\b', cmd)
+                   for cmd in commands), commands
+    results = list((work / 'report').rglob('对比结果.json'))
+    assert len(results) == 1, commands
+    pair = json.loads(results[0].read_text(encoding='utf-8'))['comparisons'][0]
+    assert pair['comparable'] and pair['diff_count'] > 0, pair
 
 
 def retained_result(work):
@@ -157,7 +196,7 @@ def main():
             sys.exit('测试需要已装配的子 skill：' + child)
     scenarios = {scenario.__name__: scenario for scenario in (
         collect_role, collect_only, analysis_gap, role_conflict, p_history_pair,
-        pd_pair, retained_result, missing_child)}
+        d_history_pair, pd_pair, offline_generic_pair, retained_result, missing_child)}
     failed = 0
     for name in sys.argv[1:] or scenarios:
         if name not in scenarios:
