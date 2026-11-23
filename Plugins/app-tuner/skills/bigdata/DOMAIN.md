@@ -1,7 +1,7 @@
 # 大数据域（app-tuner 侧）
 
-大数据**框架层**的性能调优：Spark / Flink 在 ARM（鲲鹏）上的参数推荐、资源计算与基准执行协议；
-后续可扩展到 Hive / ClickHouse / Doris / Kafka 等组件。
+大数据框架与服务的部署、验证和性能调优。已落地的独立技能见成员表；
+现有 Spark / Flink 知识涵盖 ARM（鲲鹏）参数推荐、资源计算与基准执行协议。
 
 ## 独立成员
 
@@ -38,7 +38,7 @@ Spark / Flink 相关内容仍位于 `kpbot-app-tuner` 主框架的子技能里�
 - **分布式存储客户端**（HDFS/Ceph 客户端参数）→ `code-optimizer/skills/storage/`，本域只管计算框架侧；
 - **容器与沙箱**（框架跑在 microVM/AgentENV 里）→ `agentic-infra/`。
 
-## 候选首个成员（待原作者确认后抽取）
+## 候选 Spark / Flink 成员（待原作者确认后抽取）
 
 `bigdata-framework-tuning`：把 `bigdata-playbook.md` + 5 个脚本抽成独立 skill，母技能改为指针。
 属于**新写 skill**而非搬移，需要原作者确认内容归属，故未随本 PR 落地。

@@ -51,7 +51,15 @@ cd experiment/tpch-tools
 
 下载器先将 ref 解析到 commit，再通过 GitHub 的公开 API/Raw 下载完整目录，逐文件校验 Git blob SHA-1，保存 source.json；输出目录已存在时拒绝覆盖。目标机不能访问 API/Raw 时，可在联网机器运行该命令，然后将生成目录整体复制到目标机。下面所有 bin 命令均可在这个工具目录中执行，无需另外创建脚本。
 
-将 conf/doris-cluster.conf 中 FE_HOST、FE_QUERY_PORT、FE_HTTP_PORT、USER、PASSWORD、DB 设置为目标实验集群；DB 使用新的隔离库名。不要把凭据提交到结果目录。先阅读建表脚本，确认只作用于该实验库。
+将 conf/doris-cluster.conf 中 FE_HOST、FE_QUERY_PORT、FE_HTTP_PORT、USER、DB 设置为目标实验集群；DB 使用新的隔离库名。PASSWORD 不填写明文，将该文件原有的 PASSWORD 赋值行替换为下面这一行（保留字面量变量引用）：
+
+```bash
+export PASSWORD="${DORIS_PASSWORD?set DORIS_PASSWORD explicitly}"
+```
+
+在运行下列 bin 命令的同一个 Bash 会话中，用 `read -r -s -p 'Doris password: ' DORIS_PASSWORD; printf '\n'; export DORIS_PASSWORD` 隐藏输入口令，也可由受控环境注入；空口令需要显式设置 `export DORIS_PASSWORD=''`。不要开启 shell 跟踪，不把展开后的配置或凭据写入结果文件。完成后执行 `unset DORIS_PASSWORD MYSQL_PWD`。最小检查脚本的 `--config` 认证文件应由用户在 Git 工作树之外创建、限制为仅本人可读，并通过 `--config "$DORIS_CLIENT_CONFIG"` 引用。
+
+skill 的忽略规则覆盖 results、experiment、cases 下的 results 以及示例源码目录；它只是防误提交措施，不能代替凭据管理。先阅读建表脚本，确认只作用于该实验库。
 
 SF=1 起步，容量验证后再调整；以下命令均在 tools/tpch-tools 目录执行，任何一步失败即停止：
 
