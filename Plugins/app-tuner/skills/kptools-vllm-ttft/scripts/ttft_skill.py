@@ -6,8 +6,8 @@ Responsibilities:
   - build strict contextual plans from payload manifests (before/after text);
     any tree that does not contextually match the "before" text refuses,
     preserving unrelated local edits
-  - apply plans transactionally with a rollback state file (backups + hashes)
-  - roll back to the exact pre-apply state
+  - durably record backups before replacing source files
+  - roll back to the exact pre-apply bytes, including after interrupted writes
 
 CLI entrypoint: python ttft_skill.py <subcommand> (see main()).
 """
@@ -18,8 +18,11 @@ import argparse
 import difflib
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -256,8 +259,20 @@ def plan_entries(root: Path, entries: list[dict]) -> list[FilePlan]:
     return [build_file_plan(root, e) for e in entries]
 
 
+def _replace_source(target: Path, data: bytes) -> None:
+    """Publish one complete file; interruption cannot leave a truncated target."""
+    target = target.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".ttft-", dir=target.parent) as directory:
+        staged = Path(directory) / target.name
+        staged.write_bytes(data)
+        if target.exists():
+            shutil.copymode(target, staged)
+        os.replace(staged, target)
+
+
 def apply_transaction(plans: list[FilePlan], state_dir: Path, metadata: dict) -> Path:
-    """Write all planned files atomically; state file enables rollback."""
+    """Persist recovery state before touching source, then replace files one at a time."""
     state_path = state_dir / "state.json"
     if state_path.exists():
         raise SkillError(
@@ -283,40 +298,45 @@ def apply_transaction(plans: list[FilePlan], state_dir: Path, metadata: dict) ->
             for p in pending
         ],
     }
+    try:
+        with state_path.open("x", encoding="utf-8") as journal:
+            json.dump(state, journal, ensure_ascii=False, indent=1)
+            journal.flush()
+            os.fsync(journal.fileno())
+    except OSError as exc:
+        raise SkillError(f"无法保存回滚状态；未写入源码：{state_path}（{exc}）") from exc
     for p in pending:
-        target = p.root / p.path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(p.after, encoding="utf-8", newline="\n")
-    state_path.write_text(
-        json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8"
-    )
+        try:
+            _replace_source(p.root / p.path, p.after.encode("utf-8"))
+        except OSError as exc:
+            raise SkillError(
+                f"{p.path}: 打点写入中断（{exc}）；保持停服，使用回滚状态：{state_path}"
+            ) from exc
     return state_path
 
 
 def rollback_state(state_path: Path) -> None:
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    # Preflight: verify every file still holds exactly what we wrote
-    # (after_sha256) BEFORE restoring anything. A mismatch means someone
-    # edited files post-apply; refuse rather than clobber their changes —
-    # and refuse atomically, so no file is left half-restored.
+    # A file may still hold its original bytes (or not exist) if apply was interrupted.
+    restore = []
     for record in state["files"]:
         target = Path(record["root"]) / record["path"]
-        current = target.read_bytes() if target.exists() else None
-        if (
-            record["after_sha256"] is not None
-            and (current is None or hashlib.sha256(current).hexdigest() != record["after_sha256"])
-        ):
+        current = hashlib.sha256(target.read_bytes()).hexdigest() if target.exists() else None
+        if current == record["backup_sha256"]:
+            continue
+        if current != record["after_sha256"]:
             raise SkillError(
                 f"{record['path']}: 应用后文件被再次修改，拒绝回滚；请人工检查。"
             )
-    # All hashes verified — safe to restore the whole tree.
-    for record in state["files"]:
-        target = Path(record["root"]) / record["path"]
-        if record["backup"] is None:
-            if target.exists():
+        restore.append((target, record["backup"]))
+    for target, backup in restore:
+        try:
+            if backup is None:
                 target.unlink()
-        else:
-            target.write_bytes(record["backup"].encode("utf-8"))
+            else:
+                _replace_source(target, backup.encode("utf-8"))
+        except OSError as exc:
+            raise SkillError(f"{target}: 回滚写入中断（{exc}）；排除错误后可用同一状态重试。") from exc
 
 
 def load_manifest(name: str) -> dict:

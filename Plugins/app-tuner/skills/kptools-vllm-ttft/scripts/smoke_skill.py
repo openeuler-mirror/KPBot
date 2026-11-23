@@ -22,6 +22,9 @@ import tempfile
 from contextlib import contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
+from unittest.mock import patch
+
+import ttft_skill
 
 SKILL = Path(__file__).resolve().parent
 PY = sys.executable
@@ -918,9 +921,45 @@ def check_forward_identity_and_missing(tmp: Path) -> None:
     print("PASS forward totals/missing/zero; legacy diagnostics cannot invent TP rows")
 
 
+def check_interrupted_apply(root: Path) -> None:
+    original = b"x = 1\r\n"
+    first, created, denied, skipped = [
+        root / name for name in ("first.py", "created.py", "denied.py", "skipped.py")
+    ]
+    for path in (first, denied):
+        path.write_bytes(original)
+    entries = [
+        {"path": path.name, "before": before, "after": "x = 2\n"}
+        for path, before in zip((first, created, denied, skipped), ("x = 1\n", None, "x = 1\n", None))
+    ]
+    plans = ttft_skill.plan_entries(root, entries)
+    real_replace = os.replace
+    state = root / "state" / "state.json"
+
+    def interrupt(source, target):
+        if target == denied:
+            raise PermissionError("simulated write failure")
+        real_replace(source, target)
+
+    with patch.object(os, "replace", side_effect=interrupt):
+        try:
+            ttft_skill.apply_transaction(plans, state.parent, {})
+        except ttft_skill.SkillError as exc:
+            assert str(state) in str(exc)
+        else:
+            raise AssertionError("injected write failure did not stop apply")
+    assert first.read_bytes() == created.read_bytes() == b"x = 2\n"
+    assert denied.read_bytes() == original and not skipped.exists()
+    ttft_skill.rollback_state(state)
+    assert first.read_bytes() == denied.read_bytes() == original
+    assert not created.exists() and not skipped.exists()
+    print("PASS interrupted apply -> byte-exact rollback of changed files only")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="ttft-skill-smoke-") as tmp:
         tmp = Path(tmp)
+        check_interrupted_apply(tmp)
         make_env(tmp / "a", "vllm")
         env_b = make_env(
             tmp / "b",
