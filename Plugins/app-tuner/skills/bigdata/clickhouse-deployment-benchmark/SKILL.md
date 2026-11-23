@@ -29,3 +29,5 @@ python3 cases/client-check/test_client_check.py
 最小脚本的 `passed` 只表示目标连接及三条只读 SQL 通过，不验证集群所有节点、副本存活或复制延迟。集群测试前须按目标拓扑另行检查 `system.clusters` 与各节点的 `system.replicas`；不能从此脚本的结果推断集群健康。
 
 运行产物隔离测试需 Git：`python3 cases/output-isolation/test_output_isolation.py`。随附忽略规则覆盖示例结果、实验与源码目录；自定义输出位置需自行检查 Git 状态，凭据始终保存在工作树外或通过环境注入。
+
+检查脚本退出码：0 表示验证通过，1 表示客户端调用或结果验证失败，2 表示命令参数错误或无法创建输出目录（包括目录已存在）；换新目录后重试，不覆盖旧证据。case.yaml 的入口为各 case 的 run.sh，会生成该 case 的 results/result.json，记录 success、测试数、失败数与错误数。

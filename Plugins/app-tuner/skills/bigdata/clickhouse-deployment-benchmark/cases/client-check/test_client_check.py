@@ -131,4 +131,22 @@ class ClientCheckTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.defaultTestLoader.loadTestsFromModule(
+        sys.modules[__name__]
+    )
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    output = Path(__file__).resolve().parent / "results"
+    output.mkdir(exist_ok=True)
+    (output / "result.json").write_text(
+        json.dumps(
+            {
+                "success": result.wasSuccessful(),
+                "tests": result.testsRun,
+                "failures": len(result.failures),
+                "errors": len(result.errors),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    sys.exit(0 if result.wasSuccessful() else 1)
