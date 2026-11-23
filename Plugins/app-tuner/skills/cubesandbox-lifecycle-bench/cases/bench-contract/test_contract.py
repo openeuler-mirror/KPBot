@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from unittest import mock
@@ -709,6 +711,104 @@ class ResultSafetyContractTest(unittest.TestCase):
             ):
                 with self.assertRaises(lib.BenchError):
                     cli.analyze_create_reports(args, {}, run_dir)
+
+
+class OutputContractTest(unittest.TestCase):
+    def test_check_output_rejects_symlink_without_touching_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "sentinel.json"
+            original = '{"ok": true, "sentinel": "keep"}\n'
+            target.write_text(original, encoding="utf-8")
+            output = root / "preflight.json"
+            output.symlink_to(target)
+            checks = cli.Checks()
+            checks.pass_("mock.read_only", "ok")
+            with mock.patch.object(cli, "resolve_template", return_value="tpl-confirmed"), \
+                 mock.patch.object(cli, "run_preflight", return_value=checks):
+                with self.assertRaisesRegex(lib.BenchError, "符号链接"):
+                    cli.main([
+                        "check", "--repo", str(root / "repo"),
+                        "--template-id", "tpl-confirmed", "--numa-node", "0",
+                        "--sections", "pause_resume", "--output", str(output),
+                    ])
+            self.assertTrue(output.is_symlink())
+            self.assertEqual(target.read_text(encoding="utf-8"), original)
+            self.assertEqual(list(root.glob(".preflight.json.*.tmp")), [])
+
+    def test_atomic_replace_does_not_follow_a_racing_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "sentinel.json"
+            original = '{"sentinel": "keep"}\n'
+            target.write_text(original, encoding="utf-8")
+            output = root / "preflight.json"
+            output.write_text('{"ok": true}\n', encoding="utf-8")
+            real_replace = os.replace
+
+            def replace_after_race(source, destination):
+                self.assertEqual(Path(destination), output)
+                Path(destination).unlink()
+                Path(destination).symlink_to(target)
+                return real_replace(source, destination)
+
+            with mock.patch.object(lib.os, "replace", side_effect=replace_after_race):
+                lib.write_json(output, {"ok": False}, reject_symlink=True)
+            self.assertFalse(output.is_symlink())
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), {"ok": False})
+            self.assertEqual(target.read_text(encoding="utf-8"), original)
+
+    def test_concurrent_reports_use_unique_temp_files_and_atomic_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "preflight.json"
+            output.write_text('{"writer": -1}\n', encoding="utf-8")
+            workers = 6
+            barrier = threading.Barrier(workers)
+            source_lock = threading.Lock()
+            sources = []
+            real_replace = os.replace
+            stop = threading.Event()
+            read_errors = []
+
+            def synchronized_replace(source, destination):
+                self.assertTrue(Path(source).is_file())
+                with source_lock:
+                    sources.append(Path(source).name)
+                barrier.wait(timeout=10)
+                return real_replace(source, destination)
+
+            def read_reports():
+                while not stop.is_set():
+                    try:
+                        payload = json.loads(output.read_text(encoding="utf-8"))
+                        self.assertIsInstance(payload["writer"], int)
+                    except Exception as exc:
+                        read_errors.append(exc)
+                        return
+                    stop.wait(0.001)
+
+            reader = threading.Thread(target=read_reports)
+            reader.start()
+            try:
+                with mock.patch.object(lib.os, "replace", side_effect=synchronized_replace):
+                    with ThreadPoolExecutor(max_workers=workers) as pool:
+                        list(pool.map(
+                            lambda writer: lib.write_json(
+                                output, {"writer": writer}, reject_symlink=True
+                            ),
+                            range(workers),
+                        ))
+            finally:
+                stop.set()
+                reader.join(timeout=5)
+            self.assertFalse(reader.is_alive())
+            self.assertEqual(read_errors, [])
+            self.assertEqual(len(set(sources)), workers)
+            self.assertIn(json.loads(output.read_text(encoding="utf-8"))["writer"], range(workers))
+            self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(list(root.glob(".preflight.json.*.tmp")), [])
+            self.assertFalse((root / "preflight.json.tmp").exists())
 
 
 class CliContractTest(unittest.TestCase):
