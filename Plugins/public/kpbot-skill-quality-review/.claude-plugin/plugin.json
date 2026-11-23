@@ -1,0 +1,9 @@
+{
+  "name": "kpbot-skill-quality-review",
+  "version": "1.0.0",
+  "description": "按 KPBot 静态质量检测规则评审 Skill，并提供逐项证据、评分和修改建议",
+  "author": {"name": "Kunpeng Acceleration Team"},
+  "license": "MulanPSL-2.0",
+  "keywords": ["skill", "quality", "static-review"],
+  "platforms": ["claude", "opencode"]
+}
