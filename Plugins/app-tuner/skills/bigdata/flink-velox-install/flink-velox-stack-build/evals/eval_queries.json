@@ -1,0 +1,43 @@
+{
+  "skill_name": "flink-velox-stack-build",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-build-deploy",
+      "prompt": "编译 velox4j 和 gluten-flink，把 jar 部署进 Flink lib",
+      "should_trigger": true,
+      "note": "场景入口类触发词：编译 velox4j、编译 gluten-flink、部署 GFV 构建"
+    },
+    {
+      "id": "q-stack-build",
+      "prompt": "把 GFV 构建编出来放进 lib，旧 jar 先备份",
+      "should_trigger": true,
+      "note": "动作类触发词：编译部署、stack build、备份旧 jar"
+    },
+    {
+      "id": "q-runtime-deps",
+      "prompt": "gluten 的 jar 运行时还要哪些第三方依赖，一起放进 Flink lib",
+      "should_trigger": true,
+      "note": "运行依赖部署：14 个 jar 从 ~/.m2 进 lib"
+    },
+    {
+      "id": "q-prepare",
+      "prompt": "装 maven 和 JDK 17，克隆 velox 源码",
+      "should_trigger": false,
+      "note": "构建环境 → flink-velox-build-env-prepare"
+    },
+    {
+      "id": "q-check-only",
+      "prompt": "lib 里有哪些 gluten jar（只查）",
+      "should_trigger": false,
+      "note": "只读 → flink-velox-lib-state-check"
+    },
+    {
+      "id": "q-restart",
+      "prompt": "重启 Flink 集群",
+      "should_trigger": false,
+      "note": "重启 → flink-velox-cluster-switch（规划中）；本 skill 只部署"
+    }
+  ]
+}

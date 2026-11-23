@@ -23,10 +23,10 @@ Flink + GlutenFlink（gluten-flink + velox4j + velox 向量化执行栈）环境
 |---|---|
 | [`flink-velox-build-env-prepare`](flink-velox-build-env-prepare/SKILL.md) | 准备构建环境：克隆 velox / velox4j / gluten，dnf 装 28 个 openEuler 包（工具链、构建工具、C++ 库、JDK 17），按 velox setup 脚本装源码级 C++ 库进 /usr/local（脚本来源与 sha256 留档）；克隆先落独占临时目录、已有的目录一律不删，经 sudo 时克隆以原用户执行；verify 调 env 家族五个检查 |
 | [`flink-velox-runtime-install`](flink-velox-runtime-install/SKILL.md) | 安装 Flink 运行时与 nexmark：官方 Flink 1.19.x tgz（镜像下载、sha512 恒取 archive.apache.org）解压到 /opt/flink-<版本> + /opt/flink 软链，Flink 实际读的那份 conf 全是注释时补最小键；nexmark 源码取到固定 commit、mvn 构建 nexmark-flink jar 进该版本的 lib（记 sha256）、按清单铺 /opt/nexmark 可运行树；verify 调 flink-dist-check 与 nexmark-check |
+| [`flink-velox-stack-build`](flink-velox-stack-build/SKILL.md) | 编译并部署 GlutenFlink 构建：velox4j（对着工作区 velox 源码编原生 .so）与 gluten-flink planner / loader / runtime 两条 mvn 构建（经 sudo 时以原用户执行，源码 origin / commit / 本地改动留档），只把会被替换的旧 jar 备份到 lib.bak/<时间戳>/ 后移出 lib，部署 4 个 jar + 14 个运行依赖（构建后从 ~/.m2 取，缺失判失败），Flink 实际读的那份 conf 缺 env.java.home 时补构建 JDK；jar 名一律 glob；verify 调 lib-state-check --expect gfv |
 
 ## 其它成员（分 PR 提交，合入后移入上表）
 
-- `flink-velox-stack-build`：编译并部署 GlutenFlink 构建；审中 !324
 - `flink-velox-cluster-switch`：在 native 与 GlutenFlink 之间切换并重启集群；审中 !325
 
 ## 与其它域的边界

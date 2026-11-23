@@ -1,0 +1,35 @@
+{
+  "skill_name": "flink-velox-stack-build",
+  "evals": [
+    {
+      "id": "first-deploy",
+      "query": "构建环境和 Flink 都装好了，把 velox4j 和 gluten-flink 编出来部署进 Flink 的 lib",
+      "expected": "触发本 skill：plan 列出备份清单、两条 mvn 命令、cp、conf 补键；用户同意后 apply --yes；部署后提醒重启集群（cluster-switch）"
+    },
+    {
+      "id": "rebuild-after-source-change",
+      "query": "改了 velox 源码，重新编译 velox4j 并部署",
+      "expected": "触发本 skill（可 --only velox4j）：velox4j 对着工作区 velox 源码编原生 .so，旧 jar 先备份到 lib.bak 再移出"
+    },
+    {
+      "id": "fix-lib-state-native",
+      "query": "lib-state-check 说 lib 是 native 构建，把 GFV 构建部署进去",
+      "expected": "触发本 skill：这正是 lib-state-check 的修复动作；apply 后 verify（--expect gfv）"
+    },
+    {
+      "id": "not-prepare",
+      "query": "先装 cmake、maven、JDK 17，克隆 velox 源码",
+      "expected": "不触发：构建环境属 flink-velox-build-env-prepare；本 skill 遇到前置缺失会 BLOCKED 并指向它"
+    },
+    {
+      "id": "not-check-only",
+      "query": "看看 lib 里现在有哪些 gluten 的 jar（不要编译）",
+      "expected": "不触发：只读检查属 flink-velox-lib-state-check"
+    },
+    {
+      "id": "not-restart",
+      "query": "部署完了，重启一下 Flink 集群",
+      "expected": "不触发：重启属 flink-velox-cluster-switch（规划中）且须用户同意；本 skill 只在 next_step 里提醒"
+    }
+  ]
+}
