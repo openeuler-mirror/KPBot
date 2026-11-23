@@ -8,7 +8,7 @@
     },
     {
       "id": "before-build",
-      "query": "搭 GFV 构建环境之前，先确认 libevent openssl zstd 这些 C++ 依赖头文件都在",
+      "query": "搭 GlutenFlink 构建环境之前，先确认 libevent openssl zstd 这些 C++ 依赖头文件都在",
       "expected": "触发本 skill：第一层 13 个库按头文件探测（含 <triplet>/ 子目录与 /usr/local/include），缺的逐项 fail + fix 给 openEuler -devel 包名"
     },
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "not-overall",
-      "query": "这台机器现在能不能编译 GFV 栈",
+      "query": "这台机器现在能不能编译 GlutenFlink 栈",
       "expected": "不触发：总裁决属统筹 flink-velox-env-check，本 skill 只是它的输入之一"
     },
     {

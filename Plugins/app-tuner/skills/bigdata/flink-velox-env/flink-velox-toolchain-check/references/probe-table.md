@@ -36,6 +36,12 @@
 
 velox / velox4j / gluten 各版本对 cmake、gcc、maven 的最低要求不同，而且随上游变化；本 skill 只报告版本，门槛交给构建时的真实报错，不猜。
 
-## 5. 来源
+## 5. --out 留档与中止态
 
-五件套与包名映射来自 GFV 安装器的工具探测清单（tools 段：git cmake gcc g++ mvn）；openEuler 包名以 `g++ → gcc-c++`、`mvn → maven` 两处为准，其余同名。
+- `--out FILE` 的目标必须是项目目录（运行时的当前工作目录）内的常规路径：`realpath` 落在项目目录之外、或路径本身是符号链接 → 拒绝（退出码 2，stderr 说明），检查结论照常打印
+- 已存在的文件不覆盖，除非加 `--overwrite`；新建用独占创建（`open(..., 'x')`），不跟随符号链接
+- 检查崩溃（异常）：退出码 2，JSON 仍是完整契约形态——`success: false`、`status: fail`、空的观测 / 条目 / `missing`、`next_step: fix the check error first (see error_message), then rerun`、`error_message` 以 `check aborted: ` 开头——调用方按契约处理故障时不会再遇到缺字段
+
+## 6. 来源
+
+五件套与包名映射来自 GFVBot 安装器的工具探测清单（tools 段：git cmake gcc g++ mvn）；openEuler 包名以 `g++ → gcc-c++`、`mvn → maven` 两处为准，其余同名。

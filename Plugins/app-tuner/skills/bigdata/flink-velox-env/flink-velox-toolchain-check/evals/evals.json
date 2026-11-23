@@ -8,7 +8,7 @@
     },
     {
       "id": "before-build",
-      "query": "搭 GFV 构建环境之前，先确认 git cmake gcc g++ mvn 都在",
+      "query": "搭 GlutenFlink 构建环境之前，先确认 git cmake gcc g++ mvn 都在",
       "expected": "触发本 skill：五件套逐项检查，齐了报 READY 与各版本，缺了逐项 fail + fix（g++ 给 gcc-c++、mvn 给 maven）"
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "id": "not-overall",
-      "query": "这台机器现在能不能编译 GFV 栈",
+      "query": "这台机器现在能不能编译 GlutenFlink 栈",
       "expected": "不触发：总裁决属统筹 flink-velox-env-check，本 skill 只是它的输入之一"
     },
     {

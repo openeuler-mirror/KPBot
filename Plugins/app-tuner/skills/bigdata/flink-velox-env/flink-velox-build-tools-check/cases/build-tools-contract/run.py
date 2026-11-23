@@ -7,7 +7,8 @@ real machine is in play. Pins the verdict contract (exit codes, success, status,
 missing, next_step), every probe rule (version from the first x.y.z, whole-line
 fallback, stderr counts, exit code ignored, silent tool = present with unknown
 version), the openEuler package name (ninja -> ninja-build), the JSON shape,
---out, "check aborted:" and that a check leaves the machine untouched.
+--out safety (inside the project, no symlink, no silent overwrite), the full
+contract shape of a crash result and that a check leaves the machine untouched.
 
 Writes results/result.json; exit 0 iff all tests pass.
 """
@@ -101,11 +102,12 @@ class BuildToolsCase(unittest.TestCase):
         self.addCleanup(shutil.rmtree, str(self.tmp), True)
         self.m = FakePath(self.tmp / "machine")
 
-    def run_check(self, *args, env=None):
+    def run_check(self, *args, env=None, cwd=None):
         """Run build_tools_check.py; returns (exit code, stdout, stderr, result or None)."""
         proc = subprocess.run(
             [sys.executable, str(SCRIPT)] + list(args), capture_output=True, text=True,
-            errors="replace", env=self.m.env() if env is None else env, cwd=str(self.tmp),
+            errors="replace", env=self.m.env() if env is None else env,
+            cwd=str(self.tmp if cwd is None else cwd),
             stdin=subprocess.DEVNULL, timeout=60)
         result = json.loads(proc.stdout)[KEY] if proc.stdout.lstrip().startswith("{") else None
         return proc.returncode, proc.stdout, proc.stderr, result
@@ -202,6 +204,39 @@ class BuildToolsCase(unittest.TestCase):
         self.assertEqual(json.loads(out_file.read_text(encoding="utf-8")),
                          json.loads(stdout))
 
+    def test_out_is_confined_to_the_project(self):
+        self.m.tools()
+        # outside the project (the working directory): refused, exit 2, nothing written
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        out_file = self.tmp / "elsewhere_outside.json"
+        code, stdout, err, r = self.run_check("--json", "--out", str(out_file), cwd=str(elsewhere))
+        self.assertEqual((code, r["success"]), (2, True))  # the verdict still prints
+        self.assertIn("inside the project directory", err)
+        self.assertFalse(out_file.exists())
+        # a symlink, even one pointing inside the project: refused, its target untouched
+        target = self.tmp / "keep.json"
+        target.write_text("keep me\n", encoding="utf-8")
+        link = self.tmp / "link.json"
+        link.symlink_to(target)
+        code, _, err, _ = self.run_check("--json", "--out", str(link))
+        self.assertEqual(code, 2)
+        self.assertIn("not a symlink", err)
+        self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
+        # an existing archive is kept unless --overwrite is given
+        archive = self.tmp / "project" / "check.json"
+        self.assertEqual(self.run_check("--json", "--out", str(archive))[0], 0)
+        first = archive.read_text(encoding="utf-8")
+        code, _, err, _ = self.run_check("--json", "--out", str(archive))
+        self.assertEqual(code, 2)
+        self.assertIn("--overwrite", err)
+        self.assertEqual(archive.read_text(encoding="utf-8"), first)
+        self.m.stub("ninja", "exit 0\n")  # present, version unknown: a different result to archive
+        code, _, _, _ = self.run_check("--json", "--out", str(archive), "--overwrite")
+        self.assertEqual(code, 0)
+        self.assertIn("version unknown", archive.read_text(encoding="utf-8"))
+        self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
+
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")
         self.assertEqual((code, r), (2, None))
@@ -221,6 +256,11 @@ class BuildToolsCase(unittest.TestCase):
         r = json.loads(buffer.getvalue())[KEY]
         self.assertEqual((code, r["success"]), (2, False))
         self.assertTrue(r["error_message"].startswith("check aborted:"))
+        # the crash result is in the full contract shape: no missing key for a consumer
+        self.assertEqual(set(r), {"success", "checked_at", "status", "tools", "items", "missing",
+                                  "next_step", "error_message"})
+        self.assertEqual((r["status"], r["tools"], r["items"], r["missing"]), ("fail", {}, [], []))
+        self.assertTrue(r["next_step"].startswith("fix the check error first"))
         self.assertIn("probe exploded", r["error_message"])
         # the human report names it a check error, never "READY"
         buffer = io.StringIO()

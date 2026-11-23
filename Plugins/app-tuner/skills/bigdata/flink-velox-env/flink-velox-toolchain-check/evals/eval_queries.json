@@ -1,4 +1,7 @@
 {
+  "skill_name": "flink-velox-toolchain-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
   "queries": [
     {
       "id": "q-missing-cmake",
@@ -32,7 +35,7 @@
     },
     {
       "id": "q-overall",
-      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
       "should_trigger": false,
       "note": "总裁决 → 统筹 flink-velox-env-check"
     },

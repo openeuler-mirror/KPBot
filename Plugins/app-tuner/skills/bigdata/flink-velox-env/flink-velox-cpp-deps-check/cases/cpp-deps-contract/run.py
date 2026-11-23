@@ -3,15 +3,18 @@
 
 Drives scripts/cpp_deps_check.py against a fake machine laid out in a scratch
 directory — a sysroot (os-release, headers incl. a <triplet>/ directory,
-/usr/local artifacts, a fake PATH with nothing on it) and three source
-checkouts — with nothing from the real machine in play; the script's seam
-ENV_CHECK_SYSROOT carries the fake. Pins the verdict contract (exit codes,
-success, status, missing, next_step order), every probe rule of both levels
-(header directories, the 13 packages and their openEuler names, setup-script
-choice by OS, install_velox_deps parsing boundaries, the four /usr/local
-artifact kinds, the protoc override), the velox-checkout resolution order,
-skipped-vs-fail semantics, the JSON shape, --out, "check aborted:" and that a
-check leaves the machine untouched.
+/usr/local artifacts, a fake PATH with nothing on it or a gcc stub) and source
+checkouts — with nothing from the real machine in play; the script's seams
+ENV_CHECK_SYSROOT and ENV_CHECK_WALK_ROOT carry the fake. Pins the verdict
+contract (exit codes, success, status, missing, next_step order, the verdict
+limited to "system headers present" when the source level is skipped), every
+probe rule of both levels (header directories incl. the target's multiarch
+triplet from gcc -dumpmachine or the machine table, the 13 packages and their
+openEuler names, setup-script choice by OS, install_velox_deps parsing
+boundaries, all four /usr/local artifact kinds, the protoc override), the
+velox-checkout resolution order, the walk-up boundary, skipped-vs-fail
+semantics, the JSON shape (also for a crash), --out safety (inside the project,
+no symlink, no silent overwrite) and that a check leaves the machine untouched.
 
 Writes results/result.json; exit 0 iff all tests pass.
 """
@@ -61,6 +64,8 @@ SETUP_SCRIPT = textwrap.dedent('''\
       run_and_time install_glog
       run_and_time install_protobuf
       run_and_time install_fmt
+      run_and_time install_snappy
+      run_and_time install_uring
     }
     function install_fmt() { cmake_install; }
     # outside install_velox_deps: not on the list
@@ -68,7 +73,7 @@ SETUP_SCRIPT = textwrap.dedent('''\
       run_and_time install_conda_helper
     }
     ''')
-PARSED = ["gflags", "glog", "protobuf", "fmt"]
+PARSED = ["gflags", "glog", "protobuf", "fmt", "snappy", "uring"]
 
 
 def load_module():
@@ -109,11 +114,15 @@ class FakeMachine:
                 self.write(self.sys / "usr" / "include" / header, "/* header */\n")
 
     def source_libs(self, without=()):
-        # one library per kind of /usr/local trace the probe accepts
+        # one library per kind of /usr/local trace the probe accepts: a cmake
+        # config dir (name / Capitalized in lib64), an include dir, a header
+        # (<name>.h and the lib<name>.h spelling), a probe binary
         kinds = {
             "gflags": ("dir", self.sys / "usr/local/lib/cmake/gflags"),
-            "glog": ("dir", self.sys / "usr/local/include/glog"),
             "fmt": ("dir", self.sys / "usr/local/lib64/cmake/Fmt"),
+            "glog": ("dir", self.sys / "usr/local/include/glog"),
+            "snappy": ("file", self.sys / "usr/local/include/snappy.h"),
+            "uring": ("file", self.sys / "usr/local/include/liburing.h"),
             "protobuf": ("bin", self.sys / "usr/local/bin/protoc"),
         }
         for lib, (kind, path) in kinds.items():
@@ -121,6 +130,8 @@ class FakeMachine:
                 continue
             if kind == "dir":
                 path.mkdir(parents=True, exist_ok=True)
+            elif kind == "file":
+                self.write(path, "/* header */\n")
             else:
                 self.script(path, 'echo "libprotoc 25.3"\n')
 
@@ -131,7 +142,9 @@ class FakeMachine:
 
     def env(self, **overrides):
         env = {"PATH": str(self.bin), "ENV_CHECK_SYSROOT": str(self.sys), "HOME": str(self.root),
-               "LC_ALL": "C", "GFV_REPOS_DIR": str(self.repos)}
+               "LC_ALL": "C", "GFV_REPOS_DIR": str(self.repos),
+               # the upward search for repos/velox never leaves the fake machine
+               "ENV_CHECK_WALK_ROOT": str(self.root)}
         for key, value in overrides.items():
             if value is None:
                 env.pop(key, None)
@@ -187,30 +200,57 @@ class CppDepsCase(unittest.TestCase):
         self.assertEqual((r["system"]["expected"], r["system"]["present"], r["system"]["missing"]),
                          (13, 13, []))
         self.assertEqual(r["source"]["expected"], PARSED)
-        self.assertEqual((r["source"]["present"], r["source"]["missing"]), (4, []))
+        self.assertEqual((r["source"]["present"], r["source"]["missing"]), (6, []))
+        self.assertIs(r["source_probed"], True)
         self.assertEqual(r["source"]["list_source"],
                          str(self.m.repos / "velox" / "scripts" / "setup-centos9.sh"))
         self.assertEqual(r["velox_dir"], os.path.realpath(str(self.m.repos / "velox")))
         self.assertEqual([i["name"] for i in r["items"]], list(ORDER) + ["source-deps"])
         self.assertEqual(self.item(r, "source-deps")["status"], "ok")
         self.assertEqual(self.item(r, "source-deps")["detail"],
-                         f"4/4 present under /usr/local (list: {r['source']['list_source']}; "
+                         f"6/6 present under /usr/local (list: {r['source']['list_source']}; "
                          "velox checkout via GFV_REPOS_DIR/velox)")
         self.assertEqual(r["next_step"], "ready: every C++ library the stack needs is present")
         _, out, _, _ = self.run_check()
-        self.assertIn("cpp-deps    OK       13/13 system headers present; source-level 4/4 present "
+        self.assertIn("cpp-deps    OK       13/13 system headers present; source-level 6/6 present "
                       "under /usr/local (list: ", out)
         self.assertIn("READY: every C++ library the stack needs is present", out)
         self.assertEqual(err, "")
 
-    def test_header_in_triplet_dir_counts(self):
+    def test_header_in_target_triplet_dir_counts(self):
+        """The <triplet>/ directory probed is the target's: gcc -dumpmachine when a
+        compiler is on PATH, else the table for this machine."""
         self.ready()
         (self.m.sys / "usr/include/librdkafka/rdkafka.h").unlink()
+        # a compiler on PATH decides the triplet
+        self.m.script(self.m.bin / "gcc", 'echo "aarch64-linux-gnu"\n')
         self.m.write(self.m.sys / "usr/include/aarch64-linux-gnu/librdkafka/rdkafka.h", "/* h */\n")
         code, _, _, r = self.run_check("--json")
-        self.assertEqual((code, r["success"]), (0, True))
+        self.assertEqual((code, r["success"], r["triplet"]), (0, True, "aarch64-linux-gnu"))
         self.assertEqual(self.item(r, "librdkafka")["detail"],
                          f"header found: {self.m.sys}/usr/include/aarch64-linux-gnu/librdkafka/rdkafka.h")
+        # without a compiler: the machine's own triplet
+        (self.m.bin / "gcc").unlink()
+        (self.m.sys / "usr/include/aarch64-linux-gnu/librdkafka/rdkafka.h").unlink()
+        machine_triplet = {"aarch64": "aarch64-linux-gnu", "x86_64": "x86_64-linux-gnu"}.get(
+            __import__("platform").machine())
+        if machine_triplet:
+            self.m.write(self.m.sys / f"usr/include/{machine_triplet}/librdkafka/rdkafka.h", "/* h */\n")
+            _, _, _, r = self.run_check("--json")
+            self.assertEqual((r["triplet"], self.item(r, "librdkafka")["status"]), (machine_triplet, "ok"))
+
+    def test_header_in_foreign_triplet_dir_does_not_count(self):
+        """Headers of another architecture under /usr/include do not make a library
+        present for this build."""
+        self.ready()
+        (self.m.sys / "usr/include/librdkafka/rdkafka.h").unlink()
+        self.m.script(self.m.bin / "gcc", 'echo "aarch64-linux-gnu"\n')
+        self.m.write(self.m.sys / "usr/include/x86_64-linux-gnu/librdkafka/rdkafka.h", "/* h */\n")
+        self.m.write(self.m.sys / "usr/include/mips64el-linux-gnuabi64/librdkafka/rdkafka.h", "/* h */\n")
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"]), (1, False))
+        self.assertEqual(self.item(r, "librdkafka")["status"], "fail")
+        self.assertEqual(r["system"]["missing"], ["librdkafka"])
 
     def test_header_under_usr_local_counts(self):
         self.ready()
@@ -268,7 +308,7 @@ class CppDepsCase(unittest.TestCase):
         self.assertEqual((item["status"], item["fix"]),
                          ("fail", "built by Velox's own setup script: install_protobuf()"))
         self.assertEqual(self.item(r, "source-deps")["status"], "info")
-        self.assertIn("3/4 present (list: ", self.item(r, "source-deps")["detail"])
+        self.assertIn("5/6 present (list: ", self.item(r, "source-deps")["detail"])
         self.assertEqual(r["source"]["missing"], ["protobuf"])
         self.assertIn("protobuf: not found under /usr/local", r["missing"])
         self.assertEqual(r["next_step"], "build the missing libraries with Velox's own setup script "
@@ -303,11 +343,16 @@ class CppDepsCase(unittest.TestCase):
         self.assertEqual(self.item(r, "source-deps")["status"], "warn")
         self.assertIn("ships no setup script for CentOS/RHEL 7", self.item(r, "source-deps")["detail"])
         self.assertEqual(r["source"], {"list_source": None, "expected": [], "present": None, "missing": []})
+        self.assertIs(r["source_probed"], False)
+        self.assertEqual(r["next_step"], "system headers present; source-level libraries not probed "
+                         "(not probed: the velox checkout ships no setup script for CentOS/RHEL 7 "
+                         "(only setup-ubuntu.sh and setup-centos9.sh), so this OS is not a supported build host)")
         _, out, _, _ = self.run_check()
         self.assertIn("system headers present; source-level warn", out)
         self.assertIn("  WARN  source-deps: not probed: the velox checkout ships no setup script for "
                       "CentOS/RHEL 7", out)
-        self.assertIn("READY: every C++ library the stack needs is present", out)
+        self.assertIn("READY: 13/13 system headers present; source-level libraries not probed", out)
+        self.assertNotIn("every C++ library", out)
         # a checkout without the script file -> warn
         self.m.os_release()
         (self.m.repos / "velox/scripts/setup-centos9.sh").unlink(missing_ok=True)
@@ -317,25 +362,41 @@ class CppDepsCase(unittest.TestCase):
         self.m.checkout(body="#!/bin/bash\nfunction install_velox_deps {\n  run_and_time install_conda\n}\n")
         _, _, _, r = self.run_check("--json")
         self.assertIn("no install_* calls found", self.item(r, "source-deps")["detail"])
+        self.assertIs(r["source_probed"], False)
+        _, out, _, _ = self.run_check()
+        self.assertNotIn("None/0", out)
+        self.assertIn("source-level warn", out)
+        self.assertIn("READY: 13/13 system headers present; source-level libraries not probed", out)
 
     def test_no_velox_checkout_is_skipped_not_failure(self):
         self.m.os_release()
         self.m.headers()
         elsewhere = self.tmp / "elsewhere"
         elsewhere.mkdir()
-        env = self.m.env(GFV_REPOS_DIR=None)
+        # a checkout ABOVE the walk boundary (an ancestor of the working directory)
+        # must never be reached: the walk stops at ENV_CHECK_WALK_ROOT
+        self.m.write(self.tmp / "repos/velox/CMakeLists.txt", "cmake_minimum_required(VERSION 3.16)\n")
+        env = self.m.env(GFV_REPOS_DIR=None, ENV_CHECK_WALK_ROOT=str(elsewhere))
         code, _, _, r = self.run_check("--json", env=env, cwd=str(elsewhere))
         self.assertEqual((code, r["success"]), (0, True))
         self.assertEqual(r["status"], "skipped")
         self.assertIsNone(r["velox_dir"])
         self.assertEqual(r["source"], {"list_source": None, "expected": [], "present": None, "missing": []})
+        self.assertIs(r["source_probed"], False)
         item = self.item(r, "source-deps")
         self.assertEqual(item["status"], "skipped")
         self.assertTrue(item["detail"].startswith("not probed: needs the velox checkout"))
-        self.assertEqual(r["next_step"], "ready: every C++ library the stack needs is present")
+        # the verdict is limited to the system headers and says how to probe the rest
+        self.assertEqual(r["next_step"], "system headers present; source-level libraries not probed "
+                         "— give the velox checkout (--velox-dir or VELOX_HOME) to check them")
         _, out, _, _ = self.run_check(env=env, cwd=str(elsewhere))
         self.assertIn("source-level skipped: not probed: needs the velox checkout", out)
-        self.assertIn("READY", out)
+        self.assertIn("READY: 13/13 system headers present; source-level libraries not probed", out)
+        self.assertNotIn("every C++ library", out)
+        # without the boundary seam the same walk would have found the ancestor checkout
+        env_unbounded = self.m.env(GFV_REPOS_DIR=None, ENV_CHECK_WALK_ROOT=None)
+        _, _, _, r = self.run_check("--json", env=env_unbounded, cwd=str(elsewhere))
+        self.assertEqual(r["velox_dir"], os.path.realpath(str(self.tmp / "repos/velox")))
 
     def test_velox_dir_resolution_order(self):
         self.m.os_release()
@@ -354,6 +415,7 @@ class CppDepsCase(unittest.TestCase):
         # walked upward from the working directory when nothing is given (the machine root
         # holds repos/velox one level down)
         _, _, _, r = self.run_check("--json", env=self.m.env(GFV_REPOS_DIR=None), cwd=str(self.m.root))
+        self.assertEqual(r["velox_dir"], os.path.realpath(str(self.m.repos / "velox")))
         self.assertIn("velox checkout via repos/velox walked up from the working directory",
                       self.item(r, "source-deps")["detail"])
         # an explicit path that is not a directory: warn, level 2 skipped, still not a failure
@@ -367,8 +429,8 @@ class CppDepsCase(unittest.TestCase):
         self.ready()
         (self.m.sys / "usr/include/openssl/ssl.h").unlink()
         _, _, _, r = self.run_check("--json")
-        self.assertEqual(set(r), {"success", "checked_at", "status", "os", "system", "source", "velox_dir",
-                                  "items", "missing", "next_step", "error_message"})
+        self.assertEqual(set(r), {"success", "checked_at", "status", "os", "triplet", "system", "source",
+                                  "source_probed", "velox_dir", "items", "missing", "next_step", "error_message"})
         self.assertEqual(set(r["system"]), {"expected", "present", "missing"})
         self.assertEqual(set(r["source"]), {"list_source", "expected", "present", "missing"})
         self.assertEqual(set(self.item(r, "libevent")), {"name", "status", "detail"})
@@ -382,6 +444,39 @@ class CppDepsCase(unittest.TestCase):
         out_file = self.tmp / "project" / "cpp-deps-check.json"
         _, stdout, _, _ = self.run_check("--json", "--out", str(out_file))
         self.assertEqual(json.loads(out_file.read_text(encoding="utf-8")), json.loads(stdout))
+
+    def test_out_is_confined_to_the_project(self):
+        self.ready()
+        # outside the project (the working directory): refused, exit 2, nothing written
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        out_file = self.tmp / "elsewhere_outside.json"
+        code, stdout, err, r = self.run_check("--json", "--out", str(out_file), cwd=str(elsewhere))
+        self.assertEqual((code, r["success"]), (2, True))  # the verdict still prints
+        self.assertIn("inside the project directory", err)
+        self.assertFalse(out_file.exists())
+        # a symlink, even one pointing inside the project: refused, its target untouched
+        target = self.tmp / "keep.json"
+        target.write_text("keep me\n", encoding="utf-8")
+        link = self.tmp / "link.json"
+        link.symlink_to(target)
+        code, _, err, _ = self.run_check("--json", "--out", str(link))
+        self.assertEqual(code, 2)
+        self.assertIn("not a symlink", err)
+        self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
+        # an existing archive is kept unless --overwrite is given
+        archive = self.tmp / "project" / "cpp-deps-check.json"
+        self.assertEqual(self.run_check("--json", "--out", str(archive))[0], 0)
+        first = archive.read_text(encoding="utf-8")
+        code, _, err, _ = self.run_check("--json", "--out", str(archive))
+        self.assertEqual(code, 2)
+        self.assertIn("--overwrite", err)
+        self.assertEqual(archive.read_text(encoding="utf-8"), first)
+        (self.m.sys / "usr/include/openssl/ssl.h").unlink()
+        code, _, _, _ = self.run_check("--json", "--out", str(archive), "--overwrite")
+        self.assertEqual(code, 1)
+        self.assertFalse(json.loads(archive.read_text(encoding="utf-8"))[KEY]["success"])
+        self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")
@@ -402,6 +497,12 @@ class CppDepsCase(unittest.TestCase):
         r = json.loads(buffer.getvalue())[KEY]
         self.assertEqual((code, r["success"]), (2, False))
         self.assertTrue(r["error_message"].startswith("check aborted:"))
+        # the crash result is in the full contract shape: no missing key for a consumer
+        self.assertEqual(set(r), {"success", "checked_at", "status", "os", "triplet", "system", "source",
+                                  "source_probed", "velox_dir", "items", "missing", "next_step", "error_message"})
+        self.assertEqual((r["status"], r["items"], r["missing"], r["source_probed"]), ("fail", [], [], False))
+        self.assertEqual(r["system"], {"expected": 13, "present": None, "missing": []})
+        self.assertTrue(r["next_step"].startswith("fix the check error first"))
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             module.main([])

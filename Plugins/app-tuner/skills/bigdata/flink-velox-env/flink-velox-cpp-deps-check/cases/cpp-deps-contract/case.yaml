@@ -1,11 +1,11 @@
 name: cpp-deps-contract
 skill: flink-velox-cpp-deps-check
 tier: A
-entrypoint: ["python3", "skills/bigdata/flink-velox-env/flink-velox-cpp-deps-check/cases/cpp-deps-contract/run.py"]
+entrypoint: ["python3", "cases/cpp-deps-contract/run.py"]
 assert:
   - type: exit_code
     expect: 0
   - type: json_field
-    file: skills/bigdata/flink-velox-env/flink-velox-cpp-deps-check/cases/cpp-deps-contract/results/result.json
+    file: results/result.json
     field: success
     expect: true

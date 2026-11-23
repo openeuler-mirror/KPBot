@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build_tools_check.py — read-only check of the build-side tools the GFV stack needs.
+"""build_tools_check.py — read-only check of the build-side tools the GlutenFlink stack needs.
 
 Which tools: ninja, ccache, autoconf, automake, libtool, flex, bison, python3
 and patchelf — looked up on PATH and asked for --version. The script classifies
@@ -7,11 +7,15 @@ only: it installs nothing, changes nothing, writes nowhere except the optional
 --out file.
 
 Usage:
-  build_tools_check.py [--json] [--out FILE]
+  build_tools_check.py [--json] [--out FILE [--overwrite]]
 
-Exit codes: 0 every tool present; 1 at least one missing; 2 check error (JSON,
-error_message "check aborted: ...") — an invalid command line is also 2, with
-the usage on stderr and no JSON.
+--out FILE also archives the JSON result. The file must be a regular path inside
+the project directory (the working directory) — a symlink or a path outside it
+is refused, and an existing file is kept unless --overwrite is given.
+
+Exit codes: 0 every tool present; 1 at least one missing; 2 check error (JSON in
+the full contract shape, error_message "check aborted: ..."), a refused --out, or
+an invalid command line (usage on stderr, no JSON).
 """
 import argparse
 import datetime
@@ -105,11 +109,52 @@ def build_result():
     return {KEY: result}, 0 if success else 1
 
 
+def aborted(exc):
+    """A check crash in the full contract shape: every documented key exists, so a
+    consumer never trips over a missing field while handling the failure."""
+    return {KEY: {
+        'success': False,
+        'checked_at': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
+        'status': 'fail',
+        'tools': {},
+        'items': [],
+        'missing': [],
+        'next_step': 'fix the check error first (see error_message), then rerun',
+        'error_message': f'check aborted: {exc!r}',
+    }}
+
+
+def write_out(path, result, overwrite):
+    """The --out archive stays inside the project (the working directory), is never a
+    symlink, and is never truncated without --overwrite. Returns the exit code to use
+    when the write is refused (0 when written); the verdict itself is kept either way."""
+    root = os.path.realpath(os.getcwd()) + os.sep
+    target = os.path.abspath(path)
+    if os.path.islink(target) or not os.path.realpath(target).startswith(root):
+        print('build_tools_check.py: --out must be a regular path inside the project directory '
+              f'(the working directory), not a symlink or a path outside it: {path}', file=sys.stderr)
+        return 2
+    if os.path.exists(target) and not overwrite:
+        print(f'build_tools_check.py: --out already exists, pass --overwrite to replace it: {path}',
+              file=sys.stderr)
+        return 2
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, 'w' if overwrite else 'x', encoding='utf-8') as fh:  # 'x' never follows a symlink
+            fh.write(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    except OSError as exc:  # the archive is a side output: say so, keep the verdict
+        print(f'build_tools_check.py: cannot write --out {path}: {exc.strerror or exc}', file=sys.stderr)
+        return 2
+    return 0
+
+
 def render(result):
     r = result[KEY]
-    if r['error_message'].startswith('check aborted'):
-        return f"CHECK ERROR: {r['error_message']}"
     lines = []
+    if r['error_message'].startswith('check aborted'):
+        lines.append(f"CHECK ERROR: {r['error_message']}")
+        lines.append(f"next: {r['next_step']}")
+        return '\n'.join(lines)
     if r['success']:
         lines.append('build-tools OK       all %d present: ' % len(r['items']) + ', '.join(
             f'{i["name"]} {i["version"] or "version unknown"}' for i in r['items']))
@@ -128,27 +173,19 @@ def render(result):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='Read-only check of the build-side tools '
-                                                 '(ninja ccache autoconf automake libtool flex bison '
-                                                 'python3 patchelf) for the Flink + GlutenFlink stack.')
-    parser.add_argument('--out', help='also write the JSON result to this file')
+    parser = argparse.ArgumentParser(description='Read-only check of the build tools '
+                                                 '(git cmake gcc g++ mvn) for the Flink + GlutenFlink stack.')
+    parser.add_argument('--out', help='also write the JSON result to this file (inside the project '
+                                      'directory; an existing file is kept unless --overwrite)')
+    parser.add_argument('--overwrite', action='store_true', help='let --out replace an existing file')
     parser.add_argument('--json', action='store_true', help='print the JSON result only')
     args = parser.parse_args(argv)
     try:
         result, code = build_result()
     except Exception as exc:  # a check bug must never be reported as "present"
-        result = {KEY: {'success': False, 'error_message': f'check aborted: {exc!r}',
-                        'missing': [], 'items': []}}
-        code = 2
+        result, code = aborted(exc), 2
     if args.out:
-        try:
-            parent = os.path.dirname(os.path.abspath(args.out))
-            os.makedirs(parent, exist_ok=True)
-            with open(args.out, 'w', encoding='utf-8') as fh:
-                fh.write(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
-        except OSError as exc:  # the archive is a side output: say so, keep the verdict
-            print(f'build_tools_check.py: cannot write --out {args.out}: {exc.strerror or exc}',
-                  file=sys.stderr)
+        code = max(code, write_out(args.out, result, args.overwrite))  # a refused write is 2, the verdict still prints
     print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else render(result))
     return code
 

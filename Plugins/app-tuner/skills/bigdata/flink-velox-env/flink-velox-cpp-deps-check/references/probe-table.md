@@ -20,7 +20,7 @@
 | zlib | `zlib.h` | zlib-devel |
 | librdkafka | `librdkafka/rdkafka.h` | librdkafka-devel |
 
-- 探测目录：`/usr/include/`、`/usr/include/*/`（triplet 子目录，按名排序）、`/usr/local/include/`
+- 探测目录：`/usr/include/`、`/usr/include/<triplet>/`（**只取目标编译器**的 multiarch 目录：PATH 上有 gcc 时 `gcc -dumpmachine`，否则按 `platform.machine()` 查表 aarch64 → aarch64-linux-gnu、x86_64 → x86_64-linux-gnu、armv7l → arm-linux-gnueabihf、ppc64le → powerpc64le-linux-gnu、riscv64 → riscv64-linux-gnu、s390x → s390x-linux-gnu；JSON 的 `triplet` 字段记录实际取值）、`/usr/local/include/`。其它架构的目录不探：x86_64 主机上只有 aarch64-linux-gnu/curl/curl.h 时 curl 判缺
 - ok：detail `header found: <找到的路径>`；fail：detail `no header <第一个候选> under /usr/include or /usr/local/include`，fix `system package (openEuler name): <包名>`
 
 ## 2. 第二层：Velox 源码级
@@ -40,14 +40,20 @@
 
 ## 3. velox checkout 定位顺序
 
-`--velox-dir` → `VELOX_HOME` → `GFV_REPOS_DIR/velox` → 从当前目录向上找 `repos/velox`。前两项给了但不是目录时报 warn 并跳过第二层；后两项找不到则静默继续。
+`--velox-dir` → `VELOX_HOME` → `GFV_REPOS_DIR/velox` → 从当前目录向上找 `repos/velox`。前两项给了但不是目录时报 warn 并跳过第二层；后两项找不到则静默继续。向上查找默认到文件系统根；设置了 `ENV_CHECK_WALK_ROOT`（tier-A 缝）时走到该目录即停。
 
 ## 4. 判定与 next_step
 
 - `success` = 没有 fail（第二层 skipped / warn 不阻断）；`status` = 全部条目最差值
-- `next_step`：系统库缺 → `install the missing system packages (dnf install <包名…按表序>), then rerun`；只源码级缺 → `build the missing libraries with Velox's own setup script (install_<lib>(), …), then rerun`；全在 → `ready: every C++ library the stack needs is present`
+- `next_step`：系统库缺 → `install the missing system packages (dnf install <包名…按表序>), then rerun`；只源码级缺 → `build the missing libraries with Velox's own setup script (install_<lib>(), …), then rerun`；第二层 skipped → `system headers present; source-level libraries not probed — give the velox checkout (--velox-dir or VELOX_HOME) to check them`；第二层 warn → `system headers present; source-level libraries not probed (<原因>)`；两层都探过且全在 → `ready: every C++ library the stack needs is present`
 - `error_message`：失败形如 `2 item(s) missing: openssl, fmt`（先系统库后源码级库）
 
-## 5. 来源
+## 5. --out 留档与中止态
 
-13 个库与包名表来自 GFV 安装器的 cpp-deps 探测清单；源码级清单的解析方式来自其 `source-deps.sh`（逐库探测后驱动官方 install 函数）。本 skill 只探测，不驱动任何安装。
+- `--out FILE` 的目标必须是项目目录（运行时的当前工作目录）内的常规路径：`realpath` 落在项目目录之外、或路径本身是符号链接 → 拒绝（退出码 2，stderr 说明），检查结论照常打印
+- 已存在的文件不覆盖，除非加 `--overwrite`；新建用独占创建（`open(..., 'x')`），不跟随符号链接
+- 检查崩溃（异常）：退出码 2，JSON 仍是完整契约形态——`success: false`、`status: fail`、空的观测 / 条目 / `missing`、`next_step: fix the check error first (see error_message), then rerun`、`error_message` 以 `check aborted: ` 开头——调用方按契约处理故障时不会再遇到缺字段
+
+## 6. 来源
+
+13 个库与包名表来自 GFVBot 安装器的 cpp-deps 探测清单；源码级清单的解析方式来自其 `source-deps.sh`（逐库探测后驱动官方 install 函数）。本 skill 只探测，不驱动任何安装。

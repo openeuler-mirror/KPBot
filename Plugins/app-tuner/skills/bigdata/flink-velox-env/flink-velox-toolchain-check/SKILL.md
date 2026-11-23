@@ -3,10 +3,11 @@ name: flink-velox-toolchain-check
 description: >
   Flink + GlutenFlink（velox 向量化栈）编译工具链只读检查：在 PATH 上找 git、cmake、gcc、g++、mvn
   五件并取各自版本，逐项 ok/fail，缺的给 openEuler 包名（g++ → gcc-c++、mvn → maven），末尾唯一
-  next_step。只扫不改：不装包、不改环境。适用于搭 GFV 构建环境前后、编译报 cmake/gcc/mvn
-  "command not found" 时先查缺什么。触发词：编译工具链、工具链齐不齐、有没有 cmake/gcc/g++/mvn、
-  gcc 版本、mvn 版本、command not found。不负责：ninja/ccache/autoconf 等构建辅助工具 →
-  flink-velox-build-tools-check；C++ 库头文件 → flink-velox-cpp-deps-check；"能不能编译 GFV 栈"的
+  next_step。只扫不改：不装包、不改环境。适用于搭 GlutenFlink 构建环境前后、编译报 cmake/gcc/mvn
+  报 cmake / gcc / mvn "command not found" 时先查缺什么。触发词：编译工具链、工具链齐不齐、
+  有没有 cmake/gcc/g++/mvn、gcc 版本、mvn 版本、cmake/gcc/g++/mvn command not found（带工具名，
+  不与构建工具类重叠）。不负责：ninja/ccache/autoconf 等构建辅助工具 →
+  flink-velox-build-tools-check；C++ 库头文件 → flink-velox-cpp-deps-check；"能不能编译 GlutenFlink 栈"的
   总裁决 → flink-velox-env-check；装包修复 → 同族安装类 skill。
 compatibility: Linux (aarch64/x86_64)，Python 3.7+ 标准库
 metadata:
@@ -25,7 +26,7 @@ metadata:
 
 ### 适用（应使用本 skill）
 
-- 搭 GFV 构建环境之前或之后，确认编译工具链齐不齐
+- 搭 GlutenFlink 构建环境之前或之后，确认编译工具链齐不齐
 - 编译报 `cmake: command not found` / `gcc: command not found` / `mvn: command not found` 时先查缺什么
 - 换机器、换容器后的工具链确认
 - 要知道这台机器 gcc / mvn 等工具的版本
@@ -35,7 +36,7 @@ metadata:
 - 指望它把缺的装上——`fix` 与 `next_step` 只是工单，修复交给同族的安装类 skill
 - ninja / ccache / autoconf / automake / libtool / flex / bison / python3 / patchelf → `flink-velox-build-tools-check`
 - C++ 库头文件（libevent / openssl / re2 …）→ `flink-velox-cpp-deps-check`
-- "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`（它按目标聚合各具体项检查）
+- "这台机器能不能编译 GlutenFlink 栈"的总裁决 → 统筹 `flink-velox-env-check`（它按目标聚合各具体项检查）
 
 ## 检查项
 
@@ -54,12 +55,12 @@ metadata:
 ### 步骤 1：扫描
 
 ```bash
-python3 <skill_dir>/scripts/toolchain_check.py [--json] [--out FILE]
+python3 <skill_dir>/scripts/toolchain_check.py [--json] [--out FILE [--overwrite]]
 ```
 
-输出是人读报告：齐了一行 `toolchain   OK       all 5 present: git 2.43.0, cmake 3.30.4, ...`；缺了逐项 `FAIL <tool>: not found on PATH` 并附 `fix:`；末尾是 `READY` / `NOT READY` 与 `next:`。要机器消费时加 `--json`（只输出 JSON），要留档再加 `--out <项目内路径>/toolchain-check.json`。
+输出是人读报告：齐了一行 `toolchain   OK       all 5 present: git 2.43.0, cmake 3.30.4, ...`；缺了逐项 `FAIL <tool>: not found on PATH` 并附 `fix:`；末尾是 `READY` / `NOT READY` 与 `next:`。要机器消费时加 `--json`（只输出 JSON），要留档再加 `--out <项目内路径>/toolchain-check.json`（留档规则见「环境约定」）。
 
-退出码：**0** 五件全在；**1** 有缺失；**2** 检查本身出错（`error_message` 以 `check aborted:` 开头，此时结论不可信，先看报错）或命令行参数非法（stderr 为用法提示，无 JSON）。
+退出码：**0** 五件全在；**1** 有缺失；**2** 检查本身出错（`error_message` 以 `check aborted:` 开头，此时结论不可信，先看报错）、`--out` 被拒绝（见「环境约定」）或命令行参数非法（stderr 为用法提示，无 JSON）。
 
 ### 步骤 2：判读
 
@@ -71,7 +72,7 @@ python3 <skill_dir>/scripts/toolchain_check.py [--json] [--out FILE]
 
 - **只读**：只在 PATH 上找可执行文件并运行各工具的 `--version`；不写任何文件（`--out` 指定的除外）
 - `--version` 的退出码不看：有些工具把版本打到 stderr 或以非零退出，仍取第一行作版本
-- `--out` 的落盘文件放项目目录内，不写 `/tmp`
+- `--out` 留档受限：目标必须是项目目录（即运行时的当前工作目录）内的常规路径——项目目录之外、符号链接（含指向项目内的）一律拒绝；已存在的文件不覆盖，除非显式加 `--overwrite`；被拒绝时退出码 2、stderr 说明原因，检查结论照常打印
 
 ## 输出
 
@@ -100,11 +101,11 @@ python3 <skill_dir>/scripts/toolchain_check.py [--json] [--out FILE]
 
 - `tools`：每个工具的原始观测（`path`、`version`、`package`）；`items`：逐项判定（`name` / `status` / `detail`，fail 另带 `fix`）。条目状态只有 `ok` / `fail`；`status` 是全部条目的最差值
 - `success`：五件全在。`missing`：缺的工具，形如 `g++: not found on PATH`
-- 失败形态：`success: false`，`error_message` 形如 `1 tool(s) missing: g++`；检查崩溃：退出码 2，`error_message` 以 `check aborted:` 开头，`success: false`
+- 失败形态：`success: false`，`error_message` 形如 `1 tool(s) missing: g++`；检查崩溃：退出码 2，JSON 仍是完整契约形态（`status: fail`、空观测与条目、`missing: []`、`next_step` 指向先修检查错误），`error_message` 以 `check aborted:` 开头，`success: false`
 
 ## 边界与相邻 skill
 
 - `flink-velox-build-tools-check`：ninja / ccache / autoconf 等构建辅助工具——同层级的兄弟检查项，触发词不重叠
 - `flink-velox-cpp-deps-check`：C++ 库头文件（包管理器级与 Velox 源码级）
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一
-- 装包修复：同族安装类 skill；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复
+- 装包修复：同族安装类 skill（规划中，后续 PR）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复
