@@ -1,0 +1,17 @@
+{
+  "skill_name": "collect-environment",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "同一台机器上的 vllm-p 和 vllm-d 分别是 P、D。只采下来存档，不要对比。",
+      "expected_output": "按 P、D 分两次调用现有采集器，各传一个容器、不同输出目录和正确的 --role。核对两个采集包的元数据及 SUMMARY.txt，只报告真实的产物与缺采项，不启动比较器。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "只采容器 engine-2 的环境，后面要和旧 D 比。engine-2 的角色我还没确认。",
+      "expected_output": "先确认 engine-2 的角色，不根据名称或后续对比用途标成 D。不采其他容器，不把不完整采集当完整快照。",
+      "files": []
+    }
+  ]
+}
