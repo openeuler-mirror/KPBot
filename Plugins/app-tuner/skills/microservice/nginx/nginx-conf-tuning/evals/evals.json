@@ -1,0 +1,65 @@
+{
+  "skill_name": "nginx-conf-tuning",
+  "version": 1,
+  "notes": "Scene-driven config decisions. Split from nginx-optimization evals (id 1).",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我们有一台 4 核 VM，上面跑 nginx 做 HTTPS 网关，客户端不用 keepalive（每请求新建连接），压测环境，QPS 上不去。请做场景识别，给出 worker 数、ssl_session_cache、keepalive_requests、reuseport、证书类型、绑核掩码等关键配置决策及理由，并说明压测验证纪律。不要执行任何破坏性操作。",
+      "expected_output": "判定为 https_short（短连接、TLS 启用）；worker_processes = N = 4（短连接不留中断核）；ssl_session_cache off 且 ssl_session_tickets off（短连接会话不复用，缓存纯开销）；keepalive_requests 取短连接量级 2000；listen 443 ssl（短连接不加 reuseport）；ECDSA 证书优先 + TLSv1.2/1.3；worker_cpu_affinity 掩码是二进制字符串（核0=1、核1=10、核2=100、核3=1000）；access_log off；压测 ≥3 轮取均值、波动 >5% 重测、逐层归因。",
+      "files": [],
+      "expectations": [
+        "明确判定连接模式为 https 短连接（https_short），并给出判定依据（Connection: Close / 无 keepalive / listen 带 ssl）",
+        "worker_processes 给出 4（=核数 N），而不是 N-1，且能说明 N-1 是长连接场景规则",
+        "ssl_session_cache 给出 off（短连接会话不复用），且 ssl_session_tickets 也 off",
+        "keepalive_requests 给出短连接量级（2000），而非长连接的 200000",
+        "证书类型选择 ECDSA 并给出理由（ECC 运算量低于 RSA，握手吞吐显著更高）；协议版本 TLSv1.2/1.3",
+        "worker_cpu_affinity 掩码按二进制字符串书写（核0=1、核1=10、核2=100、核3=1000），不写成十六进制递进",
+        "压测验证纪律：≥3 轮取均值、波动 >5% 视为无效重测、只保留有增益的变更",
+        "没有建议 pkill nginx 或 stop 系统服务等破坏性操作（重启用 pidfile 作用域的 nginx -s stop）"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "4 核 VM 上 nginx 做纯 HTTP 静态内容分发，客户端每请求新建连接（Connection: Close），压测提升 QPS。给出 worker 数、keepalive_requests、listen reuseport 与绑核布局建议及理由。不要执行任何变更。",
+      "expected_output": "判定 http_short（4T）：worker_processes = 4 = N（短连接不留中断核）；keepalive_requests 取短连接量级 2000；listen 80 reuseport；中断与 worker 同核分布（2 队列核 2-3 的环境级配合，路由见 nginx-env-tuning）；worker_cpu_affinity 二进制掩码核0=1、核1=10、核2=100、核3=1000。",
+      "files": [],
+      "expectations": [
+        "场景判定为 http_short（短连接、无 TLS）",
+        "worker_processes 给 4（=N，短连接规则），并说明 N-1 是长连接规则",
+        "keepalive_requests 给 2000 量级（非长连接的 200000）",
+        "listen 80 加 reuseport",
+        "掩码按二进制字符串书写（核0=1、核1=10、核2=100、核3=1000）",
+        "没有给出 ssl_session_cache 相关决策（http 场景不适用）"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "8 核物理机上 nginx 做 HTTP API 负载均衡网关，客户端长连接（keepalive 复用），持续转发。给出 worker 数、keepalive_requests、listen 与绑核建议及理由。不要执行任何变更。",
+      "expected_output": "判定 http_long（8P）：worker_processes = 7 = N-1（留 1 核专跑 master + 网卡中断）；keepalive_requests = 200000（长连接复用大配额）；listen reuseport；worker 与中断布局配合见 nginx-env-tuning 长连接行（1 队列独立中断核）。",
+      "files": [],
+      "expectations": [
+        "场景判定为 http_long（长连接、无 TLS）",
+        "worker_processes 给 7 = N-1 并说明留核理由（master + 中断）",
+        "keepalive_requests 给 200000 量级（非短连接 2000）",
+        "listen 加 reuseport",
+        "没有把 ssl_session_cache 决策套在 http 场景上"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "4 核鲲鹏 VM 上 nginx 做 HTTPS 网关，客户端长连接（keepalive 复用连接），持续 TLS 转发。给出 worker 数、ssl_session_cache、ssl_session_tickets、keepalive_requests、listen 写法与证书协议选择及理由。不要执行任何变更。",
+      "expected_output": "判定 https_long（4T）：worker_processes = 3 = N-1（留 1 核 master + 中断）；ssl_session_cache = shared:SSL:1m（长连接复用握手，与短连接 off 相反）；ssl_session_tickets = off；keepalive_requests = 200000；listen 443 ssl reuseport（长连接加 reuseport，短连接不加）；证书 ECDSA 优先 + TLSv1.2/1.3。",
+      "files": [],
+      "expectations": [
+        "场景判定为 https_long（长连接、TLS 启用）",
+        "worker_processes 给 3 = N-1 并说明留核理由",
+        "ssl_session_cache 给 shared:SSL:1m（复用握手），并能对比短连接应 off",
+        "ssl_session_tickets 给 off",
+        "keepalive_requests 给 200000 量级",
+        "listen 443 ssl 且加 reuseport（长连接规则）",
+        "证书选 ECDSA 并给出 ECC 运算量低于 RSA 的理由"
+      ]
+    }
+  ]
+}
