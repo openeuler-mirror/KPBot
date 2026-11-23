@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-vllm-ascend-ttft-instrumentation",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "TTFT-01",
+      "prompt": "给 vLLM-Ascend 一侧出 TTFT 打点计划",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-02",
+      "prompt": "只给 vLLM 主仓出 TTFT 打点计划",
+      "should_trigger": false
+    }
+  ]
+}
