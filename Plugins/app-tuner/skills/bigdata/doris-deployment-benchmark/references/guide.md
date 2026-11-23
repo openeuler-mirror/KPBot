@@ -91,6 +91,8 @@ python3 "$SKILL_DIR/scripts/verify_tpch_import.py" \
 
 **Stream Load 传输与凭据。** 钉定 commit 的上游 `bin/load-tpch-data.sh` 用 `curl -u` 通过 HTTP 发送口令，并用 `--location-trusted` 把凭据转发给重定向目标；口令在链路上明文传输。该方式只适用于已确认可信、隔离且无窃听风险的测试网络，不得用于跨网段、共享网络或生产网络。其他环境启用 FE/BE HTTPS 后，用随附脚本导入：先请求 FE 的 307 目标，确认目标是 HTTPS 且主机在显式 `--allow-host` 列表中，再用 `--cacert` 验证 FE/BE 证书后发送数据；不使用 `-k`，也不会把口令转发给未校验的重定向目标。口令只从 `DORIS_PASSWORD` 环境变量读取，不进入 argv。
 
+先按目标版本的官方 [FE 证书配置](https://doris.apache.org/docs/3.x/admin-manual/auth/fe-certificate/) 和 [BE HTTPS 配置](https://doris.apache.org/docs/3.x/admin-manual/config/be-config/#enable_https) 配置服务端证书，确认客户端所用主机名与证书匹配。这里不自动生成或修改服务端凭据。
+
 上游 `gen-tpch-data.sh` 对 partsupp、orders、lineitem 生成 `.tbl.1` 到 `.tbl.N`（N 等于 `-c`），其他五表生成单个 `.tbl`。下面的循环同时覆盖这两类文件，按实际文件 `wc -l` 得到 expected rows，为每个文件指定唯一输出目录和以 `${table}_${index}` 形式结尾的 label；`verify_tpch_import.py` 能按该 label 把响应聚合到表。把 `BE_HOSTS` 设为 `SHOW BACKENDS` 中 Alive 的 BE 地址（多个用空格分隔），`DORIS_CA_BUNDLE` 设为签发 FE/BE 证书的 CA 文件：
 
 ```bash
