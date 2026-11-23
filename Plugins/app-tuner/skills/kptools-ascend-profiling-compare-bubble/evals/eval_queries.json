@@ -1,0 +1,20 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-bubble",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "BUB-01", "prompt": "设备时间轴上一段一段的空窗在哪，分别空了多久", "should_trigger": true },
+    { "id": "BUB-02", "prompt": "帮我找 NPU 的气泡窗口，并区分是计算空窗、通信等待还是同步等待", "should_trigger": true },
+    { "id": "BUB-03", "prompt": "两份 profiling 的气泡数量和最长气泡前后差多少", "should_trigger": true },
+    { "id": "BUB-04", "prompt": "这份 trace 里设备 idle gap 的起止时间戳列出来，方便我回 trace 定位", "should_trigger": true },
+    { "id": "BUB-05", "prompt": "优化后设备空窗减少了吗？按窗口看，不要只看 Free 占比", "should_trigger": true },
+    { "id": "BUB-06", "prompt": "分析单份采集的设备气泡，分成计算/通信/同步三类", "should_trigger": true },
+    { "id": "BUB-07", "prompt": "哪些空闲窗口紧邻 hcom 通信算子，属于通信等待", "should_trigger": true },
+    { "id": "BUB-08", "prompt": "对比这两份 profiling 的整体步耗时和瓶颈迁移", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare (v1) / -hub" },
+    { "id": "BUB-09", "prompt": "每步 Free 占比是多少，主要瓶颈分量变了吗", "should_trigger": false, "note": "Free 占比归 kptools-ascend-profiling-compare (v1)" },
+    { "id": "BUB-10", "prompt": "看一下每个 stream 的忙碌占比和跨流依赖", "should_trigger": false, "note": "routes to kptools-ascend-profiling-stream" },
+    { "id": "BUB-11", "prompt": "分析单份无栈 trace 的 P1/P2/P3 和模型结构", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis-nostack" },
+    { "id": "BUB-12", "prompt": "对比两份 trace 的算子种类、调用次数和 shape 分布", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-opstats" },
+    { "id": "BUB-13", "prompt": "帮我把推理服务的整体吞吐调高", "should_trigger": false, "note": "routes to kpbot-app-tuner" }
+  ]
+}
