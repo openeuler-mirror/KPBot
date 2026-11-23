@@ -1,0 +1,8 @@
+name: client-check
+skill: doris-deployment-benchmark
+tier: A
+entrypoint: ["python3", "cases/client-check/test_client_check.py"]
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0

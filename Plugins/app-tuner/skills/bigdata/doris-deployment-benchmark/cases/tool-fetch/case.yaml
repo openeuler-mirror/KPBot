@@ -1,0 +1,8 @@
+name: tool-fetch
+skill: doris-deployment-benchmark
+tier: A
+entrypoint: ["python3", "cases/tool-fetch/test_tool_fetch.py"]
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
