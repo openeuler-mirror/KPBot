@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "_comment": "线程角色识别配置（kptools-affinity-trace）。匹配对 comm 小写化后进行；tid==pid 的主线程无条件标 __main__，不进本表。新增框架/适配新版本线程名 = 加一条 rules，不改代码。rules 顺序即优先级（前 > 后）；role 命名空间自由，但参与 A2 设备对齐判定的 role 必须列入 npu_host_roles。真源：kpbot-app-tuner/subskills/cpu-affinity-optimization 的 PTA 分级模型与 vLLM/torchrun 实名映射表。",
+    "version": "1.0.0"
+  },
+  "rules": [
+    { "match": "exact",    "pattern": "mainthread",     "role": "pta_main",  "label": "PTA 前向算子下发（第一热点）" },
+    { "match": "exact",    "pattern": "npuguardthread", "role": "pta_guard", "label": "PTA 反向算子下发（第二热点）" },
+    { "match": "contains", "pattern": "acl_thread",     "role": "acl_thread", "label": "ACL 二级流水/控制通路" },
+    { "match": "contains", "pattern": "release_thread", "role": "release",   "label": "异步资源释放" },
+    { "match": "prefix",   "pattern": "hccl",           "role": "hccl_comm", "label": "HCCL 集合通信/看门狗" },
+    { "match": "contains", "pattern": "hcom",           "role": "hcom",     "label": "HCCL hcom 通道" },
+    { "match": "prefix",   "pattern": "vllm::",         "role": "vllm_ec",   "label": "vLLM EngineCore 主线程" },
+    { "match": "exact",    "pattern": "devicemanager",  "role": "cann_dm",   "label": "CANN 设备管理" },
+    { "match": "prefix",   "pattern": "devmmgr",        "role": "cann_dm",   "label": "CANN 设备内存管理" },
+    { "match": "contains", "pattern": "d2h",            "role": "d2h",       "label": "Device→Host 拷贝" },
+    { "match": "contains", "pattern": "h2d",            "role": "h2d",       "label": "Host→Device 拷贝" }
+  ],
+  "npu_host_roles": ["pta_main", "pta_guard", "acl_thread", "release", "hccl_comm",
+                     "hcom", "vllm_ec", "cann_dm", "d2h", "h2d", "__main__"],
+  "display": {
+    "unnamed_label": "未命名（数字/空名）",
+    "unmatched_label": "未匹配",
+    "unmatched_role": null,
+    "note": "未匹配/未命名线程按观测数据完整呈现，不猜角色（真源纪律）；unmatched_label 可自定义"
+  }
+}
