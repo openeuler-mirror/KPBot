@@ -82,6 +82,46 @@ class ClientCheckTests(unittest.TestCase):
             (self.output / "timeout.stdout").read_bytes(), b"partial"
         )
 
+    def test_empty_version_output_fails_even_on_zero_exit(self):
+        def empty_version(argv, **kwargs):
+            value = self.client(argv, **kwargs)
+            if argv[-1] == "SELECT version()":
+                value.stdout = "\n"
+            return value
+
+        with patch.object(module.subprocess, "run", side_effect=empty_version):
+            result = module.check(self.args)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("version", result["error"])
+        self.assertNotIn("version_output", result)
+        self.assertFalse((self.output / "02.stdout").exists())
+        self.assertEqual(
+            json.loads((self.output / "result.json").read_text())["status"],
+            "failed",
+        )
+
+    def test_main_exits_nonzero_on_empty_version(self):
+        def empty_version(argv, **kwargs):
+            value = self.client(argv, **kwargs)
+            if argv[-1] == "SELECT version()":
+                value.stdout = ""
+            return value
+
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["check_service.py", "--output", str(self.output)],
+            ),
+            patch.object(module.subprocess, "run", side_effect=empty_version),
+            patch("builtins.print"),
+        ):
+            self.assertEqual(module.main(), 1)
+        self.assertEqual(
+            json.loads((self.output / "result.json").read_text())["status"],
+            "failed",
+        )
+
     def test_missing_client_is_reported(self):
         with patch.object(
             module.subprocess,

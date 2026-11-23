@@ -1,0 +1,12 @@
+name: benchmark-rounds
+skill: clickhouse-deployment-benchmark
+tier: A
+entrypoint: ["bash", "cases/benchmark-rounds/run.sh"]
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: cases/benchmark-rounds/results/result.json
+    field: success
+    expect: true

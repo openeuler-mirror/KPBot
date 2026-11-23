@@ -23,14 +23,15 @@ clickhouse-client --host localhost --port 9000 --query 'SELECT sum(number) FROM 
 
 ## 可直接执行的有限查询基准
 
-使用 [官方 clickhouse-benchmark](https://clickhouse.com/docs/operations/utilities/clickhouse-benchmark)。以下是合成计算基准，不代表磁盘扫描或业务 SQL：
+使用 [官方 clickhouse-benchmark](https://clickhouse.com/docs/operations/utilities/clickhouse-benchmark)。以下是合成计算基准，不代表磁盘扫描或业务 SQL。`bash scripts/run_benchmark_rounds.sh` 为每次实验新建目录：目录已存在时以退出码 3 停止且不触碰旧文件；预热写入 `warmup.log`，每个测量轮次写入独立的 `round-<n>.log`，任一轮失败即停止。始终用 `bash` 显式调用，因此复制或安装后权限为 0644 也可用：
 
 ```bash
-mkdir -p results
-clickhouse-benchmark --host localhost --port 9000 --concurrency 1 --iterations 10 --query 'SELECT sum(number) FROM numbers(1000000)' > results/round-1.log 2>&1
+bash scripts/run_benchmark_rounds.sh --output "results/run-$(date -u +%Y%m%dT%H%M%SZ)" --rounds 3 -- \
+  --host localhost --port 9000 --concurrency 1 --iterations 10 \
+  --query 'SELECT sum(number) FROM numbers(1000000)'
 ```
 
-先执行一轮预热，再以新文件名执行三轮；每条命令都检查退出码并保留输出。统计工具输出的 QPS/延迟，保留各轮值；固定并发、查询、版本与线程设置。改测真实 SQL 时将已验证查询传给 --query，多条查询按官方工具的输入格式保存成文件并通过标准输入传入。始终设置有限 iterations。
+单二进制安装使用 `--client ./clickhouse --subcommand benchmark`。脚本只接受新目录；需要保留的上一轮输出不会被同名重定向截断。统计各轮日志中的 QPS/延迟并保留全部轮次值；固定并发、查询、版本与线程设置。改测真实 SQL 时将已验证查询传给 `--query`，多条查询按官方工具的输入格式保存成文件并通过标准输入传入。始终设置有限 iterations。
 
 ## TPC-H
 
@@ -42,7 +43,19 @@ git -C clickhouse-source sparse-checkout set tests/benchmarks/tpc-h
 git -C clickhouse-source rev-parse HEAD
 ```
 
-在实验库里用客户端 `--multiquery` 执行 init.sql，查询按 `queries/query_01.sql` 至 `query_22.sql` 逐条运行。读取同目录 README.md 处理查询与规模适配；主分支文件并不自动适用于所有服务版本。先从 SF=1 验证，再按容量选择规模。建表、导入和查询使用同一个独立数据库；执行前将建表 SQL 的数据库名改为该数据库并检查无覆盖已有表的动作。
+上游 `init.sql` 使用 `CREATE TABLE nation` 等未限定库名的语句，文件中没有可直接替换的库名；仅传 `--multiquery` 时表会建在当前连接默认库。先确认一个已授权的实验库（不存在时由有权限的账号先创建），在 DDL、导入和查询三处显式传入相同的 `--database`：
+
+```bash
+export CH=(clickhouse-client --host localhost --port 9000)
+export DB=tpch_sf1  # 替换为已授权的实验库
+"${CH[@]}" --database "${DB}" --multiquery < clickhouse-source/tests/benchmarks/tpc-h/init.sql
+# dbgen 的 .tbl 以 | 分隔且行尾多一个 |；去掉行尾分隔符并转为制表符分隔
+sed 's/|$//; s/|/\t/g' nation.tbl > nation.tsv
+"${CH[@]}" --database "${DB}" --query 'INSERT INTO nation FORMAT TSV' < nation.tsv
+"${CH[@]}" --database "${DB}" --query "$(cat clickhouse-source/tests/benchmarks/tpc-h/queries/query_01.sql)"
+```
+
+八张表的 `.tbl` 都按相同方式去掉行尾 `|` 并转为制表符分隔，再以 `FORMAT TSV` 导入；`query_01.sql` 至 `query_22.sql` 逐条查询时也使用同一个 `--database`。`init.sql` 中没有可替换的库名，不要依赖不存在的库名替换；若确需在已授权的实验范围内做 DDL 适配（例如引擎、分区或索引调整），应审查改动并保留记录，但不能因此省略 `--database`。否则表或查询会落到默认库。读取同目录 README.md 处理查询与规模适配；主分支文件并不自动适用于所有服务版本。先从 SF=1 验证，再按容量选择规模。执行前检查无覆盖已有表的动作。
 
 顺序：生成八张表数据 → 执行已审查 DDL → 按表导入 → 比对源文件记录数与 COUNT(*) → 校验查询结果 → 预热与多轮查询。保存生成参数、DDL/查询/数据清单校验和及导入日志。查询性能与合成计算基准分开报告。
 

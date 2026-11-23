@@ -89,7 +89,10 @@ def check(args):
         one = query("SELECT 1").strip().splitlines()
         if not one or one[-1] != "1":
             raise ValueError("SELECT 1 returned an unexpected result")
-        result["version_output"] = query("SELECT version()").strip()
+        version_output = query("SELECT version()").strip()
+        if not version_output:
+            raise ValueError("SELECT version() returned an empty result")
+        result["version_output"] = version_output
         sql = "SELECT sum(number) FROM numbers(1000)"
         values = query(sql).strip().splitlines()
         expected = "499500"
