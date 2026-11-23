@@ -1,0 +1,240 @@
+package templatecenter
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"testing"
+	"time"
+)
+
+const ReplicaStatusReady = "READY"
+
+var ErrTemplateHasNoReadyReplica = errors.New("no ready replica")
+
+type ReplicaStatus struct {
+	NodeID string
+	Status string
+}
+
+type blockedNodeKey struct{}
+
+var list func(context.Context, string) ([]ReplicaStatus, error)
+
+func isReady() bool { return true }
+
+func ListReplicas(ctx context.Context, id string) ([]ReplicaStatus, error) { return list(ctx, id) }
+
+func replicaModelToStatus(row ReplicaStatus) ReplicaStatus { return row }
+
+// Simulate a target with an additional, request-time placement restriction.
+func isReplicaSchedulableNow(ctx context.Context, row ReplicaStatus) bool {
+	return row.NodeID != ctx.Value(blockedNodeKey{}) && baselinePredicate(ctx, row)
+}
+
+func setup(enabled bool) *time.Time {
+	now := time.Unix(1, 0)
+	readyReplicaTTLEnabled = enabled
+	readyReplicaCache = readyReplicaTTLCache{now: func() time.Time { return now }}
+	return &now
+}
+
+func ready(node string) ReplicaStatus { return ReplicaStatus{NodeID: node, Status: ReplicaStatusReady} }
+
+func checkNode(t *testing.T, ctx context.Context, preferred string, want string) {
+	t.Helper()
+	row, err := ResolveTemplateReadyReplica(ctx, "template", preferred)
+	if err != nil || row.NodeID != want {
+		t.Fatalf("selected %q, error %v; want %q", row.NodeID, err, want)
+	}
+}
+
+func checkReads(t *testing.T, reads, want int) {
+	t.Helper()
+	if reads != want {
+		t.Fatalf("got %d replica list calls; want %d", reads, want)
+	}
+}
+
+func TestCompletedRequestsReuseOnlyWhenEnabled(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		enabled bool
+		want    int
+	}{{"disabled", false, 3}, {"enabled", true, 1}} {
+		t.Run(test.name, func(t *testing.T) {
+			clock := setup(test.enabled)
+			reads := 0
+			list = func(context.Context, string) ([]ReplicaStatus, error) {
+				reads++
+				return []ReplicaStatus{ready("a"), ready("b")}, nil
+			}
+			ctx := context.Background()
+			checkNode(t, ctx, "", "a")
+			*clock = clock.Add(300 * time.Millisecond)
+			checkNode(t, ctx, " b ", "b")
+			*clock = clock.Add(300 * time.Millisecond)
+			checkNode(t, context.WithValue(ctx, blockedNodeKey{}, "a"), "", "b")
+			checkReads(t, reads, test.want)
+		})
+	}
+}
+
+func TestExpiryStartsAtQueryEntry(t *testing.T) {
+	clock := setup(true)
+	reads := 0
+	list = func(context.Context, string) ([]ReplicaStatus, error) {
+		reads++
+		if reads == 1 {
+			*clock = clock.Add(700 * time.Millisecond)
+			return []ReplicaStatus{ready("a")}, nil
+		}
+		return []ReplicaStatus{ready("b")}, nil
+	}
+	ctx := context.Background()
+	checkNode(t, ctx, "", "a")
+	*clock = clock.Add(299 * time.Millisecond)
+	checkNode(t, ctx, "", "a")
+	*clock = clock.Add(time.Millisecond)
+	checkNode(t, ctx, "", "b")
+	checkReads(t, reads, 2)
+}
+
+func TestFailuresAndMissingReadyRowsAreNeverCached(t *testing.T) {
+	setup(true)
+	reads := 0
+	dbErr := errors.New("query failed")
+	list = func(context.Context, string) ([]ReplicaStatus, error) {
+		reads++
+		switch reads {
+		case 1:
+			return nil, dbErr
+		case 2:
+			return []ReplicaStatus{{NodeID: "a", Status: "CREATING"}}, nil
+		default:
+			return []ReplicaStatus{ready("b")}, nil
+		}
+	}
+	ctx := context.Background()
+	for _, want := range []error{dbErr, ErrTemplateHasNoReadyReplica} {
+		if _, err := ResolveTemplateReadyReplica(ctx, "template", ""); !errors.Is(err, want) {
+			t.Fatalf("got error %v; want %v", err, want)
+		}
+	}
+	checkNode(t, ctx, "", "b")
+	checkReads(t, reads, 3)
+}
+
+func TestLocalWritesInvalidateOnlyAfterSuccess(t *testing.T) {
+	setup(true)
+	reads := 0
+	node := "a"
+	list = func(context.Context, string) ([]ReplicaStatus, error) {
+		reads++
+		return []ReplicaStatus{ready(node)}, nil
+	}
+	ctx := context.Background()
+	checkNode(t, ctx, "", "a")
+	dbErr := errors.New("write failed")
+	if err := finishReadyReplicaWrite(dbErr); !errors.Is(err, dbErr) {
+		t.Fatalf("write failure lost: %v", err)
+	}
+	checkNode(t, ctx, "", "a")
+	checkReads(t, reads, 1)
+	node = "b"
+	if err := finishReadyReplicaWrite(nil); err != nil {
+		t.Fatal(err)
+	}
+	checkNode(t, ctx, "", "b")
+	checkReads(t, reads, 2)
+}
+
+func TestWriteFencesAnInFlightRead(t *testing.T) {
+	setup(true)
+	reads := 0
+	list = func(context.Context, string) ([]ReplicaStatus, error) {
+		reads++
+		if reads == 1 {
+			// The query captured the old result before a local write completed.
+			if err := finishReadyReplicaWrite(nil); err != nil {
+				return nil, err
+			}
+			return []ReplicaStatus{ready("old")}, nil
+		}
+		return []ReplicaStatus{ready("new")}, nil
+	}
+	ctx := context.Background()
+	checkNode(t, ctx, "", "new")
+	checkNode(t, ctx, "", "new")
+	checkReads(t, reads, 2)
+}
+
+func TestConcurrentMissesEachQuery(t *testing.T) {
+	setup(true)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	started := make(chan struct{}, 2)
+	list = func(ctx context.Context, _ string) ([]ReplicaStatus, error) {
+		started <- struct{}{}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	done := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			_, err := ResolveTemplateReadyReplica(ctx, "template", "")
+			done <- err
+		}()
+	}
+	count := 0
+	for count < 2 {
+		select {
+		case <-started:
+			count++
+		case <-ctx.Done():
+			goto join
+		}
+	}
+join:
+	cancel()
+	for i := 0; i < 2; i++ {
+		<-done
+	}
+	checkReads(t, count, 2)
+}
+
+func TestCapacityAndOversizedEntries(t *testing.T) {
+	clock := setup(true)
+	list = func(_ context.Context, id string) ([]ReplicaStatus, error) {
+		if id == "oversized" {
+			rows := make([]ReplicaStatus, readyReplicaTTLRows+1)
+			rows[0] = ready("a")
+			return rows, nil
+		}
+		return []ReplicaStatus{ready("a")}, nil
+	}
+	ctx := context.Background()
+	for _, id := range []string{"oversized", "0"} {
+		if _, err := ResolveTemplateReadyReplica(ctx, id, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok := readyReplicaCache.entries["oversized"]; ok {
+		t.Fatal("oversized entry was retained")
+	}
+	for i := 1; i <= readyReplicaTTLKeys; i++ {
+		if _, err := ResolveTemplateReadyReplica(ctx, strconv.Itoa(i), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := len(readyReplicaCache.entries); got != readyReplicaTTLKeys {
+		t.Fatalf("cache has %d entries; want %d", got, readyReplicaTTLKeys)
+	}
+	*clock = clock.Add(time.Second)
+	if _, err := ResolveTemplateReadyReplica(ctx, "fresh", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(readyReplicaCache.entries) != 1 || len(readyReplicaCache.entries["fresh"].rows) != 1 {
+		t.Fatal("expired entries prevented admission of a fresh entry")
+	}
+}
