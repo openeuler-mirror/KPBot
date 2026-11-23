@@ -12,6 +12,14 @@
       "prompt": "旧包里有两个容器，新的只有 P。我没有单独的旧 P 包。",
       "expected_output": "不运行会展开全部容器的比较，请求单对象旧 P 快照，不用包名猜新旧或选其他容器代替。",
       "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "先运行 evals/fixtures/make_duplicate.py <新的工作目录> 准备样例，再把生成的 p-snapshot/ 和 p-snapshot.tar.gz 分别当旧 P 和新 P，看看有何变化。",
+      "expected_output": "核对两个包的节点、对象、采集时间及内容相同，识别为同一次采集；停止，不启动比较器、不输出漂移结论。",
+      "files": [
+        "evals/fixtures/make_duplicate.py"
+      ]
     }
   ]
 }
