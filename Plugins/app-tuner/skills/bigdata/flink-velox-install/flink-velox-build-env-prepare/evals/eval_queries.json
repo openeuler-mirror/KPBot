@@ -1,0 +1,43 @@
+{
+  "skill_name": "flink-velox-build-env-prepare",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-prepare-build-env",
+      "prompt": "准备 GFV 的构建环境，装依赖、克隆源码仓",
+      "should_trigger": true,
+      "note": "场景入口类触发词：准备构建环境、装依赖、克隆源码仓"
+    },
+    {
+      "id": "q-source-deps",
+      "prompt": "跑 velox 的 setup 脚本把源码级 C++ 库装进 /usr/local",
+      "should_trigger": true,
+      "note": "source-deps 步骤：setup 脚本、源码级库"
+    },
+    {
+      "id": "q-plan-first",
+      "prompt": "先列出来要装哪些包、克隆哪些仓，我看过再说",
+      "should_trigger": true,
+      "note": "plan 子命令：先看计划再执行"
+    },
+    {
+      "id": "q-check-only",
+      "prompt": "这台机器缺哪些构建依赖（只查不装）",
+      "should_trigger": false,
+      "note": "纯检查 → flink-velox-env 家族；本 skill 是修复动作"
+    },
+    {
+      "id": "q-runtime-install",
+      "prompt": "安装 Flink 1.19 运行时和 nexmark",
+      "should_trigger": false,
+      "note": "Flink 运行时 → flink-velox-runtime-install（规划中）"
+    },
+    {
+      "id": "q-stack-build",
+      "prompt": "编译 velox4j 和 gluten-flink 并部署进 lib",
+      "should_trigger": false,
+      "note": "编译部署 → flink-velox-stack-build（规划中）"
+    }
+  ]
+}

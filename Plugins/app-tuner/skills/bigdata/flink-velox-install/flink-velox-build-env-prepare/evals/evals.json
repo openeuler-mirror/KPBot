@@ -1,0 +1,35 @@
+{
+  "skill_name": "flink-velox-build-env-prepare",
+  "evals": [
+    {
+      "id": "fresh-machine-plan-then-apply",
+      "query": "新机器要搭 Flink + GlutenFlink 的构建环境，先看看要装什么、克隆什么，再执行",
+      "expected": "触发本 skill：先跑 plan 把将执行的 dnf / git clone / install_<lib> 命令给用户看，用户同意后 sudo apply --yes；幂等，失败即停并报告做到哪"
+    },
+    {
+      "id": "fix-env-check-findings",
+      "query": "env-check 报缺 cmake、ninja 和 re2-devel，源码仓也没克隆，把它们补齐",
+      "expected": "触发本 skill：这正是 toolchain / build-tools / cpp-deps / source-repos 检查的修复动作；apply 只装缺的、只克隆缺的；装完 verify 复查"
+    },
+    {
+      "id": "source-deps-after-branch-switch",
+      "query": "velox 换了分支，setup 脚本里的源码级库清单变了，把缺的库构建进 /usr/local",
+      "expected": "触发本 skill：source-deps 步骤按当前 checkout 的 setup 脚本解析清单，逐库探测 /usr/local，只构建缺的；第一个失败即停"
+    },
+    {
+      "id": "not-check-only",
+      "query": "只告诉我这台机器缺哪些构建依赖，不要动机器",
+      "expected": "不触发 apply：本 skill 的 plan 子命令只读可用，但纯检查诉求应路由到 flink-velox-env 家族的检查（toolchain / build-tools / cpp-deps / source-repos）"
+    },
+    {
+      "id": "not-runtime-install",
+      "query": "把 Flink 1.19 装到 /opt/flink，再把 nexmark 构建出来",
+      "expected": "不触发：Flink 运行时与 nexmark 属 flink-velox-runtime-install（规划中）"
+    },
+    {
+      "id": "not-stack-build",
+      "query": "编译 velox4j 和 gluten-flink，把 jar 部署进 Flink 的 lib",
+      "expected": "不触发：编译部署属 flink-velox-stack-build（规划中）"
+    }
+  ]
+}
