@@ -1,0 +1,48 @@
+# 用例：tier C —— utf8-validation-neon 的改写语义与收益契约
+#
+# 覆盖：
+#   skill     SKILL.md 不变量：frontmatter、章节齐备、引用的脚本/参考/数据/fixture
+#             真实存在、补丁模板极性正确（#ifdef __aarch64__）、
+#             fixture 不得引用编造符号（utf8_range_ValidateUTF8Native）
+#   transform 真机语义（aarch64 + gcc，缺省时 SKIP 并记录）：
+#             fuzz 973 组逐位一致、NEON 指令真实进入热点函数（vqtbl1q）、
+#             基线无向量指令、极性写反变体的反汇编与基线一致（no-op 机械证明）、
+#             A/B 门禁（mixed rp=0 ≥ 2.0x；ASCII 与 rp=1 无回归）
+#   contract  输出对象字段齐备（utf8_route_result / router_patch /
+#             functional_test / performance / risk_notes / error_message）
+#
+# 运行（在技能根目录下）：
+#   bash cases/router-contract/run.sh
+#   # 产物 cases/router-contract/results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier C（真机 aarch64 + gcc/binutils；非 aarch64 环境真机项 SKIP，
+#       结果记 skipped_transform=true，仍要求 skill/contract 组全过）。
+
+name: router-contract
+skill: utf8-validation-neon
+tier: C
+
+entrypoint: ["bash", "cases/router-contract/run.sh"]
+
+env_requires:
+  - aarch64
+  - gcc/binutils
+
+# assert 中的 file 路径相对用例目录解析（与全仓 case.yaml 约定一致）；
+# 产物完整路径为 cases/router-contract/results/result.json。
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 8
