@@ -1,0 +1,77 @@
+{
+  "skill_name": "lance-bp-neon-optimize",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "wrapper-confound",
+      "prompt": "某合成试验用原版 legacy_copy 对比候选 typed_view，报告 1.8 倍。能据此证明 NEON 内核加速吗？只分析设计，不执行测试。",
+      "expected_output": "区分包装层复制、分配变化与内核变化，要求同包装对照和独立实际命中证据。",
+      "files": [],
+      "assertions": [
+        "不把全部倍数归因NEON",
+        "遵守只分析的范围",
+        "要求匹配包装和真实内核审计"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "all-width-fallback",
+      "prompt": "计划为 u64 BP 增加 NEON。原版零宽与满宽有专门处理，FastLanes 会重排通道。实现和验收需要保持什么？",
+      "expected_output": "保持原有顺序、边界、错误、尾块和特殊位宽；分别验证全解码位宽和真实候选命中。",
+      "files": [],
+      "assertions": [
+        "检查通道顺序与尾块",
+        "不假定原版Rust为标量",
+        "不强行让不支持位宽进入NEON"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "official-source-gap",
+      "prompt": "只搜索了 decoder.rs，能否说官方没有其他 BP/RLE benchmark？",
+      "expected_output": "不能；核查固定提交下全仓注册、生成器和脚本，区分官方、适配与自建。",
+      "files": [],
+      "assertions": [
+        "拒绝单文件缺失推断全仓不存在",
+        "结论限定提交"
+      ]
+    },
+    {
+      "id": 3,
+      "files": [],
+      "eval_name": "physical-tail-and-oracle",
+      "prompt": "u64 内核固定写 1024 个值，逻辑尾块只有 1，方案只分配 1 个位置，解码后再截断，且只做新编码器和解码器的往返检查。请只审查。",
+      "expected_output": "拒绝不足物理容量的写入；需要完整物理空间或单独证明的有界尾路径，以及独立压缩数据参照。",
+      "assertions": [
+        "不接受先越界后截断",
+        "区分逻辑与物理范围",
+        "识别共享编码/解码错误",
+        "不声称做过实机测试"
+      ]
+    },
+    {
+      "id": 4,
+      "files": [],
+      "eval_name": "global-target-and-fallback",
+      "prompt": "外层 BP 开关覆盖所有位宽，零宽和满宽的 NEON 适配器返回 false，二进制使用全局机器专用编译目标。这算全位宽 NEON 且可移植回退构建吗？",
+      "expected_output": "不能。分别统计实际NEON与回退；检查全局指令要求，回退分支不证明整个程序可移植。",
+      "assertions": [
+        "不把包装调用当SIMD命中",
+        "正确性位宽和候选位宽分开",
+        "识别全局编译的部署限制"
+      ]
+    },
+    {
+      "eval_name": "pinned-reproduction-feature-boundary",
+      "prompt": "按固定提交示例只克隆了 Lance 上游，运行 --features experimental-bp-neon 提示特性不存在。可以当作 NEON 已禁用并继续报原版对候选成绩吗？",
+      "expected_output": "该特性属于示例候选补丁，不是上游特性。缺补丁则 awaiting_candidate_patch；只跑默认 bench profile 的原版，不伪造候选命中或成绩。先核对候选元数据、非空测试和逐位宽审计。",
+      "assertions": [
+        "区分上游 bitpacking 和候选补丁特性",
+        "不使用未定义 profile",
+        "缺补丁不报告候选成绩"
+      ],
+      "id": 5,
+      "files": []
+    }
+  ]
+}
