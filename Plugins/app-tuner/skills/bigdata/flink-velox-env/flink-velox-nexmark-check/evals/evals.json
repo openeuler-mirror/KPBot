@@ -1,0 +1,35 @@
+{
+  "skill_name": "flink-velox-nexmark-check",
+  "evals": [
+    {
+      "id": "before-benchmark",
+      "query": "跑 nexmark 之前，确认 nexmark 的 jar 和可运行树都到位了",
+      "expected": "触发本 skill：跑 scripts/nexmark_check.py，jar 与 home 两项各报 ok/fail，缺的按 next_step 转述构建 jar 与铺可运行树两个动作；只报告不构建"
+    },
+    {
+      "id": "missing-tree",
+      "query": "nexmark 的 run_query.sh 在哪，NEXMARK_HOME 指对了没",
+      "expected": "触发本 skill：nexmark.home / home_via 作答（NEXMARK_HOME → /usr/local/nexmark → /opt/nexmark），没有可执行 bin/run_query.sh 时 fail 并给铺树动作"
+    },
+    {
+      "id": "not-benchmark",
+      "query": "用 nexmark 测一下 GlutenFlink 的吞吐",
+      "expected": "不触发：跑基准属基准类 skill（规划中）；本 skill 只核对 jar 与可运行树在不在"
+    },
+    {
+      "id": "not-dist",
+      "query": "Flink 装全了没，lib 里的 flink-dist 是不是 1.19",
+      "expected": "不触发：Flink 发行版属 flink-velox-flink-dist-check"
+    },
+    {
+      "id": "not-lib-state",
+      "query": "lib 里 gluten 的 jar 齐不齐，是不是 partial",
+      "expected": "不触发：GFV 构建分类属 flink-velox-lib-state-check"
+    },
+    {
+      "id": "not-build",
+      "query": "把 nexmark-flink 构建出来拷进 lib，再把可运行树铺好",
+      "expected": "不触发：本 skill 只读；构建与铺树属安装类 skill（规划中），next_step 是交给它的工单"
+    }
+  ]
+}

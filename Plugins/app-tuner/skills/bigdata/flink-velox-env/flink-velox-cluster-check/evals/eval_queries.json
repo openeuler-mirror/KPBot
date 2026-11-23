@@ -1,0 +1,49 @@
+{
+  "skill_name": "flink-velox-cluster-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-lib-vs-cluster",
+      "prompt": "换了 jar 之后集群重启了没，还在跑旧的吗",
+      "should_trigger": true,
+      "note": "判据类触发词：lib 与集群一致吗、重启了没"
+    },
+    {
+      "id": "q-loaded-build",
+      "prompt": "集群现在加载的是 native 还是 GFV，TaskManager 都在吗",
+      "should_trigger": true,
+      "note": "场景入口类触发词：集群加载的是哪套 jar、在不在跑"
+    },
+    {
+      "id": "q-safe-to-restart",
+      "prompt": "现在能重启集群吗，有没有作业在跑",
+      "should_trigger": true,
+      "note": "重启前检查：REST 在跑作业数"
+    },
+    {
+      "id": "q-lib-state",
+      "prompt": "lib 里是 native 还是 GFV 构建，gluten jar 齐不齐",
+      "should_trigger": false,
+      "note": "lib 内容分类 → flink-velox-lib-state-check"
+    },
+    {
+      "id": "q-jdk",
+      "prompt": "Flink 守护进程用的是哪个 Java",
+      "should_trigger": false,
+      "note": "Java → flink-velox-jdk-check"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-restart",
+      "prompt": "重启 Flink 集群",
+      "should_trigger": false,
+      "note": "重启 → 切换类 skill（规划中）；本 skill 只读"
+    }
+  ]
+}
