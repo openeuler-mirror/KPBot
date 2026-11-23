@@ -30,12 +30,8 @@ class ClientCheckTests(unittest.TestCase):
         values = {
             "SELECT 1": "1\n",
             "SELECT version()": "test-version\n",
-            "SHOW FRONTENDS": "Host\tJoin\tAlive\nnode\ttrue\ttrue\n",
-            "SHOW BACKENDS": "Host\tAlive\nnode\ttrue\n",
         }
-        value = values.get(
-            query, "499500\n" if module.SERVICE == "clickhouse" else "6\n"
-        )
+        value = values[query] if query in values else "499500\n"
         return subprocess.CompletedProcess(argv, 0, value, "")
 
     def test_complete_validation(self):
@@ -109,15 +105,17 @@ class ClientCheckTests(unittest.TestCase):
             module.check(self.args)
         self.assertIn("db-host", self.calls[0])
         self.assertIn("19000", self.calls[0])
-        if module.SERVICE == "doris":
-            self.assertEqual(
-                self.calls[0][1], "--defaults-extra-file=client.conf"
-            )
+        self.assertIn("--config-file", self.calls[0])
+        self.assertIn("client.conf", self.calls[0])
 
-    def test_empty_or_unhealthy_nodes_fail(self):
-        for text in ("Host\tAlive\n", "Host\tAlive\nnode\tfalse\n"):
-            with self.assertRaises(ValueError):
-                module.alive_rows(text, ("Alive",))
+    def test_passed_result_explicitly_limits_scope(self):
+        with patch.object(module.subprocess, "run", side_effect=self.client):
+            result = module.check(self.args)
+        self.assertEqual(result["scope"], "connection-and-sql-only")
+        self.assertEqual(
+            self.calls[-1][-1], "SELECT sum(number) FROM numbers(1000)"
+        )
+        self.assertEqual(len(self.calls), 3)
 
     def test_timeout_must_be_finite_and_positive(self):
         for value in ("nan", "inf", "-1", "0"):
@@ -125,21 +123,11 @@ class ClientCheckTests(unittest.TestCase):
                 module.positive_timeout(value)
 
     def test_client_layout_is_usable(self):
-        if module.SERVICE == "clickhouse":
-            self.args.client = "./clickhouse"
-            self.args.single_binary = True
-            with patch.object(
-                module.subprocess, "run", side_effect=self.client
-            ):
-                self.assertEqual(module.check(self.args)["status"], "passed")
-            self.assertEqual(self.calls[0][:2], ["./clickhouse", "client"])
-        else:
-            self.args.client = "./mysql"
-            with patch.object(
-                module.subprocess, "run", side_effect=self.client
-            ):
-                self.assertEqual(module.check(self.args)["status"], "passed")
-            self.assertEqual(self.calls[0][0], "./mysql")
+        self.args.client = "./clickhouse"
+        self.args.single_binary = True
+        with patch.object(module.subprocess, "run", side_effect=self.client):
+            self.assertEqual(module.check(self.args)["status"], "passed")
+        self.assertEqual(self.calls[0][:2], ["./clickhouse", "client"])
 
 
 if __name__ == "__main__":

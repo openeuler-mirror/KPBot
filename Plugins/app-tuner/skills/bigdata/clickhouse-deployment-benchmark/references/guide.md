@@ -19,6 +19,8 @@ clickhouse-client --host localhost --port 9000 --query 'SELECT sum(number) FROM 
 
 两条结果应分别为 `1`、`499500`。随 skill 提供的 `scripts/check_service.py` 会自动检查这些结果并保存原始输出，单二进制情况下，在 skill 根目录运行 `python3 scripts/check_service.py --client experiment/clickhouse --single-binary --output results/smoke-001`，其中 experiment/clickhouse 是你复制的二进制位置。已安装 clickhouse-client 时使用 SKILL.md 中的默认命令。
 
+该脚本只验证连接、版本响应和合成 SQL 结果，不检测远端节点或副本状态。集群场景须另行核对配置节点清单，并在各节点检查 [system.replicas](https://clickhouse.com/docs/operations/system-tables/replicas) 的 is_readonly、is_session_expired、active_replicas/total_replicas 和 absolute_delay；延迟阈值按业务要求确定。无复制表时该表为空，不能据此认定整个集群健康。
+
 ## 可直接执行的有限查询基准
 
 使用 [官方 clickhouse-benchmark](https://clickhouse.com/docs/operations/utilities/clickhouse-benchmark)。以下是合成计算基准，不代表磁盘扫描或业务 SQL：
