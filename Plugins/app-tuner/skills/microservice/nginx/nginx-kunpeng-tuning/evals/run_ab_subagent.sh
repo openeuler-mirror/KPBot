@@ -3,7 +3,7 @@
 # Skill-level A/B eval runner (opencode CLI, with vs without skill).
 #
 # Each mode runs in its own clean workspace:
-#   $OUT/with     has .opencode/skills/nginx-optimization
+#   $OUT/with     has .opencode/skills/nginx-kunpeng-tuning
 #   $OUT/without  has no project skill
 # The only variable is whether the skill is present / mentioned.
 #
@@ -32,7 +32,7 @@ set -uo pipefail
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EVALS_JSON="$SKILL_DIR/evals/evals.json"
 MODEL="${OPENCODE_MODEL:-opencode/deepseek-v4.1-flash-free}"
-EVAL_ID="1"
+EVAL_ID=""
 OUT="${TMPDIR:-/tmp}/nginx-skill-ab"
 TIMEOUT_SEC=300
 DRY_RUN=0
@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
         --timeout) TIMEOUT_SEC="${2:?}"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         --lenient) LENIENT=1; shift ;;
-        -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
@@ -54,6 +54,17 @@ done
 if [[ ! -f "$EVALS_JSON" ]]; then
     echo "error: $EVALS_JSON not found" >&2
     exit 2
+fi
+
+if [[ -z "${EVAL_ID}" ]]; then
+    EVAL_ID="$(python3 - "$EVALS_JSON" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+evals = data.get("evals") or []
+print(evals[0].get("id", "") if evals else "")
+PY
+)"
+    [[ -n "${EVAL_ID}" ]] || { echo "error: no eval entries in ${EVALS_JSON}" >&2; exit 2; }
 fi
 
 # P2：OUT 必须绝对路径
@@ -69,16 +80,16 @@ for sub in with without; do
         mv "${OUT}/${sub}" "${OUT}/${sub}.bak.$(date +%Y%m%d%H%M%S)"
     fi
 done
-mkdir -p "${OUT}/with/.opencode/skills/nginx-optimization" "${OUT}/with/results" \
+mkdir -p "${OUT}/with/.opencode/skills/nginx-kunpeng-tuning" "${OUT}/with/results" \
          "${OUT}/without/results"
 
 # P1：被测内容只含 SKILL.md 与 references/（评分答案不进 with 工作区）
-cp "${SKILL_DIR}/SKILL.md" "${OUT}/with/.opencode/skills/nginx-optimization/SKILL.md"
-cp -r "${SKILL_DIR}/references" "${OUT}/with/.opencode/skills/nginx-optimization/references"
+cp "${SKILL_DIR}/SKILL.md" "${OUT}/with/.opencode/skills/nginx-kunpeng-tuning/SKILL.md"
+cp -r "${SKILL_DIR}/references" "${OUT}/with/.opencode/skills/nginx-kunpeng-tuning/references"
 
 PROMPT="$(python3 - "$EVALS_JSON" "$EVAL_ID" <<'PY'
 import json, sys
-data = json.load(open(sys.argv[1]))
+data = json.load(open(sys.argv[1], encoding="utf-8"))
 eid = int(sys.argv[2])
 for e in data.get("evals", []):
     if int(e.get("id", -1)) == eid:
@@ -88,11 +99,16 @@ sys.exit(1)
 PY
 )"
 if [[ -z "${PROMPT}" ]]; then
-    echo "error: eval id ${EVAL_ID} not found in ${EVALS_JSON}" >&2
+    echo "error: eval id ${EVAL_ID} not found in ${EVALS_JSON}; available ids:" >&2
+    python3 - "$EVALS_JSON" >&2 <<'PY'
+import json, sys
+for e in json.load(open(sys.argv[1], encoding="utf-8")).get("evals", []):
+    print("  " + str(e.get("id")))
+PY
     exit 2
 fi
 
-WITH_PROMPT="请先调用 nginx-optimization skill（用 skill 工具加载），再完成下面的任务。
+WITH_PROMPT="请先调用 nginx-kunpeng-tuning skill（用 skill 工具加载），再完成下面的任务。
 
 ${PROMPT}
 
@@ -116,9 +132,9 @@ RC=0
 for mode in with without; do
     echo "==> ${mode}"
     ws="${OUT}/${mode}"
-    if ! timeout "${TIMEOUT_SEC}" opencode run --auto --format json -m "${MODEL}" \
+    if ! ( cd "${ws}" && timeout "${TIMEOUT_SEC}" opencode run --auto --format json -m "${MODEL}" \
             "$(cat "${ws}/prompt.md")" \
-            > "${ws}/results/trace.jsonl" 2> "${ws}/results/opencode.log"; then
+            > "${ws}/results/trace.jsonl" 2> "${ws}/results/opencode.log" ); then
         echo "    run failed (see ${ws}/results/opencode.log)" >&2
         RC=1
         continue
