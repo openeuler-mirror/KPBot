@@ -113,8 +113,29 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `kptools-jvmjit` | JVM JIT 符号化 perf 采样分析(libperf-jvmti + perf inject --jit：方法级热点、JIT 代码指令级注解导出 annotate.txt 源码+汇编+逐指令周期占比、容器内采集与工具注入 toolpack)，含 dump 刷盘语义与 [JIT] 残留处理纪律 |
 | `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
-| [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键基准(计划哈希确认、只读预检、NUMA/TAP/代理准备、create/density/Snapshot/dirty_page/Rollback/Clone/Pause-Resume 全矩阵、差集清理与证据归档) |
+| [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键 Workflow/路由与共享执行器(保留计划哈希、预检、准备、29 档全矩阵、冒烟、差集清理与证据归档) |
 | [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
+
+#### CubeSandbox 单项基准入口（10 个）
+
+以下入口共享 `cubesandbox-lifecycle-bench/scripts/` 和 `default-plan.json`，不是十份执行器副本；
+八个场景入口固定各自 section，preflight/prepare 分别固定只读检查和独立准备。
+
+| 技能 | 单点能力与成功证据 |
+|------|------|
+| [`cubesandbox-bench-preflight`](skills/cubesandbox-bench-preflight/SKILL.md) | 只读 check；输出 `preflight.json`，FAIL 即受阻，不自动修复或压测 |
+| [`cubesandbox-bench-prepare`](skills/cubesandbox-bench-prepare/SKILL.md) | 独立 NUMA/TAP 准备；输出 `prepare.json`、readiness 和复验结果，不运行基准 |
+| [`cubesandbox-template-create-bench`](skills/cubesandbox-template-create-bench/SKILL.md) | Template Create；复用 bench-protocol 生成 `create-verdict.json` |
+| [`cubesandbox-density-bench`](skills/cubesandbox-density-bench/SKILL.md) | Density；输出内存/实际存活数据并完成本章节差集排空 |
+| [`cubesandbox-snapshot-bench`](skills/cubesandbox-snapshot-bench/SKILL.md) | 独立沙箱的 Snapshot 制作并发 |
+| [`cubesandbox-dirty-page-bench`](skills/cubesandbox-dirty-page-bench/SKILL.md) | 指定 dirty MiB 的 Snapshot/恢复矩阵 |
+| [`cubesandbox-snapshot-create-bench`](skills/cubesandbox-snapshot-create-bench/SKILL.md) | 同一 Snapshot 的并发创建/恢复 |
+| [`cubesandbox-rollback-bench`](skills/cubesandbox-rollback-bench/SKILL.md) | 各沙箱回滚到自身 checkpoint 的并发 Rollback |
+| [`cubesandbox-clone-bench`](skills/cubesandbox-clone-bench/SKILL.md) | 运行中源沙箱的并发 Clone，区分 num 与 concurrency |
+| [`cubesandbox-pause-resume-bench`](skills/cubesandbox-pause-resume-bench/SKILL.md) | 并发 Pause 后 Resume |
+
+每个入口都有 `scripts/run.sh` 和 Tier-A `cases/skill-contract/`。场景可先 `--dry-run`、再用
+`--show-plan` 生成固定范围的批准哈希；正式运行沿用统一锁、冒烟、清理和 `results.json.ok` 判据。
 
 ### 场景优化类 skill
 

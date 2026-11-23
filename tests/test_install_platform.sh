@@ -94,6 +94,28 @@ check_agentenv_package() {
         '! bash "$skills/kptools-agentenv-tuning/scripts/collect_environment.sh" --output "$TMPROOT" >/dev/null 2>&1'
 }
 
+check_cubesandbox_split() {
+    local skills="$1"
+    local skill
+    for skill in \
+        cubesandbox-bench-preflight cubesandbox-bench-prepare \
+        cubesandbox-template-create-bench cubesandbox-density-bench \
+        cubesandbox-snapshot-bench cubesandbox-dirty-page-bench \
+        cubesandbox-snapshot-create-bench cubesandbox-rollback-bench \
+        cubesandbox-clone-bench cubesandbox-pause-resume-bench; do
+        check "installs $skill with executable entry" \
+            '[ -f "$skills/$skill/SKILL.md" ] && [ -x "$skills/$skill/scripts/run.sh" ]'
+    done
+    check "installs shared CubeSandbox focused executor" \
+        '[ -f "$skills/cubesandbox-lifecycle-bench/scripts/cubesandbox_skill.py" ]'
+    check "installed focused entry expands its fixed section" \
+        '"$skills/cubesandbox-density-bench/scripts/run.sh" --repo /mock/CubeSandbox --dry-run 2>&1 | grep -Fq "[density / batch4]"'
+    check "installed focused entry rejects section escape" \
+        '! "$skills/cubesandbox-density-bench/scripts/run.sh" --repo /mock/CubeSandbox --dry-run --sections all >/dev/null 2>&1'
+    check "installed prepare entry can render prepare-only approval" \
+        '"$skills/cubesandbox-bench-prepare/scripts/run.sh" --show-plan --repo /mock/CubeSandbox --template-id tpl-confirmed --numa-node 0 --tap-evidence aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2>&1 | grep -q "operation.*prepare"'
+}
+
 echo "== claude mode =="
 run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
@@ -110,6 +132,7 @@ check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimi
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
+check_cubesandbox_split "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
@@ -136,6 +159,7 @@ for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
 check_agentenv_package "$OPENCODE_SKILLS"
+check_cubesandbox_split "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo "== preview count vs installed count =="
