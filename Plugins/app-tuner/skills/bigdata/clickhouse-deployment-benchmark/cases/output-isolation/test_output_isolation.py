@@ -30,10 +30,10 @@ class OutputIsolationTests(unittest.TestCase):
                 shutil.copyfile(SKILL / ".gitignore", skill / ".gitignore")
                 generated = (
                     "results/smoke/result.json",
-                    "experiment/tpch-tools/conf/doris-cluster.conf",
+                    "results/round-1.log",
+                    "experiment/clickhouse",
                     "cases/client-check/results/log",
-                    "doris-source/tools/tpch-tools/conf/doris-cluster.conf",
-                    "clickhouse-source/generated",
+                    "clickhouse-source/tests/benchmarks/tpc-h/init.sql",
                     "scripts/__pycache__/cached.pyc",
                 )
                 for name in (
