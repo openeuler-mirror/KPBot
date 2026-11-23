@@ -46,12 +46,20 @@ git -C clickhouse-source rev-parse HEAD
 上游 `init.sql` 使用 `CREATE TABLE nation` 等未限定库名的语句，文件中没有可直接替换的库名；仅传 `--multiquery` 时表会建在当前连接默认库。先确认一个已授权的实验库（不存在时由有权限的账号先创建），在 DDL、导入和查询三处显式传入相同的 `--database`：
 
 ```bash
-export CH=(clickhouse-client --host localhost --port 9000)
+set -euo pipefail
+CH=(clickhouse-client --host localhost --port 9000)
 export DB=tpch_sf1  # 替换为已授权的实验库
 "${CH[@]}" --database "${DB}" --multiquery < clickhouse-source/tests/benchmarks/tpc-h/init.sql
 # dbgen 的 .tbl 以 | 分隔且行尾多一个 |；去掉行尾分隔符并转为制表符分隔
-sed 's/|$//; s/|/\t/g' nation.tbl > nation.tsv
-"${CH[@]}" --database "${DB}" --query 'INSERT INTO nation FORMAT TSV' < nation.tsv
+for table in region nation supplier part partsupp customer orders lineitem; do
+  test -s "$table.tbl" || { echo "缺少生成数据：$table.tbl" >&2; exit 1; }
+  sed 's/|$//; s/|/\t/g' "$table.tbl" |
+    "${CH[@]}" --database "${DB}" --query "INSERT INTO $table FORMAT TSV"
+  expected=$(wc -l < "$table.tbl")
+  actual=$("${CH[@]}" --database "${DB}" --query "SELECT COUNT(*) FROM $table")
+  test "$actual" -eq "$expected" || { echo "$table 行数不符" >&2; exit 1; }
+done
+# 八表导入及行数核对全部完成后，才校验查询结果并进入计时阶段
 "${CH[@]}" --database "${DB}" --query "$(cat clickhouse-source/tests/benchmarks/tpc-h/queries/query_01.sql)"
 ```
 
