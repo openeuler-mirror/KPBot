@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: inspect-proxy-capture
+expected_outcome: |
+  从启动参数定位实际处理函数，不因采集模块存在或已导入就将它判定为接入。只读源码及启动记录，不为验证而启动进程或改配置。

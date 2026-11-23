@@ -1,0 +1,24 @@
+---
+name: capture-prompts
+description: >
+  在已接入采集的 proxy 上按授权和时限采集 prompt，确认 worker 开关及写盘状态，交付采集分段。
+---
+
+# Prompt 采集
+
+## 操作流程
+
+1. 确认指定 proxy 已接入且健康。按 [配置说明](../../references/capture-and-analysis.md#配置准备) 确定绝对配置路径、时长、保存位置、磁盘预算和会话范围。默认仅采元数据；prompt 全文、输出全文和 golden 分别确认，golden 还须有后端兼容性证据。
+2. 使用 proxy 所用的 Python 解释器，在相同容器或 PID 命名空间准备配置。新配置按需使用 `init` 与 `load`，已有配置先用 `show` 核对，保留不属于本轮的设置。活动窗口或 worker 归属不清时先确认，不接管已有任务。会话预设的自动跟踪数是每个 worker 的配额，不保证会话完整。
+3. 按本次授权窗口开启采集。以下 `$S` 为父 skill 目录，`$CFG` 为配置绝对路径，`$DURATION` 为已确认的正秒数。
+
+```bash
+$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration "$DURATION"
+$PY "$S/scripts/capturectl.py" --config "$CFG" status --json
+```
+
+检查预期 worker 数、版本、有效开关和实际文件增长。返回码 4 表示尚未确认生效，不能只依据配置文件判断。到期或发生持续写盘错误、预算不足时，对本轮采集执行 `off`，再查状态。等待在途记录及写盘收尾；超时记录缺失，不重启 proxy。
+
+## 输出
+
+交付受限目录中的 `FORMAT=1` 分段、采集时间、配置口径、写入和丢弃情况及实际关闭状态。若已有 `run.json`，记录本轮状态。没有流量时如实记录，采集关闭不等于代码恢复。
