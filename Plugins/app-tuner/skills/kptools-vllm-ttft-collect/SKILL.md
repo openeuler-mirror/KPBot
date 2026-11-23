@@ -1,12 +1,14 @@
 ---
 name: kptools-vllm-ttft-collect
 description: 为已经运行的 vLLM P/D 服务采集一次可关联的 TTFT 请求证据并生成 JSON 交接。用于要求发单请求、收 Prefill 日志或从既有日志整理采集证据；不启动服务或生成看板。
-compatibility: Python 3.10+; requires the sibling kptools-vllm-ttft package from KPBot PR 181 or a compatible installed revision.
+compatibility: Python 3.10+; requires the installed sibling kptools-vllm-ttft base skill (KPBot !181) with report.list_requests.
 ---
 
 # TTFT 请求采集
 
 输入：运行中的实例、用户指定的请求方式、Prefill 日志来源；或者已有的原始日志和请求 ID。使用已安装的同级 `kptools-vllm-ttft` 对应日志口径。
+
+发请求前确认同级 `kptools-vllm-ttft/scripts/report.py` 已安装并提供 `list_requests`。缺失时报告缺少 KPBot !181 并停止。交接单需要基础包解析出的**完整日志请求 ID**，不自行剥离 `chatcmpl-`、`cmpl-` 或后缀，也不将 Prometheus 摘要当作 BREAKDOWN。
 
 1. 实时采集前确认本轮目标实例和调用位置、使用现有认证方式，不回显凭据。记录发请求前的日志位置或时间边界。仅在用户授权请求后发一次，不重试、不启停服务。
 2. 保存本轮原始 Prefill 日志范围，保留关联记录，不只 grep 一行。将返回的请求标识与日志中的 `[TTFT][BREAKDOWN] req=…` 对上。没有可靠关联或日志轮转导致范围不明时停止并报告缺失；不把 HTTP 200 当作 TTFT 或 KV 链路验证。已存在日志只读接受，标为 `existing_logs`。

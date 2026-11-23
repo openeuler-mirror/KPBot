@@ -8,7 +8,7 @@ import re
 import sys
 
 
-BREAKDOWN = re.compile(rb"\[TTFT\]\[BREAKDOWN\] req=(\S+)")
+REPORT_SCRIPTS = Path(__file__).resolve().parents[2] / "kptools-vllm-ttft/scripts"
 ORIGINS = ("live_request", "existing_logs")
 FIELDS = {"schema_version", "origin", "request_id", "prefill_log", "sha256"}
 
@@ -17,19 +17,29 @@ def snapshot(path, request_id):
     path = path.resolve(strict=True)
     if not path.is_file():
         raise ValueError("Prefill log must be a regular file")
-    request = request_id.encode("utf-8")
+    if not (REPORT_SCRIPTS / "report.py").is_file():
+        raise ValueError(f"missing TTFT base package (KPBot !181): {REPORT_SCRIPTS / 'report.py'}")
+    sys.path.insert(0, str(REPORT_SCRIPTS))
+    try:
+        from report import list_requests
+    except ImportError as exc:
+        raise ValueError("installed TTFT base does not provide report.list_requests (KPBot !181)") from exc
+    finally:
+        sys.path.pop(0)
+    before = path.stat()
+    requests = dict(list_requests(path))
     digest = hashlib.sha256()
-    breakdown_count = 0
-    matched = False
     with path.open("rb") as log:
-        for line in log:
-            digest.update(line)
-            breakdown_count += line.count(b"[TTFT][BREAKDOWN]")
-            if not matched:
-                matched = any(m[1] == request for m in BREAKDOWN.finditer(line))
-    if not matched:
+        for chunk in iter(lambda: log.read(1024 * 1024), b""):
+            digest.update(chunk)
+    after = path.stat()
+    if (before.st_ino, before.st_size, before.st_mtime_ns) != (
+        after.st_ino, after.st_size, after.st_mtime_ns
+    ):
+        raise ValueError("Prefill log changed during collection; provide a stable snapshot")
+    if request_id not in requests:
         raise ValueError("request_id has no BREAKDOWN evidence in the Prefill log")
-    if breakdown_count != 1:
+    if sum(requests.values()) != 1:
         raise ValueError("report requires exactly one BREAKDOWN; provide a single-request snapshot")
     return str(path), digest.hexdigest()
 

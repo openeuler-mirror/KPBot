@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-vllm-ttft-collect",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "TTFT-01",
+      "prompt": "从这份 Prefill 日志生成 TTFT 采集交接 JSON，不用出图",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-02",
+      "prompt": "已有有效的 TTFT 交接 JSON，只生成 HTML 报告",
+      "should_trigger": false
+    }
+  ]
+}
