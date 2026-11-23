@@ -45,15 +45,17 @@ class HandoffContract(unittest.TestCase):
                         '--origin', 'existing_logs', status=status)
 
     def test_relocated_log_generates_selected_report(self):
-        self.receipt.write_text(self.collect().stdout, encoding='utf-8')
+        receipt = self.collect().stdout
+        self.receipt.write_text(receipt, encoding='utf-8')
         local_copy = self.log.rename(self.root / 'transferred.log')
         result = self.cli(HANDOFF, 'verify', self.receipt, '--log', local_copy)
         evidence = json.loads(result.stdout)
-        self.assertEqual(Path(evidence['prefill_log']), local_copy)
+        self.assertEqual(Path(evidence['prefill_log']), local_copy.resolve())
+        self.assertEqual(self.receipt.read_text(encoding='utf-8'), receipt)
         self.assertEqual(evidence['origin'], 'existing_logs')
         html = self.root / 'report.html'
-        self.cli(TTFT, 'check', evidence['prefill_log'])
-        self.cli(TTFT, 'report', evidence['prefill_log'], '--req', evidence['request_id'],
+        self.cli(TTFT, 'check', local_copy)
+        self.cli(TTFT, 'report', local_copy, '--req', evidence['request_id'],
                  '--mode', 'prefill', '-o', html)
         rendered = html.read_text(encoding='utf-8')
         self.assertIn('selected', rendered)
@@ -63,7 +65,7 @@ class HandoffContract(unittest.TestCase):
         self.assertIn('no BREAKDOWN', self.collect('select', status=1).stderr)
         self.receipt.write_text(self.collect().stdout, encoding='utf-8')
         self.log.write_bytes(LOG.encode() + b'# appended\n')
-        result = self.cli(HANDOFF, 'verify', self.receipt, status=1)
+        result = self.cli(HANDOFF, 'verify', self.receipt, '--log', self.log, status=1)
         self.assertIn('no longer match', result.stderr)
         self.assertEqual(result.stdout, '')
 
@@ -76,7 +78,7 @@ class HandoffContract(unittest.TestCase):
         data = json.loads(self.collect().stdout)
         data['schema_version'] = 2
         self.receipt.write_text(json.dumps(data), encoding='utf-8')
-        result = self.cli(HANDOFF, 'verify', self.receipt, status=1)
+        result = self.cli(HANDOFF, 'verify', self.receipt, '--log', self.log, status=1)
         self.assertIn('invalid TTFT handoff schema', result.stderr)
 
 
