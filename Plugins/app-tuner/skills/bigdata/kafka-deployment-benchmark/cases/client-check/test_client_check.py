@@ -7,7 +7,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/check_service.py"
@@ -136,6 +137,27 @@ class KafkaCheckTests(unittest.TestCase):
         self.assertEqual(self.run_check()["status"], "failed")
         self.assertTrue((self.output / "03.stderr").exists())
 
+    def test_posix_timeout_kills_the_process_group(self):
+        self.timeout_at = 3
+        killpg = Mock()
+        with (
+            patch.object(module, "signal", SimpleNamespace(SIGKILL=9)),
+            patch.object(
+                module, "os", SimpleNamespace(name="posix", killpg=killpg)
+            ),
+            patch.object(
+                module.subprocess, "Popen", side_effect=self.process
+            ) as popen,
+        ):
+            self.assertEqual(module.check(self.args)["status"], "failed")
+        killpg.assert_called_once_with(12345, 9)
+        self.assertTrue(
+            all(
+                call.kwargs["start_new_session"]
+                for call in popen.call_args_list
+            )
+        )
+
     def test_consumer_is_bounded(self):
         self.run_check()
         self.assertIn("--max-messages", self.calls[-1])
@@ -143,4 +165,22 @@ class KafkaCheckTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.defaultTestLoader.loadTestsFromModule(
+        sys.modules[__name__]
+    )
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    output = Path(__file__).resolve().parent / "results"
+    output.mkdir(exist_ok=True)
+    (output / "result.json").write_text(
+        json.dumps(
+            {
+                "success": result.wasSuccessful(),
+                "tests": result.testsRun,
+                "failures": len(result.failures),
+                "errors": len(result.errors),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    sys.exit(0 if result.wasSuccessful() else 1)
