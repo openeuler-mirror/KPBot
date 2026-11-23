@@ -1,0 +1,34 @@
+id: rocksdb-test-baseline
+name: rocksdb-test-baseline
+version: 1.0.0
+description: 消费 deploy.env，执行 100W 数据量 RocksDB 基线测试并输出报告。
+entrypoint: scripts/run_test.sh
+resources:
+  - SKILL.md
+  - scripts
+  - references
+supervisor:
+  action: test
+  inputs:
+    - name: deploy_env
+      contract: rocksdb-baseline-deploy/v1
+      required: true
+    - name: data_dir
+      contract: rocksdb-baseline/data-dir/v1
+      required: true
+    - name: result_dir
+      contract: rocksdb-baseline/result-dir/v1
+      required: false
+  outputs:
+    - name: summary
+      contract: rocksdb-baseline-result/v1
+      path: summary.json
+    - name: report
+      contract: rocksdb-baseline-report/v1
+      path: REPORT.md
+    - name: backup
+      contract: rocksdb-baseline-backup/v1
+      path: env/cleanup.env
+capabilities:
+  - id: rocksdb.baseline.test
+    contract: rocksdb-baseline-test/v1
