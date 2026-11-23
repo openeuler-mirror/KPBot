@@ -94,6 +94,22 @@ check_agentenv_package() {
         '! bash "$skills/kptools-agentenv-tuning/scripts/collect_environment.sh" --output "$TMPROOT" >/dev/null 2>&1'
 }
 
+check_pdenv_package() {
+    local skills="$1"
+    local source="$ROOT/Plugins/app-tuner/skills/ascend_kunpeng/kptools-ascend-pd-env"
+    local parent="$skills/kptools-ascend-pd-env"
+    local source_skill name
+    check "installs P/D environment entry at skill root" '[ -f "$parent/SKILL.md" ]'
+    check "installs P/D summary subskill" \
+        '[ -r "$parent/subskills/summarize-environment-findings/SKILL.md" ]'
+    for source_skill in "$source"/subskills/*/SKILL.md; do
+        [ -f "$source_skill" ] || continue
+        name="$(basename "$(dirname "$source_skill")")"
+        check "keeps P/D $name inside the parent skill" \
+            'cmp -s "$source_skill" "$parent/subskills/$name/SKILL.md" && [ ! -e "$skills/$name" ]'
+    done
+}
+
 echo "== claude mode =="
 run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
@@ -110,6 +126,7 @@ check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimi
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
+check_pdenv_package "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
@@ -136,6 +153,7 @@ for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
 check_agentenv_package "$OPENCODE_SKILLS"
+check_pdenv_package "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo "== preview count vs installed count =="
