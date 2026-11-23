@@ -111,7 +111,7 @@ kpbot uninstall global opencode
 
 ### 方式二：git clone（开发者，获取最新 HEAD）
 
-KPBot 提供统一的安装脚本 `install.sh`，同时支持 Claude Code 和 OpenCode。
+从源码安装时，Linux 和 macOS 使用 `install.sh`，Windows 使用 `install.ps1`。两个入口均支持 Claude Code、OpenCode 和 DSH。
 
 ### 前置条件
 
@@ -129,24 +129,41 @@ install.sh [level] [tool] [install_path]
 | 参数 | 可选值 | 默认值 | 说明 |
 |------|--------|--------|------|
 | `level` | `project` / `global` | `project` | 安装级别：项目级或全局级 |
-| `tool` | `claude` / `opencode` | `claude` | 目标 AI 编码工具 |
-| `install_path` | 任意路径 | 当前目录 | 项目级安装的目标路径 |
+| `tool` | `claude` / `opencode` / `dsh` | `claude` | 目标 AI 编码工具 |
+| `install_path` | 任意路径 | 当前目录（项目级） | 项目根目录，或全局 DSH 安装目录 |
 
 ### 安装示例
 
 ```bash
 # 项目级安装（Claude Code，当前目录）
-/path/to/KPBot/install.sh
+bash /path/to/KPBot/install.sh project claude
 
 # 项目级安装（OpenCode，指定路径）
 cd /path/to/your-c-project
-/path/to/KPBot/install.sh project opencode
+bash /path/to/KPBot/install.sh project opencode
 
 # 全局安装（Claude Code）
-/path/to/KPBot/install.sh global claude
+bash /path/to/KPBot/install.sh global claude
 
 # 全局安装（OpenCode）
-/path/to/KPBot/install.sh global opencode
+bash /path/to/KPBot/install.sh global opencode
+```
+
+### Windows PowerShell 安装
+
+在 KPBot 仓库目录下，用 Windows PowerShell 5.1 或 PowerShell 7 运行。Claude Code 和 OpenCode 安装仅需 PowerShell。DSH 还需要 Node.js 18 或更新版本，并先在仓库目录运行 `npm ci --ignore-scripts`。
+
+Claude Code 和 OpenCode 的技能目录使用 Win32 扩展路径复制和清理，允许技能资源的绝对路径超过 260 个字符，无需修改系统的长路径设置。
+
+```powershell
+# 将 Claude Code 技能安装到指定项目
+.\install.ps1 project claude 'C:\Work\My Project'
+
+# 为当前用户安装 OpenCode 技能
+.\install.ps1 global opencode
+
+# 将 DSH 技能安装到指定项目（先安装 npm 依赖）
+.\install.ps1 project dsh 'C:\Work\My Project'
 ```
 
 ### 安装路径
@@ -155,6 +172,9 @@ cd /path/to/your-c-project
 |------|--------|------|
 | Claude Code | `.claude/skills/` + `CLAUDE.md` | `~/.claude/skills/` + `~/.claude/CLAUDE.md` |
 | OpenCode | `.opencode/skills/` + `AGENTS.md` | `~/.config/opencode/skills/` + `AGENTS.md` |
+| DSH | `.dsh/skills/` | `$env:DSH_HOME/skills/` 或 `~/.dsh/skills/` |
+
+PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能装到该目录下的 `opencode/skills/`。
 
 ### 安装脚本自动完成
 
@@ -184,6 +204,12 @@ bash tests/test_install_platform.sh
 该测试在临时目录分别执行 `install.sh project claude` 和 `install.sh project opencode`，验证：
 
 - OpenCode 模式不安装 `opencode.exclude` 声明的 claude-only skill
+
+PowerShell 入口的安装和重装回归在临时目录运行。
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -File .\tests\test_install_platform.ps1
+```
 
 ---
 
@@ -435,7 +461,8 @@ KPBot/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
 │       └── skills/                #   技能源目录
-├── install.sh                     # 统一安装脚本（Claude Code + OpenCode）
+├── install.sh                     # Bash 安装脚本
+├── install.ps1                    # Windows PowerShell 安装脚本
 ├── README.md
 └── LICENSE
 ```
