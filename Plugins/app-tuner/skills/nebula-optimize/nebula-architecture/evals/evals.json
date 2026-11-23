@@ -1,0 +1,62 @@
+{
+  "skill_name": "nebula-architecture",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "请解释 NebulaGraph 在分布式部署（三独立进程形态）下，从客户端执行 `GO 1 STEP FROM '933' OVER KNOWS YIELD KNOWS.creationDate` 到 RocksDB 的完整链路：涉及哪些进程/端口、graphd 如何路由分区、storaged 如何构造 Key、结果如何返回。不要执行命令。",
+      "expected_output": "客户端连 graphd GraphService（9669），graphd 解析→校验→规划/执行→StorageClient 按 VID 哈希算 partId→查 MetaClient 缓存 leader→GraphStorageService RPC 到 storaged（9779 等）→storaged 构造 edgePrefix(type|part|src|edgeType) 做 RocksDB prefix scan→RowReader 解码→组装响应→graphd 回调组装→序列化返回。指出（分布式部署下）graphd 与 storaged 之间是 Thrift RPC，storaged 内 RocksDB 是函数调用，返回路径有四次序列化/反序列化。",
+      "files": [],
+      "expectations": [
+        "指出 graphd 接收客户端、storaged 存数据、metad 不参与每次查询",
+        "说明按 VID 哈希算 partId 并查 MetaClient 缓存的 leader",
+        "说明分布式部署下 graphd→storaged 走 GraphStorageService Thrift RPC（standalone 构建下该腿由 StorageClient 进程内直投）",
+        "说明 storaged 用 edgeType+src 前缀做 RocksDB prefix scan",
+        "说明结果经 storaged 序列化、graphd 回调/组装/序列化返回",
+        "提到 MetaClient 本地缓存与心跳，而非每次查 metad",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "为什么只读压测时 metad 的 CPU 接近 0？standalone 和分布式在进程/通信上有什么区别？请从架构角度解释。不要执行命令。",
+      "expected_output": "graphd/storaged 进程内 MetaClient 维护 SpaceInfoCache（schema/partHosts/索引/leader），查询命中本地缓存，正常路径 0 次 metad RPC；后台约 10s 心跳拉取变更，所以 metad 只在心跳/元数据变更时活跃。standalone 是编译期 ENABLE_STANDALONE_VERSION=ON，一个进程三线程（meta/graph/storage）：客户端→graphd、graphd/storaged→metad（meta_port）仍走 loopback Thrift RPC，而 graphd→storaged 由 StorageClient 直接投递到进程内 GraphStorageLocalServer（经 ThreadManager 派发，无端口与序列化）；分布式是三个独立二进制，可多实例，通信走网络 RPC。",
+      "files": [],
+      "expectations": [
+        "解释 MetaClient 本地缓存与心跳刷新",
+        "指出正常查询不经过 metad，metad 只在心跳/变更时活跃",
+        "说明 standalone 是编译期选项、单进程三线程",
+        "说明 standalone 下客户端→graphd、graphd/storaged→metad 仍走 loopback Thrift RPC，而 graphd→storaged 由 StorageClient 进程内直投 GraphStorageLocalServer（无端口与序列化）",
+        "说明分布式是三个独立二进制、可多实例、走网络 RPC",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我在一台机器上启动两个 storaged：第一个 --port=9779，第二个 --port=9780，结果第二个启动报 Address already in use。请解释 Nebula 的端口占用规则和正确规划。不要执行命令。",
+      "expected_output": "每个 storaged 实际占连续 3 个端口：port-1（StorageAdminService）、port（GraphStorageService）、port+1（RaftexService）。第一个 9779 占用 9778/9779/9780，第二个用 9780 就和第一个的 raft 端口冲突。正确规划要留 ≥3 间隔，如 9779/9782/9785/9788；同时检查 HTTP 端口不要冲突。多实例还要注意 meta_server_addrs、data_path、cluster.id。",
+      "files": [],
+      "expectations": [
+        "说明每 storaged 占 port-1/port/port+1 三个端口",
+        "指出 9779 的 raft 是 9780，第二个用 9780 冲突",
+        "给出间隔≥3 的正确规划示例（9779/9782/9785）",
+        "提醒 HTTP 端口等其他端口也要规划",
+        "提到 data_path/cluster.id 等部署检查",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "为什么 Go1Step 的瓶颈在 graphd，而 Go2Step/Go3Step 的瓶颈会迁移到 storaged？请结合 RPC、线程和 Key 访问模式解释。不要执行命令。",
+      "expected_output": "Go1 每查询 1 次 storaged RPC，查询极轻、QPS 极高，graphd worker 大量时间在 Thrift 队列 futex 和序列化，所以 graphd 是瓶颈。Go2/Go3 每跳一次串行 RPC，扇出放大（Go2 约 11 次 RPC，Go3 更多），storaged 承受成倍 RocksDB prefix scan/结果组装/内存分配；graphd worker 多在 Future 等待，CPU 低。Key 访问模式是多跳每跳按当前顶点集合重新路由和前缀扫描，扫描/组装量随扇出增长。",
+      "files": [],
+      "expectations": [
+        "指出 Go1 每查询基本 1 次 RPC、QPS 高、graphd 队列/序列化主导",
+        "指出 Go2/Go3 每跳一次串行 RPC、扇出放大",
+        "指出 storaged 的 RocksDB 扫描/结果组装/内存随扇出增长",
+        "指出 graphd 在多跳时多在 Future 等 RPC、CPU 不一定高",
+        "说明每跳按当前顶点集合重新路由/前缀扫描",
+        "没有执行命令"
+      ]
+    }
+  ]
+}
