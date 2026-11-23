@@ -72,7 +72,8 @@ def main():
     collect.add_argument("--origin", choices=ORIGINS, required=True)
     verify = commands.add_parser("verify")
     verify.add_argument("receipt", type=Path)
-    verify.add_argument("--log", type=Path, help="local copy of the original log snapshot")
+    verify.add_argument("--log", type=Path, required=True,
+                        help="consumer-selected local copy of the original log snapshot")
     args = parser.parse_args()
     try:
         if args.command == "collect":
@@ -81,7 +82,7 @@ def main():
                           prefill_log=log, sha256=digest)
         else:
             result = read_receipt(args.receipt)
-            log, digest = snapshot(args.log or Path(result["prefill_log"]), result["request_id"])
+            log, digest = snapshot(args.log, result["request_id"])
             if digest != result["sha256"]:
                 raise ValueError("Prefill log bytes no longer match the handoff")
             result["prefill_log"] = log

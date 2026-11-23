@@ -38,10 +38,18 @@ class Handoff(unittest.TestCase):
                 self.log.write_text(line, encoding='utf-8')
                 self.assertIn('no BREAKDOWN', self.collect('fixture', status=1).stderr)
                 self.receipt.write_text(self.collect(request).stdout, encoding='utf-8')
-                result = json.loads(self.cli('verify', self.receipt).stdout)
+                result = json.loads(self.cli('verify', self.receipt, '--log', self.log).stdout)
                 self.assertEqual(result['request_id'], request)
                 self.log.write_text(line + '# appended\n', encoding='utf-8')
-                self.assertIn('no longer match', self.cli('verify', self.receipt, status=1).stderr)
+                result = self.cli('verify', self.receipt, '--log', self.log, status=1)
+                self.assertIn('no longer match', result.stderr)
+
+    def test_verify_requires_explicit_log_even_when_sender_path_exists(self):
+        self.log.write_text('[TTFT][BREAKDOWN] req=chatcmpl-a steps=1\n', encoding='utf-8')
+        self.receipt.write_text(self.collect('chatcmpl-a').stdout, encoding='utf-8')
+        result = self.cli('verify', self.receipt, status=2)
+        self.assertIn('the following arguments are required: --log', result.stderr)
+        self.assertEqual(result.stdout, '')
 
     def test_prometheus_only_and_multiple_breakdowns_are_rejected(self):
         self.log.write_text('[TTFT_DEBUG][Prometheus] req=chatcmpl-a\n', encoding='utf-8')
@@ -51,7 +59,8 @@ class Handoff(unittest.TestCase):
 
     def test_invalid_schema_is_rejected(self):
         self.receipt.write_text('{"schema_version": 2}', encoding='utf-8')
-        self.assertIn('invalid TTFT handoff schema', self.cli('verify', self.receipt, status=1).stderr)
+        result = self.cli('verify', self.receipt, '--log', self.log, status=1)
+        self.assertIn('invalid TTFT handoff schema', result.stderr)
 
 
 if __name__ == '__main__':

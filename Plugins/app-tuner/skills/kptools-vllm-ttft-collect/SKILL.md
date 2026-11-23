@@ -19,4 +19,6 @@ compatibility: Python 3.10+; requires the installed sibling kptools-vllm-ttft ba
    `ORIGIN` 为 `live_request` 或 `existing_logs`。将 stdout 保存到调用方指定的新 JSON 文件；不要覆盖原始日志。日志仍在增长时先在授权路径保存稳定快照。
    交接给报告的快照只允许一条 BREAKDOWN；已有日志有多条时，保留原始文件，另取目标请求的完整片段再生成交接单。
 
+   输入交接单的 `prefill_log` 仅记录采集来源。接收方必须选择已授权的本地快照并运行 `python3 "$HANDOFF" verify "$RECEIPT" --log "$LOCAL_LOG"`；即使在同一台机器上也必须显式传入 `--log`。校验成功的 stdout 中，`prefill_log` 是实际校验的本地绝对路径；输入交接单不变。
+
 输出：交接 JSON、实例和采集范围、仍缺少的指标证据。此交接只确认文件和请求关联，不声明所有指标可用。
