@@ -33,9 +33,7 @@ class ClientCheckTests(unittest.TestCase):
             "SHOW FRONTENDS": "Host\tJoin\tAlive\nnode\ttrue\ttrue\n",
             "SHOW BACKENDS": "Host\tAlive\nnode\ttrue\n",
         }
-        value = values.get(
-            query, "499500\n" if module.SERVICE == "clickhouse" else "6\n"
-        )
+        value = values.get(query, "6\n")
         return subprocess.CompletedProcess(argv, 0, value, "")
 
     def test_complete_validation(self):
@@ -109,10 +107,7 @@ class ClientCheckTests(unittest.TestCase):
             module.check(self.args)
         self.assertIn("db-host", self.calls[0])
         self.assertIn("19000", self.calls[0])
-        if module.SERVICE == "doris":
-            self.assertEqual(
-                self.calls[0][1], "--defaults-extra-file=client.conf"
-            )
+        self.assertEqual(self.calls[0][1], "--defaults-extra-file=client.conf")
 
     def test_empty_or_unhealthy_nodes_fail(self):
         for text in ("Host\tAlive\n", "Host\tAlive\nnode\tfalse\n"):
@@ -125,22 +120,29 @@ class ClientCheckTests(unittest.TestCase):
                 module.positive_timeout(value)
 
     def test_client_layout_is_usable(self):
-        if module.SERVICE == "clickhouse":
-            self.args.client = "./clickhouse"
-            self.args.single_binary = True
-            with patch.object(
-                module.subprocess, "run", side_effect=self.client
-            ):
-                self.assertEqual(module.check(self.args)["status"], "passed")
-            self.assertEqual(self.calls[0][:2], ["./clickhouse", "client"])
-        else:
-            self.args.client = "./mysql"
-            with patch.object(
-                module.subprocess, "run", side_effect=self.client
-            ):
-                self.assertEqual(module.check(self.args)["status"], "passed")
-            self.assertEqual(self.calls[0][0], "./mysql")
+        self.args.client = "./mysql"
+        with patch.object(module.subprocess, "run", side_effect=self.client):
+            self.assertEqual(module.check(self.args)["status"], "passed")
+        self.assertEqual(self.calls[0][0], "./mysql")
 
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.defaultTestLoader.loadTestsFromModule(
+        sys.modules[__name__]
+    )
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    output = Path(__file__).resolve().parent / "results"
+    output.mkdir(exist_ok=True)
+    (output / "result.json").write_text(
+        json.dumps(
+            {
+                "success": result.wasSuccessful(),
+                "tests": result.testsRun,
+                "failures": len(result.failures),
+                "errors": len(result.errors),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    sys.exit(0 if result.wasSuccessful() else 1)

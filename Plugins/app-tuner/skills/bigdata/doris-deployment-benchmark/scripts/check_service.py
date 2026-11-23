@@ -7,8 +7,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-SERVICE = "doris"
-
 
 def positive_timeout(value):
     seconds = float(value)
@@ -35,22 +33,9 @@ def alive_rows(text, required):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--host", default="localhost")
-    result.add_argument(
-        "--port", type=int, default=9000 if SERVICE == "clickhouse" else 9030
-    )
-    result.add_argument(
-        "--user", default="default" if SERVICE == "clickhouse" else "root"
-    )
-    result.add_argument(
-        "--client",
-        default="clickhouse-client" if SERVICE == "clickhouse" else "mysql",
-    )
-    if SERVICE == "clickhouse":
-        result.add_argument(
-            "--single-binary",
-            action="store_true",
-            help="invoke --client as clickhouse client",
-        )
+    result.add_argument("--port", type=int, default=9030)
+    result.add_argument("--user", default="root")
+    result.add_argument("--client", default="mysql")
     result.add_argument(
         "--config", type=Path, help="client authentication configuration file"
     )
@@ -62,7 +47,7 @@ def parser():
 def check(args):
     args.output.mkdir(parents=True, exist_ok=False)
     result = {
-        "service": SERVICE,
+        "service": "doris",
         "status": "failed",
         "host": args.host,
         "port": args.port,
@@ -71,14 +56,8 @@ def check(args):
 
     def query(sql):
         argv = [args.client]
-        if SERVICE == "clickhouse" and args.single_binary:
-            argv.append("client")
         if args.config:
-            argv += (
-                ["--config-file", str(args.config)]
-                if SERVICE == "clickhouse"
-                else [f"--defaults-extra-file={args.config}"]
-            )
+            argv += [f"--defaults-extra-file={args.config}"]
         argv += [
             "--host",
             args.host,
@@ -87,11 +66,7 @@ def check(args):
             "--user",
             args.user,
         ]
-        argv += (
-            ["--format", "TSV", "--query", sql]
-            if SERVICE == "clickhouse"
-            else ["--batch", "--raw", "--execute", sql]
-        )
+        argv += ["--batch", "--raw", "--execute", sql]
         index = len(result["checks"])
         item = {"sql": sql, "returncode": None}
         result["checks"].append(item)
@@ -121,19 +96,14 @@ def check(args):
         if not one or one[-1] != "1":
             raise ValueError("SELECT 1 returned an unexpected result")
         result["version_output"] = query("SELECT version()").strip()
-        if SERVICE == "doris":
-            alive_rows(query("SHOW FRONTENDS"), ("Join", "Alive"))
-            alive_rows(query("SHOW BACKENDS"), ("Alive",))
+        alive_rows(query("SHOW FRONTENDS"), ("Join", "Alive"))
+        alive_rows(query("SHOW BACKENDS"), ("Alive",))
         sql = (
-            "SELECT sum(number) FROM numbers(1000)"
-            if SERVICE == "clickhouse"
-            else (
-                "SELECT SUM(v) FROM (SELECT 1 AS v "
-                "UNION ALL SELECT 2 UNION ALL SELECT 3) AS t"
-            )
+            "SELECT SUM(v) FROM (SELECT 1 AS v "
+            "UNION ALL SELECT 2 UNION ALL SELECT 3) AS t"
         )
         values = query(sql).strip().splitlines()
-        expected = "499500" if SERVICE == "clickhouse" else "6"
+        expected = "6"
         if not values or values[-1] != expected:
             raise ValueError(
                 "aggregate result does not match the expected value"

@@ -1,8 +1,12 @@
 name: output-isolation
 skill: doris-deployment-benchmark
-tier: A
-entrypoint: ["python3", "cases/output-isolation/test_output_isolation.py"]
-env_requires: ["git"]
+tier: B
+entrypoint: ["bash", "cases/output-isolation/run.sh"]
+env_requires: []
 assert:
   - type: exit_code
     expect: 0
+  - type: json_field
+    file: cases/output-isolation/results/result.json
+    field: success
+    expect: true
