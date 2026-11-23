@@ -8,7 +8,7 @@ Q67 在日期维表按月份筛选，再按销售日期编号做内连接，提�
 | --- | --- | --- |
 | 生成过滤 | `HashProbe.cpp`，`Driver::canPushdownFilters` | 构建侧准备好后，先判断探测列能否到达扫描 |
 | 追踪和安装 | `Driver::pushdownFilters`、`FilterProject.cpp` | 识别保值扩宽，映射回扫描原列 |
-| 应用过滤 | `TableScan::addDynamicFilter`、`HiveDataSource::addDynamicFilter` | 将过滤交给对应列的 ScanSpec |
+| 应用过滤 | `TableScan::addDynamicFilterLocked` → `connector::DataSource::addDynamicFilter`，如 `HiveDataSource::addDynamicFilter` | 扫描层转交连接器，将过滤交给对应列的 ScanSpec |
 
 假设日期表过滤后保留 `101、102`。销售表读出 `099、101、101、102`。原实现先扩宽四个号，再由连接淘汰 `099`。有效下推后，扫描只交出后三行，两个 `101` 都保留。此处四行数据用于说明算法。
 
