@@ -1,0 +1,46 @@
+{
+  "queries": [
+    {
+      "id": "q-missing-header",
+      "prompt": "编译报 fatal error: openssl/ssl.h: No such file or directory，缺什么",
+      "should_trigger": true,
+      "note": "判据类触发词：No such file or directory、缺哪个 .h"
+    },
+    {
+      "id": "q-cpp-deps",
+      "prompt": "C++ 依赖齐不齐，libevent re2 zstd 的头文件都在吗",
+      "should_trigger": true,
+      "note": "场景入口类触发词：C++ 依赖、头文件、devel 包"
+    },
+    {
+      "id": "q-source-level",
+      "prompt": "velox 的 setup 脚本要源码构建的那些库装进 /usr/local 了没",
+      "should_trigger": true,
+      "note": "第二层入口：源码级库、/usr/local、setup 脚本"
+    },
+    {
+      "id": "q-toolchain",
+      "prompt": "cmake、gcc、mvn 装了没",
+      "should_trigger": false,
+      "note": "编译工具链 → flink-velox-toolchain-check"
+    },
+    {
+      "id": "q-build-tools",
+      "prompt": "ninja、ccache、flex 装了没",
+      "should_trigger": false,
+      "note": "构建辅助工具 → flink-velox-build-tools-check"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-install",
+      "prompt": "把缺的 re2-devel 装上",
+      "should_trigger": false,
+      "note": "装包 → 同族安装类 skill；本 skill 只读"
+    }
+  ]
+}

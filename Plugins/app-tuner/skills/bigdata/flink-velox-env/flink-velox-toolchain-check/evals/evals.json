@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-toolchain-check",
+  "evals": [
+    {
+      "id": "missing-cmake",
+      "query": "编译 velox4j 报 cmake: command not found，看看缺什么工具",
+      "expected": "触发本 skill：跑 scripts/toolchain_check.py，逐项读 git/cmake/gcc/g++/mvn 的 ok/fail，按 next_step 转述 dnf install cmake；只报告不装包"
+    },
+    {
+      "id": "before-build",
+      "query": "搭 GFV 构建环境之前，先确认 git cmake gcc g++ mvn 都在",
+      "expected": "触发本 skill：五件套逐项检查，齐了报 READY 与各版本，缺了逐项 fail + fix（g++ 给 gcc-c++、mvn 给 maven）"
+    },
+    {
+      "id": "versions",
+      "query": "这台机器的 gcc 和 mvn 是什么版本",
+      "expected": "触发本 skill：从 --json 的 tools.gcc.version / tools.mvn.version 读版本作答；版本只报告不设门槛"
+    },
+    {
+      "id": "not-build-tools",
+      "query": "ninja 和 patchelf 装了没",
+      "expected": "不触发：构建辅助工具属 flink-velox-build-tools-check"
+    },
+    {
+      "id": "not-cpp-deps",
+      "query": "libevent 和 openssl 的头文件在不在",
+      "expected": "不触发：C++ 库头文件属 flink-velox-cpp-deps-check"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译 GFV 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check，本 skill 只是它的输入之一"
+    },
+    {
+      "id": "not-install",
+      "query": "把缺的 gcc-c++ 装上",
+      "expected": "不触发：本 skill 只读；装包属同族安装类 skill，next_step 是交给它的工单"
+    }
+  ]
+}

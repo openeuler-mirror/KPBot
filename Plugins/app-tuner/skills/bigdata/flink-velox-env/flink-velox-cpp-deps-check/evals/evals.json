@@ -1,0 +1,45 @@
+{
+  "skill_name": "flink-velox-cpp-deps-check",
+  "evals": [
+    {
+      "id": "missing-header",
+      "query": "编译 velox 报 fatal error: re2/re2.h: No such file or directory，看看还缺哪些 C++ 库",
+      "expected": "触发本 skill：跑 scripts/cpp_deps_check.py，第一层逐项读 13 个库的 ok/fail，按 next_step 转述 dnf install re2-devel；只报告不装包"
+    },
+    {
+      "id": "before-build",
+      "query": "搭 GFV 构建环境之前，先确认 libevent openssl zstd 这些 C++ 依赖头文件都在",
+      "expected": "触发本 skill：第一层 13 个库按头文件探测（含 <triplet>/ 子目录与 /usr/local/include），缺的逐项 fail + fix 给 openEuler -devel 包名"
+    },
+    {
+      "id": "source-level",
+      "query": "velox setup 脚本要装的源码级库，哪几个还没装进 /usr/local",
+      "expected": "触发本 skill：给 --velox-dir 或让脚本按 VELOX_HOME / GFV_REPOS_DIR/velox / 向上找 repos/velox 定位 checkout，解析 install_velox_deps 得清单逐库探测 /usr/local；缺的给 install_<lib>() 工单"
+    },
+    {
+      "id": "no-velox-checkout",
+      "query": "这台机器 C++ 依赖齐不齐（没有 velox 源码）",
+      "expected": "触发本 skill：第一层照常判定；第二层报 skipped 并说明需要 velox checkout，不判负、不报 NOT READY"
+    },
+    {
+      "id": "not-toolchain",
+      "query": "cmake 和 g++ 装了没",
+      "expected": "不触发：编译工具链属 flink-velox-toolchain-check"
+    },
+    {
+      "id": "not-build-tools",
+      "query": "ninja 和 patchelf 装了没",
+      "expected": "不触发：构建辅助工具属 flink-velox-build-tools-check"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译 GFV 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check，本 skill 只是它的输入之一"
+    },
+    {
+      "id": "not-install",
+      "query": "把缺的 openssl-devel 装上，再跑 velox 的 install_fmt",
+      "expected": "不触发：本 skill 只读；装包与跑 setup 脚本属同族安装类 skill，next_step 是交给它的工单"
+    }
+  ]
+}
