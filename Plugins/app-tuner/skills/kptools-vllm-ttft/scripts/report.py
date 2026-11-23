@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from gen_ttft_report import ids, pf
+
 SKILL_ROOT = Path(__file__).resolve().parent
 GEN = SKILL_ROOT / "gen_ttft_report.py"
 
@@ -26,13 +28,15 @@ def scan_log(text: str) -> dict[str, int]:
 
 def list_requests(log: Path) -> list[tuple[str, int]]:
     """(request_id, BREAKDOWN count) in first-appearance order."""
-    import re
-
     seen: dict[str, int] = {}
-    text = log.read_text(encoding="utf-8", errors="replace")
-    for match in re.finditer(r"\[TTFT\]\[BREAKDOWN\] req=(\S+)", text):
-        req = match[1]
-        seen[req] = seen.get(req, 0) + 1
+    with log.open(encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            _, marker, tail = line.partition(REQUIRED[0][0])
+            if marker:
+                names = ids(pf(tail))
+                if len(names) == 1:
+                    request = next(iter(names))
+                    seen[request] = seen.get(request, 0) + 1
     return list(seen.items())
 
 
@@ -72,23 +76,16 @@ def cmd_report(args) -> int:
         )
         if not args.force:
             return 1
+    if counts[REQUIRED[0][0]] > 1:
+        print("日志包含多条 BREAKDOWN；请截取单请求日志切片后重跑，"
+              "--req 只核对切片中的请求 ID。", file=sys.stderr)
+        for req, count in list_requests(log):
+            print(f"  req={req}  BREAKDOWN={count} 条", file=sys.stderr)
+        return 1
     requests = list_requests(log)
     if not args.req and len(requests) == 1:
         args.req = requests[0][0]
         print(f"  单一请求：{args.req}（已自动选中）")
-    if not args.req and len(requests) > 1:
-        print(
-            f"日志包含 {len(requests)} 个请求的 BREAKDOWN 记录；"
-            "报告一次只分析一个请求：",
-            file=sys.stderr,
-        )
-        for req, count in requests:
-            print(f"  req={req}  BREAKDOWN={count} 条", file=sys.stderr)
-        print(
-            "请用 --req <request-id> 指定后重跑；或分批采集单请求日志。",
-            file=sys.stderr,
-        )
-        return 1
     if args.req:
         matched = [r for r, _ in requests if r == args.req]
         if requests and not matched:

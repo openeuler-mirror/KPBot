@@ -95,6 +95,7 @@ class FilePlan:
     before: str | None
     after: str
     already_applied: bool = False
+    original: str | None = None
 
 
 def sha256_text(text: str) -> str:
@@ -172,7 +173,8 @@ def build_file_plan(root: Path, entry: dict) -> FilePlan:
     target = root / entry["path"]
     current = None
     if target.exists():
-        current = _normalize_newlines(target.read_text(encoding="utf-8"))
+        original = target.read_bytes().decode("utf-8")
+        current = _normalize_newlines(original)
     before, after = entry["before"], entry["after"]
     if current == after:
         return FilePlan(root, entry["path"], before, after, already_applied=True)
@@ -201,7 +203,7 @@ def build_file_plan(root: Path, entry: dict) -> FilePlan:
                 f"{entry['path']}: 当前文件与 0.27 基线不匹配"
                 f"（版本不符或含未知本地修改）；拒绝执行。（{exc}）"
             ) from exc
-    return FilePlan(root, entry["path"], before, new_text)
+    return FilePlan(root, entry["path"], before, new_text, original=original)
 
 
 def apply_mapped(current: str, before: str, after: str) -> str:
@@ -262,6 +264,11 @@ def apply_transaction(plans: list[FilePlan], state_dir: Path, metadata: dict) ->
             f"回滚状态已存在，拒绝覆盖：{state_path}；请使用新的独立 --state-dir。"
         )
     pending = [p for p in plans if not p.already_applied]
+    for p in pending:
+        target = p.root / p.path
+        current = target.read_bytes().decode("utf-8") if target.exists() else None
+        if current != p.original:
+            raise SkillError(f"{p.path}: 源码在计划后发生变化，拒绝应用；请重新生成计划。")
     state_dir.mkdir(parents=True, exist_ok=True)
     state = {
         "metadata": metadata,
@@ -269,26 +276,13 @@ def apply_transaction(plans: list[FilePlan], state_dir: Path, metadata: dict) ->
             {
                 "root": str(p.root),
                 "path": p.path,
-                "backup": (p.root / p.path).read_text(encoding="utf-8")
-                if (p.root / p.path).exists()
-                else None,
-                "backup_sha256": sha256_text(
-                    (p.root / p.path).read_text(encoding="utf-8")
-                )
-                if (p.root / p.path).exists()
-                else None,
+                "backup": p.original,
+                "backup_sha256": sha256_text(p.original) if p.original is not None else None,
                 "after_sha256": sha256_text(p.after),
             }
             for p in pending
         ],
     }
-    # Verify every plan still matches before writing anything.
-    for p in pending:
-        rebuilt = build_file_plan(
-            p.root, {"path": p.path, "before": p.before, "after": p.after}
-        )
-        if rebuilt.already_applied:
-            continue
     for p in pending:
         target = p.root / p.path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -307,11 +301,10 @@ def rollback_state(state_path: Path) -> None:
     # and refuse atomically, so no file is left half-restored.
     for record in state["files"]:
         target = Path(record["root"]) / record["path"]
-        current = target.read_text(encoding="utf-8") if target.exists() else None
+        current = target.read_bytes() if target.exists() else None
         if (
             record["after_sha256"] is not None
-            and current is not None
-            and sha256_text(current) != record["after_sha256"]
+            and (current is None or hashlib.sha256(current).hexdigest() != record["after_sha256"])
         ):
             raise SkillError(
                 f"{record['path']}: 应用后文件被再次修改，拒绝回滚；请人工检查。"
@@ -323,7 +316,7 @@ def rollback_state(state_path: Path) -> None:
             if target.exists():
                 target.unlink()
         else:
-            target.write_text(record["backup"], encoding="utf-8", newline="\n")
+            target.write_bytes(record["backup"].encode("utf-8"))
 
 
 def load_manifest(name: str) -> dict:

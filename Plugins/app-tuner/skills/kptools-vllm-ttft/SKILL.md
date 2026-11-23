@@ -32,7 +32,7 @@ python3 "$SKILL_DIR/scripts/ttft.py" report /path/to/log_prefill.log \
 ```
 
 - `check` 统计 `BREAKDOWN`、`QUEUE` 和 `AscendStoreSave` 标记。检查失败时保留缺失项并排查日志完整性。
-- 单请求日志自动选中。多请求日志先列出请求 ID 和 `BREAKDOWN` 次数，请用户选定后传 `--req <request-id>`。保留原始日志和能保留关联记录的请求日志切片。
+- 单请求日志自动选中。遇到多条 `BREAKDOWN`（即使请求 ID 相同），保留原日志，另截取仅含一条 BREAKDOWN 且保留关联记录的单请求日志后重跑。`--req` 仅核对切片的 ID，不过滤多请求原日志。
 - 返回报告路径、请求 ID、指标单位和缺失证据。正式报告保留原始关联记录，分享前核对并脱敏。
 
 ## 使用边界

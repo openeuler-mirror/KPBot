@@ -954,6 +954,9 @@ def main() -> int:
         state_file.write_bytes(b'{"existing": "rollback evidence"}')
         for repo in ("vllm", "ascend"):
             env = make_env(tmp / f"guard-{repo}", repo)
+            original_entry = next(e for e in PROFILES[repo]["repos"][repo] if e["before"])
+            crlf = env / original_entry["path"]
+            crlf.write_bytes(crlf.read_bytes().replace(b"\n", b"\r\n"))
             before = {
                 p.relative_to(env): p.read_bytes()
                 for p in env.rglob("*")
