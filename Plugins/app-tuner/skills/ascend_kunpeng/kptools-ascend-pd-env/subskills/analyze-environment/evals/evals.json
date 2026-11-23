@@ -1,0 +1,17 @@
+{
+  "skill_name": "analyze-environment",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "只分析这份 D 侧采集包。NPU 信息有，Python 包清单超时了，帮我看启动参数和配额。",
+      "expected_output": "只读取选定快照，说明角色来源并引用启动参数和配额的实际证据。把缺失的包清单标为未采到，不把软件版本判为正常，不连接 Docker。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "旧采集包标的是 PD，里面有三个容器，帮我分析 P 侧。",
+      "expected_output": "先确认包内哪个容器是 P；不按容器名猜，不把三个容器合成一份分析。",
+      "files": []
+    }
+  ]
+}
