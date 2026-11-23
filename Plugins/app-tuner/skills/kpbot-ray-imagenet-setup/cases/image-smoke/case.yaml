@@ -1,0 +1,21 @@
+name: kpbot-ray-imagenet-image-smoke
+skill: kpbot-ray-imagenet-setup
+tier: B
+entrypoint: ["bash", "cases/image-smoke/run.sh"]
+env_requires:
+  - Linux x86_64
+  - 按本 skill Dockerfile 构建的隔离 CPU 镜像及全部哈希锁定依赖
+  - Python 3.11.14、Ray 2.52.0、torch 2.6.0+cpu、torchvision 0.21.0+cpu
+  - 至少 4 CPU、8 GiB 内存、1 GiB 共享内存
+  - 本次结果目录可写，已有结果不复用
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/image-smoke/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/image-smoke/result.json
+    field: verified_rows
+    expect: 16

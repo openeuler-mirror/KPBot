@@ -1,0 +1,8 @@
+# Hash-locked CPU wheels for CPython 3.11 on Linux x86_64.
+# Source: official PyTorch CPU wheel index https://download.pytorch.org/whl/cpu.
+# Hashes are the official wheel SHA256 receipts recorded by pip for that index;
+# see references/lock-provenance.json for the exact wheel URL provenance.
+torch==2.6.0+cpu \
+    --hash=sha256:5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc
+torchvision==0.21.0+cpu \
+    --hash=sha256:d67081026aad9642c46d3b14035f8ae69117468c09a07d628f3eafc7ae74841f

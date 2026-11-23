@@ -1,0 +1,409 @@
+{
+  "target": "CPython 3.11, Linux x86_64, Debian bookworm glibc",
+  "selection": "x86_64 cp311/abi3 manylinux wheels plus py3-none-any wheels; sdist excluded",
+  "official_sources": [
+    "https://pypi.org/simple",
+    "https://download.pytorch.org/whl/cpu"
+  ],
+  "note": "Package hashes come from the official PyPI JSON API. CPU torch/torchvision hashes were verified against official https://download-r2.pytorch.org/whl/cpu/<name>/ index fragments and match the earlier pip install receipt. No mirror or installed-package report is trusted.",
+  "packages": [
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "pypi_json": "https://pypi.org/pypi/attrs/26.1.0/json",
+      "pypi_json_sha256": "a882bf941fb4a0bb748d0194df544121cc130f5fb15a710ab6b804c17d2899b7",
+      "wheels": [
+        {
+          "filename": "attrs-26.1.0-py3-none-any.whl",
+          "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+        }
+      ]
+    },
+    {
+      "name": "certifi",
+      "version": "2026.11.20",
+      "pypi_json": "https://pypi.org/pypi/certifi/2026.11.20/json",
+      "pypi_json_sha256": "6959a4fa5a31855d093cdd90f5724ea5403dbdcec1402b4b4f00a6825dfdd5f7",
+      "wheels": [
+        {
+          "filename": "certifi-2026.11.20-py3-none-any.whl",
+          "sha256": "7422df25243767b9877031a2248cb14d09ddac9beee846f4cef3d5c9191d488f"
+        }
+      ]
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "pypi_json": "https://pypi.org/pypi/charset-normalizer/3.5.2/json",
+      "pypi_json_sha256": "2a3a2a543f2a5c5ff29d141f824be931dc89daa2262dd41015c4ed80a51ad9c5",
+      "wheels": [
+        {
+          "filename": "charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "211d5a3eb6af8f513b8d4ca19a8c1b7accab1b5f0d3175f9826b03c1a920dc1f"
+        },
+        {
+          "filename": "charset_normalizer-3.5.2-cp37-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+          "sha256": "1c50fe28bbc2ced33386f298650d91218076c05420e6cbd790b913adc41659e7"
+        },
+        {
+          "filename": "charset_normalizer-3.5.2-py3-none-any.whl",
+          "sha256": "b6b751274acb69d77b3323d6b7dbaa3c7fdfc1eb829b7eb61d262f32e1af9685"
+        }
+      ]
+    },
+    {
+      "name": "click",
+      "version": "8.5.1",
+      "pypi_json": "https://pypi.org/pypi/click/8.5.1/json",
+      "pypi_json_sha256": "d6ec5ff9b41fc09d046eb431973dae2eec594dba3a853d03f369c4e3b2fde9b6",
+      "wheels": [
+        {
+          "filename": "click-8.5.1-py3-none-any.whl",
+          "sha256": "8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37"
+        }
+      ]
+    },
+    {
+      "name": "filelock",
+      "version": "4.3.0",
+      "pypi_json": "https://pypi.org/pypi/filelock/4.3.0/json",
+      "pypi_json_sha256": "dbb4ca3c0b2f9beb379c19c22b48520897674db74b4e5744d6d4366d8629b200",
+      "wheels": [
+        {
+          "filename": "filelock-4.3.0-py3-none-any.whl",
+          "sha256": "f933f39f7e01249a4a49b9abab30edc6d4b874624c3de5dd0b0d137aa8adb979"
+        }
+      ]
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "pypi_json": "https://pypi.org/pypi/fsspec/2026.9.0/json",
+      "pypi_json_sha256": "4a93a853911936a59262f3ccc1a36a42cfbff106beec53d6e247d00f7a3aa1e9",
+      "wheels": [
+        {
+          "filename": "fsspec-2026.9.0-py3-none-any.whl",
+          "sha256": "8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f"
+        }
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "pypi_json": "https://pypi.org/pypi/idna/3.20/json",
+      "pypi_json_sha256": "e7cbd26e23ce60f6cb3a151d2adf3b1b087bb8f10ac2d9d6db70fdccbf3bb041",
+      "wheels": [
+        {
+          "filename": "idna-3.20-py3-none-any.whl",
+          "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+        }
+      ]
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "pypi_json": "https://pypi.org/pypi/Jinja2/3.1.6/json",
+      "pypi_json_sha256": "1bc757d7065f3e67d3a49e72ebc731d0774055575732592eede9820c136329cc",
+      "wheels": [
+        {
+          "filename": "jinja2-3.1.6-py3-none-any.whl",
+          "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+        }
+      ]
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "pypi_json": "https://pypi.org/pypi/jsonschema/4.26.0/json",
+      "pypi_json_sha256": "d0c9ccdfa30c3cdc57b048c2be21123dfb0c2f4d6bef2e8324dcb4eac985cfcf",
+      "wheels": [
+        {
+          "filename": "jsonschema-4.26.0-py3-none-any.whl",
+          "sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce"
+        }
+      ]
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "pypi_json": "https://pypi.org/pypi/jsonschema-specifications/2025.9.1/json",
+      "pypi_json_sha256": "91810d8f79384375ad0c0cf631e06903e2790b030d3fad2f1ad657b20ddd839e",
+      "wheels": [
+        {
+          "filename": "jsonschema_specifications-2025.9.1-py3-none-any.whl",
+          "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe"
+        }
+      ]
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.4",
+      "pypi_json": "https://pypi.org/pypi/MarkupSafe/3.0.4/json",
+      "pypi_json_sha256": "85cd5bce3f85e67ab0b921be9c9ba144a7cc01a2d02b85ad65b1f8dabeac4c57",
+      "wheels": [
+        {
+          "filename": "markupsafe-3.0.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "6da83a088f8ef93b2d483a8232a4dbf4d69d3d8496b568a03c56becac43e1808"
+        }
+      ]
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "pypi_json": "https://pypi.org/pypi/mpmath/1.3.0/json",
+      "pypi_json_sha256": "cc8d63714e311b9a2f9419d8dcb63d52190b5f69a63bc85e570987a434dc7a57",
+      "wheels": [
+        {
+          "filename": "mpmath-1.3.0-py3-none-any.whl",
+          "sha256": "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"
+        }
+      ]
+    },
+    {
+      "name": "msgpack",
+      "version": "1.2.4",
+      "pypi_json": "https://pypi.org/pypi/msgpack/1.2.4/json",
+      "pypi_json_sha256": "6fb5984e62a21072b8f9a5a5bd2b9d6add981390b5dbed608d840d613f46e348",
+      "wheels": [
+        {
+          "filename": "msgpack-1.2.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "a45ceb5f199d5e388f28b550ba881096a3740d4bda10e661d77f59d9a2e8187a"
+        }
+      ]
+    },
+    {
+      "name": "networkx",
+      "version": "3.6.1",
+      "pypi_json": "https://pypi.org/pypi/networkx/3.6.1/json",
+      "pypi_json_sha256": "086ea20eae0bce8c0100f4ad27141818546f904be441a713ce4c3a7f2d650d19",
+      "wheels": [
+        {
+          "filename": "networkx-3.6.1-py3-none-any.whl",
+          "sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762"
+        }
+      ]
+    },
+    {
+      "name": "numpy",
+      "version": "2.1.3",
+      "pypi_json": "https://pypi.org/pypi/numpy/2.1.3/json",
+      "pypi_json_sha256": "1012fa636066453f0b0d621d53bc714cf73eb8d9a029351223da5bf3d255245e",
+      "wheels": [
+        {
+          "filename": "numpy-2.1.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "sha256": "bc6f24b3d1ecc1eebfbf5d6051faa49af40b03be1aaa781ebdadcbc090b4539b"
+        }
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "pypi_json": "https://pypi.org/pypi/packaging/26.3/json",
+      "pypi_json_sha256": "4f190d2f0b312b3086058cee64ab4333bf3ce67fb78b4c2bdb43899049b29f4d",
+      "wheels": [
+        {
+          "filename": "packaging-26.3-py3-none-any.whl",
+          "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+        }
+      ]
+    },
+    {
+      "name": "pandas",
+      "version": "3.1.1",
+      "pypi_json": "https://pypi.org/pypi/pandas/3.1.1/json",
+      "pypi_json_sha256": "89c7b02c67ebcd7f8afdd667b54b198afd5a6c106b680257de81a4e4a862d581",
+      "wheels": [
+        {
+          "filename": "pandas-3.1.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "4f1602f614bb83f443381dbcbb94c4ac764b2e50c8d6c965614c5cd83e328c47"
+        }
+      ]
+    },
+    {
+      "name": "pillow",
+      "version": "11.3.0",
+      "pypi_json": "https://pypi.org/pypi/pillow/11.3.0/json",
+      "pypi_json_sha256": "b3352119f61a526420e793b1f6af33826c7e212c3fcaff1c30ec7059c94ca4f3",
+      "wheels": [
+        {
+          "filename": "pillow-11.3.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+          "sha256": "91da1d88226663594e3f6b4b8c3c8d85bd504117d043740a8e0ec449087cc494"
+        },
+        {
+          "filename": "pillow-11.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "106064daa23a745510dabce1d84f29137a37224831d88eb4ce94bb187b1d7e5f"
+        }
+      ]
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2",
+      "pypi_json": "https://pypi.org/pypi/protobuf/7.36.2/json",
+      "pypi_json_sha256": "38d5c8ef9f0bc79403979baa746281979abdebeeb72fc180194731d71e3d87a4",
+      "wheels": [
+        {
+          "filename": "protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl",
+          "sha256": "89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2"
+        },
+        {
+          "filename": "protobuf-7.36.2-py3-none-any.whl",
+          "sha256": "bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e"
+        }
+      ]
+    },
+    {
+      "name": "pyarrow",
+      "version": "19.0.1",
+      "pypi_json": "https://pypi.org/pypi/pyarrow/19.0.1/json",
+      "pypi_json_sha256": "6fb0e33ca8b495901e1799a056520d8eaca64b7bc5ff2ffe4756055900d862b6",
+      "wheels": [
+        {
+          "filename": "pyarrow-19.0.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "sha256": "f24faab6ed18f216a37870d8c5623f9c044566d75ec586ef884e13a02a9d62c5"
+        },
+        {
+          "filename": "pyarrow-19.0.1-cp311-cp311-manylinux_2_28_x86_64.whl",
+          "sha256": "49a3aecb62c1be1d822f8bf629226d4a96418228a42f5b40835c1f10d42e4db6"
+        }
+      ]
+    },
+    {
+      "name": "python-dateutil",
+      "version": "4.0.0",
+      "pypi_json": "https://pypi.org/pypi/python-dateutil/4.0.0/json",
+      "pypi_json_sha256": "b13eb57b123adf7f9268e59818dd21bd119d1c55e0f3a2bcceb7057e37c36436",
+      "wheels": [
+        {
+          "filename": "python_dateutil-4.0.0-py3-none-any.whl",
+          "sha256": "a5e246f79eb80475e691bf93862cead98decd8a498cf53ba0516fcdc0f50dc1c"
+        }
+      ]
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.4",
+      "pypi_json": "https://pypi.org/pypi/PyYAML/6.0.4/json",
+      "pypi_json_sha256": "45e5d23e958fbc6502a0e96777921072545f2f2fb9978d27ef1a1ce9c180f765",
+      "wheels": [
+        {
+          "filename": "pyyaml-6.0.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "622aa875fa6533f25fedcffe23079357d65a690d462200afed5d8e9d0e01ebee"
+        }
+      ]
+    },
+    {
+      "name": "ray",
+      "version": "2.52.0",
+      "pypi_json": "https://pypi.org/pypi/ray/2.52.0/json",
+      "pypi_json_sha256": "3c3488ed4b8cded5880e86e7c033a58d9eb15bd8ebdaea053e16d07e7ad1fb01",
+      "wheels": [
+        {
+          "filename": "ray-2.52.0-cp311-cp311-manylinux2014_x86_64.whl",
+          "sha256": "59a22d8ea21bad4e703ac5a3a1947c2fc09a43b4e9043666d9f8d396ceebb974"
+        }
+      ]
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0",
+      "pypi_json": "https://pypi.org/pypi/referencing/0.37.0/json",
+      "pypi_json_sha256": "a67968d8e03aa45e650fc2ff0d07796676db1a7841ce8e810bf2dba5af689464",
+      "wheels": [
+        {
+          "filename": "referencing-0.37.0-py3-none-any.whl",
+          "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231"
+        }
+      ]
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "pypi_json": "https://pypi.org/pypi/requests/2.34.2/json",
+      "pypi_json_sha256": "8622e50ffd295ed759ec793f2a009172a4ed0204bbc5e948de23111bc3d2aeae",
+      "wheels": [
+        {
+          "filename": "requests-2.34.2-py3-none-any.whl",
+          "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+        }
+      ]
+    },
+    {
+      "name": "rpds-py",
+      "version": "2026.9.1",
+      "pypi_json": "https://pypi.org/pypi/rpds-py/2026.9.1/json",
+      "pypi_json_sha256": "93808b9ff27aabe26d9a4f03b28422d1d05c3fb8716d88f3826e7ddf4b0b258b",
+      "wheels": [
+        {
+          "filename": "rpds_py-2026.9.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "sha256": "136a1c3fe4402b7008bc81cb62ee538481795b61a7e83df88dff3b3f02b726ff"
+        }
+      ]
+    },
+    {
+      "name": "sympy",
+      "version": "1.13.1",
+      "pypi_json": "https://pypi.org/pypi/sympy/1.13.1/json",
+      "pypi_json_sha256": "94c096fc66dddf07e580f9abb5447cd7501733b6d2bfd93d4918f2fd3c2d4588",
+      "wheels": [
+        {
+          "filename": "sympy-1.13.1-py3-none-any.whl",
+          "sha256": "db36cdc64bf61b9b24578b6f7bab1ecdd2452cf008f34faa33776680c26d66f8"
+        }
+      ]
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "pypi_json": "https://pypi.org/pypi/typing_extensions/4.16.0/json",
+      "pypi_json_sha256": "2140da00d62dde967f52d0be0ae28444f1d6a3fe603f52c83c23988c32122d5a",
+      "wheels": [
+        {
+          "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+          "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+        }
+      ]
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.6",
+      "pypi_json": "https://pypi.org/pypi/tzdata/2026.6/json",
+      "pypi_json_sha256": "82888ae1ccdc2ed984ce983353520631122c4504e5af2dc40b8eddf8398206a0",
+      "wheels": [
+        {
+          "filename": "tzdata-2026.6-py2.py3-none-any.whl",
+          "sha256": "0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec"
+        }
+      ]
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "pypi_json": "https://pypi.org/pypi/urllib3/2.8.0/json",
+      "pypi_json_sha256": "5315e7401db3cacccd0c2ce5daf81f752a9cc3614b18c37f2b79930b7159ce2f",
+      "wheels": [
+        {
+          "filename": "urllib3-2.8.0-py3-none-any.whl",
+          "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+        }
+      ]
+    }
+  ],
+  "cpu_wheels": [
+    {
+      "name": "torch",
+      "version": "2.6.0+cpu",
+      "wheel_url": "https://download-r2.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp311-cp311-linux_x86_64.whl#sha256=5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc",
+      "sha256": "5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc",
+      "provenance": "sha256 fragment fetched from the official PyTorch CPU simple index; identical to the pip install receipt",
+      "index_url": "https://download-r2.pytorch.org/whl/cpu/torch/"
+    },
+    {
+      "name": "torchvision",
+      "version": "0.21.0+cpu",
+      "wheel_url": "https://download-r2.pytorch.org/whl/cpu/torchvision-0.21.0%2Bcpu-cp311-cp311-linux_x86_64.whl#sha256=d67081026aad9642c46d3b14035f8ae69117468c09a07d628f3eafc7ae74841f",
+      "sha256": "d67081026aad9642c46d3b14035f8ae69117468c09a07d628f3eafc7ae74841f",
+      "provenance": "sha256 fragment fetched from the official PyTorch CPU simple index; identical to the pip install receipt",
+      "index_url": "https://download-r2.pytorch.org/whl/cpu/torchvision/"
+    }
+  ]
+}
