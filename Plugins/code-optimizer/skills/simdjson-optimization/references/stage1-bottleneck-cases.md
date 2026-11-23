@@ -114,7 +114,7 @@ json_structural_indexer.h:242  checker.check_next_input(in)
 
 ## 3. 案例 C：缓冲区地址对齐
 
-症状：Top-down/PMU 出现 `LD_CANCEL_MISALIGN`（`r5091`）与 load stall；`ldp q,q` 跨 64B 缓存行时指令无法及时发射。
+症状：Top-down/PMU 出现 `LD_CANCEL_MISALIGN` 与 load stall；`ldp q,q` 跨 64B 缓存行时指令无法及时发射。
 
 处置（`align64.patch` 形态）：
 

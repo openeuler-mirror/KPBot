@@ -42,24 +42,23 @@ perf annotate -i perf.data --stdio -s <stage1_symbol> | head -80
   - 往上游能找到长延迟链（水平归约、跨域传输、栈加载）。
 - 不要把"最高采样指令"直接当作瓶颈写进结论。
 
-## 4. Top-down / PMU（Kunpeng 920 原始事件）
+## 4. Top-down / PMU
 
-`scripts/topdown.sh` 采用分组 `perf stat` 避免事件 multiplexing。关键事件：
+`scripts/topdown.sh` 采用分组 `perf stat` 避免事件 multiplexing。事件一律按名称引用，不内置平台原始事件编码。关键事件：
 
-| 事件 | 编码 | 用途 |
-|---|---|---|
-| CPU_CYCLES | `r0011` | 分母 |
-| INST_RETIRED | `r0008` | IPC |
-| LD_CANCEL_MISALIGN | `r5091` | 未对齐 load |
-| LD_CANCEL_FWD_HZD | `r5094` | store→load hazard |
-| LD_CANCEL_LQ_FULL | `r5092` | load queue 压力 |
-| memstall_anyload | `r7005` | load stall |
-| memstall_store | `r7006` | store stall |
-| memstall_L1miss | `r7007` | L1 miss stall |
-| ST_SCA_FULL / ST_ORDER_FAIL | `r50a0` / `r50a3` | store 压力/顺序失败 |
-| vfp_ptag_stall / vpd_ptag_stall | `r2008` / `r200a` | 向量寄存器/端口 stall |
+| 事件 | 用途 |
+|---|---|
+| cycles / instructions | 分母 / IPC |
+| LD_CANCEL_MISALIGN | 未对齐 load |
+| LD_CANCEL_FWD_HZD | store→load hazard |
+| LD_CANCEL_LQ_FULL | load queue 压力 |
+| memstall_anyload / memstall_store / memstall_L1miss | load/store/L1 miss stall |
+| ST_SCA_FULL / ST_ORDER_FAIL | store 压力/顺序失败 |
+| vfp_ptag_stall / vpd_ptag_stall | 向量寄存器/端口 stall |
 
-非 Kunpeng 平台没有这些 `rXXXX` 事件，脚本会跳过并在输出中标注；改用通用事件对照。
+- 事件组在当前平台不可用时自动跳过；全部不可用时降级为通用事件组（cycles/instructions/L1 miss）。
+- 若平台内核未导出上述事件名，可在脚本同目录放置 `topdown-events.local`（每行 `事件名=原始事件编码`，编码以鲲鹏 PMU 事件文档为准，该文件不入库，模板见 `scripts/topdown-events.local.example`），脚本会把名称映射为原始事件后采集。
+- 非 Kunpeng 平台没有这些专用 stall 事件，脚本会降级并在输出中标注；改用通用事件对照。
 
 ## 5. SPE（LD/ST 延迟）
 

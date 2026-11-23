@@ -17,7 +17,7 @@ usage() {
   -b DIR    构建目录 (默认: <repo>/build-<TYPE>)
   -r DIR    simdjson 源码根目录 (默认: \$SIMDJSON_ROOT 或当前目录)
   --target TARGET  只构建指定目标 (默认全部; 常用: parse / perfdiff / basictests)
-  --clean   清理后重建
+  --clean   清理后重建 (只允许清理源码目录内的构建目录; 拒绝 /、家目录、源码根与含 .. 的路径)
   -h        帮助
 EOF
   exit 0
@@ -42,14 +42,32 @@ if [[ ! -f "${REPO_ROOT}/CMakeLists.txt" ]]; then
   echo "错误: ${REPO_ROOT} 不是 simdjson 源码根目录 (无 CMakeLists.txt)" >&2
   exit 1
 fi
-REPO_ROOT="$(cd "${REPO_ROOT}" && pwd)"
+REPO_ROOT="$(realpath "${REPO_ROOT}")"
 
 if [[ -z "$BUILD_DIR" ]]; then
   BUILD_DIR="${REPO_ROOT}/build-${BUILD_TYPE}"
 fi
-BUILD_DIR="$(cd "$(dirname "${BUILD_DIR}")" && pwd)/$(basename "${BUILD_DIR}")"
+RAW_BUILD_DIR="$BUILD_DIR"
+BUILD_DIR="$(realpath -m -- "${BUILD_DIR}")"
 
 if [[ $CLEAN -eq 1 ]]; then
+  clean_refuse() {
+    echo "错误: 拒绝清理构建目录 '${RAW_BUILD_DIR}' (解析为 '${BUILD_DIR}'): $1" >&2
+    exit 2
+  }
+  case "$RAW_BUILD_DIR" in
+    ..|../*|*/..|*/../*) clean_refuse "路径包含 .. 分量";;
+  esac
+  [[ -n "$BUILD_DIR" ]] || clean_refuse "路径为空"
+  [[ "$BUILD_DIR" != "/" ]] || clean_refuse "路径解析为文件系统根 /"
+  if [[ -n "${HOME:-}" ]]; then
+    [[ "$BUILD_DIR" != "$HOME" ]] || clean_refuse "路径解析为家目录"
+  fi
+  [[ "$BUILD_DIR" != "$REPO_ROOT" ]] || clean_refuse "路径解析为源码根目录本身"
+  case "$BUILD_DIR" in
+    "$REPO_ROOT"/*) ;;
+    *) clean_refuse "规范化后必须位于源码目录 ${REPO_ROOT} 之内";;
+  esac
   echo "=== 清理构建目录: ${BUILD_DIR} ==="
   rm -rf "${BUILD_DIR}"
 fi

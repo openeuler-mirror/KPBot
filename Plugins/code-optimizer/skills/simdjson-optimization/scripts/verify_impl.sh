@@ -16,7 +16,8 @@ usage() {
   1. 存在 simdjson::arm64:: 符号
   2. stage1 含 NEON 指令 umaxv (is_ascii 水平归约)
   3. 含 NEON 比较/查表/向量逻辑指令 (classify/reduce)
-失败任一即判定 "实现未生效", 退出非零。
+  4. 运行时分派: parse -a <impl> 必须退出码 0 且输出可识别的基准结果行
+失败任一即判定 "实现未生效", 退出非零; 静默失败/崩溃/无输出一律不放行。
 IMPL 仅允许字母/数字/下划线；非法值直接退出 2。
 EOF
   exit 0
@@ -47,6 +48,9 @@ if [[ -z "$JSON" ]]; then
     if [[ -f "${cand}/jsonexamples/twitter.json" ]]; then JSON="${cand}/jsonexamples/twitter.json"; break; fi
     if [[ -f "${cand}/twitter.json" ]]; then JSON="${cand}/twitter.json"; break; fi
   done
+  if [[ -z "$JSON" ]]; then
+    echo "提示: 未找到语料，运行时分派检查将使用空输入；若因此失败请用 -j 指定有效语料。" >&2
+  fi
 fi
 
 check() {
@@ -71,20 +75,36 @@ else
   check "符号 simdjson::${IMPL}::" 'nm -C "$BIN" | grep -q -- "$IMPL_PATTERN"'
 fi
 
-# 运行时确认：用 parse -a <impl> 跑最小输入，检查不报 fallback/未知实现错误
+# 运行时确认：用 parse -a <impl> 跑最小输入。白名单式判定——
+# 只有「退出码为 0 且输出含可识别的基准结果行」才 PASS，
+# 崩溃、无输出、未知实现措辞、回退 fallback、无法识别的输出一律 FAIL。
 echo "--- 运行时分派 (parse -a ${IMPL})"
+RC=0
 if [[ -n "$JSON" ]]; then
-  OUT="$(SIMDJSON_FORCE_IMPLEMENTATION=${IMPL} "${BIN}" -a "${IMPL}" -n 1 -t "${JSON}" 2>&1 || true)"
+  OUT="$(SIMDJSON_FORCE_IMPLEMENTATION=${IMPL} "${BIN}" -a "${IMPL}" -n 1 -t "${JSON}" 2>&1)" || RC=$?
 else
-  OUT="$(SIMDJSON_FORCE_IMPLEMENTATION=${IMPL} "${BIN}" -a "${IMPL}" -n 1 -t /dev/null 2>&1 || true)"
+  OUT="$(SIMDJSON_FORCE_IMPLEMENTATION=${IMPL} "${BIN}" -a "${IMPL}" -n 1 -t /dev/null 2>&1)" || RC=$?
 fi
-if echo "$OUT" | grep -qiE 'unknown implementation|unsupported implementation|not a supported'; then
-  echo "FAIL (运行时报实现错误/回退)"
+
+print_out_head() { printf '%s\n' "$OUT" | sed -n '1,5p' | sed 's/^/  | /' >&2; }
+
+if [[ $RC -ne 0 ]]; then
+  echo "FAIL (运行时退出码非 0: ${RC})"
+  print_out_head
   PASS=0
-elif echo "$OUT" | grep -q 'Failed to parse'; then
-  echo "PASS (实现可用；输入不可用是预期噪声，不影响本检查)"
+elif [[ -z "${OUT//[[:space:]]/}" ]]; then
+  echo "FAIL (运行时无输出)"
+  PASS=0
+elif printf '%s' "$OUT" | grep -qiE 'unknown implementation|unknown simd|unsupported|not (a )?supported|not recognized|does not exist|fallback'; then
+  echo "FAIL (运行时报实现错误/回退)"
+  print_out_head
+  PASS=0
+elif printf '%s' "$OUT" | grep -Eq '^"[^"]*"[[:space:]]+([-+0-9.]|(inf|nan))'; then
+  echo "PASS (分派成功: 输出含可识别的基准结果行)"
 else
-  echo "PASS"
+  echo "FAIL (输出无法识别为基准结果，拒绝放行)"
+  print_out_head
+  PASS=0
 fi
 
 if [[ $PASS -eq 1 ]]; then

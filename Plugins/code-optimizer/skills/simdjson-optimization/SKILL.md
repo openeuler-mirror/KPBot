@@ -1,12 +1,11 @@
 ---
 name: simdjson-optimization
 description: >
-  simdjson 解析器在 Kunpeng/AArch64 上的热点优化：以 stage1（json_structural_indexer::index<N>）
-  的 cycles/byte 与 GB/s 为核心指标，执行「基线建立 → perf/Top-down/SPE 取证 → 依赖链归因
-  → step 加宽/寄存器复用/缓冲区对齐/数据依赖四类落地 → ctest 功能与 perfdiff 性能回归」的标准化流程。
-  触发场景：simdjson stage1 慢、parse 基准 c/b 偏高、stage1 GB/s 低、is_ascii 出现
-  umaxv→fmov→tbnz 串行归约链、NEON 寄存器 spill、LD_CANCEL_MISALIGN、store-to-load forwarding
-  failure、step<64>/<128>/<256> 选择、AArch64 NEON/SVE 解析热点优化。
+  simdjson 解析器在 Kunpeng/AArch64 上的热点性能优化：定位并优化 stage1（结构索引）热点，
+  提升 parse 基准的 stage1 c/b 与 GB/s。当 simdjson parse 基准偏慢、stage1 c/b 或 GB/s
+  不达预期、is_ascii 出现 umaxv→fmov→tbnz 串行归约链、NEON 寄存器 spill、
+  LD_CANCEL_MISALIGN、store-to-load forwarding failure、需要评估 step<64>/<128>/<256>
+  宽度选择，或需要在 AArch64 上对 simdjson 做 NEON/SVE 解析热点优化与验证时使用。
   不适用：非 simdjson 项目、GPU/NPU 调优、只允许配置调参或只要求理论建议的任务。
 ---
 
@@ -21,7 +20,7 @@ description: >
 3. **寄存器溢出是 NEON step 加宽的第一约束。** `step<128>` 非交错实测 **-4.7%**：栈帧 288→464B、NEON spill/reload 125/110→261/265，头号热点变成 `ldp q2,q4,[sp,#160]`（29%）。加宽本身不产生收益。
 4. **寄存器复用与数据并行必须同时做。** 同一 `step<128>`，把 `scanner.next(in_2)` 挪到 `this->next(in_1)` 之后交错执行，spill 降到 42/45、栈帧 368B，性能从 -4.7% 转为 **+0.7%**。**先缩短寄存器生命周期，再谈加宽**。
 5. **编译器自动向量化可能制造数据依赖故障。** GCC 会把连续的标量数组写批量成 NEON 16B store，随后从同一栈区读回 16B 到 q 寄存器时触发 **store→load forwarding failure**——性能上表现为一条高延迟 `ldr q`，源码上完全看不出来，只能靠 SPE/反汇编定位。
-6. **未对齐访存会让指令无法发射。** Top-down/PMU 上表现为 `LD_CANCEL_MISALIGN`（Kunpeng 920 事件 `r5091`）抬升、内存子项 stall；输入缓冲区应做 **64B 对齐**（`posix_memalign`/`aligned_alloc`，ARM64 缓存行 64B，`ldp q,q` 不跨行）。
+6. **未对齐访存会让指令无法发射。** Top-down/PMU 上表现为 `LD_CANCEL_MISALIGN` 抬升、内存子项 stall；输入缓冲区应做 **64B 对齐**（`posix_memalign`/`aligned_alloc`，ARM64 缓存行 64B，`ldp q,q` 不跨行）。
 7. **"编过了"不等于"跑的是这份实现"。** simdjson 是运行时多实现分派，必须用 `SIMDJSON_FORCE_IMPLEMENTATION=arm64` + `parse -a arm64` 固定，并用 `nm`/`objdump` 确认 stage1 里真有 `umaxv`/`eor` 等 NEON 指令，否则 A/B 可能落在 fallback 或别的实现上。
 8. **三层数字口径不可混用。** `stage1 c/b`（机制指标）、`stage1 GB/s`（阶段吞吐）、`all GB/s`（端到端）三者结论可能不同；本 Skill 的优化目标固定在 stage1，报告必须同时给三层。
 9. **负载形态决定收益。** twitter.json 含 **15.11%** 非 ASCII 字节、31,808 个多字节 UTF-8 字符，因此非 ASCII 路径（`prev_input_block` 栈溢出）被频繁触发；纯 ASCII 输入的收益结构完全不同，换语料必须重测。
@@ -120,15 +119,15 @@ perf annotate -i perf.data --stdio -s <stage1 符号> | head -80
 scripts/topdown.sh -p <parse_pid> -t 10        # 或 -c "numactl ... ./parse ..."
 ```
 
-关注事件（Kunpeng 920 原始编码，见 `scripts/topdown.sh`）：
+关注事件（一律按事件名引用，见 `scripts/topdown.sh`；平台不支持的事件组自动跳过）：
 
 | 事件 | 含义 | 关联优化点 |
 |---|---|---|
-| `LD_CANCEL_MISALIGN` (`r5091`) | load 因未对齐被取消发射 | 缓冲区 64B 对齐 |
-| `LD_CANCEL_FWD_HZD` (`r5094`) | load 因 store→load 前递 hazard 被取消 | 数据依赖/写回结构 |
-| `memstall_anyload` (`r7005`) / `memstall_L1miss` (`r7007`) | load 相关 stall | 访存路径 |
-| `ST_ORDER_FAIL` (`r50a3`) / `ST_SCA_FULL` (`r50a0`) | store 顺序/缓冲区压力 | 批量写与写回 |
-| `vfp_ptag_stall` (`r2008`) / `vpd_ptag_stall` (`r200a`) | 向量寄存器重命名/端口 stall | 寄存器压力 |
+| `LD_CANCEL_MISALIGN` | load 因未对齐被取消发射 | 缓冲区 64B 对齐 |
+| `LD_CANCEL_FWD_HZD` | load 因 store→load 前递 hazard 被取消 | 数据依赖/写回结构 |
+| `memstall_anyload` / `memstall_L1miss` | load 相关 stall | 访存路径 |
+| `ST_ORDER_FAIL` / `ST_SCA_FULL` | store 顺序/缓冲区压力 | 批量写与写回 |
+| `vfp_ptag_stall` / `vpd_ptag_stall` | 向量寄存器重命名/端口 stall | 寄存器压力 |
 
 2c. **ARM SPE 指令级归因**（用于高延迟 LD 与 store→load 依赖）：
 
@@ -284,7 +283,7 @@ objdump -d build-Release/benchmark/dom/parse | grep -c 'str[[:space:]]*q.*\[sp' 
 |---|---|
 | `perf record` 无符号/无法 annotate | 用 `RelWithDebInfo` 或 `-g` 重建；仍不行则只做函数级 `perf report`，标注"未到指令级" |
 | 无 SPE 权限 / `arm_spe` 不可用 | 用 Top-down 的 `LD_CANCEL_FWD_HZD`/`ST_ORDER_FAIL` + `objdump` 静态判断；标注低置信 |
-| 非 Kunpeng 平台（无 `rXXXX` 事件） | `topdown.sh` 自动跳过不可用事件，改用通用 `perf stat` 事件（cycles/instructions/L1 miss），并说明平台差异 |
+| 非 Kunpeng 平台（无专用 stall 事件） | `topdown.sh` 跳过不可用事件组并降级为通用 `perf stat` 事件（cycles/instructions/L1 miss），并说明平台差异；需要专用事件时在脚本同目录放置 `topdown-events.local` 映射文件（不入库，见脚本用法） |
 | 无法改缓冲区分配（外部托管内存） | 只做 4a/4b/4d；对齐项标注"不适用" |
 | `step<256>` 实测退化 | 回退到 `step<128>` 交错形态，记录 spill 与栈帧数据 |
 | 无 `perfdiff`（未构建） | 用 `scripts/bench.sh` 5 轮交错替代，标注"非官方回归工具" |
@@ -325,7 +324,7 @@ objdump -d build-Release/benchmark/dom/parse | grep -c 'str[[:space:]]*q.*\[sp' 
 | `scripts/bench.sh` | 运行 `benchmark/dom/parse` 多轮并聚合。`bench.sh [-a arm64] [-j twitter.json] [-n 200] [-R 5] [-b build_dir] [--perf-stat] [--numa N]`；语料自动解析源码树根/构建目录/`benchmark/` 下的 `jsonexamples/`，也可传绝对路径；输出每轮与中位的 stage1/stage2/all c/b 与 GB/s，落盘 `perf_data/bench_<ts>.tsv` |
 | `scripts/func_test.sh` | 功能验证。`func_test.sh [-b build_dir] [-i arm64] [-L label] [-R regex]`；默认依次跑 `dom`、`ondemand`、`per_implementation`，任一失败退出非零 |
 | `scripts/verify_impl.sh` | 核验 arm64 实现确实编入并被使用。`verify_impl.sh <binary>`；检查 `simdjson::arm64::` 符号、`umaxv`/`eor` 等 NEON 指令、`SIMDJSON_FORCE_IMPLEMENTATION` 生效 |
-| `scripts/topdown.sh` | Kunpeng 920 Top-down/PMU 采集（分组避免 multiplexing），覆盖 `LD_CANCEL_MISALIGN`/`LD_CANCEL_FWD_HZD`/`memstall_*`/`ST_*`/向量 ptag stall。`topdown.sh -t 10 -p PID` 或 `-c "<cmd>"` |
+| `scripts/topdown.sh` | Kunpeng 920 Top-down/PMU 采集（分组避免 multiplexing），覆盖 `LD_CANCEL_MISALIGN`/`LD_CANCEL_FWD_HZD`/`memstall_*`/`ST_*`/向量 ptag stall。事件一律按名称引用，不内置平台原始事件编码；平台未导出事件名时可在脚本同目录放置 `topdown-events.local`（`名称=编码`，不入库）。`topdown.sh -t 10 -p PID` 或 `-c "<cmd>"` |
 | `scripts/spe_ldst.py` | SPE LD/ST 聚合：按 PC 统计 count/mean/p99/max `total_lat`，可 `--bin` 用 `addr2line` 映射符号与源码行。自动识别 `perf script -F` 空格文本（9 列契约）/带 `op`、`pc` 表头的 CSV/`--columns` 指定列；`#` 横幅行跳过。`spe_ldst.py <输入> --bin parse --op LD --top 20 [--columns cpu,op,pc,...]` |
 
 ## 协作
