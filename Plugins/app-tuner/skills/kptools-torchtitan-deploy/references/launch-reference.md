@@ -88,10 +88,10 @@ torchtitan 逐步输出（rank0 过滤后 stdout）：
 step/loss/tps/tflops/mfu/elapsed_time_per_step ...
 ```
 
-- 部署冒烟只看"有输出且 loss 在动"；指标解读/对比/预警归 `train-metrics`
-  （其解析器对这些字段原生支持，别名表可扩展新版本格式）
+- 部署冒烟只看"有输出且 loss 在动"；指标解读/对比/预警由所在部署环境的
+  训练指标工具承接（对上述字段原生解析的工具通常支持别名表扩展新格式）
 - 排障提示：profiler 采样会让日志混入额外输出，影响指标解析健康度
-  （train-metrics 的健康度门会标出）
+  （有健康度门的指标工具会标出这类污染）
 
 ## 6. TorchFT（容错训练）注意
 

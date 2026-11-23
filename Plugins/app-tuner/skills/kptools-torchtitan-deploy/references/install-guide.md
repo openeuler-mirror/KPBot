@@ -79,7 +79,7 @@ cannlab NPU Pod 与 master 分支的天然配套关系：
 | 项 | Pod 实况 | master 要求 |
 |----|---------|------------|
 | CANN | 9.2.0（`~/Ascend/cann`，随同步） | 9.2.0 ✓ |
-| python | `/opt/buildtools/python-3.12.9/bin/python3` | 3.12.x ✓ |
+| python | 镜像预置的构建版 Python 3.12（非系统 python，路径见环境文档） | 3.12.x ✓ |
 | torch/torch_npu | 构建 python 自带 | 2.14.0 配套 ✓ |
 
 - 操作链路（传代码/执行/回收）按 `kptools-cannlab-env` 的纪律走

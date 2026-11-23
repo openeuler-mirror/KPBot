@@ -10,7 +10,7 @@
     {
       "id": 2,
       "prompt": "帮我启动一个 8 卡的 torchtitan-npu 训练。",
-      "expected_output": "按启动参考：NGPU=8 bash scripts/run_train.sh --module/--config + CLI 覆盖，或直接用 examples/deepseek_v4/debug 的 8 卡成品脚本；说明 LOG_RANK 排障开关与 HCCL 超时是防御值；启动后用 train-metrics 看 step/loss/tps 验证；引用真实输出，不编造。",
+      "expected_output": "按启动参考：NGPU=8 bash scripts/run_train.sh --module/--config + CLI 覆盖，或直接用 examples/deepseek_v4/debug 的 8 卡成品脚本；说明 LOG_RANK 排障开关与 HCCL 超时是防御值；启动后用训练指标工具看 step/loss/tps 验证；引用真实输出，不编造。",
       "files": []
     },
     {

@@ -63,7 +63,7 @@ NGPU=1 bash scripts/run_train.sh \
 - tokenizer/数据集有内置默认（`tests/assets/deepseek_v3` 与 `c4_test`），
   冒烟无需下载真实模型；覆盖用 `HF_ASSETS_PATH` / `DATASET` / `DATASET_PATH`
 - 看到逐步 loss 输出（step/loss/tps/tflops/mfu/elapsed_time_per_step）
-  即部署成功；指标解读归 train-metrics
+  即部署成功；指标解读由所在部署环境的训练指标工具承接
 
 ## 启动速查（新配置系统）
 
@@ -105,8 +105,9 @@ COMM_MODE=gloo bash scripts/run_train.sh ...
 ## 约束
 
 - 本 skill 管部署/配置/启动/排障；**链路操作**（怎么把代码传到 NPU Pod）
-  归 `kptools-cannlab-env`，**训练指标解读**归 `train-metrics`，
-  **上板性能采集**归 `tool-perf-collect`
+  归 `kptools-cannlab-env`，**上板性能与 profiling 分析**归
+  `kptools-ascend-profiling-analysis`，训练指标解读由所在部署环境的
+  指标工具承接（仓内暂无对应 skill）
 - 低精度训练（all_block_fp8 等 recipe）**仅 A5（Ascend 950）硬件**支持，
   A3 上开 `--extension.quantization.*` 会直接失败
 - PyPI 安装暂未提供（主线待 torchtitan 稳定版），只支持源码安装
@@ -114,8 +115,8 @@ COMM_MODE=gloo bash scripts/run_train.sh ...
 ### 和同类 skill 的分界
 
 - 远程环境链路与 NPU Pod 操作：`kptools-cannlab-env`
-- 训练日志指标（tps/mfu/step time）解析：`train-metrics`
-- 上板性能采集与加速比对比：`tool-perf-collect`
+- 上板性能与 profiling 分析：`kptools-ascend-profiling-analysis`
+- 训练日志指标（tps/mfu/step time）解析：由所在部署环境的指标工具承接
 - 通用昇腾环境采集（非 torchtitan）：各 kptools-* collector
 
 ## 错误处理

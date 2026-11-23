@@ -90,9 +90,16 @@ done
 check_in "T8d B-19 确诊 plog 开关" "ASCEND_GLOBAL_LOG_LEVEL=0" "$PIT"
 check_in "T8e B-19 修复补丁" "fix-main-bind-universal.patch" "$PIT"
 
-# ============================================================ T9 分界路由
-for r in "kptools-cannlab-env" "train-metrics" "tool-perf-collect"; do
+# ============================================================ T9 分界路由（真实存在的 skill）
+for r in "kptools-cannlab-env" "kptools-ascend-profiling-analysis"; do
   check_in "T9 路由 [$r]" "$r" "$SK"
+done
+for ghost in "train-metrics" "tool-perf-collect" "tool-perf-analysis"; do
+  if grep -qF "$ghost" "$SK" "$(dirname "$SK")/evals"/*.json 2>/dev/null; then
+    bad "T9 幽灵 skill 仍被引用: $ghost"
+  else
+    ok "T9 幽灵 skill 已清除 [$ghost]"
+  fi
 done
 
 # ============================================================ T10 敏感信息自检
