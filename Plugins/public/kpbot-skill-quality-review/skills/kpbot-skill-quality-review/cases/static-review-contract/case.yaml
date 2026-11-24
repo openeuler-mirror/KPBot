@@ -1,0 +1,18 @@
+name: static-review-contract
+skill: kpbot-skill-quality-review
+tier: A
+description: 检查静态评审 Skill 的入口、规则引用和四个维度的检查项是否完整。
+entrypoint: ["python3", "cases/static-review-contract/run.py"]
+env_requires: ["Python 3.8+（仅标准库）"]
+env_vars: {}
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: rule_count
+    expect: 22
