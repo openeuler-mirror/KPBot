@@ -37,7 +37,7 @@
       "id": "q-stack-build",
       "prompt": "编译 gluten-flink 部署进 lib",
       "should_trigger": false,
-      "note": "编译部署 → flink-velox-stack-build（规划中）"
+      "note": "编译部署 → flink-velox-stack-build（见 !324）"
     }
   ]
 }

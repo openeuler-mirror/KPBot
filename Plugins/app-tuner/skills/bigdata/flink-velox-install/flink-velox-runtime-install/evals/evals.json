@@ -29,7 +29,7 @@
     {
       "id": "not-stack-build",
       "query": "编译 gluten-flink 并把 jar 部署进 Flink lib",
-      "expected": "不触发：编译部署属 flink-velox-stack-build（规划中）"
+      "expected": "不触发：编译部署属 flink-velox-stack-build（见 !324）"
     },
     {
       "id": "not-other-version",
