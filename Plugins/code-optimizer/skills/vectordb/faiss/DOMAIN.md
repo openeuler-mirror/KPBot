@@ -31,7 +31,7 @@ Faiss 查询路径性能优化的技能族：编排与契约、算法与候选�
 | Skill | 职责 | 来源 |
 | --- | --- | --- |
 | [`faiss-simd-optimization`](faiss-simd-optimization/SKILL.md) | NEON/SVE 选型决策、实际启用证据、ARM 源码导航 | 成研 |
-| [`faiss-optimization-selection`](faiss-optimization-selection/SKILL.md) | 候选排序与收益止损：四道闸门、信号→机制选择矩阵、上界与摊销口径 | 深研 |
+| [`faiss-optimization-selection`](faiss-optimization-selection/SKILL.md) | 候选排序与收益止损：四道闸门、信号→机制选择矩阵、上界与摊销口径；执行与特征依赖待并入技能（见下方清单） | 深研 |
 | [`faiss-simd-layer-port`](faiss-simd-layer-port/SKILL.md) | 定宽 SIMD 层落地：类型层、分派与门控、单层/动态分发语义、构建与实例化 | 深研 |
 
 ### 待并入（深研，8）

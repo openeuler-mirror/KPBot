@@ -14,7 +14,7 @@ description: 在 Faiss 内核优化候选之间做选择：用热点信号匹配
 1. 事实闸门：确认真实执行路径（分派、宏、实际加载库）、热点归因（self/inclusive 与调用方）、可移除成本上界。任一缺失时只能提出假设，不得进入选择。
 2. 机制闸门：按 [选择矩阵](references/selection-matrix.md) 将信号映射到机制族并路由到对应方法技能；一个候选只承载一个主要机制。
 3. 形态闸门：确定落地形态——局部改写、新增 SIMD 层、接口两侧扩展、参数/算法变更（后两者须另立实验，参数变更不计入纯实现收益）。默认关闭开关、保留通用回退、阈值 guard；阈值必须来自实测拐点。
-4. 收益止损：按 [收益与止损](references/benefit-and-stop.md) 估算上界与摊销，预声明噪声带与最小可检测差异；对照未超噪声带即拒绝，负结论保留。
+4. 收益止损：按 [收益与止损](references/benefit-and-stop.md) 估算上界与摊销，预声明噪声带与最小可检测差异；对照未超噪声带记 INCONCLUSIVE 并停止追加投入，明确负收益超噪声带才拒绝回滚，证据一律保留。
 
 ## 输出
 
@@ -46,4 +46,4 @@ description: 在 Faiss 内核优化候选之间做选择：用热点信号匹配
 - [选择矩阵](references/selection-matrix.md)
 - [收益与止损](references/benefit-and-stop.md)
 
-执行与证据：基线冻结用 `faiss-benchmark-baseline`，两臂执行用 `faiss-benchmark-run`，特征采集用 `faiss-feature-capture`（采样命令与归因用 `faiss-perf-profile`），统计与比较用 `vector-experiment-methodology`，测试设计用 `vector-ut-st-validation`。
+执行与证据：基线冻结用 `faiss-benchmark-baseline`，两臂执行用 `faiss-benchmark-run`，特征采集用 `faiss-feature-capture`（采样命令与归因用 `faiss-perf-profile`），统计与比较用 `vector-experiment-methodology`，测试设计用 `vector-ut-st-validation`。`faiss-benchmark-run` 与 `faiss-feature-capture` 尚未并入子域时不可按技能名调用：两臂对照按 `faiss-benchmark-baseline` 的对照口径执行，特征采集按 `faiss-perf-profile` 的采样与归因口径获取同类字段，实际使用的口径与来源一并记录。
