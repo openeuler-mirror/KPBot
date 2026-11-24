@@ -1,6 +1,6 @@
 ---
 name: agentenv-dtlbi-pr30652
-description: AgentENV coding 负载 KVM TLB 切换开销优化：先用 perf 确认宿主机存在 __tlb_switch_to_host 热点，再按 openEuler PR #30652（KVM arm64 directed stage-2 TLB invalidation）构建 6.6.0-pr30652-dtlbi 内核并重启生效（有重启风险，须提示使用者），重启后二选一使能 kvm.direct_tlbi=1（cmdline）或 echo 1 > /sys/module/kvm/parameters/direct_tlbi（运行时）。触发词：__tlb_switch_to_host 热点、directed TLBI、kvm.direct_tlbi、6.6.0-pr30652-dtlbi、AgentENV coding 负载 TLBI 优化。
+description: AgentENV coding 负载 KVM TLB 切换开销优化（KVM 软件定向 stage-2 失效，非 DVMBM/cluster-tlbi 的硬件位图方案）：先用 perf 确认宿主机存在 __tlb_switch_to_host 热点，再按 openEuler PR #30652（KVM arm64 directed stage-2 TLB invalidation）构建 6.6.0-pr30652-dtlbi 内核并重启生效（有重启风险，须提示使用者），重启后二选一使能 kvm.direct_tlbi=1（cmdline）或 echo 1 > /sys/module/kvm/parameters/direct_tlbi（运行时）。触发词：__tlb_switch_to_host 热点、directed TLBI、kvm.direct_tlbi、6.6.0-pr30652-dtlbi、AgentENV coding 负载 TLBI 优化。
 ---
 
 # AgentENV directed TLBI 优化（PR #30652）
@@ -43,10 +43,15 @@ perf report -i perf-coding-base.data --stdio --sort symbol | \
   grep -w __tlb_switch_to_host
 ```
 
-- 记录该函数样本数占比（另存 `perf report --stdio > report-base.txt`）。
-- 占比 ≥1%：继续阶段 2。
-- 占比 <1% 或无样本：向使用者报告热点占比与预期收益有限，
-  **由使用者决定**是否仍换核；不要替用户默认继续。
+- 占比判定走门禁脚本（可回归，配 tier-A 用例
+  `cases/dtlbi-gate-contract/`）：
+  `python3 scripts/check_hotspot.py report-base.txt`（`--threshold` 默认 1.0）
+  输出 JSON 的 `decision`：
+  - `pass`（≥1%）：继续阶段 2。
+  - `fail`（<1% 或无样本）：向使用者报告热点占比与预期收益有限，
+    **由使用者决定**是否仍换核；不要替用户默认继续。
+- 手工口径（脚本不可用时）：`grep -w __tlb_switch_to_host` 后累计
+  Overhead 列，规则同上。
 - 空闲机器采不到热点，采样窗必须覆盖负载忙期。
 
 ## 阶段 2：按 PR #30652 构建 `6.6.0-pr30652-dtlbi`
