@@ -122,6 +122,27 @@ check_cubesandbox_split() {
         '"$skills/cubesandbox-bench-prepare/scripts/run.sh" --show-plan --repo /mock/CubeSandbox --template-id tpl-confirmed --numa-node 0 --tap-evidence aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2>&1 | grep -q "operation.*prepare"'
 }
 
+check_sandbox_profile_install() {
+    local skills="$1"
+    local spec skill case_name
+    check "installs sandbox profile workflow" '[ -f "$skills/sandbox-timeline-profile/SKILL.md" ]'
+    check "sandbox workflow entry resolves after flattening" 'bash "$skills/sandbox-timeline-profile/scripts/run_profile_workflow.sh" --help >/dev/null'
+    check "sandbox interpretation reference survives install" '[ -r "$skills/sandbox-timeline-profile/references/interpretation.md" ]'
+    check "stage-analysis interpretation link resolves after flattening" \
+        'grep -Fq "(../sandbox-timeline-profile/references/interpretation.md)" "$skills/sandbox-stage-latency-analyze/SKILL.md" && [ -r "$skills/sandbox-stage-latency-analyze/../sandbox-timeline-profile/references/interpretation.md" ]'
+    for spec in \
+        sandbox-profile-evidence-collect:collect-external-workload \
+        sandbox-stage-latency-analyze:analyze-and-reject-bad-logs \
+        sandbox-timeline-svg-render:render-json-csv \
+        sandbox-profile-report:reuse-analysis; do
+        skill=${spec%%:*}
+        case_name=${spec#*:}
+        check "installs $skill" '[ -f "$skills/$skill/SKILL.md" ]'
+        check "installs $skill independent tier-A case" '[ -f "$skills/$skill/cases/$case_name/run.sh" ]'
+        check "$skill entry resolves shared implementation" 'bash "$skills/$skill/scripts/run.sh" --help >/dev/null'
+    done
+}
+
 echo "== claude mode =="
 run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
@@ -139,6 +160,7 @@ check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimi
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
 check_cubesandbox_split "$CLAUDE_SKILLS"
+check_sandbox_profile_install "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
@@ -166,6 +188,7 @@ for role in analyzer profiler candidate-planner implementer reviewer; do
 done
 check_agentenv_package "$OPENCODE_SKILLS"
 check_cubesandbox_split "$OPENCODE_SKILLS"
+check_sandbox_profile_install "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo "== preview count vs installed count =="

@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "run_id": "replace-with-run-id",
+  "platform": {
+    "cpu": null,
+    "kernel": null,
+    "virtualization": null,
+    "tool_version": null,
+    "help_evidence": null
+  },
+  "target": {
+    "pid": null,
+    "start_time": null,
+    "exe": null,
+    "build_id": null,
+    "cpu": null,
+    "config": null,
+    "input": null,
+    "phase": null
+  },
+  "identity": {
+    "value": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "scope": {
+    "value": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "privilege": {
+    "value": null,
+    "requested": null,
+    "effective": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "steady": {
+    "value": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "model": {
+    "value": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "window": {
+    "value": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "execution": {
+    "kind": "batch",
+    "tool_exit": null,
+    "target_exit": null,
+    "evidence": "",
+    "completed": {
+      "value": null,
+      "evidence": ""
+    },
+    "healthy": {
+      "value": null,
+      "evidence": ""
+    }
+  },
+  "duration": {
+    "requested_seconds": null,
+    "actual_seconds": null
+  },
+  "warnings_reviewed": {
+    "value": null,
+    "evidence": "",
+    "reason": ""
+  },
+  "arithmetic": {
+    "same_scope": null,
+    "ipc_tolerance": null,
+    "evidence": ""
+  },
+  "partition": {
+    "confirmed": null,
+    "tolerance_pp": null,
+    "evidence": ""
+  },
+  "pmu": {
+    "time_enabled": null,
+    "time_running": null,
+    "minimum_ratio": null,
+    "evidence": ""
+  },
+  "work": {
+    "same_window": null,
+    "units": null,
+    "unit": null,
+    "evidence": ""
+  }
+}

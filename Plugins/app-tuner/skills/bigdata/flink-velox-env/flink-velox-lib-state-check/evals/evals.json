@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-lib-state-check",
+  "evals": [
+    {
+      "id": "partial-after-deploy",
+      "query": "部署完 gluten 的 jar 之后作业报 NoClassDefFoundError，lib 里是不是少拷了东西",
+      "expected": "触发本 skill：跑 scripts/lib_state_check.py，lib_state.build 为 partial 时 missing_parts 点名缺的 artifact，按 next_step 转述补齐或清空后重启（重启须用户同意）"
+    },
+    {
+      "id": "which-build",
+      "query": "现在 lib 里是 native 构建还是 GFV 构建",
+      "expected": "触发本 skill：lib_state.build（native / gfv / partial）与 gfv_jars 作答；多版本时转述 duplicates warn"
+    },
+    {
+      "id": "expect-native",
+      "query": "要跑 native 侧，确认 lib 里没有 gluten 的 jar",
+      "expected": "触发本 skill，--expect native：有 gluten/velox jar 即 fail，fix 为移出并重启（须用户同意）"
+    },
+    {
+      "id": "not-cluster",
+      "query": "集群现在加载的是哪套 jar，改了 lib 之后重启了没",
+      "expected": "不触发：集群实际加载状态属 flink-velox-cluster-check"
+    },
+    {
+      "id": "not-dist",
+      "query": "Flink 装得全不全，版本是不是 1.19",
+      "expected": "不触发：Flink 发行版属 flink-velox-flink-dist-check"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check"
+    },
+    {
+      "id": "not-move-jars",
+      "query": "把 lib 里旧版本的 gluten jar 删掉，然后重启集群",
+      "expected": "不触发：本 skill 只读；挪 jar 与重启属构建部署/切换类 skill（审中 !324 / !325）且须用户同意"
+    }
+  ]
+}

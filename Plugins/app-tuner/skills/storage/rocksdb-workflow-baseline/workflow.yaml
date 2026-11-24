@@ -1,0 +1,47 @@
+id: rocksdb-workflow-baseline
+name: rocksdb-workflow-baseline
+version: 1.0.0
+description: 依次调用 deploy 和 test 子 skill，完成 RocksDB 100W 数据量基线测试。
+entrypoint: scripts/run_workflow.sh
+resources:
+  - SKILL.md
+  - scripts
+steps:
+  - id: deploy
+    skill: rocksdb-deploy-baseline
+    action: deploy
+    when: "mode != 'test-only'"
+    inputs:
+      - work_root
+      - result_dir
+      - rocksdb_src
+      - ycsb_src
+    outputs:
+      - deploy_env
+  - id: test
+    skill: rocksdb-test-baseline
+    action: test
+    depends_on:
+      - deploy
+    when: "mode != 'deploy-only'"
+    inputs:
+      - deploy_env
+      - data_dir
+      - result_dir
+    outputs:
+      - summary
+      - report
+      - backup
+outputs:
+  - name: workflow_env
+    contract: rocksdb-baseline-workflow/v1
+    path: env/workflow.env
+  - name: summary
+    contract: rocksdb-baseline-result/v1
+    path: summary.json
+  - name: report
+    contract: rocksdb-baseline-report/v1
+    path: REPORT.md
+  - name: backup
+    contract: rocksdb-baseline-backup/v1
+    path: env/cleanup.env

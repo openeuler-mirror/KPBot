@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: correlate-vllm-logs
+expected_outcome: |
+  使用已有请求表和 P 日志，报告按 ID 匹配的覆盖率；旧格式无 ID 行只计日志分布，D 侧标为未提供，不计算未匹配请求的内部耗时。

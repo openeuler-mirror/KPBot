@@ -85,6 +85,20 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | [`model-precision-analysis`](skills/model-precision-analysis/SKILL.md) | 优化后精度回归验证：读取精度评测工具 `opendatas/output` 下的合并结果，输出准确率对比、回归/改善题号与达标结论，精度不达标即阻止按性能放行 |
 
+### CubeSandbox 时序剖析 Skills
+
+原 `sandbox-timeline-profile` 保留为一键 Workflow、路由和唯一共享实现；一期拆分的四个单点 Skill 可独立调用，也可由 Workflow 依次串联。
+
+| 技能 | 单点职责与产物 |
+|------|----------------|
+| [`sandbox-profile-evidence-collect`](skills/sandbox-profile-evidence-collect/SKILL.md) | 围绕外部 argv workload 采集日志 delta/轮转 warning、Host/process/metrics 与可选 bpftrace，输出 evidence manifest；原 cube-bench 流仍由 Workflow 兼容 |
+| [`sandbox-stage-latency-analyze`](skills/sandbox-stage-latency-analyze/SKILL.md) | 复用共享分析器生成 Cubelet/Shim/CubeMaster 与 CreateContainer 统计、拓扑 CSV、details JSONL 和摘要 |
+| [`sandbox-timeline-svg-render`](skills/sandbox-timeline-svg-render/SKILL.md) | 直接读取 analysis JSON + 阶段 CSV 生成 timeline.svg 和渲染元数据，新路径不依赖 Excel |
+| [`sandbox-profile-report`](skills/sandbox-profile-report/SKILL.md) | 只复用既有 analysis 生成七 sheet Excel、阶段/分批/Host PNG 和报告 manifest，不重新运行 analyzer |
+| [`sandbox-timeline-profile`](skills/sandbox-timeline-profile/SKILL.md) | 四阶段一键 Workflow、旧 `run_c50_profile.sh` / `profile_dir` 调用兼容与共享脚本；不计入四个聚焦 Skill |
+
+四个入口均为各 Skill 下的 `scripts/run.sh`，安装后通过平铺的 `sandbox-timeline-profile/scripts/` 解析共享库；缺共享库会明确 blocked。外部 Workflow 每轮要求新的 `startup-latency`，调用方必须在 workload 退出前交付同一 case 的 summary/benchmark JSON 对；失败 manifest、旧 benchmark 或路径重合都会阻止下游发布。进程快照不采集 argv，避免泄露主机命令行秘密。跨进程时钟、日志不可加性、阈值部分观测、轮转与 warmup 判读纪律统一保留在共享参考文档中。
+
 ### 分析型子 skill(subskills,自研)
 
 | 技能 | 描述 |
@@ -106,6 +120,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 
 | 技能 | 描述 |
 |------|------|
+| [`topdown-quality-diagnosis`](skills/topdown-quality-diagnosis/SKILL.md) | 鲲鹏 DevKit Top-down 采集质量审核：核对目标、窗口与事件口径，诊断异常数值和运行中断，提供有界复采方案与证据报告 |
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
 | [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡采集与分析：现场轮询/Prometheus 回采/本地 CSV 三种方式获取 dp_load_metrics，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性） |
 | [`kptools-arthas`](skills/kptools-arthas/SKILL.md) | Java 进程性能分析(Arthas 批处理只读采集：trace/watch/monitor/tt 方法级耗时分解与入参观察、thread 高 CPU/阻塞/锁竞争分析、memory/GC 状态、JVM 运行时性能参数、ognl 查询)，含性能分析剧本、采集纪律与 agent 级 with/without A/B 用例 |
