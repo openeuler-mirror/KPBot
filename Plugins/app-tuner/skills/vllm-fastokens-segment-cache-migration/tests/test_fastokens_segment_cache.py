@@ -14,6 +14,7 @@ import base64
 import hashlib
 import importlib.metadata as metadata
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -24,6 +25,7 @@ import types
 import unittest
 import zipfile
 from array import array
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -94,6 +96,27 @@ class HelperTests(unittest.TestCase):
             prefix = current["messages"][: len(previous["messages"])]
             self.assertEqual(prefix, previous["messages"])
             self.assertGreater(len(current["messages"]), len(previous["messages"]))
+
+    def test_make_sessions_writes_repeatable_replay_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = [Path(tmp) / name for name in ("replay.jsonl", "repeat.jsonl")]
+            for path in paths:
+                subprocess.run(
+                    [
+                        sys.executable, str(SCRIPT), "make-sessions", "--out", str(path),
+                        "--sessions", "3", "--turns", "4", "--block-chars", "500", "--seed", "17",
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+            self.assertEqual(paths[0].read_bytes(), paths[1].read_bytes())
+            requests = tool.load_requests(paths[0])
+            self.assertEqual(len(requests), 12)
+            for name in ("s0", "s1", "s2"):
+                messages = [row["messages"] for row in requests if row["session"] == name]
+                self.assertEqual(len(messages), 4)
+                for previous, current in zip(messages, messages[1:]):
+                    self.assertEqual(current[: len(previous)], previous)
 
 
 class ProcessDiscoveryTests(unittest.TestCase):
@@ -264,6 +287,23 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("可编辑", info["error"])
         self.assertNotIn("wheel", info)
 
+    def test_snapshot_without_installed_fastokens_records_absence(self):
+        with (
+            mock.patch.object(tool, "find_distribution", return_value=None),
+            mock.patch.object(tool, "module_path", return_value=None),
+            mock.patch.object(tool, "scan_processes") as scan,
+            mock.patch.dict(tool.os.environ, {tool.CACHE_VAR: "64"}, clear=True),
+            redirect_stdout(io.StringIO()),
+        ):
+            tool.main(["snapshot", "--out", str(self.tmp)])
+        scan.assert_not_called()
+        self.assertTrue((self.tmp / "packages.txt").is_file())
+        env = json.loads((self.tmp / "env.json").read_text())
+        self.assertEqual(env, {"当前 shell": {tool.CACHE_VAR: "64"}})
+        info = json.loads((self.tmp / "fastokens.json").read_text())
+        self.assertEqual(info, {"installed": False, "native": []})
+        self.assertIn("uninstall -y fastokens", (self.tmp / "RESTORE.md").read_text())
+
 
 def fake_run(digests, lengths, backend="fastokens", stats=None, encode_ms=1.0):
     return {
@@ -355,6 +395,25 @@ class VerdictTests(unittest.TestCase):
         )
         self.assertTrue(report["correctness_pass"], report["problems"])
 
+    def test_report_distinguishes_requested_threads_from_concurrency_evidence(self):
+        for name in ("orig", "on"):
+            self.write_ids(name, [[1], [2]])
+        self.args.threads = 8
+        orig = fake_run(["a", "b"], [1, 1], backend="tokenizers")
+        on = fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})
+        on["concurrency"] = {"threads": 1, "mismatch": [], "errors": []}
+        report = self.summarize({"orig": [orig], "on": [on]})
+        self.assertTrue(report["correctness_pass"])
+        text = tool.verify_text(report)
+        for name in ("基线组", "段缓存开启组"):
+            self.assertIn(f"{name}：未执行多线程并发检查", text)
+        self.assertNotIn("并发检查未发现", text)
+
+        on["concurrency"]["threads"] = 2
+        text = tool.verify_text(self.summarize({"orig": [orig], "on": [on]}))
+        self.assertIn("段缓存开启组：2 线程并发检查未发现不一致或异常", text)
+        self.assertNotIn("8 线程并发检查未发现", text)
+
 
 def verdict_info():
     return {
@@ -390,6 +449,41 @@ class MinimumVersionTests(unittest.TestCase):
 
 
 class ProbeTests(unittest.TestCase):
+    def test_candidate_probe_keeps_baseline_and_candidate_evidence_separate(self):
+        info = verdict_info()
+        packages = {name: {"module_dir": None, "version": None} for name in tool.MODULES}
+        packages["vllm"] = info["packages"]["vllm"]
+        features = dict(info["vllm_features"], has_rust_frontend=False, rust_binary_built=False)
+        current = {
+            "ok": True, "backend_module": "tokenizers", "backend_class": "Tokenizer", "load_s": 0,
+        }
+        candidate = {
+            **current, "backend_module": "fastokens",
+            "fastokens_version": tool.MIN_VERSION, "has_stats": True,
+        }
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(tool.os, "environ", {tool.CACHE_VAR: "64"}),
+            mock.patch.object(tool, "package_info", side_effect=packages.__getitem__),
+            mock.patch.object(tool, "scan_processes", return_value=([], None)),
+            mock.patch.object(tool, "vllm_features", return_value=features),
+            mock.patch.object(tool, "run_worker", side_effect=[current, candidate]) as worker,
+            mock.patch.object(tool, "pypi_latest") as pypi,
+            redirect_stdout(io.StringIO()),
+        ):
+            overlay = str(Path(tmp) / "candidate")
+            tool.main([
+                "probe", "--model", "m", "--overlay", overlay,
+                "--target-version", tool.MIN_VERSION, "--offline", "--out", tmp,
+            ])
+            result = json.loads((Path(tmp) / "probe.json").read_text())
+        pypi.assert_not_called()
+        self.assertEqual(result["load_current"], current)
+        self.assertEqual(result["load_candidate"], candidate)
+        baseline_env, candidate_env = [call.args[0] for call in worker.call_args_list]
+        self.assertEqual(baseline_env, {tool.CACHE_VAR: "64"})
+        self.assertEqual(candidate_env, {"PYTHONPATH": overlay, tool.SWITCH_VAR: "1"})
+
     @unittest.skipIf(importlib.util.find_spec("vllm"), "当前 Python 环境中已安装 vLLM")
     def test_probe_without_vllm_says_unsupported(self):
         done = subprocess.run(

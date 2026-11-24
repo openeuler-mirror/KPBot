@@ -1228,7 +1228,7 @@ def verify_text(report) -> str:
     lines.append(
         f"- 回放数据：{report['requests']} 条请求，{report['sessions']} 个会话"
         f"（{report['sessions_file']}）；共 {report['rounds']} 轮，每轮轮换各组顺序；"
-        f"并发检查线程数 {report['threads']}"
+        f"配置的并发检查线程数 {report['threads']}"
     )
     lines.append(
         f"- 候选安装目录：{report['overlay'] or '未指定（使用环境中已安装的 fastokens）'}；"
@@ -1257,8 +1257,17 @@ def verify_text(report) -> str:
     if passed:
         lines.append(
             f"- 两组 token ID 在全部 {report['requests']} 条请求上逐条一致；"
-            "各轮结果一致；并发检查未发现结果不一致或异常"
+            "各轮结果一致"
         )
+    for name, arm in report["arms"].items():
+        if not arm.get("ok"):
+            continue
+        concurrency = arm.get("concurrency") or {}
+        threads = concurrency.get("threads", 0)
+        if threads < 2:
+            lines.append(f"- {ARM_LABELS[name]}：未执行多线程并发检查")
+        elif not concurrency["mismatch"] and not concurrency["errors"]:
+            lines.append(f"- {ARM_LABELS[name]}：{threads} 线程并发检查未发现不一致或异常")
     lines.append("")
     lines.append("## 分词耗时与内存")
     lines.append("")

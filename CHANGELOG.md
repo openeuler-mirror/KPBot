@@ -22,6 +22,7 @@
 - code-optimizer 新增 `hot-path-overhead-elimination` skill：热点路径机制开销消除（主导结果内联、叶子入口拆分、常量宽度拷贝替代通用例程、按实测值频率重排分派、无消费者记账跳过并维护不变量、拷贝后别名重载消除），源自事件缓冲区库 evbuffer 热路径的一线优化记录；附 `value_distribution.py` / `codegen_overhead_probe.py` 两个只读分析器、tier-A 用例 `cases/probe-contract`（脚本契约 + 反汇编对照 + frontmatter/路由泛化看护）、tier-B 用例 `cases/append-notify`（自包含三接口夹具，编两版比两版），以及只应用本 SKILL 补丁的真实 libevent 端到端用例 `cases/libevent-interfaces`（需外部 libevent 2.1.12 源码树，未提供时用例 SKIP；提供后 evbuffer 回归组通过、补丁不含分配路径改动；实测记录见用例 README）
 - code-optimizer 新增 `openzl-compression-tuning` skill：OpenZL 压缩内核调优（熵解码根表/块恒等、循环携带补码移位、编码批次与展开约束、熵 codec 选型、无损正确性门禁、负结果与对抗审核档案），源自 KV Cache BF16 一线优化案例（Encode 2.16x / Decode 3.44x）；附 tier-A 用例 `cases/skill-integrity`（frontmatter/引用链接/方法论不变量/敏感内容看护，见 docs/case-spec.md）
 - code-optimizer 新增 `openzl-bench-protocol` skill：OpenZL 基准测试工程协议（unitBench 场景注册与熵模式、openzl_benchmark 均值口径、KV 数据准备与分布统计、绑核与噪声控制、多机部署复测、topdown TMA 采集），附 `prepare_kvdata.py` / `bench_kv.sh` / `td_loop.sh` 三个脚本与 tier-A 用例 `cases/script-contract`（脚本契约 + mock unitBench 解析 + 分布统计数值回归）
+- app-tuner 为 `vllm-fastokens-segment-cache-migration` 新增六项技能：分词后端分析、候选加载验证、迁移快照、多轮回放数据生成、分词回放验证及迁移评估报告。已有验证产物可直接用于汇总。
 
 ## [1.0.0] - 2026-09-03
 
