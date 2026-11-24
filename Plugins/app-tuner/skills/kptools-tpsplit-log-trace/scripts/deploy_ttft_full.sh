@@ -41,7 +41,7 @@ VLLM_FILES=(
     "vllm/v1/engine/__init__.py"
     "vllm/v1/engine/core.py"
     "vllm/v1/engine/input_processor.py"
-    "vllm/v1/engine/outputs.py"
+    "vllm/v1/outputs.py"
     "vllm/v1/request.py"
     "vllm/v1/core/sched/output.py"
     "vllm/v1/core/sched/scheduler.py"
@@ -61,13 +61,25 @@ KVXFER_FILES=(
     "kv_transfer.py"
 )
 
-# 版本指纹（known-good v3.2，md5 前 8 位）——部署后必须逐字节一致
+# 版本指纹（known-good v3.2，md5 前 8 位）——16 文件全量登记；登记不全脚本拒绝运行（拒绝绕过内容核验）
+# 写入前比对上传件 md5（步骤 1/7），写入后回读比对（步骤 6/7 deploy_one）
 declare -A PATCH_FP=(
-    ["vllm_ascend/worker/model_runner_v1.py"]="2e7db5f3"
-    ["vllm/distributed/device_communicators/shm_broadcast.py"]="55821b06"
-    ["vllm/v1/worker/gpu_model_runner.py"]="0a59cde4"
     ["vllm/v1/metrics/stats.py"]="9f9f5276"
+    ["vllm/v1/engine/__init__.py"]="70fdbb10"
+    ["vllm/v1/engine/core.py"]="d05f9ff2"
+    ["vllm/v1/engine/input_processor.py"]="e8021a2d"
+    ["vllm/v1/outputs.py"]="cfb892e8"
+    ["vllm/v1/request.py"]="dfc95660"
     ["vllm/v1/core/sched/output.py"]="c6d9b049"
+    ["vllm/v1/core/sched/scheduler.py"]="bbaa8a28"
+    ["vllm/v1/worker/gpu_model_runner.py"]="0a59cde4"
+    ["vllm/v1/worker/kv_connector_model_runner_mixin.py"]="5f69d00f"
+    ["vllm/distributed/device_communicators/shm_broadcast.py"]="55821b06"
+    ["vllm_ascend/core/recompute_scheduler.py"]="8e37abd1"
+    ["vllm_ascend/worker/model_runner_v1.py"]="2e7db5f3"
+    ["kvxfer/pool_worker.py"]="f5b54a27"
+    ["kvxfer/ascend_store_connector.py"]="de0ea38f"
+    ["kvxfer/kv_transfer.py"]="cbdb71ec"
 )
 # 基座指纹（patch 未触碰文件）——不可读或不符 = 基座不同/未知，停下确认
 declare -A BASE_FP=(
@@ -141,14 +153,13 @@ docker inspect "$CONTAINER" >/dev/null 2>&1 || die "容器不存在: $CONTAINER"
 [ -d "$SRC" ] || die "SRC 不存在: $SRC（先 scp -r patched_src root@宿主:/data/<user>/）"
 
 # ---------- 4. 步骤 1/7: 输入预检（存在性 / known-good 指纹 / py_compile，全部在写入前完成） ----------
-log "== 步骤 1/7: 输入预检（文件存在 / known-good 指纹 / py_compile） =="
+log "== 步骤 1/7: 输入预检（文件存在 / known-good 指纹全量比对 / py_compile） =="
 for f in "${VLLM_FILES[@]}" "${SP_FILES[@]}"; do
     [ -f "$SRC/$f" ] || die "patch 包缺文件: $SRC/$f"
+    [ -n "${PATCH_FP[$f]:-}" ] || die "指纹登记不全: $f 无 known-good 指纹 —— 拒绝绕过内容核验，请先在 PATCH_FP 登记"
     in_md5="$(md5sum "$SRC/$f" | awk '{print $1}')"
-    if [ -n "${PATCH_FP[$f]:-}" ]; then
-        [[ "$in_md5" = "${PATCH_FP[$f]}"* ]] \
-            || die "输入指纹不符: $f md5=${in_md5:0:8} 期望=${PATCH_FP[$f]} —— 禁止携带未验证版本"
-    fi
+    [[ "$in_md5" = "${PATCH_FP[$f]}"* ]] \
+        || die "输入指纹不符: $f md5=${in_md5:0:8} 期望=${PATCH_FP[$f]} —— 禁止携带未验证版本"
 done
 KVXFER_MISSING=0
 for f in "${KVXFER_FILES[@]}"; do
@@ -157,6 +168,14 @@ for f in "${KVXFER_FILES[@]}"; do
         log "  [WARN] KVXFER 包缺 $f —— 三件套整体跳过（不做部分部署）；grep 校验仍要求现役已含其打点"
     fi
 done
+if [ "$KVXFER_MISSING" -eq 0 ]; then
+    for f in "${KVXFER_FILES[@]}"; do
+        [ -n "${PATCH_FP[kvxfer/$f]:-}" ] || die "指纹登记不全: kvxfer/$f 无 known-good 指纹 —— 拒绝绕过内容核验"
+        in_md5="$(md5sum "$KVXFER/$f" | awk '{print $1}')"
+        [[ "$in_md5" = "${PATCH_FP[kvxfer/$f]}"* ]] \
+            || die "输入指纹不符: kvxfer/$f md5=${in_md5:0:8} 期望=${PATCH_FP[kvxfer/$f]} —— 禁止携带未验证版本"
+    done
+fi
 if [ -n "${PROXY_TGT:-}" ]; then
     [ -f "$SRC/proxy/load_balance_proxy_server_example.py" ] || die "设置了 PROXY_TGT 但 patch 包缺 proxy 文件"
 fi
@@ -254,25 +273,37 @@ for name in "${!BASE_FP[@]}"; do
     log "  基座 OK: $name=${cur:0:8}"
 done
 
-# ---------- 8. 步骤 5/7: 现役 vs 目标 md5（未知摘要即停，除非显式放行） ----------
-log "== 步骤 5/7: 现役 vs 目标 md5 =="
+# ---------- 8. 步骤 5/7: 现役 vs 目标 md5（vllm / SP / KVXFER 全量；未知摘要即停） ----------
+log "== 步骤 5/7: 现役 vs 目标 md5（vllm / SP / KVXFER 全量） =="
 SKIP_LIST=()
 UNKNOWN_LIST=()
-for f in "${VLLM_FILES[@]}"; do
-    tgt_md5="$(md5sum "$SRC/$f" | awk '{print $1}')"
-    cur_md5="$(container_md5 "$VLLM_ROOT/$f")"
+compare_current() {  # $1=上传文件 $2=容器内路径 $3=登记名
+    local lf="$1" cpath="$2" rel="$3" tgt_md5 cur_md5
+    tgt_md5="$(md5sum "$lf" | awk '{print $1}')"
+    cur_md5="$(container_md5 "$cpath")"
     if [ -n "$cur_md5" ] && [ "$tgt_md5" = "$cur_md5" ]; then
-        log "  $f: 已与目标一致，跳过写入"
-        SKIP_LIST+=("$f")
-    elif [ -n "$cur_md5" ] && [ -n "${PATCH_FP[$f]:-}" ] && [[ "$cur_md5" = "${PATCH_FP[$f]}"* ]]; then
-        log "  $f: 现役为旧版打点(md5=${cur_md5:0:8})，将升级到目标版本"
+        log "  $rel: 已与目标一致，跳过写入"
+        SKIP_LIST+=("$rel")
     elif [ -z "$cur_md5" ]; then
-        log "  $f: 容器内原不存在，首次写入"
+        log "  $rel: 容器内原不存在，首次写入"
+    elif [ -n "${PATCH_FP[$rel]:-}" ] && [[ "$cur_md5" = "${PATCH_FP[$rel]}"* ]]; then
+        log "  $rel: 现役为已知打点版本(md5=${cur_md5:0:8})，将升级到目标版本"
     else
-        log "  $f: 现役摘要未知(${cur_md5:0:8})，既非目标也非已知打点版本"
-        UNKNOWN_LIST+=("$f=${cur_md5:0:8}")
+        log "  $rel: 现役摘要未知(${cur_md5:0:8})，既非目标也非已知打点版本"
+        UNKNOWN_LIST+=("$rel=${cur_md5:0:8}")
     fi
+}
+for f in "${VLLM_FILES[@]}"; do
+    compare_current "$SRC/$f" "$VLLM_ROOT/$f" "$f"
 done
+for f in "${SP_FILES[@]}"; do
+    compare_current "$SRC/$f" "${SP_ROOT}${f}" "$f"
+done
+if [ "$KVXFER_MISSING" -eq 0 ]; then
+    for f in "${KVXFER_FILES[@]}"; do
+        compare_current "$KVXFER/$f" "$KVXFER_DST/$f" "kvxfer/$f"
+    done
+fi
 if [ "${#UNKNOWN_LIST[@]}" -gt 0 ]; then
     if [ -n "${ALLOW_UNKNOWN_DIGEST:-}" ]; then
         log "  [WARN] ALLOW_UNKNOWN_DIGEST 已设置，以下未知摘要按人工确认放行："
@@ -314,11 +345,24 @@ for f in "${VLLM_FILES[@]}"; do
     deploy_one "$SRC/$f" "$VLLM_ROOT/$f" "$f"
 done
 for f in "${SP_FILES[@]}"; do
+    # shellcheck disable=SC2076
+    if [[ " ${SKIP_LIST[*]-} " == *" $f "* ]]; then
+        docker cp "$CONTAINER:${SP_ROOT}${f}" "$VERIFY/$(basename "$f")" >/dev/null 2>&1 \
+            || die "拉取现役文件失败: $f"
+        continue
+    fi
     deploy_one "$SRC/$f" "${SP_ROOT}${f}" "$f"
 done
 if [ "$KVXFER_MISSING" -eq 0 ]; then
     for f in "${KVXFER_FILES[@]}"; do
-        deploy_one "$KVXFER/$f" "$KVXFER_DST/$f" "kvxfer/$f"
+        rel="kvxfer/$f"
+        # shellcheck disable=SC2076
+        if [[ " ${SKIP_LIST[*]-} " == *" $rel "* ]]; then
+            docker cp "$CONTAINER:$KVXFER_DST/$f" "$VERIFY/$(basename "$f")" >/dev/null 2>&1 \
+                || die "拉取现役文件失败: $rel"
+            continue
+        fi
+        deploy_one "$KVXFER/$f" "$KVXFER_DST/$f" "$rel"
     done
 else
     # KVXFER 包缺失：跳过写入，但拉取现役内容进 VERIFY，保证 grep 校验覆盖现役全量
