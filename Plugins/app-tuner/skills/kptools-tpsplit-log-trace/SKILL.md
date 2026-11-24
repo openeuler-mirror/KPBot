@@ -8,7 +8,7 @@ description: >
   打点部署后不生效排查。即使用户只说"把打点推上去"或"更新一下 TTFT patch"，也应使用此技能。
   只负责部署，不含日志解析出表（出表见 kptools-tpsplit-log-analysis skill）。
 license: Proprietary
-compatibility: 本地 Windows（patch 包在 D:\workspace\vllm_ascend\patched_src，写出的 .sh 需去 CR）；SSH 访问 P/D 宿主机（root 密码见 ssh-mcp-server 的 servers.json，MCP 启动时缓存密码，改密码后用可达机如 104 跳板）；远端 docker（stopped 容器只能 docker cp，docker exec 无效）；容器内 /workspace/vllm 源码根 + site-packages 下的 vllm_ascend；连接方式优先 ssh-mcp-server 的 upload/execute-command/download，无 MCP 时回退本地 ssh/scp
+compatibility: 本地 Windows（patch 包在 D:\workspace\vllm_ascend\patched_src，写出的 .sh 需去 CR）；SSH 访问 P/D 宿主机（使用调用方已授权的目标连接；认证失败即停止，请维护者更新该连接，不绕行其他主机）；远端 docker（stopped 容器只能 docker cp，docker exec 无效）；容器内 /workspace/vllm 源码根 + site-packages 下的 vllm_ascend；连接方式优先 ssh-mcp-server 的 upload/execute-command/download，无 MCP 时回退本地 ssh/scp
 metadata:
   skill_type: tool_assisted
   category: deployment
@@ -22,7 +22,7 @@ metadata:
 
 ## 快速决策
 
-1. 用户要部署打点（默认场景）→ 走第 3 节完整流程：确认参数 → 上传 → 备份 + md5 基座核对 → 覆盖 → grep/py_compile 校验 → 提示用户重启 + smoke
+1. 用户要部署打点（默认场景）→ 走第 3 节完整流程：确认参数 → 上传 → 输入预检（存在/known-good 指纹/py_compile）→ 备份全部目标 → md5 基座核对 → 覆盖 → grep 校验 → 提示用户重启 + smoke
 2. 用户只要部署脚本（远端自己跑）→ 只产出 `deploy_ttft_full.sh` + 使用说明，不连远端
 3. md5 / 基座指纹对不上 → **立即停下问用户**，禁止强推（见第 5 节踩坑）
 4. 部署后打点没输出 → 先查第 4 节环境变量与 Ray 日志（VLLM_TTFT_SHM_LOG / Ray actor env / RAY_DEDUP_LOGS），再按第 3 节第 6 步 grep 校验部署是否生效
@@ -38,7 +38,7 @@ PD 分离：P 做 prefill、D 做 decode，proxy 是宿主机进程。
 | 13/11/102 | 13+11（`vllm-ascend-glm52-p-gt`，目录 `p0-1112`/`p0`） | 102（`vllm-ascend-glm52-d-gt`，`d0-1112`） | proxy 在 102 宿主机 7200 |
 | 102/103/104 | 102+104（glm52-p） | 103（glm52-d） | 102/103 常 stopped |
 
-- root 密码见 `D:\Program Files\ssh-mcp-server-main\servers.json`；MCP ssh **启动时缓存密码**，改完用可达机（104 自带 sshpass）跳板。
+- 连接一律使用调用方已授权的目标 SSH 连接；认证失败即停止，由维护者更新该连接后重试，不绕行其他主机。
 - 容器内 vllm 源码根 = `/workspace/vllm`（PYTHONPATH 注入）；vllm_ascend 在 site-packages（SP=`/usr/local/python3.12.13/lib/python3.12/site-packages`）。`/data` 是共享挂载，容器内可见宿主机文件。
 - ⚠️ 同机常有他人容器（dsv41/v30 引擎）占 NPU，**勿停勿改**；起集群前先看 NPU 占用。
 
@@ -68,7 +68,7 @@ PD 分离：P 做 prefill、D 做 decode，proxy 是宿主机进程。
 
 1. **确认参数**：P/D 宿主机+容器名、容器内源码根、本地 patched_src、是否连 proxy/压测端一起推（`PROXY_TGT` / `BENCH_TGT`）。
 2. **上传**：`scp -r patched_src root@<宿主>:/data/<user>/`，部署脚本一并拷到 `scripts/`。
-3. **备份 + 基座核对（必须）**：容器内 `mktemp -d /tmp/ttft_bak.XXXXXX`，按清单 cp 出全部文件；`md5sum` 现役 vs 目标。**不一致就停下问用户**，禁止强推（防覆盖他人特有改动）。
+3. **备份 + 基座核对（必须）**：排他创建本轮私有备份目录（宿主机 `mktemp -d /tmp/ttft_bak.<容器名>.XXXXXX`，并发部署 P/D 互不覆盖），**按原路径备份本轮全部目标**（vllm/SP/KVXFER/proxy/bench，写 MANIFEST 映射，区分新文件与读取失败，备份不完整即停）；基座指纹不可读或不符即停，**禁止强推**（防覆盖他人特有改动）。
 4. **覆盖**：共享挂载下容器内直接 `cp`；否则宿主机 `docker cp`（对 **stopped 容器同样有效**，`docker exec` 无效）。SP 文件先用 `find` 定位：
 
    ```bash
@@ -76,7 +76,7 @@ PD 分离：P 做 prefill、D 做 decode，proxy 是宿主机进程。
    find / -path '*site-packages/vllm_ascend/core/recompute_scheduler.py'
    ```
 
-5. **一键脚本**：`bash scripts/deploy_ttft_full.sh <CONTAINER> [SRC] [KVXFER]` —— 备份→md5 提示→docker cp 16 文件→kv_transfer 定位→proxy/压测端(可选)→grep 校验→py_compile→提示重启；vllm 侧需 `cd /workspace/vllm && python -m py_compile ...`。
+5. **一键脚本**：`bash scripts/deploy_ttft_full.sh <CONTAINER> [SRC] [KVXFER]` —— 输入预检（文件存在 + known-good 指纹 + py_compile，写入前完成）→ 定位 SP/KVXFER → 按原路径备份全部目标 → 基座指纹核对（不可读即停）→ 现役 vs 目标 md5（**未知摘要即停**，人工确认后 `ALLOW_UNKNOWN_DIGEST=1` 放行）→ docker cp 16 文件并回读校验 → proxy/压测端（可选，失败即停 + 回读）→ grep 校验（含跳过写入的现役文件）→ 提示重启。
 6. **校验**：容器内 grep 各关键字段应 >0：`frontend_ts`、`schedule_total_time`、`queue_wait`、`step_other`、`add_req_iq`、`TTFT_DECODE`、`TTFT_KVXFER`、`start_load_kv`、`TTFT_DRAFT`、`_ttft_in_draft`、`_TTFT_SHM_DQ`；再与本地逐字节 `md5sum` 比对。
 7. **不自动重启**：由用户停启 P/D 引擎与 proxy。顺序参考：pkill launch_online_dp / vllm serve / EngineCore → P 起 mooncake_master → P `start_p0.sh` → D `start_d0.sh` → 102 宿主机 `start_proxy.sh`。
 8. **smoke**：发 1 条请求，确认 `[TTFT][BREAKDOWN]` v3 行、`[TTFT_DRAFT]`、`[SHM_DEQUEUE_BATCH]` 有输出、端口监听、`Application startup complete`。
@@ -90,6 +90,8 @@ PD 分离：P 做 prefill、D 做 decode，proxy 是宿主机进程。
 ## 5. 部署踩坑（务必遵守）
 
 - **禁止携带未运行验证的改动**：P10 曾把未验证的 `shm_broadcast.py`（dequeue finally 内累计 `_obj`）全量推送 → D 侧 `get_kv_cache_specs` RPC 返回类型损坏、EngineCore 启动即崩；回滚 55821b06 才恢复。**清单内每个文件 md5 必须与已验证版本一致。**
+- **先核验后写入**：输入 known-good 指纹与 py_compile 必须在任何 docker cp 之前完成——先覆盖后校验会把被拒绝的内容留在目标目录。
+- **现役摘要未知即停**：现役文件既非目标版本也非已知打点版本时，可能含现场定制；列出差异并停止，人工确认后以 `ALLOW_UNKNOWN_DIGEST=1` 显式放行。
 - **部署 ≠ 运行**：部署完必须重启 + smoke 才算闭环。
 - **基座指纹**（patch 未触碰文件）：`detokenizer.py=3fe8bf88`、`kv_cache_manager.py=d1a6c67c`、`version.py=2b4efcd3`；不符=基座不同，停下确认。
 - `EngineCoreRequest` 必填字段（lora_request/cache_salt/data_parallel_rank）必须在可选字段之前，否则启动崩。
