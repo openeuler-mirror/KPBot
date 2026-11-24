@@ -78,7 +78,9 @@ Web 日结果   → 累计 SUM ┐
 
 ## 交付与验收
 
-交付算子对应图、排序属性证明、反例和实际命中记录、局部及端到端配对耗时。缺少计划时把窗口分支与收益标为待验证。从 Skill 根目录运行 `python cases/window-contract/run.py` 验证累计下降、历史最大值、分区重置和输入乱序反例。
+交付算子对应图、排序属性证明、反例和实际命中记录、局部及端到端配对耗时。缺少计划时把窗口分支与收益标为待验证。从 Skill 根目录运行 `python3 cases/window-contract/run.py` 验证累计下降、历史最大值、分区重置和输入乱序反例。
+
+正向流式准入写入 `stream_route_positive`，与回退检查共同决定 `success` 和退出码，不依赖裸 `assert`。用 `python3 -O cases/window-contract/run.py` 或设置 `PYTHONOPTIMIZE=1` 重跑也须通过；若把流式分支改为始终排序，该字段须为 false、用例须以非零状态退出。
 
 ```text
 模式 | 窗口节点 | 实际路径 | 排序构建数 | 排序输入行 | 窗口输入行 | 峰值内存 | spill | 查询毫秒

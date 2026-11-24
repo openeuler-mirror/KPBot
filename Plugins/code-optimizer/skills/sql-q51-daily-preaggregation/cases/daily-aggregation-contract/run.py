@@ -42,7 +42,9 @@ def additional_checks():
         both = all(db.execute(baseline,(branch,)).fetchall()
                    == db.execute(candidate,(branch,)).fetchall() == rows
                    for branch,rows in expected.items())
-        assert eligibility(True,True,True)
+        eligible_selected = eligibility(True,True,True) is True and select_query(True,True,True)==candidate and all(
+            db.execute(select_query(True,True,True),(branch,)).fetchall()==expected_rows
+            for branch,expected_rows in expected.items())
         unauthorized = select_query(False,True,True)==baseline and (
             db.execute(select_query(False,True,True),('web',)).fetchall()==expected['web'])
         unsafe_state = select_query(True,True,False)==baseline and (
@@ -70,6 +72,7 @@ def additional_checks():
     # This is a bounded integer model, not Spark/Velox decimal validation.
     parenthesization = original_failed and bounded_sum([80,bounded_sum([80,-80])]) == 80
     return {
+        "eligible_rewrite_selected": eligible_selected,
         "both_branches_equivalent": both,
         "filter_boundaries_preserved": both,
         "dimension_guard_fallback": duplicate_fallback and unknown,

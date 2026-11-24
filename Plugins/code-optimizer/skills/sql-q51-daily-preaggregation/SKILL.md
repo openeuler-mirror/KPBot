@@ -79,7 +79,9 @@ N/G 只说明行数压缩潜力。状态更宽、热点组 spill 或原版已经
 
 ## 交付与验收
 
-交付前后算子图、输入行和分组数、Shuffle 字节、正确性证据与完整查询配对结果。缺少计划时只交回候选和需补的指标。从 Skill 根目录运行 `python cases/daily-aggregation-contract/run.py`，验证前置聚合、同日期多代理键及全 NULL 语义。真实 decimal 和性能使用业务引擎验收。
+交付前后算子图、输入行和分组数、Shuffle 字节、正确性证据与完整查询配对结果。缺少计划时只交回候选和需补的指标。从 Skill 根目录运行 `python3 cases/daily-aggregation-contract/run.py`，验证前置聚合、同日期多代理键及全 NULL 语义。真实 decimal 和性能使用业务引擎验收。
+
+`eligible_rewrite_selected` 同时检查正向准入、候选 SQL 选择和两渠道结果，参与 `success` 和退出码，不依赖裸 `assert`。用 `python3 -O cases/daily-aggregation-contract/run.py` 或设置 `PYTHONOPTIMIZE=1` 重跑也须通过；若准入恒为 false 或始终选择基线，该字段须为 false、用例须以非零状态退出。
 
 ```text
 模式 | 分支 | 输入行 | partial 状态记录数 | 日结果行 | Shuffle 字节 | spill | 查询毫秒

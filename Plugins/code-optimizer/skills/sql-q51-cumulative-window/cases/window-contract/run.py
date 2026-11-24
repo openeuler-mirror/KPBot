@@ -67,8 +67,8 @@ def additional_checks():
     descending_dates = [(1,2,20),(1,1,10)]
     only_item_sorted = sorted(descending_dates,key=lambda row:row[0])
     expected_ascending = [(1,1,10,10),(1,2,30,30)]
-    assert route(True,True,"ROWS",True)=="stream"
     return {
+        "stream_route_positive": route(True,True,"ROWS",True)=="stream",
         "cross_batch_state_retained": streamed == expected and wrong_reset != expected,
         "all_null_partition_retained": streamed[-2:] == [(3,1,None,None),(3,2,None,None)],
         "peer_frame_difference_detected": peers_rows == [(10,),(30,),(25,)]
