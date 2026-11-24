@@ -6,17 +6,18 @@ description: >
   （读旧启动脚本识别形态，无 Ray 时跳过去 Ray 步骤）。当用户提到以下场景时必须使用此技能：
   TP 拆分、TP size 变更、按新 TP size 部署集群、tpsplit、张量并行度调整、单机 TP 闭环、
   去 Ray 化部署、显式 DP 组网（DP rank 分配 / rpc-port 16600）、Mooncake KV_TRANSFER_CONFIG
-  的 tp/dp 对齐、单机双实例 9000/9001 分流、ASCEND_RT_VISIBLE_DEVICES 切分、按可行性分析
-  结论部署新拓扑。新 TP size 可能来自用户直接输入，也可能来自上游可行性分析 skill 输出的
-  .md 报告，两种入口都要支持。即使用户只说"帮我把集群改成 TP8"或"按上次分析的结论重新
-  部署"，也应使用此技能。
+  的 tp/dp 对齐、配置调用链梳理（追踪参数来源文件）、单机双实例 9000/9001 分流、
+  ASCEND_RT_VISIBLE_DEVICES 切分、按可行性分析结论部署新拓扑、迁移后分层测试
+  （单实例/DP 组网/KV 链路/功能/性能/稳定性）。新 TP size 可能来自用户直接输入，也可能来自
+  上游可行性分析 skill 输出的 .md 报告，两种入口都要支持。即使用户只说"帮我把集群改成 TP8"
+  或"按上次分析的结论重新部署"，也应使用此技能。
 license: Proprietary
 compatibility: 远端 Linux（openEuler/EulerOS 等，aarch64）；需要 SSH 访问所有涉及主机（P 侧与 D 侧）；NPU 环境（npu-smi、ASCEND_RT_VISIBLE_DEVICES）；vLLM（支持 --data-parallel-size 外部 DP 拉起口径）+ Mooncake/AscendStore KV 传输（MultiConnector）；连接方式优先 ssh-mcp-server 的 upload/execute-command/download，无 MCP 时回退本地 ssh/scp
 metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
@@ -34,8 +35,8 @@ metadata:
 
 1. 用户直接给了新 TP size（数字）→ 阶段 1 收集其余拓扑信息
 2. 用户给了可行性分析报告（.md 路径）或说"按上次分析的结论部署" → 阶段 1 先解析 .md 提取推荐 TP size 与拓扑结论并向用户复述确认，再补齐报告里没有的信息（主机清单等）
-3. 用户只要生成部署脚本和配置（远端自己拉）→ 走完阶段 1-4，阶段 5 的拉起验证部分改为写进部署指南由用户执行
-4. 部署完成后出现 KV 报错 / NPU 偶发错误 / hangs → 优先对照阶段 5 的验证清单和上线检查清单排查配置一致性（大概率是 Mooncake tp/dp 错配或新旧混跑），再考虑回滚
+3. 用户只要生成部署脚本和配置（远端自己拉）→ 走完阶段 1-4，阶段 5/6 的分层测试与 Proxy 切换改为写进部署指南由用户执行
+4. 部署完成后出现 KV 报错 / NPU 偶发错误 / hangs → 优先对照阶段 5 的 L3/L4 排查配置一致性（大概率是 Mooncake tp/dp 错配或新旧混跑），再考虑回滚
 
 ## 阶段 1：输入解析与信息收集（缺什么问什么，不要猜）
 
@@ -53,6 +54,7 @@ metadata:
 | DP 组大小 | 引擎组内 DP（一组几个 TP8 实例） | 默认 4，确认 |
 | Mooncake 全局 dp_size | 所有主机 P 实例总数 | 由实例布局推导并自检；分析报告给定则双向核对 |
 | D 侧现状与位置 | D 侧 dp_size/tp_size（如 64/1）、D 侧启动脚本所在主机与路径 | 必须问 |
+| 配置调用链 | 启动脚本参数的真实来源：脚本内定义 vs source 引用的外部文件 vs 环境变量（systemd/容器/编排脚本） | **SSH 后按 1.3 梳理，改文件前必做**；P/D 侧是否共享同一份拓扑配置文件重点确认 |
 | 旧方案形态 | 执行后端（ray / mp / 无旗标）、现有 TP size、KV connector 结构 | **读旧启动脚本自动识别**，结果与用户核对；**不要假设旧方案一定是 TP32+Ray** |
 | 旧集群状态 | 是否在跑、是否要停 | **必须问，绝不静默停** |
 | P 侧脚本与配置路径 | vLLM 启动脚本、KV_TRANSFER_CONFIG 所在位置 | 必须问 |
@@ -61,9 +63,31 @@ metadata:
 
 信息收集齐之前不要在远端做任何**变更性**操作；只读排查允许——用户答不上来的项（如路径记不清），SSH 上去 `ps -ef | grep vllm`、找启动脚本位置后再与用户核对。
 
+### 1.3 配置调用链梳理（改任何文件前必做）
+
+用户说"改这些参数"只说明了**改什么**，没说明参数**在哪定义**。线上脚本的参数很可能不是在脚本里写死的，而是从别处传入：`source` 进来的 env 文件、systemd 的 `Environment=`/`EnvironmentFile=`、容器 env、父级编排脚本传参、或 **P/D 侧共享的同一份拓扑配置**。直接改下游脚本的后果：上游一刷新就覆盖你的修改，或 D 侧仍从原文件读旧值——KV 错配当场发生。
+
+SSH 上去逐层追（只读）：
+
+```
+grep -nE '^\s*(source|\.)\s' <启动脚本>            # 1. 脚本 source 了哪些外部文件
+grep -n 'p_dp_size\|p_tp_size\|KV_TRANSFER_CONFIG' <脚本及其 source 的每个文件>   # 2. 参数真正定义处
+ps -ef | grep vllm                                 # 3. 反查父进程，确认是谁拉起（shell/systemd/容器/supervisor）
+systemctl list-units | grep -i vllm; systemctl cat <unit>   # systemd 场景看 Environment= 与 EnvironmentFile=
+docker inspect <容器> 2>/dev/null                  # 容器场景看 Env 与启动 cmd
+```
+
+产出《配置修改点清单》并与用户确认后才进阶段 2：
+
+| 要改的参数 | 真正定义的文件 | 消费方 | 改这一处是否覆盖全部消费方 |
+| --- | --- | --- | --- |
+| p_dp_size | （示例）/etc/machine-llm/topology.env | P 全部实例脚本 + D 侧脚本（同一 source） | 是→改 env 文件即可；否→逐文件列出 |
+
+原则：**改源头文件，不改下游脚本**。只有现场确实是"参数写死在脚本内"的自包含形态（如 legacy 基线），才直接改脚本本身。调用链追不清时（多层 source/动态生成），把已知的链路画给用户，让用户指认源头，不要猜。
+
 ## 阶段 2：拓扑推演与部署方案（先算清楚，用户确认后才动手）
 
-生成《部署方案表》展示给用户，**确认前不在远端做任何变更**。
+生成《部署方案表》展示给用户，**确认前不在远端做任何变更**。方案必须包含两份清单：**实例布局表**（下述）+ **配置修改点清单**（来自 1.3——"改哪些文件"比"改哪些参数"更重要，用户确认的正是这份文件级改动计划）。
 
 ### 2.1 实例布局表（每实例一行）
 
@@ -131,20 +155,53 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 - 新脚本**不写 `--distributed-executor-backend`**（TP 单机闭环用默认后端即可）。旧脚本带 ray backend 的，生成时删除；旧脚本本来就没有的，保持没有——新方案任何情况下都不引入该旗标
 - 每实例单独一份脚本，实例间差异项只有 `--data-parallel-rank` / `ASCEND_RT_VISIBLE_DEVICES` / `--port` 三处，其余参数全组一致——生成后 diff 一遍，差异项之外的改动都是笔误
 - DP 组网参数口径（对齐 vLLM 官方旗标）：`--data-parallel-size`（组大小）、`--data-parallel-rank`（本实例 rank）、`--data-parallel-address`（组主节点 IP）、`--data-parallel-rpc-port 16600`（组内统一）。注意 `--data-parallel-rank` 外部 LB 模式适用于 **MoE 模型**（GLM 系列 `--enable-expert-parallel` 场景即 MoE）；现场 vLLM-Ascend 版本若旗标名不同，以 `vllm serve --help | grep -i data-parallel` 实际输出为准
-- **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**，其他启动参数不动；改前备份原文件。这一原则不依赖 KV connector 的具体结构——旧脚本无论用 MultiConnector 还是其他 connector，改动面都只是 prefill 段的 dp/tp 两个值，模板里的 MultiConnector 结构以现场旧脚本实际结构为准
+- **生成脚本保持现场现有的传参形态**：参数在脚本内定义的，生成脚本内定义（模板形态）；参数从 env 文件 source 进来的，生成脚本继续 source 同一文件、只改 env 文件里的值——**不要把调用链改造成自己的习惯形态**，那会让后续运维找不到参数在哪
+- **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**；两个值改在 1.3 梳理出的**源头定义处**（共享 env 文件就改 env 文件，脚本自包含才改脚本）；改前备份原文件。这一原则不依赖 KV connector 的具体结构——旧脚本无论用 MultiConnector 还是其他 connector，改动面都只是 prefill 段的 dp/tp 两个值，模板里的 MultiConnector 结构以现场旧脚本实际结构为准
 - **旧脚本与配置一律备份后再改**（同目录 `*.bak.<日期>` 或 backup/ 子目录，禁止原地覆盖删除）——回滚靠的就是这些备份
 - 分发：每台主机只放自己的实例脚本；上传用 ssh-mcp-server upload 或 scp
 - 远端自检通过才进阶段 5：`bash -n <脚本>` 逐个过；KV_TRANSFER_CONFIG 是嵌在脚本里的字符串，用一段 python 从脚本中抽出该变量并 `json.loads` 校验合法性
 
-## 阶段 5：拉起、验证与交付
+## 阶段 5：分层测试与交付（逐层过，不过不进下一层）
 
-1. **启动顺序**：先启 DP 组 rank 0（主节点）再启组内其余实例（rendezvous 依赖主节点先就位）；不同 DP 组之间无顺序要求；同机双实例无顺序要求。启动用 nohup 后台 + 日志落盘（`nohup bash xxx.sh > xxx.log 2>&1 &`），逐实例确认进程存活
-2. **逐实例探活**：`curl -m 5 http://127.0.0.1:<http_port>/v1/models`，任一实例起不来先看日志（`grep -iE 'error|fail' <实例日志>`），常见原因：卡冲突、端口占用、DP 组网失败（主节点没先起）、KV 配置 JSON 拼写错
-3. **KV 端到端验证（Mooncake 对齐是否成功的唯一可靠判据）**：通过 Proxy（或直连任一 P 实例）发一条真实 completion 请求，确认能正常出 token 且各实例日志无 Mooncake/DP 通信报错。`kv_load_failure_policy: fail` 下 KV 传输失败会直接报错——这是好事，失败立即暴露而不是静默丢 KV
-4. **Proxy 更新**：把 P 后端列表换成新实例地址（`<主机>:9000`、`<主机>:9001` …），按用户网关类型改其配置文件并 reload（改前备份，改后探活）。MindIE Motor 类网关通过其 `register.sh` 重新注册新实例——注册表是内存态，coordinator 重启或后端换血后必须重新执行注册，否则请求报 No instance available
-5. **观察**：各实例日志持续观察数分钟，确认无 KV 路由报错、无偶发 NPU 错误
-6. **产出部署指南 `.md`**（用户指定目录或部署目录），内容：本次拓扑信息摘要（布局表 + Mooncake 参数）、启动顺序与命令、验证方法、回滚步骤（恢复备份的旧脚本/配置 + 重启旧集群）、压测提醒
-7. **压测提醒必须写进指南**：TP8 的单请求算力/显存池、单序列长度上限、最大 batch 相比 TP32 下降，**需重新压测 Prefill 吞吐与 P-D KV 传输带宽**，旧压测数据不能直接沿用
+拓扑迁移的故障多数不是"起不来"，而是"起来了但 KV 错配/容量不够/性能回退"——所以测试必须分层铺开，每层有明确通过标准。
+
+**L0 静态检查（拉起前）**
+- `bash -n` 过全部脚本；KV_TRANSFER_CONFIG 抽出 `json.loads` 校验
+- 实例间 diff：差异项只有 rank / 卡 / http 端口三处，其余不一致都是笔误
+- 共享 env 形态下：env 文件改动后逐消费方 grep 确认读到的是新值
+
+**L1 单实例启动验证**
+- 按 DP 组序拉起：先启组内 rank 0（主节点）再启其余（rendezvous 依赖主节点）；同机双实例无顺序要求。nohup 后台 + 日志落盘（`nohup bash xxx.sh > xxx.log 2>&1 &`）
+- 每实例探活：`curl -m 5 http://127.0.0.1:<http_port>/v1/models`
+- 日志确认：`tensor_parallel_size=8` 生效；`npu-smi info` 对照各实例占用卡与布局表一致（没绑错卡、没互踩）
+
+**L2 DP 组网验证**
+- 组内 rank 0/1/2/… 全部入组（日志确认，无掉队/重试报错）
+- 16600 组内互通：`ss -ltn` 确认主节点监听；组内每台 `curl/nc` 探通
+
+**L3 KV 链路验证（Mooncake 对齐的唯一可靠判据）**
+- 经 Proxy（或直连任一 P 实例）发一条真实 completion 请求，确认正常出 token
+- 各 P 实例与 D 侧日志均无 Mooncake/DP 通信报错。`kv_load_failure_policy: fail` 下 KV 传输失败会直接报错——失败立即暴露而不是静默丢 KV；若报错，优先回头查 Mooncake tp/dp 对齐与新旧混跑
+
+**L4 功能测试**
+- 正确性：固定 prompt 的 completion 输出合理（不是乱码/截断）
+- 边界：发一条接近 `--max-model-len` 的长上下文请求，确认放得下；并发压到 `--max-num-seqs` 不拒服务
+- 解析器：tool-call 与 reasoning 各发一例（旧集群用什么 parser 就测什么），确认行为与旧集群一致
+
+**L5 性能对比测试**
+- Prefill 吞吐、TTFT、P-D KV 传输带宽，**对比旧集群实测基线**（用现场已有压测工具）
+- ⚠️ TP8 与 TP32 的负载模型不同，**基线必须重新采**，旧压测数据不能直接沿用；不达标时评估调参（max-num-batched-tokens 等）还是回滚，与用户共同决策
+
+**L6 稳定性观察**
+- 上线后持续观察（建议 ≥24h 或用户指定窗口）：KV 报错率、偶发 NPU 错误、DP 组掉员、实例重启
+- 观察通过才算交付完成
+
+**失败处理**：L0-L2 失败 = 配置/环境问题，修复后从 L1 重来；L3 失败优先怀疑 Mooncake 错配或新旧混跑；L4 失败检查容量参数（回 2.3 复核项）；L5 不达标走回滚或调参决策。测试结果逐层记录进部署指南。
+
+## 阶段 6：Proxy 更新与交付
+
+1. **Proxy 更新**：L1-L3 全绿后才切流量——把 P 后端列表换成新实例地址（`<主机>:9000`、`<主机>:9001` …），按用户网关类型改其配置文件并 reload（改前备份，改后探活）。MindIE Motor 类网关通过其 `register.sh` 重新注册新实例——注册表是内存态，coordinator 重启或后端换血后必须重新执行注册，否则请求报 No instance available
+2. **产出部署指南 `.md`**（用户指定目录或部署目录），内容：拓扑信息摘要（布局表 + 修改点清单 + Mooncake 参数）、启动顺序与命令、L0-L6 测试结果记录、回滚步骤（恢复备份的旧脚本/配置 + 按旧方案原样重启）、L5/L6 的基线数据与观察结论
 
 ## 上线检查清单（写进部署指南，逐项打勾）
 
@@ -155,6 +212,7 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 5. 端口规划：http（同机实例 9000/9001…）与 data-parallel-rpc-port 16600 无冲突；kv_port / lookup_rpc_port / engine_id 保持旧值未动
 6. 全局 DP 总数：Mooncake dp_size 精确等于所有主机 P 实例数之和（逐台数一遍）
 7. 负载模型：max-model-len / max-num-batched-tokens / max-num-seqs 已按新 TP 复核，压测计划已安排
+8. 测试记录：L0-L5 各层结果已记录进部署指南，L6 观察窗口与责任人已明确；配置修改点清单（1.3）中的每个文件改动后已备份
 
 ## 回滚
 

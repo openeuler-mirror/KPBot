@@ -13,6 +13,9 @@
 # 注：--data-parallel-rank 外部 LB 模式适用于 MoE 模型（GLM 系列
 # --enable-expert-parallel 场景即 MoE）；若现场 vLLM 版本旗标名不同，
 # 以 `vllm serve --help | grep -i data-parallel` 实际输出为准。
+# 注：本模板假设拓扑参数在脚本内定义（P_DP_SIZE/P_TP_SIZE 等本文件头部变量）。
+# 若现场参数经外部 env 文件 source 传入，生成脚本应保持同样的传参形态
+# （继续 source 同一文件，只改 env 文件里的值），见 SKILL.md 阶段 1.3。
 # ============================================================================
 
 # ===== 实例身份参数（每个实例不同）=====
