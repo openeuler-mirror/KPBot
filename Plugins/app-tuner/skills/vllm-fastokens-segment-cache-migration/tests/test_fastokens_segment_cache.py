@@ -304,6 +304,25 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(info, {"installed": False, "native": []})
         self.assertIn("uninstall -y fastokens", (self.tmp / "RESTORE.md").read_text())
 
+    def test_snapshot_accounts_for_every_requested_process(self):
+        processes = [{"pid": 10, "env": {}}, {"pid": 11, "env": "无法读取（PermissionError）"}]
+        with (
+            mock.patch.object(tool, "find_distribution", return_value=None),
+            mock.patch.object(tool, "module_path", return_value=None),
+            mock.patch.object(tool, "scan_processes", return_value=(processes, None)),
+            redirect_stdout(io.StringIO()),
+        ):
+            tool.main(["snapshot", "--out", str(self.tmp), "--pid", "10", "--pid", "11",
+                       "--pid", "12"])
+        env = json.loads((self.tmp / "env.json").read_text())
+        self.assertEqual(env["进程 10"], {})
+        self.assertEqual(env["进程 11"], "无法读取（PermissionError）")
+        self.assertIsNone(env["进程 12"])
+        restore = (self.tmp / "RESTORE.md").read_text()
+        self.assertIn("进程 10：无相关变量", restore)
+        self.assertIn("进程 11：待补证（无法读取（PermissionError））", restore)
+        self.assertIn("进程 12：待补证（未找到指定进程）", restore)
+
 
 def fake_run(digests, lengths, backend="fastokens", stats=None, encode_ms=1.0):
     return {
@@ -387,13 +406,14 @@ class VerdictTests(unittest.TestCase):
     def test_all_good_passes(self):
         for name in ("orig", "on"):
             self.write_ids(name, [[1], [2]])
-        report = self.summarize(
-            {
-                "orig": [fake_run(["a", "b"], [1, 1], backend="tokenizers")],
-                "on": [fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})],
-            }
-        )
+        orig = fake_run(["a", "b"], [1, 1], backend="tokenizers")
+        on = fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})
+        for arm in (orig, on):
+            arm["concurrency"] = {"threads": 2, "mismatch": [], "errors": []}
+        report = self.summarize({"orig": [orig], "on": [on]})
         self.assertTrue(report["correctness_pass"], report["problems"])
+        self.assertEqual(report["token_consistency"], "passed")
+        self.assertEqual(report["concurrency_acceptance"], "passed")
 
     def test_report_distinguishes_requested_threads_from_concurrency_evidence(self):
         for name in ("orig", "on"):
@@ -403,7 +423,9 @@ class VerdictTests(unittest.TestCase):
         on = fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})
         on["concurrency"] = {"threads": 1, "mismatch": [], "errors": []}
         report = self.summarize({"orig": [orig], "on": [on]})
-        self.assertTrue(report["correctness_pass"])
+        self.assertFalse(report["correctness_pass"])
+        self.assertEqual(report["token_consistency"], "passed")
+        self.assertEqual(report["concurrency_acceptance"], "not_measured")
         text = tool.verify_text(report)
         for name in ("基线组", "段缓存开启组"):
             self.assertIn(f"{name}：未执行多线程并发检查", text)
@@ -422,7 +444,7 @@ class VerdictTests(unittest.TestCase):
         on["concurrency"] = {"threads": 2, "mismatch": [], "errors": []}
         report = self.summarize({"orig": [orig], "on": [on]})
         text = tool.verify_text(report)
-        self.assertIn("一致性与稳定性：未通过", text)
+        self.assertIn("回放验收：未通过", text)
         self.assertIn("段缓存开启组：2 线程并发子检查未发现不一致或异常", text)
 
         for field in ("mismatch", "errors"):
@@ -433,6 +455,44 @@ class VerdictTests(unittest.TestCase):
                 text = tool.verify_text(report)
                 self.assertIn("段缓存开启组：并发检查结果不完整", text)
                 self.assertNotIn("并发子检查未发现", text)
+
+    def test_verify_exits_nonzero_when_one_session_cannot_show_concurrency(self):
+        sessions = Path(self.args.sessions)
+        sessions.write_text('{"session":"s0","messages":[]}\n' * 2)
+        for name in ("orig", "on"):
+            self.write_ids(name, [[1], [2]])
+        orig = fake_run(["a", "b"], [1, 1], backend="tokenizers")
+        on = fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})
+        for arm in (orig, on):
+            arm["concurrency"] = {"threads": 1, "mismatch": [], "errors": []}
+        with (
+            mock.patch.object(tool, "run_worker", side_effect=[orig, on]),
+            redirect_stdout(io.StringIO()),
+            self.assertRaises(SystemExit) as exit_code,
+        ):
+            tool.main(["verify", "--model", "m", "--sessions", str(sessions), "--rounds", "1",
+                       "--threads", "2", "--out", str(self.tmp)])
+        self.assertEqual(exit_code.exception.code, 1)
+        report = json.loads((self.tmp / "report.json").read_text())
+        self.assertEqual(report["token_consistency"], "passed")
+        self.assertEqual(report["concurrency_acceptance"], "not_measured")
+        self.assertFalse(report["correctness_pass"])
+        text = (self.tmp / "report.md").read_text()
+        self.assertIn("token ID 一致性：通过", text)
+        self.assertIn("并发验收：未测", text)
+
+    def test_rss_aggregates_require_all_rounds(self):
+        for name in ("orig", "on"):
+            self.write_ids(name, [[1], [2]])
+        orig = fake_run(["a", "b"], [1, 1], backend="tokenizers")
+        on = fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})
+        orig.update(peak_rss_mib=105, rss_after_load_mib=80, rss_after_replay_mib=100)
+        next_round = dict(orig, peak_rss_mib=107, rss_after_load_mib=None, rss_after_replay_mib=102)
+        report = self.summarize({"orig": [orig, next_round], "on": [on, on]})
+        self.assertIsNone(report["arms"]["orig"]["rss_after_load_mib"])
+        self.assertEqual(report["arms"]["orig"]["peak_rss_mib"], 107)
+        self.assertIsNone(report["arms"]["on"]["peak_rss_mib"])
+        self.assertIn("未测 → 100（107）", tool.verify_text(report))
 
 
 def verdict_info():

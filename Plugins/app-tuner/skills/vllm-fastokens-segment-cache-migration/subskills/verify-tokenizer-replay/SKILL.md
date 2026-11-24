@@ -23,7 +23,7 @@ description: >
 
 ## 回放验收
 
-按 `report.json` 的 `correctness_pass`、`problems` 和各组 `concurrency` 核对以下条件：
+按 `report.json` 的 `token_consistency`、`concurrency_acceptance` 和 `problems` 核对以下条件。两项状态分别为 `passed`、`failed` 或 `not_measured`；全部条件满足时 `correctness_pass=true`、命令退出码为 0。
 
 - 两组各轮均完成，未出现异常或超时。
 - 两组聊天模板渲染结果相同，逐请求 token ID 一致，各轮分词结果一致。
@@ -32,4 +32,4 @@ description: >
 
 ## 输出
 
-交付 `report.json`、`report.md` 和本次运行参数。耗时与 RSS 是分词器层测量，成功退出不代表达到性能阈值。两组结果反映整体配置差异，不把收益单独归因于段缓存。
+交付 `report.json`、`report.md` 和本次运行参数。耗时与 RSS 是分词器层测量；某项 RSS 缺少任一轮测量时，JSON 记为 `null`，报告记为「未测」。成功退出不代表达到性能阈值。两组结果反映整体配置差异，不把收益单独归因于段缓存。

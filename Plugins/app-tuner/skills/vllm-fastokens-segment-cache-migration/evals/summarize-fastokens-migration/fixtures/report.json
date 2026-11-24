@@ -45,5 +45,7 @@
   },
   "parity": {"on": []},
   "problems": [],
+  "token_consistency": "passed",
+  "concurrency_acceptance": "passed",
   "correctness_pass": true
 }

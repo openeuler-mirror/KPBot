@@ -694,9 +694,10 @@ def cmd_snapshot(args):
     }
     (out / "packages.txt").write_text("\n".join(sorted(pins, key=str.lower)) + "\n")
     env = {"当前 shell": relevant_env(os.environ)}
-    processes, _ = scan_processes(args.pid) if args.pid else ([], None)
-    for process in processes:
-        env[f"进程 {process['pid']}"] = process.get("env")
+    processes, note = scan_processes(args.pid) if args.pid else ([], None)
+    process_env = {process["pid"]: process.get("env") for process in processes}
+    for pid in dict.fromkeys(args.pid or []):
+        env[f"进程 {pid}"] = process_env.get(pid, note)
     (out / "env.json").write_text(json.dumps(env, ensure_ascii=False, indent=1))
     fastokens_info = wheel_from_installed("fastokens", out)
     fastokens_info["native"] = native_libraries(module_path("fastokens"))
@@ -727,9 +728,12 @@ def restore_text(fastokens_info, env) -> str:
             f"   自动打包失败：{fastokens_info.get('error')}。"
             f"原版本 {fastokens_info.get('version')}，安装来源 {fastokens_info.get('direct_url')}"
         )
-    lines.append("2. 恢复环境变量（快照时不存在的变量应从服务配置中删除）：")
+    lines.append("2. 按已核实的记录恢复环境变量（确认原先未设置的变量应从服务配置中删除）：")
     for where, values in env.items():
-        lines.append(f"   - {where}：{values if values else '无相关变量'}")
+        if isinstance(values, dict):
+            lines.append(f"   - {where}：{values or '无相关变量'}")
+        else:
+            lines.append(f"   - {where}：待补证（{values or '未找到指定进程'}）")
     lines.append("3. 重启 vLLM 服务（环境变量在创建分词器时读取，重启后生效）。")
     natives = ", ".join(lib["sha256"] for lib in fastokens_info.get("native", [])) or "无"
     lines.append(
@@ -1107,6 +1111,21 @@ def cmd_verify(args):
     sys.exit(0 if report["correctness_pass"] else 1)
 
 
+def summarize_rss(results, field, aggregate):
+    values = [run.get(field) for run in results]
+    return None if None in values else aggregate(values)
+
+
+def concurrency_status(evidence):
+    evidence = evidence or {}
+    mismatch, errors = evidence.get("mismatch"), evidence.get("errors")
+    if mismatch or errors:
+        return "failed"
+    if evidence.get("threads", 0) < 2 or mismatch is None or errors is None:
+        return "not_measured"
+    return "passed"
+
+
 def summarize_arm(name, results, request_count, problems) -> dict:
     first = results[0]
     per_request = [median([r["encode_ms"][i] for r in results]) for i in range(request_count)]
@@ -1121,32 +1140,33 @@ def summarize_arm(name, results, request_count, problems) -> dict:
         "p50_ms": round(percentile(per_request, 50), 3),
         "p99_ms": round(percentile(per_request, 99), 3),
         "render_ms": first.get("render_ms"),
-        "peak_rss_mib": max((r.get("peak_rss_mib") or 0) for r in results),
-        "rss_after_load_mib": median([r.get("rss_after_load_mib") or 0 for r in results]),
-        "rss_after_replay_mib": median([r.get("rss_after_replay_mib") or 0 for r in results]),
+        "peak_rss_mib": summarize_rss(results, "peak_rss_mib", max),
+        "rss_after_load_mib": summarize_rss(results, "rss_after_load_mib", median),
+        "rss_after_replay_mib": summarize_rss(results, "rss_after_replay_mib", median),
         "stats": first.get("stats"),
         "concurrency": first.get("concurrency"),
         "text_sha": first.get("text_sha"),
     }
-    if any(r["digests"] != first["digests"] for r in results[1:]):
-        problems.append(f"{ARM_LABELS[name]}各轮的 token ID 不一致")
     if name != "orig" and not first["backend_module"].startswith("fastokens"):
         problems.append(
             f"{ARM_LABELS[name]}生效的分词后端为 {first['backend_module']}，"
             "并非 fastokens（候选版本未生效）"
         )
-    concurrency = first.get("concurrency")
-    if concurrency and (concurrency["mismatch"] or concurrency["errors"]):
+    concurrency = arm["concurrency"]
+    status = concurrency_status(concurrency)
+    if status == "failed":
         problems.append(
-            f"{ARM_LABELS[name]} {concurrency['threads']} 线程并发检查："
-            f"{len(concurrency['mismatch'])} 条结果"
-            f"不一致，{len(concurrency['errors'])} 个异常"
+            f"{ARM_LABELS[name]}并发检查：{len(concurrency.get('mismatch') or [])} 条结果不一致，"
+            f"{len(concurrency.get('errors') or [])} 个异常"
         )
+    elif status == "not_measured":
+        problems.append(f"{ARM_LABELS[name]}缺少有效的多线程并发检查结果")
     return arm
 
 
 def summarize(args, requests, runs, out, load_before, load_after) -> dict:
     problems, arms = [], {}
+    token_mismatch = False
     for name, results in runs.items():
         failed = next((r for r in results if not r.get("ok")), None)
         if failed:
@@ -1158,9 +1178,13 @@ def summarize(args, requests, runs, out, load_before, load_after) -> dict:
             }
         else:
             arms[name] = summarize_arm(name, results, len(requests), problems)
+            if any(r["digests"] != results[0]["digests"] for r in results[1:]):
+                token_mismatch = True
+                problems.append(f"{ARM_LABELS[name]}各轮的 token ID 不一致")
 
     parity = {}
-    if all(arms[name].get("ok") for name in runs):
+    completed = all(arm["ok"] for arm in arms.values())
+    if completed:
         reference = runs["orig"][0]
         for name in ("on",):
             diffs = compare_arms(
@@ -1168,6 +1192,7 @@ def summarize(args, requests, runs, out, load_before, load_after) -> dict:
             )
             parity[name] = diffs
             if diffs:
+                token_mismatch = True
                 problems.append(
                     f"{ARM_LABELS[name]}与基线组相比有 {len(diffs)} 条请求的 token ID 不一致"
                 )
@@ -1190,6 +1215,16 @@ def summarize(args, requests, runs, out, load_before, load_after) -> dict:
         for name in runs:
             total = arms[name]["encode_total_ms"]
             arms[name]["speed_vs_orig"] = round(orig_total / total, 2) if total else None
+    concurrency_statuses = {concurrency_status(arm.get("concurrency")) for arm in arms.values()}
+    if "failed" in concurrency_statuses:
+        concurrency_acceptance = "failed"
+    elif "not_measured" in concurrency_statuses:
+        concurrency_acceptance = "not_measured"
+    else:
+        concurrency_acceptance = "passed"
+    token_consistency = "passed" if completed else "not_measured"
+    if token_mismatch:
+        token_consistency = "failed"
     return {
         "time": now(),
         "model": args.model,
@@ -1206,6 +1241,8 @@ def summarize(args, requests, runs, out, load_before, load_after) -> dict:
         "arms": arms,
         "parity": parity,
         "problems": problems,
+        "token_consistency": token_consistency,
+        "concurrency_acceptance": concurrency_acceptance,
         "correctness_pass": not problems,
     }
 
@@ -1244,7 +1281,10 @@ def verify_text(report) -> str:
     )
     lines.append("")
     passed = report["correctness_pass"]
-    lines.append(f"## 一致性与稳定性：{'通过' if passed else '未通过'}")
+    labels = {"passed": "通过", "failed": "未通过", "not_measured": "未测"}
+    lines.append(f"## 回放验收：{'通过' if passed else '未通过'}")
+    lines.append(f"- token ID 一致性：{labels[report['token_consistency']]}")
+    lines.append(f"- 并发验收：{labels[report['concurrency_acceptance']]}")
     lines += [f"- {problem}" for problem in report["problems"]]
     for name, diffs in report["parity"].items():
         for diff in diffs[:5]:
@@ -1254,7 +1294,7 @@ def verify_text(report) -> str:
                     f"（会话 {diff['session']}），长度 "
                     f"{diff['len_ref']} / {diff['len_other']}，首个不同位置 {diff['first_diff']}"
                 )
-    if passed:
+    if report["token_consistency"] == "passed":
         lines.append(
             f"- 两组 token ID 在全部 {report['requests']} 条请求上逐条一致；"
             "各轮结果一致"
@@ -1270,7 +1310,7 @@ def verify_text(report) -> str:
             lines.append(f"- {ARM_LABELS[name]}：未执行多线程并发检查")
         elif mismatch is None or errors is None:
             lines.append(f"- {ARM_LABELS[name]}：并发检查结果不完整")
-        elif not mismatch and not errors:
+        elif concurrency_status(concurrency) == "passed":
             lines.append(f"- {ARM_LABELS[name]}：{threads} 线程并发子检查未发现不一致或异常")
     lines.append("")
     lines.append("## 分词耗时与内存")
@@ -1285,9 +1325,11 @@ def verify_text(report) -> str:
             lines.append(f"| {ARM_LABELS[name]} | 运行失败：{arm.get('error')} | | | | | | |")
             continue
         ratio = arm.get("speed_vs_orig")
-        rss = (
-            f"{arm['rss_after_load_mib']} → {arm['rss_after_replay_mib']}（{arm['peak_rss_mib']}）"
+        load, replay, peak = (
+            "未测" if arm[field] is None else arm[field]
+            for field in ("rss_after_load_mib", "rss_after_replay_mib", "peak_rss_mib")
         )
+        rss = f"{load} → {replay}（{peak}）"
         lines.append(
             f"| {ARM_LABELS[name]} | {arm['backend']} | {arm.get('fastokens_version') or '-'} "
             f"| {arm['encode_total_ms']} | {arm['p50_ms']} / {arm['p99_ms']} "
