@@ -10,6 +10,7 @@
 <!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
 - **2026/11/23** — **app-tuner** 新增 `flink-velox-env` 检查子域（`skills/bigdata/flink-velox-env/`，DOMAIN.md 含准入判据与成员表）及首批 3 个具体项检查 SKILL：`flink-velox-toolchain-check`（git/cmake/gcc/g++/mvn 编译工具链）、`flink-velox-build-tools-check`（ninja/ccache/autoconf/automake/libtool/flex/bison/python3/patchelf 构建辅助工具）、`flink-velox-cpp-deps-check`（13 个包管理器级 C++ 库按头文件探测 + 解析 velox checkout 自带 setup 脚本得到的源码级库清单按 /usr/local 探测）；每个 skill 独立 Python 标准库脚本、逐项 ok/fail + openEuler 包名 fix + 唯一 next_step，只扫不改；统筹 skill 与其余 6 个具体项检查分后续 PR 提交。附各自 tier-A 契约用例（11 / 11 / 16 测试，假机器不触真机）与触发评估集。（[!268](https://gitcode.com/openeuler/KPBot/pull/268)）
+- **2026/11/24** — **code-optimizer** 新增 `libco` 领域及 `libco-aarch64-context-switch` SKILL，覆盖 libco/派生版 AArch64 上下文切换、32 槽布局、16B 栈对齐、首次启动和整数/SP 检查；附领域 DOMAIN、共享 references、eval 与 skill-contract。
 - **2026/11/19** — **code-optimizer** 新增 `generic-timer-optimization` SKILL，覆盖 aarch64 热路径时钟读取优化：把自旋等待/轮询/超时判定循环内每轮的 `Clock::now()`/`clock_gettime` vDSO 读取替换为直接读 ARM 通用定时器（`mrs cntvct_el0` + 循环外一次 `cntfrq_el0`），含锚点保域、tick 域比较、分步换算防溢出三类模板与溢出边界/`asm volatile` 防 CSE 不变量，附 `mrs` 编译验证契约与微基准/语义/端到端验证步骤，源自 folly Spin.h 真实优化案例，附 tier-A 契约用例。
 - **2026/11/17** — **code-optimizer** 新增 `parallel-accumulator` SKILL，覆盖归约循环的串行累加器并行化：识别单累加器延迟绑定（低 IPC + 低 cache miss），用多个独立累加器重叠依赖链隐藏浮点延迟，附三级改写模板（纯 C 多累加器 / NEON 单累加器 / NEON 多累加器）、`accumulator_plan.py` 累加器数量脚本、tier-A 契约用例、agent 端到端 A/B 用例，对标 Intel performance-patterns 的 parallel-accumulator。
 - **2026/11/16** — **app-tuner** 新增 `kptools-jvmjit` SKILL，覆盖 JVM 进程 perf 采样符号化分析（libperf-jvmti + perf inject --jit）：方法级热点、JIT 代码指令级注解导出（源码+汇编+逐指令周期占比）、容器内采集（权限检测 + 宿主机 perf 工具注入），含 dump 刷盘语义与 [JIT] 残留处理纪律，与外部工具 arthas（免重启方法级交互）/ kptools-devkit java-perf（火焰图全景）分层互补。（[!143](https://gitcode.com/openeuler/KPBot/pull/143)）
@@ -62,7 +63,7 @@
 | [C/C++ 性能库与热点代码 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/kpbot-code-optimizer/SKILL.md) | **code-optimizer**：覆盖 NEON/SVE/SME 向量化、循环展开、分支消除、操作融合、预取、访存布局、精度变换与汇编优化；部分知识型 SKILL 已扩展 Rust 支持。 |
 
 > 已按领域归并的 skill 不再在本表逐条列出，其成员、收益与域内路由见对应域目录的 `DOMAIN.md`：
-> [sra](Plugins/code-optimizer/skills/sra/DOMAIN.md) · [vectordb](Plugins/code-optimizer/skills/vectordb/DOMAIN.md) ·
+> [sra](Plugins/code-optimizer/skills/sra/DOMAIN.md) · [vectordb](Plugins/code-optimizer/skills/vectordb/DOMAIN.md) · [libco](Plugins/code-optimizer/skills/libco/DOMAIN.md) ·
 > [agentic-infra](Plugins/code-optimizer/skills/agentic-infra/DOMAIN.md) · [microservice](Plugins/code-optimizer/skills/microservice/DOMAIN.md) ·
 > [storage](Plugins/code-optimizer/skills/storage/DOMAIN.md)。本表因此只在**场景层**变更时才需要改动，避免每个新 skill 都来抢同一张表。
 
@@ -70,7 +71,7 @@
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（103 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（104 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
 | **[openwiki-sync](Plugins/public/openwiki-sync/)** | documentation | OpenWiki 代码仓文档生成与同步 — 独立 wiki 仓托管 + commit 级联动更新 + 关联恢复，支持 GitCode/Gitee/GitHub |
 | **[kunpeng-knowledge](Plugins/public/kunpeng-knowledge/skills/kunpeng-knowledge/SKILL.md)** | documentation | 鲲鹏知识库只读查询 — 搜索 Wiki、读取页面并返回来源；在 OpenCode 中通过 WeKnora 账号授权 |
@@ -181,7 +182,7 @@ PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能�
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 103 个技能
+    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 104 个技能
     - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 101 个技能
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
@@ -261,7 +262,7 @@ powershell.exe -NoProfile -NonInteractive -File .\tests\test_install_platform.ps
 
 ### 可用技能列表
 
-code-optimizer 在 Claude Code 中安装 **103 个** skill，在 OpenCode 中安装 **101 个**（跳过 2 个 claude-only）。
+code-optimizer 在 Claude Code 中安装 **104 个** skill，在 OpenCode 中安装 **102 个**（跳过 2 个 claude-only）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -297,6 +298,7 @@ code-optimizer 在 Claude Code 中安装 **103 个** skill，在 OpenCode 中安
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
 - `hot-path-overhead-elimination` — 热点路径机制开销消除（主导结果内联、叶子入口、值频率分派、无消费者记账跳过）
 - `parallel-accumulator` — 串行累加器并行化（多累加器展开、NEON 向量累加器，重叠依赖链隐藏浮点延迟）
+- `libco-aarch64-context-switch` — libco AArch64 上下文切换、32 槽布局、栈对齐与首次启动检查
 - `generic-timer-optimization` — 通用定时器时钟读取优化（cntvct_el0/cntfrq_el0 替换自旋循环内 Clock::now()/clock_gettime，锚点保域、tick 域比较、防溢出换算，含 tier-A 契约用例）
 
 **Pipeline/编排类**
@@ -455,7 +457,7 @@ KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (103 skills)
+│   ├── code-optimizer/            # 代码优化插件 (104 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
