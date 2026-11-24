@@ -8,6 +8,19 @@ description: >
   看 TTFT 各环节占比、TTFT 长尾 P90/P99、定位首 token 延迟在 tokenize/queue/forward/KV
   哪一环。即使用户只说"帮我把这轮压测的 TTFT 日志解析一下"或"看看 TTFT 拆解在哪一环"，
   也应使用此技能。只做采集与解析出表，打点 patch 部署见 kptools-tpsplit-log-trace。
+license: Proprietary
+compatibility: >
+  本地 Windows/Linux（Python 3 + openpyxl，xlsx 输出必需；fetch_logs.sh 需远端 bash）；
+  SSH 访问 P/D/proxy 宿主机（优先 ssh-mcp-server 的 upload/execute-command/download，
+  无 MCP 时回退本地 ssh/scp）；打点须已由 kptools-tpsplit-log-trace 部署（v3.2，
+  [TTFT][BREAKDOWN] / [TTFT_KVXFER] / [SHM_DEQUEUE] / [LB_DISPATCH] / [TTFT_DRAFT]）；
+  下游 kptools-tpsplit-report 消费 --csv-out 输出的 ttft_table.csv。
+metadata:
+  skill_type: tool_assisted
+  category: diagnostics
+  domain: ttft_log_analysis
+  activation_mode: active
+  version: "0.1.0"
 ---
 
 # kptools-tpsplit-log-analysis：TTFT 日志采集 + 解析出表
