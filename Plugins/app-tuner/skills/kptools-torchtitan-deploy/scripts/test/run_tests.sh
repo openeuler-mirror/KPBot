@@ -72,12 +72,14 @@ check_in "T6f CLI 数据集参数" "--dataloader.dataset" "$INS"
 check_in "T6g 低精度仅 A5/950 门槛" "Ascend 950" "$SK"
 
 # ============================================================ T7 pitfalls 分组与条目
+# 注：变量后紧跟全角字符必须花括号——bash 3.2 会把全角字符并入变量名
+# （$nb（ 在 set -u 下直接 unbound 中止整段测试）
 na=$(grep -c '^### A-' "$PIT")
 nb=$(grep -c '^### B-' "$PIT")
 if [ "$na" -ge 10 ] && [ "$nb" -ge 8 ]; then
-  ok "T7a pitfalls 分组条目 A=$na B=$nb（≥10+8）"
+  ok "T7a pitfalls 分组条目 A=${na} B=${nb}（≥10+8）"
 else
-  bad "T7a pitfalls 条目不足 A=$na B=$nb"
+  bad "T7a pitfalls 条目不足 A=${na} B=${nb}"
 fi
 check_in "T7b A 组定义存在" "源码补丁即证据" "$PIT"
 
@@ -152,6 +154,49 @@ if grep -qE "early_start|finalize\(\)" "$LCH"; then
 else
   ok "T12d fork 特有两阶段 API 已移除（master 为 start/stop）"
 fi
+
+# ============================================================ T13 第二轮检视口径（矛盾/过时措辞固化）
+# T13a DT_INT64 口径一致：路由表不得出现与 pitfalls A-1 证据状态矛盾的
+# "仓内已带补丁"措辞（A-3/A-4 的"已由仓内 workaround 处理"是准确表述——
+# 那两处补丁真实存在，不在禁用之列）
+if grep -qF "仓内已带补丁" "$SK"; then
+  bad "T13a SKILL.md 路由表与 A-1 证据状态矛盾（'仓内已带补丁'）"
+else
+  ok "T13a DT_INT64 口径与 pitfalls A-1 一致（未见补丁→先核版本）"
+fi
+check_in "T13a-2 DT_INT64 行正向口径" "仓内未见对应补丁" "$SK"
+# T13b COMM_MODE=gloo 非法值不得出现（torchtitan 0.3.0 Literal 无 gloo）
+if grep -qF "COMM_MODE=gloo" "$SK" "$LCH"; then
+  bad "T13b COMM_MODE=gloo 残留（非法 Literal）"
+else
+  ok "T13b 无 COMM_MODE=gloo（单进程用 fake_backend）"
+fi
+check_in "T13c 单进程调试合法值" "COMM_MODE=fake_backend" "$SK"
+check_in "T13c-2 launch 同口径" "COMM_MODE=fake_backend" "$LCH"
+# T13d B-19 旧号不得出现（改号后止于 B-18）
+if grep -qF "B-19" "$SK" "$INS" "$LCH" "$PIT" \
+     "$(dirname "$SK")/evals"/*.json 2>/dev/null; then
+  bad "T13d 重编号前旧号 B-19 残留"
+else
+  ok "T13d 无 B-19 残留（B 段止于 B-18）"
+fi
+check_in "T13e B-18 正向交叉引用" "pitfalls B-18" "$LCH"
+# T13f 冒烟命令带 RoPE override（上游 quickstart 单卡示例标准配件）
+check_in "T13f SKILL.md 冒烟 RoPE override" \
+  "--override.imports torchtitan_npu.override.common.rope.workaround" "$SK"
+check_in "T13f-2 install-guide 冒烟同口径" \
+  "--override.imports torchtitan_npu.override.common.rope.workaround" "$INS"
+check_in "T13g RoPE 互斥提示" "不能同时启用" "$SK"
+# T13h v0.2.2-dev 显式检出分支
+check_in "T13h checkout 分支提示" "git checkout v0.2.2-dev" "$INS"
+# T13i 绑核验收以掩码为判据（psr 仅观察）
+check_in "T13i 掩码验收判据" "Cpus_allowed_list" "$LCH"
+check_in "T13i-2 psr 仅观察不验收" "不能当绑核成功的验收证据" "$LCH"
+check_in "T13i-3 训练 PID 选择" "训练 PID" "$LCH"
+# T13j set_env 探测链计数口径（1 环境变量 + 3 候选路径）
+check_in "T13j 3 个候选路径口径" "3 个候选路径" "$SK"
+# T13k 环境变量消费范围（examples/ 顶层同样消费）
+check_in "T13k examples 顶层消费" "examples/deepseek_v4/deepseek_v4_flash_cpt_4k_a3.sh" "$INS"
 
 # ============================================================ 汇总
 echo

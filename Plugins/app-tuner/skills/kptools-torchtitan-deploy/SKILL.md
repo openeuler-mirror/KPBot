@@ -13,7 +13,7 @@ metadata:
   skill_type: debugging
   category: deployment
   domain: torchtitan_npu
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # kptools-torchtitan-deploy — torchtitan-npu 部署手册与踩坑指导
@@ -51,13 +51,19 @@ backend 注册）。部署它的第一道坑不是代码，是**版本配套**�
 ```bash
 NGPU=1 bash scripts/run_train.sh \
   --training.local-batch-size 1 --training.seq-len 2048 \
-  --training.steps 5
+  --training.steps 5 \
+  --override.imports torchtitan_npu.override.common.rope.workaround
 ```
 
+- RoPE override 是上游 quickstart 单卡示例的标准配件（避免对复数 RoPE
+  cache 进行位置索引——复数位置索引受限的 NPU 环境必需）；与
+  `rope.asc_complex` 声明同一 target，**不能同时启用**（见上游
+  `torchtitan_npu/override/README.md`）
 - tokenizer/数据集有内置默认（`tests/assets/deepseek_v3` 与 `c4_test`），
   冒烟无需下载真实模型；覆盖用 CLI 参数 `--hf-assets-path` /
   `--dataloader.dataset` / `--dataloader.dataset-path`（**环境变量
-  HF_ASSETS_PATH/DATASET 等仅被 examples 示例脚本消费，run_train.sh
+  HF_ASSETS_PATH/DATASET 等仅被 examples/ 下的示例脚本消费（含
+  examples/deepseek_v4/ 顶层 *.sh 与 debug/ 子目录），run_train.sh
   不读取，export 后静默失效**）
 - 看到逐步 loss 输出（step/loss/tps/tflops/mfu/elapsed_time_per_step）
   即部署成功；指标解读由所在部署环境的训练指标工具承接
@@ -76,8 +82,10 @@ bash examples/deepseek_v4/debug/deepseek_v4_flash_8p_cpt_4k_a3.sh
 # 多机：NODE_IPS 逗号列表，顺序即 rank
 NODE_IPS=ip1,ip2 bash scripts/run_train_multinodes.sh ...
 
-# 单进程调试（不开 torchrun）
-COMM_MODE=gloo bash scripts/run_train.sh ...
+# 单进程调试（不开 torchrun；配置校验干跑，无需真实 NPU 通信）
+COMM_MODE=fake_backend bash scripts/run_train.sh ...
+# comm.mode 合法值（torchtitan 0.3.0 Literal）：default / fake_backend /
+# local_tensor / torchcomms——"gloo" 不是合法值，会在配置解析阶段报错
 ```
 
 > ⚠️ **配置系统重构（2026-05）**：master 用 `--module` + `--config`
@@ -90,7 +98,7 @@ COMM_MODE=gloo bash scripts/run_train.sh ...
 | 现象 | 第一嫌疑 | 详见 |
 |------|---------|------|
 | 启动即报 import/算子缺失 | 版本配套错位（先核对版本表） | pitfalls B-12 |
-| `DT_INT64 not supported` 全图编译中止 | torch_npu gather 白名单缺陷（仓内已带补丁，多半是版本错位绕过了补丁） | pitfalls A-1 |
+| `DT_INT64 not supported` 全图编译中止 | torch_npu gather 融合路径对 int64 的 AscendC 推断支持不完备；**仓内未见对应补丁**，第一嫌疑是版本配套错位 → 先核版本表与上游 issue，不要先改模型代码 | pitfalls A-1 |
 | Triton CUDA driver 探测崩溃 | Inductor roofline 估算在 NPU 走了 CUDA 路径 | pitfalls A-2 |
 | HCCL 建连超时/卡在建图 | 大 EP 建连慢是预期（3600/7200s 是防御值，勿调小） | launch-reference |
 | 多机起不来 | 网卡选择（docker0）/ NODE_IPS 顺序 | launch-reference |
@@ -123,7 +131,7 @@ COMM_MODE=gloo bash scripts/run_train.sh ...
 | `pip install -e .` 失败 | python 版本与分支不配套（版本表）；requirements 版本冲突先核对 torch/torch_npu |
 | NNAL 装不上 | 安装 NNAL 前必须 `source /usr/local/Ascend/cann/set_env.sh`（install-guide §1） |
 | 启动后无日志 | run_train.sh 默认 `--local-ranks-filter 0`（只打 rank0），多 rank 用 `LOG_RANK=N` |
-| set_env.sh 找不到 | 脚本按 `ASCEND_SET_ENV_PATH` → 4 个候选路径探测，非标准路径用环境变量显式指定 |
+| set_env.sh 找不到 | 脚本按 `ASCEND_SET_ENV_PATH` 环境变量显式指定，未设时依次探测 **3 个候选路径**（链见 launch-reference §1），非标准路径用环境变量指定 |
 | 多机 docker0 被选为通信网卡 | 脚本已自动跳过 docker0；自定义网络环境注意 HCCL_SOCKET_IFNAME |
 | 冒烟 OOM | debugmodel 很小，OOM 说明环境异常（显存被占/驱动问题），`npu-smi info` 排查 |
 

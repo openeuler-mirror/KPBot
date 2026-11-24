@@ -25,10 +25,17 @@
 ```bash
 git clone https://gitcode.com/cann/torchtitan-npu.git
 cd torchtitan-npu
+# 部署 master 配套（版本表第一行）到此为止；部署 v0.2.2-dev 配套
+# （Python 3.11 / CANN 9.0 环境，版本表第二行）必须显式检出对应分支，
+# 否则后续按默认分支装 requirements 会用错一套依赖：
+git checkout v0.2.2-dev
 python3 -m pip install -r requirements.txt
 python3 -m pip install -e .
 ```
 
+- **冒烟/启动命令的口径与检出分支一致**：本 skill 的冒烟与启动示例按
+  master（新配置系统 `--module`/`--config`）描述；检出 v0.2.2-dev 时
+  启动参数形态以该分支的 quickstart 为准
 - PyPI 安装暂未提供（待 torchtitan 稳定版），只支持源码 editable 安装
 - 卸载：`pip uninstall torchtitan_npu`
 
@@ -60,8 +67,12 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 python3 -c "import torch, torch_npu; print(torch.npu.is_available())"
 # ④ 单卡 debugmodel 冒烟（无需真实模型/数据）
 NGPU=1 bash scripts/run_train.sh \
-  --training.local-batch-size 1 --training.seq-len 2048 --training.steps 5
+  --training.local-batch-size 1 --training.seq-len 2048 --training.steps 5 \
+  --override.imports torchtitan_npu.override.common.rope.workaround
 ```
+
+④ 的 RoPE override 是上游 quickstart 单卡示例标准配件（复数位置索引
+受限的 NPU 环境必需；与 `rope.asc_complex` 同 target **互斥**）。
 
 ④ 的默认资产与覆盖方式：
 
@@ -72,6 +83,9 @@ NGPU=1 bash scripts/run_train.sh \
 
 > ⚠️ `run_train.sh` **不读取** `HF_ASSETS_PATH`/`DATASET`/`DATASET_PATH`
 > 环境变量（上游 quickstart 明文声明）——export 这些变量会**静默失效**。
-> 环境变量形式仅被 `examples/deepseek_v4/debug/*.sh` 示例脚本消费。
+> 环境变量形式仅被 examples/ 下的示例脚本消费（如
+> `examples/deepseek_v4/deepseek_v4_flash_cpt_4k_a3.sh` 顶层正式脚本
+> 及其 `debug/` 子目录——tokenizer 路径漏配即启动失败，默认值是
+> 占位符）。
 
 看到逐步 step/loss/tps/tflops/mfu 输出即部署成功。

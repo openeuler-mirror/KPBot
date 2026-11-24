@@ -24,7 +24,7 @@ ASCEND_SET_ENV_PATH（显式指定，推荐）
 | `TORCHINDUCTOR_NPU_BACKEND` | `ascendc` | Inductor 编译后端（AscendC AutoFuse 的入口开关） |
 | `PYTORCH_NPU_ALLOC_CONF` | `expandable_segments:True` | NPU 显存分配策略（减少碎片） |
 | `CUDA_DEVICE_MAX_CONNECTIONS` | `1` | 限制多流并发依赖（对齐 GPU 语义的兼容开关） |
-| `CPU_AFFINITY_CONF` | `1`（可覆盖） | torch_npu CPU 绑核总开关：`0`=关闭（完全惰性）；`1`=按设备切片分核段（mode1）；`2`=官方角色映射（main/acl/release/hccl_watchdog/other 各指定核，`2,force:N` 可强制）。**注意**：lazy_bind（默认）下主线程绑定的唯一机制是 `pt_autograd_*` 线程首次 backward 时代绑——torchtitan 默认关闭 autograd MT（上游 PR #3565），代绑链路永不触发，**主线程静默失效**（acl/release 线程照常绑定，极具迷惑性）。确诊与修复见 pitfalls B-19 |
+| `CPU_AFFINITY_CONF` | `1`（可覆盖） | torch_npu CPU 绑核总开关：`0`=关闭（完全惰性）；`1`=按设备切片分核段（mode1）；`2`=官方角色映射（main/acl/release/hccl_watchdog/other 各指定核，`2,force:N` 可强制）。**注意**：lazy_bind（默认）下主线程绑定的唯一机制是 `pt_autograd_*` 线程首次 backward 时代绑——torchtitan 默认关闭 autograd MT（上游 PR #3565），代绑链路永不触发，**主线程静默失效**（acl/release 线程照常绑定，极具迷惑性）。确诊与修复见 pitfalls B-18 |
 | `TASK_QUEUE_ENABLE` | `2` | host 侧算子下发队列模式（hostbound 场景关键） |
 | `HCCL_CONNECT_TIMEOUT` | `3600`（秒） | HCCL 建连超时——大 EP 建图慢是**预期**，勿调小 |
 | `STREAMS_PER_DEVICE` | `32` | 每设备流数 |
@@ -37,7 +37,9 @@ ASCEND_SET_ENV_PATH（显式指定，推荐）
   ——`--module`/`--config` 可覆盖，其余 CLI 参数原样透传给训练入口
   （`torchtitan_npu.train`）
 - `COMM_MODE` 非空 → 跳过 torchrun，`LOCAL_RANK=0 python3 -m` 单进程直跑
-  （调试用，如 `COMM_MODE=gloo`）
+  （调试用，如 `COMM_MODE=fake_backend`——上游 run_train.sh 注释标注的
+  "config validation without NPU" 干跑；comm.mode 合法值为
+  default/fake_backend/local_tensor/torchcomms）
 
 ## 2. 多机 run_train_multinodes.sh
 
@@ -144,8 +146,12 @@ turbo 子项就是**扩展总开关**；其余官方子选项（`mode:N`/`npu_af
 
 - 单测：`python3 -m pytest tests/unit_tests/extensions/affinity/ -q`
   （用例数随上游演进，以仓库现状为准）
-- 功能核对方法：训练中周期采样全部线程掩码（如 `ps -L -o tid,comm,
-  psr` 或读 `/proc/<pid>/task/*/status` 的 `Cpus_allowed_list`），
-  核对终态与配置语义一致；门控正确性——无 turbo 时各线程掩码应与
-  官方语义**逐位一致**且日志输出
-  `extension disabled (turbo off; official semantics only)`
+- 功能核对方法（**验收绑核以掩码为准，不以 psr 为准**）：
+  - 先锁定**训练 PID**（torchrun 主进程下的 rank 进程，不是 launcher），
+    读 `/proc/<训练pid>/task/*/status` 的 `Cpus_allowed_list` 周期采样，
+    核对各线程掩码终态与配置语义一致——**这是"绑核是否生效"的判据**
+  - `ps -L -o tid,comm,psr` 的 psr 只显示"线程最近运行的 CPU"：
+    **未绑核的线程也可能连续多次落在同一核**——psr 只用于观察实际落点
+    分布/漫游，不能当绑核成功的验收证据
+  - 门控正确性——无 turbo 时各线程掩码应与官方语义**逐位一致**且日志
+    输出 `extension disabled (turbo off; official semantics only)`
