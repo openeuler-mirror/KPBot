@@ -1,6 +1,6 @@
 # 阶段职责
 
-供 Workflow 阶段代理按当前阶段读取，输出字段由对应 schema 定义。所有阶段在 Linux AArch64 上执行，不安装或升级环境，不 commit、不 push。每个任务共用一个临时 worktree，以版本 ID、Git tree、补丁和 context 关联源码、构建产物与证据。仅 Writeback 可向原仓库应用已验证补丁并清理本任务 worktree；其余阶段不改原仓库工作文件或索引。
+服务 origin 模式，供 Workflow 阶段代理按当前阶段读取，输出字段由对应 schema 定义。所有阶段在 Linux AArch64 上执行，不安装或升级环境，不 commit、不 push。每个任务共用一个临时 worktree，以版本 ID、Git tree、补丁和 context 关联源码、构建产物与证据。仅 Writeback 可向原仓库应用已验证补丁并清理本任务 worktree；其余阶段不改原仓库工作文件或索引。
 
 BuildRequirements、Knowledge 使用本技能 `agents/` 下的 `multimedia-build-requirements`、`multimedia-knowledge` 只读代理。其余阶段不再委派规划或分析代理。
 

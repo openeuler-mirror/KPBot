@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# mock iostat — 行为由 $MOCK_SCENARIO 控制。
+# 输出两个设备段（第 1 段 = since boot，第 2 段 = 采样窗口），同时满足
+# detect_bottleneck.sh（按设备名行取 $NF 最大 %util）与
+# collect_io_evidence.sh（按表头动态解析第 2 段）两种解析方式。
+# 表头形态对齐真实 sysstat：默认 "Device:"（带冒号，use_scan.py 匹配的
+# 形态）；iostat_no_colon 场景输出 "Device"（openEuler 24.03 实测形态）；
+# iostat_bad_header 场景输出不可解析表头，看守降级 note。
+scenario="${MOCK_SCENARIO:-idle}"
+util=0.50
+[ "${scenario}" = "disk_bandwidth" ] && util=95.00
+[ "${scenario}" = "iostat_no_colon" ] && util=95.00
+
+case "${scenario}" in
+  iostat_bad_header) HEADER="Diskstats" ;;
+  iostat_no_colon)   HEADER="Device" ;;
+  *)                 HEADER="Device:" ;;
+esac
+
+emit_section() {
+  echo "Linux mock (mock) 11/19/2026 _aarch64_"
+  echo "${HEADER}  r/s rkB/s rrqm/s %rrqm r_await rareq-sz w/s wkB/s wrqm/s %wrqm w_await wareq-sz d/s dkB/s drqm/s %drqm d_await dareq-sz aqu-sz %util"
+  echo "nvme0n1 1.00 4.00 0.00 0.00 0.10 4.00 2.00 8.00 0.00 0.00 0.20 4.00 0.00 0.00 0.00 0.00 0.00 0.00 0.50 ${util}"
+  echo "dm-0    0.00 0.00 0.00 0.00 0.00 0.00 1.00 4.00 0.00 0.00 0.10 4.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.10"
+}
+
+emit_section
+emit_section

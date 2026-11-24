@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "role": "PD",
+  "node": "node-fixture",
+  "timestamp_utc": "20261024T000000Z",
+  "targets": [
+    "stream-p",
+    "stream-d"
+  ],
+  "folders": {
+    "stream-p": "archive-01",
+    "stream-d": "archive-02"
+  }
+}

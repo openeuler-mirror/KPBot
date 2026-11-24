@@ -1,0 +1,39 @@
+name: rollup-contract
+skill: sql-rollup-reuse
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: amount_evaluations
+    expect: 7
+  - type: json_field
+    file: results/result.json
+    field: cache_hits
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: cache_invalidations
+    expect: 4
+  - type: json_field
+    file: results/result.json
+    field: cache_amount_evaluations
+    expect: 8
+  - type: json_field
+    file: results/result.json
+    field: duplicate_grouping_rows
+    expect: 2
+  - type: json_field
+    file: results/result.json
+    field: duplicate_grouping_each_amount
+    expect: 10
+  - type: json_field
+    file: results/result.json
+    field: duplicate_grouping_amount_evaluations
+    expect: 1

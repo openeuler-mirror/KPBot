@@ -43,6 +43,13 @@ The contributor has confirmed ownership or authorization to distribute the
 imported collection code, analysis tools, CSS and JavaScript under MulanPSL-2.0.
 The vllm-ascend business proxy itself is not bundled by this skill.
 
+Bundled components: vLLM and vLLM-Ascend source and TTFT modifications
+Location: Plugins/app-tuner/skills/kptools-vllm-ttft/payload/
+          Plugins/app-tuner/skills/kptools-vllm-ttft/scripts/gen_ttft_report.py
+License: Apache-2.0. See the skill's references/provenance.md and
+         references/LICENSE-Apache-2.0.txt for sources and license text.
+Original copyright notices are preserved in the bundled source.
+
 The external tools and services referenced by KPBot skills (such as openwiki,
 profiling tools and platform CLIs) are invoked at runtime and are not bundled
 in this repository. Their copyrights and licenses belong to their respective

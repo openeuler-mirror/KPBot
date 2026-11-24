@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# mock ss -tinp — 行为由 $MOCK_SCENARIO 控制。
+# network 场景输出大 sendq（> 131072）；其余场景 socket 正常、队列为 0。
+scenario="${MOCK_SCENARIO:-idle}"
+sendq=0
+[ "${scenario}" = "network" ] && sendq=262144
+
+echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process"
+echo "ESTAB 0 ${sendq} 10.0.0.1:443 10.0.0.2:51000 users:((\"mockproc\",pid=4242,fd=10))"

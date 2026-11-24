@@ -5192,7 +5192,7 @@ node<span class="w"> </span>scripts/dynamic_workflow_manager.js<span class="w"> 
 | GPU/NPU 等计算卡 skill | <span class="sb">`subskills/accelerator-optimization/SKILL.md`</span> |
 | 更换高规格硬件 | <span class="sb">`subskills/hardware-upgrade-analysis/SKILL.md`</span> |
 | Other 优化 skill | <span class="sb">`subskills/other-optimization/SKILL.md`</span> |
-| 非 CPU 瓶颈预筛 | <span class="sb">`subskills/io-memory-network-bottleneck-analysis/SKILL.md`</span> |
+| 非 CPU 瓶颈预筛 | <span class="sb">`subskills/io-optimization/SKILL.md`</span> |
 | 数据库专项 | <span class="sb">`subskills/database-workload-analysis/SKILL.md`</span>，由应用配置 skill 按需引用 |
 
 <span class="gu">## Framework Ownership Boundary</span>
@@ -17123,7 +17123,7 @@ cat<span class="w"> </span>/sys/block/nvme*/device/numa_node<span class="w"> </s
 <span class="k">-</span><span class="w"> </span><span class="sb">`hardware-upgrade-analysis`</span>
 <span class="k">-</span><span class="w"> </span><span class="sb">`other-optimization`</span>
 
-<span class="sb">`io-memory-network-bottleneck-analysis`</span> 是前置瓶颈预筛，不属于覆盖执行集合。`database-workload-analysis` 默认由 <span class="sb">`application-config-optimization`</span> 按需触发；当 <span class="sb">`--database-workload`</span> 明确给出时，可追加到覆盖集合。
+<span class="sb">`io-optimization`</span> 是前置瓶颈预筛，不属于覆盖执行集合。`database-workload-analysis` 默认由 <span class="sb">`application-config-optimization`</span> 按需触发；当 <span class="sb">`--database-workload`</span> 明确给出时，可追加到覆盖集合。
 
 <span class="gu">## 停止规则</span>
 
