@@ -8,6 +8,8 @@
 
 ## 最小实现与迁移
 
+本补丁取代 `scheme1-rpc.patch` 中的 `monitor_vm` 修改。一个目标树只采用一种 monitor 实现。在干净的 v0.7.1 工作树中先应用下方独立补丁。如果还需要方案一的预连接等改动，在另一工作树应用原方案一，对照差异逐段迁入非 monitor 改动，跳过整个 `monitor_vm` hunk。检查最终 diff，只保留一次有界健康探测和探测失败后的 CONNECT 回退。已应用方案一时，在独立工作树把该方法中的直接复用分支替换为本补丁实现，再运行 monitor 验收。
+
 参考补丁基于 CubeSandbox `v0.7.1`（`31d911e430fdf8a8879bd062b8e78066c1a8e89d`）。在 `monitor_vm` 中短暂加锁取得 `self.conn` 的 clone，再释放锁并用 100 ms ttrpc deadline 做一次 `Health.Check`。收到响应说明启动时传输可用。无句柄、超时或 RPC 失败时，执行原 CONNECT 并用 `?` 传播其失败。该回退使用新传输启动 monitor，保留了原周期检查与退出规则。将新增探测的 RTT 与省下的握手一起计入候选耗时。
 
 创建和恢复在 v0.7.1 均调用 `monitor_vm(false)`。启动探测在 `false` 时也执行，周期 `client.check` 仍由 `check_agent` 控制。Guest 在业务 RPC 完成后退出时，即使 `self.conn` 尚存，探测仍会失败。随后建连失败将阻止调用方继续到成功返回。

@@ -7,6 +7,8 @@ description: 优化 CubeSandbox 中 monitor_vm 启动时重复连接 Guest agent
 
 monitor 启动时对当前实例已安装的 ttrpc 连接做一次有界探测。探测成功后复用传输，缺少句柄或探测失败时沿用原 CONNECT 路径，重连错误传回创建或恢复调用方。
 
+本补丁取代 `scheme1-rpc.patch` 中的 `monitor_vm` 修改。一个目标树只采用一种 monitor 实现。
+
 1. 沿 `connect_agent → self.conn → monitor_vm → HealthClient` 核对连接来源。按沙箱实例与恢复代关联日志，确认同一实例在主流程建连成功后，又因启动 monitor 发起 CONNECT。只有重复握手落在创建响应前或造成可观测争用时，才进入性能实验。
 2. 核对目标版本 ttrpc `Client::clone()` 的传输共享能力及关闭语义。仅从当前沙箱实例取得句柄，在锁内 clone，释放锁后再执行任何健康 RPC。旧实例退出、传输更换或恢复失败时，检查 monitor 与句柄的所有权。
 3. 先审阅 [参考补丁](references/monitor-connection-reuse.patch)，按 [实施与复现](references/runbook.md) 检查源码并构建。启动探测与周期健康检查分别验收，保持周期检查配置、退出通知和 READY 状态转换。
