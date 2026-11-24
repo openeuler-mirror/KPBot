@@ -18,15 +18,9 @@ bash scripts/verify_folly_patch.sh /path/to/服务二进制
 
 边界：未链接 CPUThreadPoolExecutor 编译单元的二进制，F3 为假阴性（脚本内已注明）；无 debug info 时 F1 跳过、F3/F2 仍有效。退出码 = FAIL 数。
 
-## inspect_build_flags.sh
+## inspect_build_flags.sh（已拆分）
 
-实际编译参数产物反推（SKILL.md 步骤 5）。
-
-```bash
-bash scripts/inspect_build_flags.sh /path/to/libfolly.a
-```
-
-优先级：`DW_AT_producer`（权威，需 -g）> SIMD 兜底探测（采样反汇编统计 z/v 寄存器）。**配置声明值 ≠ 产物生效值**——blade/make 等构建系统的全局继承链拼接结果只有产物说了算。`-mcpu` 的合法取值以 compiler-flag-tuning skill 的 canonical 映射为准。
+产物取证三链（comment 版本 / DW_AT_producer 指纹 / SIMD 兜底）已迁至 binary-compile-forensics skill）；本目录不再维护该脚本。
 
 ## allocator_ab.sh
 
@@ -43,3 +37,5 @@ bash scripts/allocator_ab.sh -c "taskset -c 288-295 ./futures_benchmark --benchm
 - 三个脚本都只读产物/只跑 benchmark，不修改被测对象
 - `strings`/`nm`/`readelf` 来自 binutils，`ar`/`objdump` 同源；无 third-party 依赖
 - 脚本输出中文，失败语义明确（exit 2 = 参数错误，verify 的 exit N = N 项 FAIL，allocator 的 exit 1 = 环境不可对照或测量失败 fail-closed）
+
+> **inspect_build_flags.sh 已拆分**：产物取证三链（comment 版本 / DW_AT_producer 指纹 / SIMD 兜底）迁至 binary-compile-forensics skill（ skill（安装后位于 skills/binary-compile-forensics/）），本目录不再维护。

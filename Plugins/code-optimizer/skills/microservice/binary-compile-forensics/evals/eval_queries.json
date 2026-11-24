@@ -1,0 +1,13 @@
+{
+  "skill_name": "binary-compile-forensics",
+  "queries": [
+    { "id": "BCF-01", "prompt": "确认线上部署的这个 .so 真是按 -O3 -mcpu 预期参数编出来的", "should_trigger": true },
+    { "id": "BCF-02", "prompt": "没有 -g 的 release 二进制，怎么知道 SIMD 代码编进去了", "should_trigger": true },
+    { "id": "BCF-03", "prompt": "静态库里出现两个编译器版本串，帮我定位混链来源", "should_trigger": true },
+    { "id": "BCF-04", "prompt": "优化归因前固定一下构建基线，别把构建差异当代码差异", "should_trigger": true },
+    { "id": "BCF-05", "prompt": "这个库跑的是哪个版本、上游有没有修这个问题", "should_trigger": false },
+    { "id": "BCF-06", "prompt": "火焰图里这个库占比多少、值不值得优化", "should_trigger": false },
+    { "id": "BCF-07", "prompt": "改 CMakeLists 让它编出 -O3", "should_trigger": false },
+    { "id": "BCF-08", "prompt": "跑 benchmark 对比两个构建的吞吐", "should_trigger": false }
+  ]
+}

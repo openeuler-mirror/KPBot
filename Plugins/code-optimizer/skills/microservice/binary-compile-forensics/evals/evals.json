@@ -1,0 +1,40 @@
+{
+  "skill_name": "binary-compile-forensics",
+  "evals": [
+    {
+      "id": 0,
+      "name": "config-chain-vs-artifact",
+      "prompt": "构建配置里明确写着 -O3，但优化收益和源码侧预期对不上，怎么确认线上跑的二进制真是 -O3 编的？",
+      "expected_output": "配置继承链任何一层都能覆盖且无法事后自证——以产物为准：跑 inspect_build_flags.sh，看 DW_AT_producer 参数指纹（需 -g 构建或找到分离的 debuginfo）拿到权威实际参数；无 -g 时建议先按 build ID 查找分离的 debuginfo 包，找不到才降级 SIMD 采样（只回答样本中有没有向量代码，不冒充参数证据）。实测案例：libprotobuf 打包链把上游 -O3 覆盖成 -O2，指纹 30 分钟定位一周排查的根因。",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "no-debug-info-fallback",
+      "prompt": "release 产物没有 debug info，DW_AT_producer 读不出来，还能判断它有没有启用 SVE 吗？",
+      "expected_output": "先查 debuginfo 是否分离（按 build ID 或 .gnu_debuglink 找匹配包——常见于发行版打包）——找到后从分离包读指纹。找不到才降级：链 3 SIMD 兜底（反汇编采样统计 z/v 寄存器指令，SVE>50 行=已启用，0=样本中未见不证伪启用）——它回答“采样范围内有没有向量代码”，不回答“具体参数是什么”；判定编译开关需另取参数记录。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "multi-compiler-strings",
+      "prompt": "一个静态库的 .comment 段里同时出现两个不同版本的 GCC 串，这是什么问题？",
+      "expected_output": "混链构建实锤——部分 .o 来自不同工具链（实测案例：混入 GCC 10.3 导致客户侧行为差异追了一周）。用 -a 逐成员检查定位污染成员（脚本会标出每个成员的名称和各自的 .comment 串）；这是取证发现不是检测错误。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "attribution-before-optimization",
+      "prompt": "我们要开始对一个第三方库做优化归因，开工前为什么建议先跑一次编译参数取证？",
+      "expected_output": "固定构建基线，防止把构建差异误归因为代码差异：实测踩过 -886% 假回归（一半根因是 find_package 链错库、另一半就是构建参数未确认）；与 hot-library-version-gap 两步走（先“哪个版本”再“怎么编的”）完成库侧归因基线；归因期间产物不变才可对比。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "exit-code-semantics",
+      "prompt": "脚本跑完有些文件读不了 debug info，只有一个文件的三条链全空，这算成功还是失败？",
+      "expected_output": "三条链全空的文件不等于取证成功——脚本的完成判定以证据为准（至少一条链产出结论才算完成）。该文件不会计入完成数。如果所有文件都如此则 exit 1；有至少一个文件完成则 exit 0 且结论行分别给出完成数/总数和指纹检出数两个独立计数。",
+      "files": []
+    }
+  ]
+}

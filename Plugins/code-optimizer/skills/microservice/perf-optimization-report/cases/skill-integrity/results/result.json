@@ -1,0 +1,10 @@
+{
+  "skill": "perf-optimization-report",
+  "case": "skill-integrity",
+  "pass": true,
+  "checks": 19,
+  "anchors": 11,
+  "links": 5,
+  "sensitive_findings": [],
+  "failures": []
+}
