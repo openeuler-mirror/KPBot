@@ -11,7 +11,7 @@ ttft = net_lb + fe_inputq + fe_addreq + sched_qwait + sched_total
      + fwd_pure + draft + kv_xfer + shm_dq + other
 ```
 
-单位一律 ms。`other` 是兜底项（detokenize、事件循环等未归类时间）。任何一行 `|ttft − Σ阶段| > max(2ms, 2%×ttft)` 视为守恒违例——不是错误数据就删，而是**数据质量信号**：违例占比 >5% 时整份数据的结论要打折扣，报告必须在「数据与运行态」一节明示。
+单位一律 ms。`other` 是兜底项（detokenize、事件循环等未归类时间）。任何一行 `|ttft − Σ阶段| > max(2ms, 2%×ttft)` 视为守恒违例——不是错误数据就删，而是**数据质量信号**：违例占比 >5% 时整份数据的结论要打折扣，报告必须在「数据与运行态」一节明示。一行都检不了（全量行缺阶段列或 ttft 为 0）时守恒校验标**不可判定**，不当作 0% 违例假装通过。
 
 ## 2. 阶段定义与 TP 敏感性
 
@@ -32,8 +32,8 @@ ttft = net_lb + fe_inputq + fe_addreq + sched_qwait + sched_total
 
 两个已知口径坑（继承自打点设计，不是 bug）：
 
-- `defer_finalize=True` 下 producer 侧 `save_kv` 的 sentinel 恒 0、engine 侧 `load_kv` 恒 0——真实值在 pool_worker / kv_transfer 日志里，`kv_xfer` 以日志回填值为准。
-- Ray 聚合日志（log_to_driver）里 worker 行会丢原始文件号，SHM_DEQUEUE 行没有 req 字段——它按 batch 打点，证据链引用时只能给时间戳，不给 req_id。
+- `defer_finalize=True` 下 producer 侧 `save_kv` 的 sentinel 恒 0、engine 侧 `load_kv` 恒 0——真实值在 pool_worker / kv_transfer 日志里，`kv_xfer` 以日志回填值为准。某侧整列恒 0 而另一侧非 0 的阶段，分析脚本会自动标「疑似未回填/口径不一致」并告警，该阶段 Δ% 记不可计算、判定仅用绝对阈值。
+- Ray 聚合日志（log_to_driver）里 worker 行会丢原始文件号，SHM_DEQUEUE 行没有 req 字段——它按 batch 打点，进不了证据链（脚本不读入内存）；证据链引用时只能给时间戳，不给 req_id。
 
 ## 3. 表格格式（kptools-tpsplit-log-analysis 输出，CSV）
 
@@ -46,7 +46,8 @@ ts,request_id,input_len,ttft_ms,net_lb_ms,fe_inputq_ms,fe_addreq_ms,sched_qwait_
 
 - `ts` 是 first token 时刻（BREAKDOWN 行打印时刻）；`request_id` 与日志行里的 `req=` 对齐，是证据链的连接键。
 - 所有 `*_ms` 字段单位 ms，保留 2 位小数。
-- loader 容忍表头多列/缺列（缺的阶段按 0 处理并在报告中标注缺失），但 `ttft_ms`、`sched_qwait_ms` 不可缺。
+- loader 容忍表头多列/缺列（缺的阶段按缺失处理并在报告中标注缺失列，缺列行不计入守恒校验），但 `ttft_ms`、`sched_qwait_ms` 不可缺；`input_len` 缺失保留为空（不算 0），任一侧无有效 `input_len` 时长度分布检查标不可判定。
+- `config.json` 可带 `data_source` 字段声明数据来源（`synthetic`/`measured`），报告会透传该标记。
 
 ## 4. 日志行格式（打点 patch v3.2）
 

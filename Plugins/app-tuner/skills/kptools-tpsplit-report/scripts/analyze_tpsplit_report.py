@@ -4,8 +4,9 @@
 输入：两套数据目录（before/after），每套含：
   ttft_table.csv   —— kptools-tpsplit-log-analysis 解析出的每请求 TTFT 分阶段表
   *.log            —— 打点原始日志（[TTFT][BREAKDOWN] v3 / [LB_DISPATCH] / [TTFT_KVXFER]
-                       / [TTFT_DRAFT] / start_load_kv / [SHM_DEQUEUE_BATCH]），可选
-  config.json      —— 运行态（tp/dp/模型/压测参数），可选
+                        / [TTFT_DRAFT] / start_load_kv），可选；[SHM_DEQUEUE_BATCH] 等
+                        batch 级行无 req 字段、不进证据链，不读入内存
+  config.json      —— 运行态（tp/dp/模型/压测参数），可选；data_source 声明数据来源
 
 输出（--out 前缀）：PREFIX.md（报告）、PREFIX.json（机器可读）、PREFIX.html（自包含网页版，
 含图表与可折叠证据链）。
@@ -43,7 +44,11 @@ STAGE_GROUP = {
 # 阶段 → 专属打点行（证据链 L3 的补充引用；无专属行的阶段以 BREAKDOWN 行为原始证据）
 STAGE_SUPPORT_TAG = {"net_lb": "LB_DISPATCH", "kv_xfer": "KVXFER", "draft": "TTFT_DRAFT"}
 INLEN_BUCKETS = [(0, 1024, "<1024"), (1024, 2048, "1024-2048"),
-                 (2048, 4096, "2048-4096"), (4096, 10 ** 9, ">=4096")]
+                  (2048, 4096, "2048-4096"), (4096, 10 ** 9, ">=4096")]
+# 排队类阶段：其耗时随压测负载变化，两侧压测参数不一致时无法归因于 TP 拆分
+QUEUE_STAGES = ("sched_qwait", "fe_inputq")
+# bench 对比时忽略的键（note 是说明文字，不是压测参数）
+BENCH_IGNORE_KEYS = {"note"}
 
 
 def log(msg):
@@ -61,6 +66,14 @@ def sanitize_nan(obj):
     return obj
 
 
+def safe_pct(new, base):
+    """相对变化%；基线为 0/NaN 等不可计算时返回 None（缺失），不编造 0.0。"""
+    if base is None or base != base or base == 0:
+        return None
+    val = (new / base - 1.0) * 100.0
+    return None if val != val else val
+
+
 # ---------------- 数据加载 ----------------
 
 def load_config(d):
@@ -68,14 +81,14 @@ def load_config(d):
     if os.path.isfile(p):
         try:
             with open(p, encoding="utf-8") as f:
-                return json.load(f)
+                return json.load(f), p
         except Exception:
-            return {}
-    return {}
+            return {}, p
+    return {}, None
 
 
 def load_table(d, warmup_s=0.0):
-    """读 ttft_table.csv（容忍缺列/多列；缺的阶段按缺失处理）。"""
+    """读 ttft_table.csv（容忍缺列/多列；缺的阶段按缺失处理；input_len 缺失保留 None）。"""
     path = None
     for cand in ("ttft_table.csv", "ttft_table.CSV"):
         if os.path.isfile(os.path.join(d, cand)):
@@ -100,8 +113,9 @@ def load_table(d, warmup_s=0.0):
                 req = (r.get("request_id") or "").strip()
                 if not req or r.get("ttft_ms") in (None, ""):
                     continue
+                il = r.get("input_len")
                 row = {"request_id": req,
-                       "input_len": int(float(r.get("input_len") or 0)),
+                       "input_len": (int(float(il)) if il not in (None, "") else None),
                        "ttft": float(r["ttft_ms"])}
                 for s in STAGES:
                     key = s + "_ms"
@@ -125,17 +139,26 @@ def load_table(d, warmup_s=0.0):
             r["ts_epoch"] for r in rows) else None
         if t0 is not None:
             rows = [r for r in rows if r["ts_epoch"] - t0 >= warmup_s]
-    return rows, {"path": base, "missing_stages": missing, "warmup_s": warmup_s}
+    return rows, {"path": base, "full_path": path, "missing_stages": missing,
+                  "warmup_s": warmup_s}
 
 
 def parse_ts(s):
+    """解析 "YYYY-MM-DD HH:MM:SS[.fff]"，保留小数秒。
+
+    strptime 会丢掉 %f、mktime 只给整秒——同一秒内 .100 与 .900 会折叠成同一时刻，
+    sub-second 级的 --warmup-seconds 会误剔数据。这里手动分离小数部分再相加。
+    """
     s = s.strip().replace(",", ".")
-    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return time.mktime(time.strptime(s, fmt))
-        except ValueError:
-            continue
-    return 0.0
+    frac = 0.0
+    head, sep, tail = s.rpartition(".")
+    if sep and tail.isdigit() and 0 < len(tail) <= 9:
+        frac = float("0." + tail)
+        s = head
+    try:
+        return time.mktime(time.strptime(s, "%Y-%m-%d %H:%M:%S")) + frac
+    except ValueError:
+        return 0.0
 
 
 LOG_PATTERNS = {
@@ -145,27 +168,25 @@ LOG_PATTERNS = {
     "TTFT_DRAFT": re.compile(r"\[TTFT_DRAFT\] .*?\breq=(\S+)"),
     "LOAD_KV": re.compile(r"start_load_kv .*?\breq=(\S+)"),
 }
-SHM_BATCH_RE = re.compile(r"\[SHM_DEQUEUE_BATCH\]")
 
 
 def scan_logs(d):
-    """扫描目录下全部 .log，按 req 建索引（BREAKDOWN 优先；每 req 每类留一条）。"""
+    """扫描目录下全部 .log，按 req 建索引（BREAKDOWN 优先；每 req 每类留一条）。
+
+    只索引带 req= 的打点行；[SHM_DEQUEUE_BATCH] 等 batch 级行无 req 字段、进不了
+    证据链，不读入内存——GB 级日志下这类最高频的行按行累积常驻是纯浪费。
+    """
     idx = {tag: {} for tag in LOG_PATTERNS}
-    shm_lines = []  # (lineno, file, text)
     files = [fn for fn in sorted(os.listdir(d)) if fn.lower().endswith(".log")]
     for fn in files:
         with open(os.path.join(d, fn), encoding="utf-8", errors="replace") as f:
             for lineno, line in enumerate(f, 1):
-                line = line.rstrip("\n")
                 for tag, pat in LOG_PATTERNS.items():
                     m = pat.search(line)
                     if m:
-                        idx[tag].setdefault(m.group(1), (fn, lineno, line))
+                        idx[tag].setdefault(m.group(1), (fn, lineno, line.rstrip("\n")))
                         break
-                else:
-                    if SHM_BATCH_RE.search(line):
-                        shm_lines.append((fn, lineno, line))
-    return {"files": files, "by_req": idx, "shm_lines": shm_lines}
+    return {"files": files, "by_req": idx}
 
 
 # ---------------- 统计 ----------------
@@ -206,45 +227,63 @@ def conservation(rows):
 def inlen_buckets(rows):
     out = {}
     for lo, hi, label in INLEN_BUCKETS:
-        sub = [r for r in rows if lo <= r["input_len"] < hi]
+        sub = [r for r in rows
+               if r["input_len"] is not None and lo <= r["input_len"] < hi]
         out[label] = stats_for(sub, "ttft")
     return out
 
 
 def bucket_share(rows):
     n = len(rows) or 1
-    return {label: sum(1 for r in rows if lo <= r["input_len"] < hi) / n
+    return {label: sum(1 for r in rows if r["input_len"] is not None
+                       and lo <= r["input_len"] < hi) / n
             for lo, hi, label in INLEN_BUCKETS}
 
 
 # ---------------- 分析 ----------------
 
 def classify(d_ms, d_pct, th_b_ms, th_pct, th_r_ms):
+    """d_pct 为 None（基线为 0，相对变化不可计算）时只用绝对阈值判定，不编造 0%。"""
     if d_ms is None:
         return "missing"
-    if d_ms <= -th_b_ms and d_pct <= -th_pct:
+    if d_ms <= -th_b_ms and (d_pct is None or d_pct <= -th_pct):
         return "benefit"
-    if d_ms > 0 and (d_ms >= th_r_ms or d_pct >= 2 * th_pct):
+    if d_ms > 0 and (d_ms >= th_r_ms or (d_pct is not None and d_pct >= 2 * th_pct)):
         return "regression"
     return "stable"
 
 
-def build_points(b_rows, a_rows, b_st, a_st, logs_b, logs_a, th):
-    """按 Δms 绝对值排序产出收益/回退点，含三级证据链。"""
+def compute_kinds(b_st, a_st, th, bench_mismatch):
+    """逐阶段判定（含「负载混杂」），收益点列表与 MD/HTML 两张明细表共用同一结果。"""
+    kinds = {}
+    for s in STAGES:
+        bs, as_ = b_st[s], a_st[s]
+        if bs["n"] == 0 or as_["n"] == 0:
+            kinds[s] = "missing"
+            continue
+        d_ms = as_["mean"] - bs["mean"]
+        d_pct = safe_pct(as_["mean"], bs["mean"])
+        kind = classify(d_ms, d_pct, th["benefit_ms"], th["benefit_pct"],
+                        th["regress_ms"])
+        if bench_mismatch and s in QUEUE_STAGES and kind in ("benefit", "regression"):
+            kind = "confounded"
+        kinds[s] = kind
+    return kinds
+
+
+def build_points(b_rows, a_rows, b_st, a_st, logs_b, logs_a, th, kinds):
+    """按 Δms 绝对值排序产出收益/回退点（判定取 compute_kinds），含三级证据链。"""
     points = []
     ttft_d = a_st["ttft"]["mean"] - b_st["ttft"]["mean"]
     for s in STAGES:
+        if kinds[s] not in ("benefit", "regression"):
+            continue
         b, a = b_st[s], a_st[s]
-        if b["n"] == 0 or a["n"] == 0:
-            continue
         d_ms = a["mean"] - b["mean"]
-        d_pct = (a["mean"] / b["mean"] - 1.0) * 100.0 if b["mean"] else 0.0
-        kind = classify(d_ms, d_pct, th["benefit_ms"], th["benefit_pct"], th["regress_ms"])
-        if kind == "stable":
-            continue
+        d_pct = safe_pct(a["mean"], b["mean"])
         contrib = (d_ms / ttft_d * 100.0) if ttft_d else 0.0
         chain = build_chain(s, b_rows, a_rows, logs_b, logs_a)
-        points.append({"stage": s, "kind": kind, "d_ms": d_ms, "d_pct": d_pct,
+        points.append({"stage": s, "kind": kinds[s], "d_ms": d_ms, "d_pct": d_pct,
                        "contrib_pct": contrib, "before": b, "after": a, "chain": chain})
     points.sort(key=lambda p: abs(p["d_ms"]), reverse=True)
     return points
@@ -288,16 +327,141 @@ def quality_report(b_rows, a_rows, b_meta, a_meta, min_samples):
         q = {"side": name, "n": len(rows), "csv": meta["path"],
              "missing_stages": meta["missing_stages"],
              "conservation_bad": bad, "conservation_checked": checked,
-             "conservation_pct": (100.0 * bad / checked) if checked else 0.0,
+             # 0 行可检（全量行缺阶段列或 ttft=0）→ 不可判定，标 None 而非 0% 假通过
+             "conservation_pct": (100.0 * bad / checked) if checked else None,
              "low_sample": len(rows) < min_samples}
         out.append(q)
     return out
 
 
+def find_zero_sides(b_st, a_st):
+    """两侧均在场的阶段里，一侧整列恒 0 而另一侧 >0 —— 疑似打点未回填/口径不一致。"""
+    out = []
+    for s in STAGES:
+        bs, as_ = b_st[s], a_st[s]
+        if not bs["n"] or not as_["n"]:
+            continue
+        if bs["mean"] == 0 and as_["mean"] > 0:
+            out.append({"stage": s, "zero_side": "before"})
+        elif as_["mean"] == 0 and bs["mean"] > 0:
+            out.append({"stage": s, "zero_side": "after"})
+    return out
+
+
+def inlen_check(b_rows, a_rows):
+    """input_len 有效行统计：任一侧无有效值时分布一致性检查不可判定。"""
+    b_valid = [r for r in b_rows if r["input_len"] is not None]
+    a_valid = [r for r in a_rows if r["input_len"] is not None]
+    out = {"before_valid": len(b_valid), "after_valid": len(a_valid),
+           "before_coverage": (len(b_valid) / len(b_rows)) if b_rows else 0.0,
+           "after_coverage": (len(a_valid) / len(a_rows)) if a_rows else 0.0}
+    if not b_valid or not a_valid:
+        out["status"] = "undeterminable"
+    elif len(b_valid) < len(b_rows) or len(a_valid) < len(a_rows):
+        out["status"] = "partial"
+    else:
+        out["status"] = "ok"
+    return out, b_valid, a_valid
+
+
+def detect_source(cfg):
+    """数据来源：优先 config 显式 data_source，其次 bench.note 线索（synth 合成）。"""
+    v = str(cfg.get("data_source", "")).lower()
+    if "synth" in v:
+        return "synthetic"
+    if v in ("measured", "real", "field"):
+        return "measured"
+    if "synth" in str((cfg.get("bench") or {}).get("note", "")).lower():
+        return "synthetic"
+    return "measured"
+
+
+def compare_bench(b_cfg, a_cfg):
+    """对比两侧 config 的 bench 压测参数；只声明在一侧或值不同都算不一致。"""
+    bb, ab = b_cfg.get("bench"), a_cfg.get("bench")
+    if not isinstance(bb, dict) or not isinstance(ab, dict):
+        return {"status": "unverified", "mismatch_keys": []}
+    keys = (set(bb) | set(ab)) - BENCH_IGNORE_KEYS
+    mismatch = sorted(k for k in keys if bb.get(k) != ab.get(k))
+    return {"status": "mismatch" if mismatch else "ok", "mismatch_keys": mismatch}
+
+
+def log_match_count(side):
+    """表格请求在 BREAKDOWN 索引里匹配到的数量——日志证据是否真正可用（有文件≠有证据）。"""
+    if not side["logs"] or not side["logs"]["files"]:
+        return 0
+    br = side["logs"]["by_req"].get("BREAKDOWN") or {}
+    if not br:
+        return 0
+    return len({r["request_id"] for r in side["rows"]} & set(br))
+
+
+def collect_flags(ctx):
+    """统一汇总数据质量告警：MD 第 1 节、HTML 告警块、控制台摘要共用。"""
+    flags = []
+    for sq in ctx["quality"]:
+        cpct = sq["conservation_pct"]
+        if cpct is None:
+            if sq["n"]:
+                flags.append("%s 守恒校验不可判定（0 行可检：全量行缺阶段列或 ttft 为 0，"
+                             "守恒质量未知）" % sq["side"])
+        elif cpct > 5:
+            flags.append("%s 守恒违例 %.1f%%（>5%%，结论需打折）" % (sq["side"], cpct))
+        if sq["low_sample"]:
+            flags.append("%s 样本量 %d 低于下限 %d（分位数不稳）"
+                         % (sq["side"], sq["n"], ctx["min_samples"]))
+    for z in ctx["zero_sides"]:
+        flags.append("`%s` 一侧整列恒 0（%s 侧），疑似打点未回填或两侧口径不一致；"
+                     "该阶段 Δ%% 不可计算，判定仅依据绝对阈值"
+                     % (z["stage"], z["zero_side"]))
+    if ctx["inlen"]["status"] == "undeterminable":
+        flags.append("input_len 缺失或全空（before 有效 %d/%d，after 有效 %d/%d），"
+                     "长度分布一致性不可判定，分层对比不可用"
+                     % (ctx["inlen"]["before_valid"], len(ctx["before"]["rows"]),
+                        ctx["inlen"]["after_valid"], len(ctx["after"]["rows"])))
+    elif ctx["inlen"]["status"] == "partial":
+        flags.append("input_len 部分缺失（before 覆盖 %.0f%%，after 覆盖 %.0f%%），"
+                     "分布一致性按有效行计算"
+                     % (ctx["inlen"]["before_coverage"] * 100,
+                        ctx["inlen"]["after_coverage"] * 100))
+    elif ctx["confound"]:
+        flags.append("两侧 input_len 分布不一致（L1 距离 %.2f > 0.15），原始均值对比被混杂，"
+                     "以第 7 节分层结论为准" % ctx["confound_l1"])
+    if not ctx["has_logs"]:
+        if ctx["log_unmatched_sides"]:
+            flags.append("%s 侧有 .log 文件但没有表格请求匹配到 BREAKDOWN 行"
+                         "（日志与表格可能非同源），证据链 L3 缺失（结论只到表格层）"
+                         % "、".join(ctx["log_unmatched_sides"]))
+        else:
+            flags.append("输入未提供原始日志，证据链 L3 缺失（结论只到表格层）")
+    if ctx["bench"]["status"] == "mismatch":
+        flags.append("两侧压测参数不一致（%s），排队类阶段（sched_qwait、fe_inputq）"
+                     "已暂停收益归因（判「负载混杂」）"
+                     % "、".join(ctx["bench"]["mismatch_keys"]))
+    if ctx["synthetic"]:
+        flags.append("本次输入为仿真合成数据（synthetic，非现场实测），"
+                     "数字仅供演示与回归，不能当作现场优化结果")
+    if ctx["source_mismatch"]:
+        flags.append("两侧数据来源不一致（before=%s，after=%s），对比结论不可信"
+                     % (ctx["b_source"], ctx["a_source"]))
+    return flags
+
+
 # ---------------- Markdown 渲染 ----------------
 
+KIND_CN = {"benefit": "收益", "regression": "回退", "stable": "稳定",
+           "missing": "缺数据", "confounded": "负载混杂"}
+
+
 def fmt_ms(v, digits=1):
-    return ("%%.%df" % digits) % v if v == v else "—"
+    if v is None or v != v:
+        return "—"
+    return ("%%.%df" % digits) % v
+
+
+def fmt_pct_cell(v):
+    """表格里的 Δ% 单元格；基线为 0（不可计算）显式标注而不是假 0。"""
+    return "—（基线为 0）" if v is None else fmt_ms(v)
 
 
 def render_md(ctx):
@@ -307,56 +471,61 @@ def render_md(ctx):
     ps = ctx["points"]
     ttft_b, ttft_a = b["st"]["ttft"], a["st"]["ttft"]
     d_mean = ttft_a["mean"] - ttft_b["mean"]
-    d_pct = (ttft_a["mean"] / ttft_b["mean"] - 1.0) * 100.0
     benefits = [p for p in ps if p["kind"] == "benefit"]
     regressions = [p for p in ps if p["kind"] == "regression"]
     q = ctx["quality"]
 
+    def pct_frag(base_v, new_v):
+        dp = safe_pct(new_v, base_v)
+        return "%s%%" % fmt_ms(dp, 1) if dp is not None else "Δ% 不可算（基线为 0）"
+
     L.append("# %s" % title)
     L.append("")
     has_logs = ctx["has_logs"]
+    if ctx["source_mismatch"]:
+        src_txt = "数据性质：**不一致**（before=%s，after=%s）" % (
+            ctx["b_source"], ctx["a_source"])
+    elif ctx["synthetic"]:
+        src_txt = "数据性质：**仿真数据**（synthetic，非现场实测）"
+    else:
+        src_txt = "数据性质：现场实测"
     L.append("> 工具：kptools-tpsplit-report v0.1.0 ｜ 生成：%s ｜ 数据来源：TTFT 表格"
-             "（kptools-tpsplit-log-analysis 解析）%s"
+             "（kptools-tpsplit-log-analysis 口径）%s ｜ %s"
              % (time.strftime("%Y-%m-%d %H:%M:%S"),
-                "＋ 打点原始日志" if has_logs else "（未提供原始日志，证据止步表格层）"))
+                "＋ 打点原始日志" if has_logs else "（未匹配到原始日志，证据止步表格层）",
+                src_txt))
     L.append("")
 
     # 1. 结论
     L.append("## 1. 结论")
     L.append("")
     verdict = "净收益" if d_mean < 0 else "净回退"
-    L.append("- **总收益：TTFT mean %s→%s ms（%s%%，%s ms）**，P90 %s→%s ms（%s%%），"
-             "P99 %s→%s ms（%s%%）。判定：%s。"
-             % (fmt_ms(ttft_b["mean"]), fmt_ms(ttft_a["mean"]), fmt_ms(d_pct, 1),
-                fmt_ms(d_mean), fmt_ms(ttft_b["p90"]), fmt_ms(ttft_a["p90"]),
-                fmt_ms((ttft_a["p90"] / ttft_b["p90"] - 1) * 100 if ttft_b["p90"] else 0),
+    L.append("- **总收益：TTFT mean %s→%s ms（%s，%s ms）**，P90 %s→%s ms（%s），"
+             "P99 %s→%s ms（%s）。判定：%s。"
+             % (fmt_ms(ttft_b["mean"]), fmt_ms(ttft_a["mean"]),
+                pct_frag(ttft_b["mean"], ttft_a["mean"]), fmt_ms(d_mean),
+                fmt_ms(ttft_b["p90"]), fmt_ms(ttft_a["p90"]),
+                pct_frag(ttft_b["p90"], ttft_a["p90"]),
                 fmt_ms(ttft_b["p99"]), fmt_ms(ttft_a["p99"]),
-                fmt_ms((ttft_a["p99"] / ttft_b["p99"] - 1) * 100 if ttft_b["p99"] else 0),
+                pct_frag(ttft_b["p99"], ttft_a["p99"]),
                 verdict))
     if benefits:
-        top = ", ".join("%s（%s ms / %s%%，贡献 %s%%）" % (
-            STAGE_CN[p["stage"]], fmt_ms(p["d_ms"]), fmt_ms(p["d_pct"]),
+        top = ", ".join("%s（%s ms / %s，贡献 %s%%）" % (
+            STAGE_CN[p["stage"]], fmt_ms(p["d_ms"]),
+            ("%s%%" % fmt_ms(p["d_pct"])) if p["d_pct"] is not None
+            else "Δ% 不可算（基线为 0）",
             fmt_ms(abs(p["contrib_pct"]))) for p in benefits[:3])
         L.append("- **主要收益点**（按 |Δms| 排序）：%s。" % top)
     if regressions:
-        top = ", ".join("%s（+%s ms / +%s%%）" % (STAGE_CN[p["stage"]], fmt_ms(p["d_ms"]),
-                                                  fmt_ms(p["d_pct"])) for p in regressions[:3])
+        top = ", ".join("%s（+%s ms / %s）" % (
+            STAGE_CN[p["stage"]], fmt_ms(p["d_ms"]),
+            ("%s%%" % fmt_ms(p["d_pct"])) if p["d_pct"] is not None
+            else "Δ% 不可算（基线为 0）") for p in regressions[:3])
         L.append("- **回退/风险点**：%s。量级与主要收益相比是否可接受，见第 6 节。" % top)
-    flags = []
-    for side_q in q:
-        if side_q["conservation_pct"] > 5:
-            flags.append("%s 守恒违例 %.1f%%（>5%%，结论需打折）"
-                         % (side_q["side"], side_q["conservation_pct"]))
-        if side_q["low_sample"]:
-            flags.append("%s 样本量 %d 低于下限 %d（分位数不稳）"
-                         % (side_q["side"], side_q["n"], ctx["min_samples"]))
-    if ctx["confound"]:
-        flags.append("两侧 input_len 分布不一致（L1 距离 %.2f > 0.15），原始均值对比被混杂，"
-                     "以第 7 节分层结论为准" % ctx["confound_l1"])
-    if not ctx["has_logs"]:
-        flags.append("输入未提供原始日志，证据链 L3 缺失（结论只到表格层）")
-    L.append("- **数据质量**：%s。" % ("；".join(flags) if flags else "两侧守恒、样本量、"
-                                       "input_len 分布均通过检查，无混杂信号"))
+    flags = ctx["flags"]
+    L.append("- **数据质量**：%s。" % ("；".join(flags) if flags else
+                                       "两侧守恒、样本量、input_len 分布、日志证据、"
+                                       "压测参数均通过检查，无混杂信号"))
     L.append("")
 
     # 2. 数据与运行态
@@ -368,19 +537,30 @@ def render_md(ctx):
                       ("model", "模型"), ("deploy_note", "部署形态")):
         L.append("| %s | %s | %s |" % (name, b["cfg"].get(key, "—"), a["cfg"].get(key, "—")))
     L.append("| 请求数（表格行） | %d | %d |" % (q[0]["n"], q[1]["n"]))
-    L.append("| 守恒违例 | %d/%d（%.1f%%） | %d/%d（%.1f%%） |" % (
-        q[0]["conservation_bad"], q[0]["conservation_checked"], q[0]["conservation_pct"],
-        q[1]["conservation_bad"], q[1]["conservation_checked"], q[1]["conservation_pct"]))
+
+    def cons_cell(sq):
+        if sq["conservation_checked"] == 0:
+            return "不可判定（0 行可检）"
+        return "%d/%d（%.1f%%）" % (sq["conservation_bad"], sq["conservation_checked"],
+                                   sq["conservation_pct"])
+
+    L.append("| 守恒违例 | %s | %s |" % (cons_cell(q[0]), cons_cell(q[1])))
     miss_b = [x for x in q[0]["missing_stages"] if x]
     miss_a = [x for x in q[1]["missing_stages"] if x]
     if miss_b or miss_a:
         L.append("| 缺失阶段列 | %s | %s |" % ("、".join(miss_b) or "—",
-                                             "、".join(miss_a) or "—"))
+                                              "、".join(miss_a) or "—"))
     L.append("| 原始日志 | %s | %s |" % (
         "、".join(b["logs"]["files"]) if b["logs"] and b["logs"]["files"] else "无",
         "、".join(a["logs"]["files"]) if a["logs"] and a["logs"]["files"] else "无"))
+    L.append("| 日志匹配请求 | %d/%d | %d/%d |" % (
+        ctx["log_matches"]["before"], len(b["rows"]),
+        ctx["log_matches"]["after"], len(a["rows"])))
+    L.append("| 数据来源 | %s | %s |" % (ctx["b_source"], ctx["a_source"]))
     L.append("")
-    L.append("数字口径：表格为**实测**（打点解析），Δ 与贡献度为**计算**值；单位 ms。")
+    L.append("数字口径：表格为**%s**（打点解析），Δ 与贡献度为**计算**值；单位 ms。"
+             % ("仿真数据（synthetic，不能当作现场结果）" if ctx["synthetic"]
+                else "现场实测"))
     L.append("")
 
     # 3. TTFT 总览
@@ -391,15 +571,15 @@ def render_md(ctx):
     for k, name in (("mean", "mean"), ("p50", "P50"), ("p90", "P90"), ("p99", "P99"),
                     ("max", "max")):
         d = ttft_a[k] - ttft_b[k]
-        dp = (ttft_a[k] / ttft_b[k] - 1) * 100 if ttft_b[k] else 0
         L.append("| %s | %s | %s | %s | %s |" % (name, fmt_ms(ttft_b[k]), fmt_ms(ttft_a[k]),
-                                                  fmt_ms(d), fmt_ms(dp)))
+                                                  fmt_ms(d),
+                                                  fmt_pct_cell(safe_pct(ttft_a[k], ttft_b[k]))))
     L.append("")
 
     # 4. 分阶段拆解
     L.append("## 4. 分阶段拆解对比（按 mean）")
     L.append("")
-    L.append("| 阶段 | 分组 | before mean | after mean | Δms | Δ%% | 贡献度* | 判定 |")
+    L.append("| 阶段 | 分组 | before mean | after mean | Δms | Δ% | 贡献度* | 判定 |")
     L.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
     for s in STAGES:
         bs, as_ = ctx["before"]["st"][s], ctx["after"]["st"][s]
@@ -408,16 +588,20 @@ def render_md(ctx):
                       % (STAGE_CN[s], STAGE_GROUP[s]))
             continue
         d_ms = as_["mean"] - bs["mean"]
-        d_pct = (as_["mean"] / bs["mean"] - 1) * 100 if bs["mean"] else 0
-        kind = {"benefit": "收益", "regression": "回退", "stable": "稳定",
-                "missing": "缺数据"}[classify(d_ms, d_pct, ctx["th"]["benefit_ms"],
-                                              ctx["th"]["benefit_pct"], ctx["th"]["regress_ms"])]
+        kind = ctx["kinds"][s]
         contrib = d_ms / d_mean * 100 if d_mean else 0
         L.append("| %s（%s） | %s | %s | %s | %s | %s | %s%% | %s |" % (
             STAGE_CN[s], s, STAGE_GROUP[s], fmt_ms(bs["mean"]), fmt_ms(as_["mean"]),
-            fmt_ms(d_ms), fmt_ms(d_pct), fmt_ms(contrib), kind))
+            fmt_ms(d_ms), fmt_pct_cell(safe_pct(as_["mean"], bs["mean"])),
+            fmt_ms(contrib), KIND_CN[kind]))
+    if any(k == "confounded" for k in ctx["kinds"].values()):
+        L.append("")
+        L.append("> ⚠️ 两侧压测参数不一致（%s），排队类阶段（`sched_qwait`、`fe_inputq`）"
+                 "的 Δ 无法区分「TP 拆分」与「负载变化」，已暂停其收益/回退归因"
+                 "（判「负载混杂」）。" % "、".join(ctx["bench"]["mismatch_keys"]))
     L.append("")
-    L.append("*贡献度 = 该阶段 Δms ÷ TTFT Δms（改善为负时，负贡献 = 拉低改善；总和 ≈ 100%）。")
+    L.append("*贡献度 = 该阶段 Δms ÷ TTFT Δms（改善为负时，负贡献 = 拉低改善；总和 ≈ 100%）。"
+             "Δ% 为「—（基线为 0）」时表示基线均值为 0、相对变化不可计算，该阶段判定仅依据绝对阈值。")
     L.append("")
 
     # 5. 收益点与证据链
@@ -445,10 +629,23 @@ def render_md(ctx):
     # 7. 分输入长度分层
     L.append("## 7. 分输入长度分层对比")
     L.append("")
-    if ctx["confound"]:
+    if ctx["inlen"]["status"] == "undeterminable":
+        L.append("> ⚠️ input_len 列缺失或全空（before 有效 %d/%d，after 有效 %d/%d），"
+                 "长度分布一致性**不可判定**，分层对比不可用——第 3 节的均值差可能含"
+                 "长度混杂，下结论前需补齐 input_len 再跑。"
+                 % (ctx["inlen"]["before_valid"], len(b["rows"]),
+                    ctx["inlen"]["after_valid"], len(a["rows"])))
+        L.append("")
+    elif ctx["confound"]:
         L.append("> ⚠️ 两侧 input_len 分布不一致（before 均值 %d vs after 均值 %d token），"
                  "第 3 节的原始均值差有混杂成分；本节按桶分层后的对比才是干净结论。"
                  % (ctx["b_inlen_mean"], ctx["a_inlen_mean"]))
+        L.append("")
+    elif ctx["inlen"]["status"] == "partial":
+        L.append("> input_len 部分缺失（before 覆盖 %.0f%%，after 覆盖 %.0f%%），"
+                 "本节分层对比基于有效行。"
+                 % (ctx["inlen"]["before_coverage"] * 100,
+                    ctx["inlen"]["after_coverage"] * 100))
         L.append("")
     L.append("| input_len 桶 | before n | before TTFT mean | after n | after TTFT mean | Δms | Δ% |")
     L.append("| --- | --- | --- | --- | --- | --- | --- |")
@@ -459,10 +656,9 @@ def render_md(ctx):
             L.append("| %s | %d | — | %d | — | — | — |" % (label, bb["n"], ab["n"]))
             continue
         d = ab["mean"] - bb["mean"]
-        dp = (ab["mean"] / bb["mean"] - 1) * 100 if bb["mean"] else 0
         L.append("| %s | %d | %s | %d | %s | %s | %s |" % (
             label, bb["n"], fmt_ms(bb["mean"]), ab["n"], fmt_ms(ab["mean"]),
-            fmt_ms(d), fmt_ms(dp)))
+            fmt_ms(d), fmt_pct_cell(safe_pct(ab["mean"], bb["mean"]))))
     L.append("")
 
     # 8. 假设与未测项
@@ -470,23 +666,42 @@ def render_md(ctx):
     L.append("")
     L.append("- 本报告只比较 TTFT 及其阶段拆解；**吞吐、显存、长稳（数小时漂移）未在数据内**，"
              "下结论前需另行验证。")
-    L.append("- 两次采集的流量形态按 config 声明一致处理；若实际压测脚本/并发参数不同，"
-             "排队类阶段（`sched_qwait`、`fe_inputq`）的对比不成立。")
+    if ctx["bench"]["status"] == "unverified":
+        L.append("- 两侧 config 未提供 bench 压测参数，流量一致性**未核对**，按声明一致处理；"
+                 "若实际压测脚本/并发参数不同，排队类阶段（`sched_qwait`、`fe_inputq`）"
+                 "的对比不成立。")
+    elif ctx["bench"]["status"] == "mismatch":
+        L.append("- 两侧压测参数不一致（%s），排队类阶段（`sched_qwait`、`fe_inputq`）已"
+                 "**暂停收益归因**——这部分 Δ 更可能来自负载变化而非 TP 拆分，"
+                 "需要同参数重采后再对比。"
+                 % "、".join(ctx["bench"]["mismatch_keys"]))
+    else:
+        L.append("- 两次采集的流量形态按 config 声明一致处理；若实际压测脚本/并发参数不同，"
+                 "排队类阶段（`sched_qwait`、`fe_inputq`）的对比不成立。")
     L.append("- `kv_xfer` 依据打点回填值（pool_worker/kv_transfer 日志），"
-             "`defer_finalize` 下 engine 侧 load_kv 恒 0 属已知口径。")
+             "`defer_finalize` 下 engine 侧 load_kv 恒 0 属已知口径；脚本会对"
+             "「一侧整列恒 0」的阶段自动告警（疑似未回填/口径不一致）。")
+    if ctx["synthetic"]:
+        L.append("- 本次输入为**仿真合成数据**（synthetic），收益数字仅用于演示/回归，"
+                 "不能当作现场优化结果。")
     if not ctx["has_logs"]:
-        L.append("- 本次输入缺少原始日志，全部证据止步于表格层（L2），"
-                 "未能回溯 BREAKDOWN 原始行（L3）；拿到日志后重跑即可补全证据链。")
+        L.append("- 本次输入%s，全部证据止步于表格层（L2），"
+                 "未能回溯 BREAKDOWN 原始行（L3）；拿到可匹配的日志后重跑即可补全证据链。"
+                 % ("缺少原始日志" if not ctx["log_unmatched_sides"]
+                    else "%s 侧日志未匹配到表格请求（日志与表格可能非同源）"
+                         % "、".join(ctx["log_unmatched_sides"])))
     L.append("")
     return "\n".join(L)
 
 
 def emit_point(L, p, ctx):
     d_ms_str = ("%+.1f" % p["d_ms"]) if p["d_ms"] > 0 else fmt_ms(p["d_ms"])
-    L.append("- **L1 Claim**：%s mean %s → %s ms（%s ms，%s%%，占 TTFT 变化的 %s%%）；"
+    dp_str = ("%s%%" % fmt_ms(p["d_pct"])) if p["d_pct"] is not None \
+        else "Δ% 不可算（基线为 0）"
+    L.append("- **L1 Claim**：%s mean %s → %s ms（%s ms，%s，占 TTFT 变化的 %s%%）；"
              "P90 %s → %s ms。"
              % (STAGE_CN[p["stage"]], fmt_ms(p["before"]["mean"]), fmt_ms(p["after"]["mean"]),
-                d_ms_str, fmt_ms(p["d_pct"]), fmt_ms(abs(p["contrib_pct"])),
+                d_ms_str, dp_str, fmt_ms(abs(p["contrib_pct"])),
                 fmt_ms(p["before"]["p90"]), fmt_ms(p["after"]["p90"])))
     L.append("- **L2 支撑数据**（表格实测，mean/P50/P90/P99）：" + "  ".join(
         "%s %s/%s/%s/%s ms" % (side, fmt_ms(p[side]["mean"]), fmt_ms(p[side]["p50"]),
@@ -613,7 +828,7 @@ def svg_stage_delta(title, points, width=880):
 
 
 def fmt_num(v):
-    if v != v:
+    if v is None or v != v:
         return "—"
     return ("%.0f" % v) if abs(v) >= 100 else ("%.1f" % v)
 
@@ -637,7 +852,7 @@ th:first-child,td:first-child{text-align:left}
 th{background:#edf2f7}
 .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
 .tag.benefit{background:#c6f6d5;color:#22543d}.tag.regression{background:#fed7d7;color:#742a2a}
-.tag.stable{background:#e2e8f0;color:#4a5568}
+.tag.stable{background:#e2e8f0;color:#4a5568}.tag.confounded{background:#fefcbf;color:#744210}
 details{background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin:8px 0;padding:8px 14px}
 summary{cursor:pointer;font-weight:600}
 pre{background:#2d3748;color:#e2e8f0;border-radius:6px;padding:8px 12px;overflow-x:auto;font-size:12px}
@@ -657,19 +872,28 @@ def render_html(ctx):
     ps = ctx["points"]
     ttft_b, ttft_a = b["st"]["ttft"], a["st"]["ttft"]
     d_mean = ttft_a["mean"] - ttft_b["mean"]
-    d_pct = (ttft_a["mean"] / ttft_b["mean"] - 1) * 100
+    d_pct = safe_pct(ttft_a["mean"], ttft_b["mean"])
     benefits = [p for p in ps if p["kind"] == "benefit"]
     regressions = [p for p in ps if p["kind"] == "regression"]
     H = []
     title = ctx.get("title") or "TP 拆分收益对比报告：%s → %s" % (b["label"], a["label"])
+    if ctx["source_mismatch"]:
+        src_note = "数据性质：不一致（before=%s，after=%s）" % (
+            ctx["b_source"], ctx["a_source"])
+    elif ctx["synthetic"]:
+        src_note = "数据性质：<b>仿真数据</b>（synthetic，非现场实测）"
+    else:
+        src_note = "数据性质：现场实测"
     H.append("<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>")
     H.append("<meta name='viewport' content='width=device-width,initial-scale=1'>")
     H.append("<title>%s</title>" % esc(title))
     H.append("<style>%s</style></head><body><div class='wrap'>" % HTML_STYLE)
     H.append("<h1>%s</h1>" % esc(title))
-    H.append("<p class='note'>kptools-tpsplit-report v0.1.0 ｜ %s ｜ 数据：TTFT 表格%s</p>"
+    H.append("<p class='note'>kptools-tpsplit-report v0.1.0 ｜ %s ｜ 数据：TTFT 表格%s"
+             " ｜ %s</p>"
              % (time.strftime("%Y-%m-%d %H:%M:%S"),
-                " ＋ 打点原始日志" if ctx["has_logs"] else "（未提供原始日志，证据止步表格层）"))
+                " ＋ 打点原始日志" if ctx["has_logs"] else "（未匹配到原始日志，证据止步表格层）",
+                src_note))
 
     H.append("<h2>总览</h2>")
 
@@ -677,41 +901,33 @@ def render_html(ctx):
         return ("<div class='card'><div class='k'>%s</div><div class='v %s'>%s</div>"
                 "<div class='sub'>%s</div></div>" % (label, cls, value, sub))
 
+    def sub_pct(base_v, new_v, d_ms):
+        dp = safe_pct(new_v, base_v)
+        head = ("%s%%" % fmt_num(dp)) if dp is not None else "Δ% 不可算（基线为 0）"
+        return "%s（%s ms）" % (head, fmt_num(d_ms))
+
     H.append("<div class='cards'>")
     H.append(card("TTFT mean",
                   "%s → %s ms" % (fmt_num(ttft_b["mean"]), fmt_num(ttft_a["mean"])),
-                  "%s%%（%s ms）" % (fmt_num(d_pct), fmt_num(d_mean)),
+                  sub_pct(ttft_b["mean"], ttft_a["mean"], d_mean),
                   "good" if d_mean < 0 else "bad"))
     for key in ("p90", "p99"):
         vb, va = ttft_b[key], ttft_a[key]
         H.append(card("TTFT %s" % key.upper(),
                       "%s → %s ms" % (fmt_num(vb), fmt_num(va)),
-                      "%s%%（%s ms）" % (fmt_num((va / vb - 1) * 100 if vb else 0),
-                                         fmt_num(va - vb)),
+                      sub_pct(vb, va, va - vb),
                       "good" if va < vb else "bad"))
-    cons_max = max(ctx["quality"][0]["conservation_pct"],
-                   ctx["quality"][1]["conservation_pct"])
+    cps = [sq["conservation_pct"] for sq in ctx["quality"]]
+    cons_txt = ("守恒校验不可判定（0 行可检）" if any(c is None for c in cps)
+                else "守恒违例 %.1f%%" % max(cps))
     H.append(card("样本（before / after）",
                   "%d / %d" % (ctx["quality"][0]["n"], ctx["quality"][1]["n"]),
-                  "守恒违例 %.1f%%" % cons_max))
+                  cons_txt))
     H.append("</div>")
-    if not ctx["has_logs"] or ctx["confound"] or ctx["quality"][0]["conservation_pct"] > 5 \
-            or ctx["quality"][1]["conservation_pct"] > 5 or ctx["quality"][0]["low_sample"] \
-            or ctx["quality"][1]["low_sample"]:
-        H.append("<div class='warn'><b>数据质量告警：</b>")
-        msgs = []
-        if not ctx["has_logs"]:
-            msgs.append("未提供原始日志，证据链 L3 缺失（结论只到表格层）")
-        for sq in ctx["quality"]:
-            if sq["conservation_pct"] > 5:
-                msgs.append("%s 守恒违例 %.1f%%" % (sq["side"], sq["conservation_pct"]))
-            if sq["low_sample"]:
-                msgs.append("%s 样本 %d 低于下限 %d" % (sq["side"], sq["n"], ctx["min_samples"]))
-        if ctx["confound"]:
-            msgs.append("input_len 分布不一致（L1=%.2f），均值对比有混杂，以分层结论为准"
-                       % ctx["confound_l1"])
-        H.append("；".join(esc(m) for m in msgs))
-        H.append("</div>")
+    flags = ctx["flags"]
+    if flags:
+        H.append("<div class='warn'><b>数据质量告警：</b>%s</div>"
+                 % "；".join(esc(m) for m in flags))
 
     H.append("<h2>TTFT 分位数对比</h2>")
     H.append(svg_grouped_bars(
@@ -720,29 +936,30 @@ def render_html(ctx):
          ("P90", ttft_b["p90"], ttft_a["p90"]), ("P99", ttft_b["p99"], ttft_a["p99"])]))
     H.append("<h2>分阶段 Δ（mean）</h2>")
     H.append(svg_stage_delta("各阶段 Δms（改善向左 / 回退向右）", ps or
-                             [{"stage": s, "d_ms": a["st"][s]["mean"] - b["st"][s]["mean"]}
-                              for s in STAGES
-                              if b["st"][s]["n"] and a["st"][s]["n"]]))
+                              [{"stage": s, "d_ms": a["st"][s]["mean"] - b["st"][s]["mean"]}
+                               for s in STAGES
+                               if b["st"][s]["n"] and a["st"][s]["n"]]))
 
     H.append("<h2>分阶段明细</h2>")
     H.append("<table><tr><th>阶段</th><th>分组</th><th>before</th><th>after</th>"
-             "<th>Δms</th><th>Δ%</th><th>判定</th></tr>")
+              "<th>Δms</th><th>Δ%</th><th>判定</th></tr>")
     for s in STAGES:
         bs, as_ = b["st"][s], a["st"][s]
         if bs["n"] == 0 or as_["n"] == 0:
             continue
-        d_ms = as_["mean"] - bs["mean"]
-        d_pct = (as_["mean"] / bs["mean"] - 1) * 100 if bs["mean"] else 0
-        kind = classify(d_ms, d_pct, ctx["th"]["benefit_ms"], ctx["th"]["benefit_pct"],
-                        ctx["th"]["regress_ms"])
+        kind = ctx["kinds"][s]
         tag = {"benefit": "benefit", "regression": "regression", "stable": "stable",
-               "missing": "stable"}[kind]
-        name = {"benefit": "收益", "regression": "回退", "stable": "稳定", "missing": "缺数据"}[kind]
+               "confounded": "confounded", "missing": "stable"}[kind]
         H.append("<tr><td>%s<br><small>%s</small></td><td>%s</td><td>%s</td><td>%s</td>"
-                 "<td>%s</td><td>%s</td><td><span class='tag %s'>%s</span></td></tr>" % (
-                     esc(STAGE_CN[s]), s, STAGE_GROUP[s], fmt_num(bs["mean"]),
-                     fmt_num(as_["mean"]), fmt_num(d_ms), fmt_num(d_pct), tag, name))
+                  "<td>%s</td><td>%s</td><td><span class='tag %s'>%s</span></td></tr>" % (
+                      esc(STAGE_CN[s]), s, STAGE_GROUP[s], fmt_num(bs["mean"]),
+                      fmt_num(as_["mean"]), fmt_num(as_["mean"] - bs["mean"]),
+                      fmt_num(safe_pct(as_["mean"], bs["mean"])), tag, KIND_CN[kind]))
     H.append("</table>")
+    if any(k == "confounded" for k in ctx["kinds"].values()):
+        H.append("<p class='note'>两侧压测参数不一致（%s）：排队类阶段"
+                 "（sched_qwait、fe_inputq）已暂停收益归因（判「负载混杂」）。</p>"
+                 % esc("、".join(ctx["bench"]["mismatch_keys"])))
 
     for title, plist in (("收益点与证据链", benefits), ("风险与回退点", regressions)):
         H.append("<h2>%s</h2>" % esc(title))
@@ -776,28 +993,55 @@ def render_html(ctx):
             H.append("</details>")
 
     H.append("<h2>分输入长度分层</h2>")
+    if ctx["inlen"]["status"] == "undeterminable":
+        H.append("<p class='note'>input_len 列缺失或全空（before 有效 %d/%d，after 有效 "
+                  "%d/%d）：长度分布一致性不可判定，分层对比不可用。</p>"
+                  % (ctx["inlen"]["before_valid"], len(b["rows"]),
+                     ctx["inlen"]["after_valid"], len(a["rows"])))
+    elif ctx["confound"]:
+        H.append("<div class='warn'>两侧 input_len 分布不一致（L1=%.2f > 0.15），"
+                 "原始均值对比有混杂，以本节分层结论为准。</div>" % ctx["confound_l1"])
+    elif ctx["inlen"]["status"] == "partial":
+        H.append("<p class='note'>input_len 部分缺失（before 覆盖 %.0f%%，after 覆盖 "
+                  "%.0f%%），分层对比基于有效行。</p>"
+                  % (ctx["inlen"]["before_coverage"] * 100,
+                     ctx["inlen"]["after_coverage"] * 100))
     H.append(svg_grouped_bars(
         "各 input_len 桶的 TTFT mean（ms）",
         [(label, ctx["b_buckets"][label]["mean"], ctx["a_buckets"][label]["mean"])
          for _, _, label in INLEN_BUCKETS
          if ctx["b_buckets"][label]["n"] and ctx["a_buckets"][label]["n"]]))
     H.append("<table><tr><th>桶</th><th>before n</th><th>before mean</th><th>after n</th>"
-             "<th>after mean</th><th>Δms</th></tr>")
+              "<th>after mean</th><th>Δms</th></tr>")
     for _, _, label in INLEN_BUCKETS:
         bb, ab = ctx["b_buckets"][label], ctx["a_buckets"][label]
         if not bb["n"] or not ab["n"]:
             H.append("<tr><td>%s</td><td>%d</td><td>—</td><td>%d</td><td>—</td><td>—</td></tr>"
-                     % (esc(label), bb["n"], ab["n"]))
+                      % (esc(label), bb["n"], ab["n"]))
             continue
         H.append("<tr><td>%s</td><td>%d</td><td>%s</td><td>%d</td><td>%s</td><td>%s</td></tr>"
-                 % (esc(label), bb["n"], fmt_num(bb["mean"]), ab["n"], fmt_num(ab["mean"]),
-                    fmt_num(ab["mean"] - bb["mean"])))
+                  % (esc(label), bb["n"], fmt_num(bb["mean"]), ab["n"], fmt_num(ab["mean"]),
+                     fmt_num(ab["mean"] - bb["mean"])))
     H.append("</table>")
 
+    if ctx["bench"]["status"] == "unverified":
+        bench_li = ("<li>两侧 config 未提供 bench 压测参数，流量一致性未核对，"
+                    "按声明一致处理；实际不同则排队类阶段对比不成立。</li>")
+    elif ctx["bench"]["status"] == "mismatch":
+        bench_li = ("<li>两侧压测参数不一致（%s）：排队类阶段已"
+                    "<b>暂停收益归因</b>（判「负载混杂」），需同参数重采后再对比。</li>"
+                    % esc("、".join(ctx["bench"]["mismatch_keys"])))
+    else:
+        bench_li = ("<li>两次采集按 config 声明流量一致处理；"
+                    "实际不同则排队类阶段对比不成立。</li>")
+    synth_li = ("<li>本次输入为<b>仿真合成数据</b>（synthetic），收益数字仅用于演示/回归，"
+                "不能当作现场优化结果。</li>" if ctx["synthetic"] else "")
     H.append("<h2>假设与未测项</h2><ul>"
-             "<li>只比较 TTFT 及其拆解；吞吐/显存/长稳未在数据内。</li>"
-             "<li>两次采集按 config 声明流量一致处理；实际不同则排队类阶段对比不成立。</li>"
-             "<li><code>kv_xfer</code> 为打点回填口径（defer_finalize 设计，engine 侧恒 0）。</li></ul>")
+              "<li>只比较 TTFT 及其拆解；吞吐/显存/长稳未在数据内。</li>"
+              "%s"
+              "<li><code>kv_xfer</code> 为打点回填口径（defer_finalize 设计，engine 侧恒 0）；"
+              "一侧整列恒 0 的阶段会被自动告警（疑似未回填/口径不一致）。</li>%s</ul>"
+              % (bench_li, synth_li))
     H.append("</div></body></html>")
     return "".join(H)
 
@@ -805,13 +1049,17 @@ def render_html(ctx):
 # ---------------- 主流程 ----------------
 
 def load_side(d, warmup, min_samples):
-    cfg = load_config(d)
+    cfg, cfg_path = load_config(d)
     rows, meta = load_table(d, warmup)
-    logs = scan_logs(d) if any(fn.lower().endswith(".log") for fn in os.listdir(d)) else None
+    log_files = [fn for fn in sorted(os.listdir(d)) if fn.lower().endswith(".log")]
+    logs = scan_logs(d) if log_files else None
     label = cfg.get("label") or os.path.basename(os.path.abspath(d))
     st = {s: stats_for(rows, s) for s in (["ttft"] + STAGES)}
+    # 本次实际读取的全部输入文件：供输出路径冲突检测（防 --out 覆盖原件）
+    input_files = [meta["full_path"]] + ([cfg_path] if cfg_path else []) \
+        + [os.path.join(d, fn) for fn in log_files]
     return {"dir": d, "cfg": cfg, "label": label, "rows": rows, "meta": meta,
-            "logs": logs, "st": st}
+            "logs": logs, "st": st, "input_files": input_files}
 
 
 def main():
@@ -842,31 +1090,69 @@ def main():
     a = load_side(args.after, args.warmup_seconds, args.min_samples)
     if not b["rows"] or not a["rows"]:
         sys.exit("表格为空，无法对比")
-    has_logs = all(s["logs"] and s["logs"]["files"] for s in (b, a))
 
-    th = {"benefit_ms": args.benefit_ms, "benefit_pct": args.benefit_pct,
-          "regress_ms": args.regress_ms}
-    points = build_points(b["rows"], a["rows"], b["st"], a["st"],
-                          b["logs"], a["logs"], th)
-    quality = quality_report(b["rows"], a["rows"], b["meta"], a["meta"], args.min_samples)
-    bs, as_ = bucket_share(b["rows"]), bucket_share(a["rows"])
-    l1 = sum(abs(bs[k] - as_[k]) for k in bs)
-    confound = l1 > 0.15
-    ctx = {
-        "before": b, "after": a, "points": points, "quality": quality, "th": th,
-        "min_samples": args.min_samples, "confound": confound, "confound_l1": l1,
-        "has_logs": has_logs,
-        "b_buckets": inlen_buckets(b["rows"]), "a_buckets": inlen_buckets(a["rows"]),
-        "b_inlen_mean": (sum(r["input_len"] for r in b["rows"]) / len(b["rows"])),
-        "a_inlen_mean": (sum(r["input_len"] for r in a["rows"]) / len(a["rows"])),
-        "title": args.title,
-    }
-
+    # ---- 打开任何输出文件前的校验：避免中途异常留下半成品报告/覆盖输入原件 ----
+    bm = b["st"]["ttft"]["mean"]
+    if bm != bm or bm == 0:
+        sys.exit("before 侧 TTFT 均值为 %s（全部请求 ttft_ms=0 或非数值？）："
+                 "相对变化不可计算，拒绝生成对比报告——请检查表格数据" % bm)
     out_dir = os.path.dirname(os.path.abspath(args.out)) or "."
     os.makedirs(out_dir, exist_ok=True)
     md_path = args.out + ".md"
     html_path = args.out + ".html"
     json_path = args.out + ".json"
+
+    def norm(p):
+        return os.path.normcase(os.path.normpath(os.path.abspath(p)))
+
+    targets = {norm(p) for p in (md_path, html_path, json_path)}
+    for inp in b["input_files"] + a["input_files"]:
+        if norm(inp) in targets:
+            sys.exit("输出路径与输入文件冲突：%s\n--out 的 .md/.html/.json 会覆盖刚读过的"
+                     "输入原件，已拒绝执行——请更换 --out 前缀" % inp)
+
+    th = {"benefit_ms": args.benefit_ms, "benefit_pct": args.benefit_pct,
+          "regress_ms": args.regress_ms}
+    bench = compare_bench(b["cfg"], a["cfg"])
+    kinds = compute_kinds(b["st"], a["st"], th, bench["status"] == "mismatch")
+    points = build_points(b["rows"], a["rows"], b["st"], a["st"],
+                          b["logs"], a["logs"], th, kinds)
+    quality = quality_report(b["rows"], a["rows"], b["meta"], a["meta"], args.min_samples)
+    zero_sides = find_zero_sides(b["st"], a["st"])
+    inlen, b_valid, a_valid = inlen_check(b["rows"], a["rows"])
+    if inlen["status"] == "undeterminable":
+        confound, l1 = False, None
+    else:
+        shares_b, shares_a = bucket_share(b_valid), bucket_share(a_valid)
+        l1 = sum(abs(shares_b[k] - shares_a[k]) for k in shares_b)
+        confound = l1 > 0.15
+
+    def side_has_files(s):
+        return bool(s["logs"] and s["logs"]["files"])
+
+    log_matches = {"before": log_match_count(b), "after": log_match_count(a)}
+    unmatched_sides = [name for name, s in (("before", b), ("after", a))
+                       if side_has_files(s) and log_matches[name] == 0]
+    has_logs = (side_has_files(b) and side_has_files(a)
+                and log_matches["before"] > 0 and log_matches["after"] > 0)
+    b_source, a_source = detect_source(b["cfg"]), detect_source(a["cfg"])
+    synthetic = b_source == "synthetic" or a_source == "synthetic"
+    source_mismatch = b_source != a_source
+
+    ctx = {
+        "before": b, "after": a, "points": points, "quality": quality, "th": th,
+        "min_samples": args.min_samples, "confound": confound, "confound_l1": l1,
+        "inlen": inlen, "kinds": kinds, "zero_sides": zero_sides, "bench": bench,
+        "log_matches": log_matches, "log_unmatched_sides": unmatched_sides,
+        "has_logs": has_logs, "b_source": b_source, "a_source": a_source,
+        "synthetic": synthetic, "source_mismatch": source_mismatch,
+        "b_buckets": inlen_buckets(b["rows"]), "a_buckets": inlen_buckets(a["rows"]),
+        "b_inlen_mean": (sum(r["input_len"] for r in b_valid) / len(b_valid)) if b_valid else None,
+        "a_inlen_mean": (sum(r["input_len"] for r in a_valid) / len(a_valid)) if a_valid else None,
+        "title": args.title,
+    }
+    ctx["flags"] = collect_flags(ctx)
+
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(render_md(ctx))
     with open(html_path, "w", encoding="utf-8") as f:
@@ -874,31 +1160,37 @@ def main():
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(sanitize_nan({
             "before": {"label": b["label"], "cfg": b["cfg"], "n": len(b["rows"]),
-                       "stats": b["st"]},
+                        "stats": b["st"]},
             "after": {"label": a["label"], "cfg": a["cfg"], "n": len(a["rows"]),
-                      "stats": a["st"]},
+                       "stats": a["st"]},
             "ttft_delta_mean_ms": a["st"]["ttft"]["mean"] - b["st"]["ttft"]["mean"],
             "points": [{k: p[k] for k in ("stage", "kind", "d_ms", "d_pct",
                                           "contrib_pct")} for p in points],
+            "stage_kinds": kinds,
             "quality": quality, "confound_l1": l1, "has_logs": has_logs,
+            "log_matches": log_matches,
+            "data_source": {"before": b_source, "after": a_source},
+            "bench": bench, "inlen": inlen, "zero_sides": zero_sides,
+            "flags": ctx["flags"],
         }), f, ensure_ascii=False, indent=2, default=str)
 
     # 控制台摘要
-    ttft_d = a["st"]["ttft"]["mean"] - b["st"]["ttft"]["mean"]
     log("=" * 62)
     log("对比完成：%s (n=%d) → %s (n=%d)"
         % (b["label"], len(b["rows"]), a["label"], len(a["rows"])))
-    log("TTFT mean %s → %s ms (%s%%)" % (fmt_num(b["st"]["ttft"]["mean"]),
-                                         fmt_num(a["st"]["ttft"]["mean"]),
-                                         fmt_num((a["st"]["ttft"]["mean"] /
-                                                  b["st"]["ttft"]["mean"] - 1) * 100)))
+    dp = safe_pct(a["st"]["ttft"]["mean"], b["st"]["ttft"]["mean"])
+    log("TTFT mean %s → %s ms (%s)"
+        % (fmt_num(b["st"]["ttft"]["mean"]), fmt_num(a["st"]["ttft"]["mean"]),
+           ("%s%%" % fmt_num(dp)) if dp is not None else "Δ% 不可算"))
     for p in points[:8]:
-        log("  [%s] %-14s %+9.1f ms (%+6.1f%%)  贡献 %5.1f%%"
-            % (p["kind"][:4], p["stage"], p["d_ms"], p["d_pct"], p["contrib_pct"]))
-    log("数据质量：" + ("OK" if has_logs and not ctx["confound"] and
-                         all(q["conservation_pct"] <= 5 and not q["low_sample"]
-                             for q in quality) else "有告警（见报告第1节）"
-                         + ("" if has_logs else "，含缺原始日志")))
+        dp_s = ("%+6.1f%%" % p["d_pct"]) if p["d_pct"] is not None else "   —  "
+        log("  [%s] %-14s %+9.1f ms (%s)  贡献 %5.1f%%"
+            % (p["kind"][:4], p["stage"], p["d_ms"], dp_s, p["contrib_pct"]))
+    if ctx["flags"]:
+        log("数据质量：有告警 %d 条（详见报告第 1 节）：%s"
+            % (len(ctx["flags"]), "；".join(ctx["flags"])))
+    else:
+        log("数据质量：OK（守恒、样本量、input_len 分布、日志证据、压测参数均通过）")
     log("输出：%s | %s | %s" % (md_path, html_path, json_path))
 
 

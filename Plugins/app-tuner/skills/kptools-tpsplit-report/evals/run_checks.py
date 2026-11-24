@@ -81,6 +81,14 @@ def main():
         check("clean 无混杂信号", d.get("confound_l1", 1) < 0.15,
               "L1=%.3f" % d.get("confound_l1", -1))
         check("守恒违例 0%", all(q["conservation_pct"] == 0 for q in d["quality"]))
+        check("synthetic 来源标记透传三产物（不冒充实测）",
+              d.get("data_source", {}).get("before") == "synthetic"
+              and d.get("data_source", {}).get("after") == "synthetic"
+              and "仿真" in md and "仿真" in html, json.dumps(d.get("data_source")))
+        check("日志按请求匹配数记录（有文件≠有证据）",
+              d.get("log_matches", {}).get("before", 0) > 0
+              and d.get("log_matches", {}).get("after", 0) > 0,
+              json.dumps(d.get("log_matches")))
         for sec in SECTIONS:
             check("报告含节「%s」" % sec.split(". ")[1], sec in md)
         check("HTML 自包含（无外部 http 资源）",
@@ -186,11 +194,12 @@ def main():
               r.returncode == 0 and "缺失阶段列" in mdm
               and "| — | draft |" in mdm and "缺数据" in mdm,
               r.stderr.strip()[:80])
-        check("缺列行不计入守恒校验（不误报 100% 违例）",
+        check("缺列行不计入守恒校验（0 行可检标不可判定，不假报 0%）",
               aqm.get("conservation_checked") == 0
-              and aqm.get("conservation_pct") == 0.0,
+              and aqm.get("conservation_pct") is None
+              and "不可判定" in mdm,
               "checked=%s pct=%s" % (aqm.get("conservation_checked"),
-                                     aqm.get("conservation_pct")))
+                                      aqm.get("conservation_pct")))
 
         # --- 错误路径 ---
         bad1 = os.path.join(tmp, "bad1")
@@ -234,11 +243,167 @@ def main():
         def mean_ttft(base):
             import csv as _csv
             rows = list(_csv.DictReader(open(os.path.join(base, "after_tp8dp",
-                                                          "ttft_table.csv"),
-                                             encoding="utf-8")))
+                                                           "ttft_table.csv"),
+                                              encoding="utf-8")))
             return sum(float(x["ttft_ms"]) for x in rows) / len(rows)
         m1, m2 = mean_ttft(os.path.join(tmp, "det1")), mean_ttft(os.path.join(tmp, "det2"))
         check("同种子合成可复现", abs(m1 - m2) < 1e-6, "%.6f vs %.6f" % (m1, m2))
+
+        # --- parse_ts 保留小数秒（sub-second warmup 不误剔） ---
+        code = ("import sys; sys.path.insert(0, "
+                + json.dumps(os.path.join(ROOT, "scripts"))
+                + "); import analyze_tpsplit_report as m; "
+                "a = m.parse_ts('2026-11-23 10:00:00.100'); "
+                "b = m.parse_ts('2026-11-23 10:00:00.900'); "
+                "print('%.6f' % (b - a))")
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        check("parse_ts 保留小数秒（.100 与 .900 相差 0.8s 而非 0）",
+              r.returncode == 0 and abs(float(r.stdout.strip()) - 0.8) < 1e-6,
+              (r.stdout.strip() or r.stderr.strip()[:100]))
+
+        # --- tables-only 复用目录：清掉上一轮 .log，旧日志不再冒充证据 ---
+        run_py(SYNTH, ["--out", os.path.join(tmp, "stale"), "--scenario", "clean",
+                       "--num-prompts", "200"])
+        run_py(SYNTH, ["--out", os.path.join(tmp, "stale"), "--scenario", "tables-only",
+                       "--num-prompts", "200"])
+        leftovers = [fn for side in ("before_tp32ray", "after_tp8dp")
+                     for fn in os.listdir(os.path.join(tmp, "stale", side))
+                     if fn.lower().endswith(".log")]
+        check("tables-only 复用目录时清掉上一轮 .log", not leftovers, str(leftovers))
+        r = run_py(ANALYZE, ["--before", os.path.join(tmp, "stale", "before_tp32ray"),
+                             "--after", os.path.join(tmp, "stale", "after_tp8dp"),
+                             "--out", os.path.join(tmp, "stale", "g")])
+        stl = load_json(os.path.join(tmp, "stale", "g.json")) if r.returncode == 0 else {}
+        check("复用目录后不把旧日志当证据（has_logs=False）",
+              r.returncode == 0 and stl.get("has_logs") is False)
+
+        # --- 有日志文件但匹配不到请求 → 明确降级 ---
+        um = os.path.join(tmp, "unmatch")
+        run_py(SYNTH, ["--out", um, "--num-prompts", "200"])
+        with open(os.path.join(um, "after_tp8dp", "p_engine.log"), "w",
+                  encoding="utf-8") as f:
+            f.write("2026-11-23 10:00:00,000 INFO  [HealthCheck] engine alive\n")
+        r = run_py(ANALYZE, ["--before", os.path.join(um, "before_tp32ray"),
+                             "--after", os.path.join(um, "after_tp8dp"),
+                             "--out", os.path.join(um, "g")])
+        du = load_json(os.path.join(um, "g.json")) if r.returncode == 0 else {}
+        mdu = open(os.path.join(um, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("健康日志≠证据：匹配 0 请求时 has_logs 降级为 False",
+              r.returncode == 0 and du.get("has_logs") is False
+              and du.get("log_matches", {}).get("after") == 0
+              and du.get("log_matches", {}).get("before", 0) > 0,
+              json.dumps(du.get("log_matches")))
+        check("降级原因明示（日志未匹配到表格请求）",
+              "没有表格请求匹配到 BREAKDOWN" in mdu)
+
+        # --- 基线为 0（整列 0）：Δ% 不可计算、绝对阈值判定、恒 0 告警 ---
+        zr = os.path.join(tmp, "zerobase")
+        zheader = ("ts,request_id,input_len,ttft_ms,net_lb_ms,fe_inputq_ms,fe_addreq_ms,"
+                   "sched_qwait_ms,sched_total_ms,fwd_pure_ms,draft_ms,kv_xfer_ms,"
+                   "shm_dq_ms,other_ms")
+
+        def zrow(i, side):
+            st = [3.0, 2.0, 1.0, 20.0 + i * 0.1, 15.0, 40.0,
+                  0.0 if side == "b" else 12.0,
+                  0.0 if side == "b" else 3.4, 5.0, 4.0]
+            return ["2026-11-23 10:00:%02d.000" % (i % 60), "req-%03d" % i, 2048,
+                    "%.2f" % sum(st)] + ["%.2f" % v for v in st]
+
+        for side, dirname in (("b", "before_tp32ray"), ("a", "after_tp8dp")):
+            os.makedirs(os.path.join(zr, dirname), exist_ok=True)
+            with open(os.path.join(zr, dirname, "ttft_table.csv"), "w",
+                      encoding="utf-8", newline="") as f:
+                f.write(zheader + "\n")
+                for i in range(30):
+                    f.write(",".join(str(x) for x in zrow(i, side)) + "\n")
+        r = run_py(ANALYZE, ["--before", os.path.join(zr, "before_tp32ray"),
+                             "--after", os.path.join(zr, "after_tp8dp"),
+                             "--out", os.path.join(zr, "g")])
+        dz = load_json(os.path.join(zr, "g.json")) if r.returncode == 0 else {}
+        mdz = open(os.path.join(zr, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("基线 0→12ms 阶段凭绝对阈值判回退（d_pct=null 不再是 0.0）",
+              r.returncode == 0 and dz.get("stage_kinds", {}).get("draft") == "regression"
+              and any(p["stage"] == "draft" and p["d_pct"] is None
+                      for p in dz.get("points", [])),
+              json.dumps(dz.get("stage_kinds")))
+        check("基线 0→3.4ms 阶段判稳定且 Δ% 显示「基线为 0」",
+              dz.get("stage_kinds", {}).get("kv_xfer") == "stable"
+              and "基线为 0" in mdz and "Δ% 0.0" not in mdz)
+        check("恒 0 阶段自动告警（疑似未回填/口径不一致）",
+              any(z["stage"] in ("draft", "kv_xfer") for z in dz.get("zero_sides", []))
+              and "恒 0" in mdz)
+
+        # --- input_len 缺失：不可判定而非假通过 ---
+        ni = os.path.join(tmp, "noinputlen")
+        for side in ("before_tp32ray", "after_tp8dp"):
+            os.makedirs(os.path.join(ni, side), exist_ok=True)
+            lines = open(os.path.join(tmp, "clean", side, "ttft_table.csv"),
+                         encoding="utf-8").read().splitlines()
+            cols = [ln.split(",") for ln in lines]
+            if side == "after_tp8dp":
+                cols = [[c for j, c in enumerate(row) if j != 2] for row in cols]
+            with open(os.path.join(ni, side, "ttft_table.csv"), "w",
+                      encoding="utf-8", newline="") as f:
+                f.write("\n".join(",".join(row) for row in cols) + "\n")
+        r = run_py(ANALYZE, ["--before", os.path.join(ni, "before_tp32ray"),
+                             "--after", os.path.join(ni, "after_tp8dp"),
+                             "--out", os.path.join(ni, "g")])
+        dn = load_json(os.path.join(ni, "g.json")) if r.returncode == 0 else {}
+        mdn2 = open(os.path.join(ni, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("input_len 全缺：检查标不可判定（不显示通过）",
+              r.returncode == 0
+              and dn.get("inlen", {}).get("status") == "undeterminable"
+              and dn.get("inlen", {}).get("after_valid") == 0
+              and "不可判定" in mdn2,
+              json.dumps(dn.get("inlen")))
+
+        # --- --out 与输入文件冲突：拒绝执行并保留原件 ---
+        cl = os.path.join(tmp, "clash")
+        for side in ("before_tp32ray", "after_tp8dp"):
+            os.makedirs(os.path.join(cl, side), exist_ok=True)
+            for fn in ("ttft_table.csv", "config.json"):
+                src = os.path.join(tmp, "clean", side, fn)
+                if os.path.isfile(src):
+                    open(os.path.join(cl, side, fn), "wb").write(open(src, "rb").read())
+        r = run_py(ANALYZE, ["--before", os.path.join(cl, "before_tp32ray"),
+                             "--after", os.path.join(cl, "after_tp8dp"),
+                             "--out", os.path.join(cl, "before_tp32ray", "config")])
+        kept = json.load(open(os.path.join(cl, "before_tp32ray", "config.json"),
+                              encoding="utf-8")) if r.returncode != 0 else None
+        check("--out 撞输入 config.json 时拒绝执行且原件无损",
+              r.returncode != 0 and "冲突" in (r.stdout + r.stderr)
+              and kept is not None and kept.get("data_source") == "synthetic",
+              r.stderr.strip()[:100])
+
+        # --- 两侧压测参数不一致：排队阶段暂停归因 ---
+        bpm = os.path.join(tmp, "benchmm")
+        for side in ("before_tp32ray", "after_tp8dp"):
+            os.makedirs(os.path.join(bpm, side), exist_ok=True)
+            for fn in ("ttft_table.csv", "p_engine.log", "proxy.log", "config.json"):
+                src = os.path.join(tmp, "clean", side, fn)
+                if os.path.isfile(src):
+                    open(os.path.join(bpm, side, fn), "wb").write(open(src, "rb").read())
+        cfgp = os.path.join(bpm, "after_tp8dp", "config.json")
+        cfg = json.load(open(cfgp, encoding="utf-8"))
+        cfg["bench"]["mean_qps"] = 5.0
+        json.dump(cfg, open(cfgp, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        r = run_py(ANALYZE, ["--before", os.path.join(bpm, "before_tp32ray"),
+                             "--after", os.path.join(bpm, "after_tp8dp"),
+                             "--out", os.path.join(bpm, "g")])
+        db = load_json(os.path.join(bpm, "g.json")) if r.returncode == 0 else {}
+        mdb = open(os.path.join(bpm, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("bench 参数不一致：排队类阶段判「负载混杂」并暂停归因",
+              r.returncode == 0
+              and db.get("bench", {}).get("status") == "mismatch"
+              and db.get("stage_kinds", {}).get("sched_qwait") == "confounded"
+              and db.get("stage_kinds", {}).get("fwd_pure") == "benefit"
+              and not any(p["stage"] == "sched_qwait" for p in db.get("points", [])),
+              json.dumps(db.get("stage_kinds")))
+        check("混杂暂停在报告里明示", "负载混杂" in mdb and "暂停" in mdb)
     finally:
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)

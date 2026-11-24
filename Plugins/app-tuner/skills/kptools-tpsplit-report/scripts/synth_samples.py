@@ -13,7 +13,9 @@
   python synth_samples.py --out <dir> [--scenario clean|quality-trap|tables-only]
                           [--seed 42] [--num-prompts 2000]
 产出 <dir>/before_tp32ray/ 与 <dir>/after_tp8dp/，各含：
-  ttft_table.csv, p_engine.log, proxy.log, config.json（tables-only 场景不含 .log）
+  ttft_table.csv, p_engine.log, proxy.log, config.json（tables-only 场景不含 .log，
+  且会清掉同目录上一轮合成留下的 .log，避免旧日志被当成新表格的证据）
+config.json 带 data_source: synthetic 标记，分析脚本会在报告里标「仿真数据」。
 """
 import argparse
 import json
@@ -109,12 +111,22 @@ def write_side(out_dir, side, reqs, window, base_epoch, with_logs=True):
         "model": "GLM-5.2-W4A8", "p_total_cards": 64,
         "deploy_note": p["note"], "num_requests": len(reqs),
         "window_seconds": round(window, 1),
+        # 显式来源标记：分析脚本据此在 md/html/json 三处标「仿真数据」，防止演示报告被当现场结果
+        "data_source": "synthetic",
         "bench": {"distribution": "bursty-poisson", "mean_qps": 3.5,
                   "output_len": 128, "note": "synthesized by synth_samples.py"},
     }
     with open(os.path.join(out_dir, "config.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     if not with_logs:
+        # 同目录复用（先 clean 再 tables-only）时清掉上一轮留下的 .log，
+        # 防止旧日志（复用的 request_id 相同）被当成新表格的证据
+        stale = [fn for fn in os.listdir(out_dir) if fn.lower().endswith(".log")]
+        for fn in stale:
+            os.remove(os.path.join(out_dir, fn))
+        if stale:
+            print("note: removed stale logs from previous synth run in %s: %s"
+                  % (out_dir, ", ".join(stale)))
         return
     # ---- 日志行（与表格共享 request_id / 数值，证据链可对回）----
     eng_lines, proxy_lines = [], []
