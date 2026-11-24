@@ -40,8 +40,11 @@ def main():
         source.mkdir(parents=True)
         store = source / "store.go"
         store.write_bytes((CASE / "fixtures/store.go.txt").read_bytes().replace(b"\r\n", b"\n"))
+        template_store = root / "CubeMaster/pkg/templatecenter/store.go"
+        template_store.parent.mkdir()
+        template_store.write_bytes((CASE / "fixtures/templatecenter-store.go.txt").read_bytes().replace(b"\r\n", b"\n"))
         for mode in (["--check"], []):
-            subprocess.run([git, "apply", "--include=CubeMaster/pkg/sandboxspec/*", *mode, "-"],
+            subprocess.run([git, "apply", *mode, "-"],
                            input=patch, cwd=root, env=git_environment, check=True)
 
         applied = store.read_text(encoding="utf-8")

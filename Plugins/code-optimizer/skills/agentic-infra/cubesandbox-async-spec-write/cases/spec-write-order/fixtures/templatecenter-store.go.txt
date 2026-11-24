@@ -1,0 +1,35 @@
+// Excerpts from CubeSandbox v0.7.1 templatecenter/store.go
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
+// ...
+
+// configureSandboxSpecHooks wires sandbox create success to the canonical
+// spec store. Failures are swallowed by the sandbox layer (logged only); we
+// still surface them here so future callers of the hook can react.
+func configureSandboxSpecHooks() {
+	sandbox.SetAfterCreateSandboxSuccessHook(func(ctx context.Context, sandboxID, hostID, hostIP string, req *sandboxtypes.CreateCubeSandboxReq) error {
+		storedReq, err := cloneCreateRequest(req)
+		if err != nil {
+			return err
+		}
+		delete(storedReq.Annotations, sandbox.AnnotationPluginVolumeSources)
+		return sandboxspec.Put(ctx, sandboxID, storedReq, sandboxspec.PutOptions{
+			HostID: hostID,
+			HostIP: hostIP,
+		})
+	})
+}
+
+func isReady() bool {
+	return store.db != nil

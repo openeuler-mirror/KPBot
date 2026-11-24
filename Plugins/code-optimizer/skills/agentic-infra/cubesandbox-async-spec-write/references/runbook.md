@@ -24,6 +24,8 @@
 
 ## 应用与构建
 
+本补丁与 `scheme2-rsi-cache.patch` 的异步 spec 实现互斥。需要默认同步、按需启用及同进程待写记录可见性时，选择本实现。方案二的组合补丁在初始化时启动 worker，创建 hook 直接调用 PutAsync。其 Get 读取数据库，缺少此版本的队列 trace。此版本用 CUBEMASTER_ASYNC_SANDBOX_SPEC=1 启用，首次 PutAsync 启动 worker，Get 可读取同进程待写记录。若当前树已有方案二，请从干净基线评估此补丁。需要同时保留方案二的解析缓存时，只迁入独立的缓存改动，保留一套 spec 写入、读取和 hook 实现，再验证立即快照、更新后克隆和同步回退。
+
 参考补丁基于 CubeSandbox `v0.7.1`（`31d911e430fdf8a8879bd062b8e78066c1a8e89d`）。在隔离源码工作树执行，`SOURCE_ROOT` 与 `SKILL_DIR` 使用本机绝对路径。
 
 ```bash
