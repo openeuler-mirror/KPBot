@@ -9,8 +9,8 @@
 | `jdk17` | JAVA_HOME → PATH 上 `java` 真实路径的上两级 → `/usr/lib/jvm/java-17-*`；每个候选须有 `bin/javac` 且主号 17 | `<home>/release` 的 `JAVA_VERSION=`，否则 `java -version` 的 `version "x"` |
 | `JAVA_HOME` | 环境变量原值；有 `bin/javac` 才算 JDK | 同上 |
 | `flink` | `FLINK_HOME` → PATH 上 `flink` 真实路径的上两级 → `/opt/flink` → `/usr/local/flink`，首个有 `bin/flink` 者 | — |
-| `startup` | conf `env.java.home`（`conf/config.yaml` 嵌套键与 `conf/flink-conf.yaml` 扁平键都读）→ `JAVA_HOME` → PATH 上 `java` | 同上；路径无 `bin/java` 或读不出 = major null |
-| `running` | `/proc/<pid>/cmdline`（NUL 分隔）：主类匹配 `org.apache.flink.runtime.entrypoint.*Entrypoint` / `…taskexecutor.TaskManagerRunner`，且 `-classpath` 里 `flink-dist*.jar` 所在目录的真实路径 == 本安装 `lib/` 的真实路径；Java home = `argv[0]` 真实路径的上两级 | 同上 |
+| `startup` | conf `env.java.home`（只从 Flink 实际读的那份配置取：`flink-conf.yaml` 存在就是它，否则 `config.yaml`；两份不合并）→ `JAVA_HOME` → PATH 上 `java` | 同上；路径无 `bin/java` 或读不出 = major null |
+| `running` | `/proc/<pid>/cmdline`（NUL 分隔）：主类匹配 `org.apache.flink.runtime.entrypoint.*Entrypoint` / `…taskexecutor.TaskManagerRunner`，且 `-classpath` 里 `flink-dist*.jar` 所在目录的真实路径 == 本安装 `lib/` 的真实路径；Java home = `argv[0]` 真实路径的上两级。本安装的**每一个**守护进程各记一条（`pid` / `role`）并逐个判定，不止第一个 | 同上；`build` 主号须 17，`native` 须 8 / 11 / 17 |
 | `java` | `running` 与 `startup` 是同一 Java（真实路径相等）时合并，`found_via` 追加 "; the running daemons use it" | — |
 
 - `jdk8`（`java-1.8.0-openjdk-*` / `java-8-openjdk-*`）只作信息记录，不参与判定
@@ -49,4 +49,4 @@
 
 ## 5. 来源
 
-探测顺序与判据来自 GFV 环境自检的 jdk / java 分组：构建脚本（velox4j、gluten-flink 的构建）优先读 JAVA_HOME；Flink 自身选 Java 的顺序见其 `bin/bash-java-utils.sh`（conf `env.java.home` → JAVA_HOME → PATH）；GFV jar 为 Java 17 字节码。
+探测顺序与判据来自 GFVBot 环境自检的 jdk / java 分组：构建脚本（velox4j、gluten-flink 的构建）优先读 JAVA_HOME；Flink 自身选 Java 的顺序见其 `bin/bash-java-utils.sh`（conf `env.java.home` → JAVA_HOME → PATH）；GlutenFlink jar 为 Java 17 字节码。

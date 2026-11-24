@@ -4,17 +4,17 @@
     {
       "id": "unsupported-class-version",
       "query": "Flink 作业报 UnsupportedClassVersionError，看看守护进程跑的是哪个 Java",
-      "expected": "触发本 skill：跑 scripts/jdk_check.py，读 running_java 与 cluster_java 的 major，build 目标下守护进程不是 Java 17 即 fail，按 next_step 转述改 conf env.java.home 并重启（重启须用户同意）"
+      "expected": "触发本 skill：跑 scripts/jdk_check.py，读 running_javas 与 cluster_java 的 major，build 目标下守护进程不是 Java 17 即 fail，按 next_step 转述改 conf env.java.home 并重启（重启须用户同意）"
     },
     {
       "id": "jdk17-and-java-home",
-      "query": "搭 GFV 构建环境前，确认 JDK 17 在不在、JAVA_HOME 指对了没",
+      "query": "搭 GlutenFlink 构建环境前，确认 JDK 17 在不在、JAVA_HOME 指对了没",
       "expected": "触发本 skill：jdk17 项报找到的 JDK 17 路径与来源（JAVA_HOME / PATH / /usr/lib/jvm），JAVA_HOME 未设为 warn、指向非 17 为 fail 并给 fix"
     },
     {
       "id": "restart-would-pick",
       "query": "改了 conf 的 env.java.home，重启之后 Flink 会用哪个 Java",
-      "expected": "触发本 skill：读 cluster_java（conf env.java.home → JAVA_HOME → PATH 的顺序），与 running_java 对比说明重启前后是否一致"
+      "expected": "触发本 skill：读 cluster_java（conf env.java.home → JAVA_HOME → PATH 的顺序），与 running_javas 对比说明重启前后是否一致"
     },
     {
       "id": "not-toolchain",
@@ -28,13 +28,13 @@
     },
     {
       "id": "not-overall",
-      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "query": "这台机器现在能不能编译并运行 GlutenFlink 栈",
       "expected": "不触发：总裁决属统筹 flink-velox-env-check"
     },
     {
       "id": "not-restart",
       "query": "把 Flink 集群重启一下让它换到 JDK 17",
-      "expected": "不触发：本 skill 只读；重启属切换类 skill（规划中）且须用户同意，本 skill 只给出该重启的 next_step"
+      "expected": "不触发：本 skill 只读；重启属切换类 skill（审中 !325）且须用户同意，本 skill 只给出该重启的 next_step"
     }
   ]
 }

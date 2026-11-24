@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""jdk_check.py — read-only check of the Java the Flink + GlutenFlink (GFV) stack needs.
+"""jdk_check.py — read-only check of the Java the Flink + GlutenFlink stack needs.
 
 Three questions, one pass: is there a JDK 17 on the machine (the build needs one);
 is JAVA_HOME what the build scripts should take (they read it first); which Java do
 the Flink daemons run on, and which would a restart pick (conf env.java.home, then
 JAVA_HOME, then java on PATH — Flink's own resolution order). goal=build (default)
-needs Java 17 everywhere because the GFV jars carry Java 17 bytecode; goal=native
-accepts Java 8, 11 or 17 (what Flink 1.19 itself runs on).
+needs Java 17 everywhere because the GlutenFlink jars carry Java 17 bytecode; goal=native
+accepts Java 8, 11 or 17 only (what Flink 1.19 itself runs on). Every daemon of
+the installation is looked at on its own: one still on another Java is reported
+with its role, PID and version instead of hiding behind the first one found.
 The script classifies only: it installs nothing, starts or stops nothing, and writes
 nowhere except the optional --out file.
 
@@ -20,6 +22,8 @@ is refused, and an existing file is kept unless --overwrite is given.
 The Flink installation is located like the other checks: FLINK_HOME, a flink on
 PATH, /opt/flink, /usr/local/flink. Without one, conf env.java.home cannot be read
 and running daemons cannot be attributed — reported as a warning, not a failure.
+env.java.home is read from the one conf file Flink reads (flink-conf.yaml when it
+exists, else config.yaml).
 
 Exit codes: 0 every item ok (warnings allowed); 1 at least one fail; 2 check error
 (JSON in the full contract shape, error_message "check aborted: ..."), a refused
@@ -36,6 +40,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -45,6 +50,11 @@ SYSROOT = os.environ.get('ENV_CHECK_SYSROOT', '')
 PROC_ROOT = os.environ.get('ENV_CHECK_PROC_ROOT', '/proc')
 
 STATUS_ORDER = ('ok', 'info', 'skipped', 'warn', 'fail')
+
+# Flink 1.19 reads flink-conf.yaml when both files exist and ignores config.yaml then.
+CONF_FILES = ('flink-conf.yaml', 'config.yaml')
+# The Java majors the GlutenFlink jars / Flink 1.19 itself can run on, per goal.
+GOAL_MAJORS = {'build': (17,), 'native': (8, 11, 17)}
 
 JM_ENTRY_RE = re.compile(r'^org\.apache\.flink\.runtime\.entrypoint\.\w+Entrypoint$')
 TM_ENTRY_RE = re.compile(r'^org\.apache\.flink\.runtime\.taskexecutor\.TaskManagerRunner$')
@@ -126,7 +136,8 @@ def find_jdk17():
             if major == 17:
                 return home, version, 'PATH'
     for cand in sorted(glob.glob(sys_path('/usr/lib/jvm/java-17-*'))):
-        if is_jdk(cand):
+        # the directory name proves nothing: a stale link may point at another JDK
+        if is_jdk(cand) and jdk_version(cand)[1] == 17:
             return cand, jdk_version(cand)[0], '/usr/lib/jvm'
     return None, None, None
 
@@ -195,32 +206,40 @@ def find_flink_home():
     return (None, None)
 
 
-def load_flink_conf(flink_home):
-    """Flatten conf/config.yaml (nested maps) and conf/flink-conf.yaml (flat dotted
-    keys) into one dict, without a YAML dependency. Scalar leaves only."""
+def effective_conf(flink_home):
+    """The one conf file Flink reads (flink-conf.yaml when it exists, else
+    config.yaml), or None when there is neither."""
+    for name in CONF_FILES:
+        if os.path.isfile(os.path.join(flink_home, 'conf', name)):
+            return os.path.join(flink_home, 'conf', name)
+    return None
+
+
+def load_flink_conf(conf_file):
+    """Flatten the one conf file Flink reads — config.yaml (nested maps) or
+    flink-conf.yaml (flat dotted keys) — without a YAML dependency. Scalar leaves
+    only; the two files are never merged (Flink ignores config.yaml as soon as
+    flink-conf.yaml exists)."""
     conf = {}
-    for name in ('config.yaml', 'flink-conf.yaml'):
-        try:
-            fh = open(os.path.join(flink_home, 'conf', name), encoding='utf-8', errors='replace')
-        except OSError:
-            continue
-        stack = []  # [(indent, dotted prefix)]
-        with fh:
-            for raw in fh:
-                line = re.sub(r'(^|\s)#.*$', r'\1', raw).rstrip()
-                if not line or line in ('---', '...'):
-                    continue
-                m = re.match(r'^(\s*)([A-Za-z0-9_.-]+):(?:\s+(.*))?$', line)
-                if not m:
-                    continue
-                indent, key, value = m.group(1), m.group(2), (m.group(3) or '').strip()
-                while stack and stack[-1][0] >= len(indent):
-                    stack.pop()
-                prefix = f'{stack[-1][1]}.' if stack else ''
-                if value:
-                    conf[prefix + key] = value.strip('\'"')
-                else:
-                    stack.append((len(indent), prefix + key))
+    if not conf_file:
+        return conf
+    stack = []  # [(indent, dotted prefix)]
+    with open(conf_file, encoding='utf-8', errors='replace') as fh:
+        for raw in fh:
+            line = re.sub(r'(^|\s)#.*$', r'\1', raw).rstrip()
+            if not line or line in ('---', '...'):
+                continue
+            m = re.match(r'^(\s*)([A-Za-z0-9_.-]+):(?:\s+(.*))?$', line)
+            if not m:
+                continue
+            indent, key, value = m.group(1), m.group(2), (m.group(3) or '').strip()
+            while stack and stack[-1][0] >= len(indent):
+                stack.pop()
+            prefix = f'{stack[-1][1]}.' if stack else ''
+            if value:
+                conf[prefix + key] = value.strip('\'"')
+            else:
+                stack.append((len(indent), prefix + key))
     return conf
 
 
@@ -239,17 +258,18 @@ def classpath_of(argv):
     return []
 
 
-def running_daemon_java(flink_home):
-    """(java home, pid, role) of a Flink daemon of THIS installation — its classpath
-    names lib/flink-dist under this installation; None when none runs or no
-    installation is known."""
+def running_daemons_java(flink_home):
+    """[(java home, pid, role)] of every Flink daemon of THIS installation — its
+    classpath names lib/flink-dist under this installation. Every one is listed:
+    a TaskManager still on another Java must not hide behind the JobManager."""
     if not flink_home:
-        return None
+        return []
     real_lib = os.path.realpath(os.path.join(flink_home, 'lib'))
     try:
         pids = sorted(e for e in os.listdir(PROC_ROOT) if e.isdigit())
     except OSError:
-        return None
+        return []
+    found = []
     for pid in pids:
         argv = read_cmdline(pid)
         entry = next((t for t in argv if JM_ENTRY_RE.match(t) or TM_ENTRY_RE.match(t)), None)
@@ -259,8 +279,8 @@ def running_daemon_java(flink_home):
         if not any(os.path.dirname(os.path.realpath(p)) == real_lib for p in dist):
             continue
         java = os.path.dirname(os.path.dirname(os.path.realpath(argv[0]))) if argv else None
-        return java, int(pid), ('jobmanager' if JM_ENTRY_RE.match(entry) else 'taskmanager')
-    return None
+        found.append((java, int(pid), 'jobmanager' if JM_ENTRY_RE.match(entry) else 'taskmanager'))
+    return found
 
 
 def describe_java(home, source):
@@ -272,9 +292,39 @@ def describe_java(home, source):
     return entry
 
 
-def scan_daemon_java(goal, flink_home, conf):
-    """The Java the Flink daemons use and the one a restart would pick (Flink's
-    bash-java-utils.sh order: conf env.java.home, JAVA_HOME, java on PATH)."""
+FIX_JAVA = {
+    'build': 'set env.java.home in the Flink conf to a JDK 17 and restart the cluster (a restart needs the user consent)',
+    'native': ('set env.java.home in the Flink conf (or JAVA_HOME) to a JDK 8, 11 or 17 and restart the cluster '
+               '(a restart needs the user consent)'),
+}
+
+
+def verdict(entry, goal):
+    """(status, detail, fix, why) for one Java under the goal; `why` is the short
+    reason used when a daemon is listed next to the others."""
+    where = f' ({entry["path"]}, via {entry["found_via"]})'
+    if not entry['path']:
+        return 'fail', ('no java for the Flink daemons: neither env.java.home, JAVA_HOME nor a java on '
+                        'PATH resolves to one'), 'set env.java.home in the Flink conf (or JAVA_HOME)', 'no java'
+    if entry['major'] is None:
+        return 'fail', f'{entry["path"]} (via {entry["found_via"]}) has no bin/java or its version cannot be read', \
+            'set env.java.home in the Flink conf (or JAVA_HOME) to a JDK', 'version cannot be read'
+    if entry['major'] in GOAL_MAJORS[goal]:
+        return 'ok', f'Java {entry["version"]}{where}', None, None
+    if goal == 'build':
+        detail = (f'Java {entry["version"]}{where}: the gluten jars carry Java 17 bytecode and fail to load '
+                  'on it (UnsupportedClassVersionError)')
+        why = 'needs Java 17: the gluten jars carry Java 17 bytecode'
+    else:
+        detail = f'Java {entry["version"]}{where}: Flink 1.19 itself runs on Java 8, 11 or 17, not on it'
+        why = 'Flink 1.19 itself runs on Java 8, 11 or 17'
+    return 'fail', detail, FIX_JAVA[goal], why
+
+
+def scan_daemon_java(goal, flink_home, conf, conf_file=None):
+    """The Java every running daemon of this installation uses and the one a
+    restart would pick (Flink's bash-java-utils.sh order: conf env.java.home,
+    JAVA_HOME, java on PATH). Each daemon is judged on its own."""
     if conf.get('env.java.home'):
         source, home = 'flink conf env.java.home', conf['env.java.home']
     elif os.environ.get('JAVA_HOME'):
@@ -284,39 +334,34 @@ def scan_daemon_java(goal, flink_home, conf):
         source, home = 'PATH', (os.path.dirname(os.path.dirname(os.path.realpath(java)))
                                 if java else None)
     startup = describe_java(home, source)
-    found = running_daemon_java(flink_home)
-    running = describe_java(found[0], f'running process (pid {found[1]}, {found[2]})') if found else None
-    payload = {'cluster_java': startup, 'running_java': running}
-    gfv_needed = goal == 'build'
+    running = [dict(describe_java(d[0], f'running process (pid {d[1]}, {d[2]})'), pid=d[1], role=d[2])
+               for d in running_daemons_java(flink_home)]
+    payload = {'cluster_java': startup, 'running_javas': running, 'conf_file': conf_file}
+    startup_real = os.path.realpath(startup['path'] or '')
     items = []
-    if running and os.path.realpath(running['path'] or '') == os.path.realpath(startup['path'] or ''):
-        # the daemons run on what a restart would pick: one verdict
-        startup['found_via'] += '; the running daemons use it'
-        entries = [('java', startup)]
-    else:
-        entries = ([('running', running)] if running else []) + [('startup', startup)]
-    for name, entry in entries:
-        path, version, major = entry['path'], entry['version'], entry['major']
-        where = f' ({path}, via {entry["found_via"]})'
-        if not path:
-            items.append(make_item(
-                name, 'fail',
-                'no java for the Flink daemons: neither env.java.home, JAVA_HOME nor a java on '
-                'PATH resolves to one', 'set env.java.home in the Flink conf (or JAVA_HOME)'))
-        elif major is None:
-            items.append(make_item(
-                name, 'fail',
-                f'{path} (via {entry["found_via"]}) has no bin/java or its version cannot be read',
-                'set env.java.home in the Flink conf (or JAVA_HOME) to a JDK'))
-        elif gfv_needed and major != 17:
-            items.append(make_item(
-                name, 'fail',
-                f'Java {version}{where}: the gluten jars carry Java 17 bytecode and fail to load '
-                'on it (UnsupportedClassVersionError)',
-                'set env.java.home in the Flink conf to a JDK 17 and restart the cluster '
-                '(a restart needs the user consent)'))
+    if running and all(os.path.realpath(e['path'] or '') == startup_real for e in running):
+        # every daemon runs what a restart would pick: one verdict
+        startup['found_via'] += f'; the {len(running)} running daemon(s) use it'
+        status, detail, fix, _ = verdict(startup, goal)
+        items.append(make_item('java', status, detail, fix))
+        return payload, items
+    if running:
+        # one daemon at a time: a TaskManager still on another Java must not hide behind the JobManager
+        judged = [(e, *verdict(e, goal)) for e in running]
+        listing = '; '.join(f'{e["role"]} pid {e["pid"]}: Java {e["version"] or "?"} ({e["path"]})'
+                            + (f' — {why}' if why else '')
+                            for e, status, detail, fix, why in judged)
+        if any(status == 'fail' for _, status, _, _, _ in judged):
+            items.append(make_item('running', 'fail', f'not every running Flink daemon runs a suitable Java: {listing}',
+                                   FIX_JAVA[goal]))
+        elif len({os.path.realpath(e['path'] or '') for e in running}) == 1:
+            items.append(make_item('running', 'ok', f'all {len(running)} running daemon(s) run {listing}'))
         else:
-            items.append(make_item(name, 'ok', f'Java {version}{where}'))
+            items.append(make_item(
+                'running', 'warn',
+                f'the running daemons run different Java versions (a restart puts them all on the startup Java): {listing}'))
+    status, detail, fix, _ = verdict(startup, goal)
+    items.append(make_item('startup', status, detail, fix))
     return payload, items
 
 
@@ -330,10 +375,7 @@ def next_step(jdk_payload, daemon_items):
     for item in daemon_items:
         if item['status'] != 'fail':
             continue
-        if 'Java 17 bytecode' in item['detail']:
-            return 'set env.java.home in the Flink conf to a JDK 17 and restart the cluster ' \
-                   '(a restart needs the user consent), then rerun'
-        return 'set env.java.home in the Flink conf (or JAVA_HOME) to a JDK, then rerun'
+        return item['fix'] + ', then rerun'
     warnings = [i for i in daemon_items if i['status'] == 'warn']
     return 'ready: the Java for the Flink daemons is in order' + (' (warnings above)' if warnings else '')
 
@@ -347,10 +389,11 @@ def build_result(goal):
             'flink', 'warn',
             'Flink installation not found (FLINK_HOME, a flink on PATH, /opt/flink, /usr/local/flink): '
             'conf env.java.home not read, running daemons not attributed'))
-        conf = {}
+        conf, conf_file = {}, None
     else:
-        conf = load_flink_conf(home)
-    daemons, daemon_items = scan_daemon_java(goal, home, conf)
+        conf_file = effective_conf(home)
+        conf = load_flink_conf(conf_file)
+    daemons, daemon_items = scan_daemon_java(goal, home, conf, conf_file)
     items += daemon_items
     missing = [f'{i["name"]}: {i["detail"]}' for i in items if i['status'] == 'fail']
     success = not missing
@@ -362,9 +405,9 @@ def build_result(goal):
         'jdk17': jdks['jdk17'],
         'jdk8': jdks['jdk8'],
         'java_home': jdks['java_home'],
-        'flink_home': {'path': home, 'found_via': source},
+        'flink_home': {'path': home, 'found_via': source, 'conf_file': daemons['conf_file']},
         'cluster_java': daemons['cluster_java'],
-        'running_java': daemons['running_java'],
+        'running_javas': daemons['running_javas'],
         'items': items,
         'missing': missing,
         'next_step': next_step(jdks, daemon_items),
@@ -384,9 +427,9 @@ def aborted(exc):
         'jdk17': {'path': None, 'version': None, 'found_via': None},
         'jdk8': None,
         'java_home': None,
-        'flink_home': {'path': None, 'found_via': None},
+        'flink_home': {'path': None, 'found_via': None, 'conf_file': None},
         'cluster_java': {'path': None, 'version': None, 'major': None, 'found_via': None},
-        'running_java': None,
+        'running_javas': [],
         'items': [],
         'missing': [],
         'next_step': 'fix the check error first (see error_message), then rerun',
@@ -406,6 +449,12 @@ def write_out(path, result, overwrite):
         return 2
     if os.path.exists(target) and not overwrite:
         print(f'jdk_check.py: --out already exists, pass --overwrite to replace it: {path}',
+              file=sys.stderr)
+        return 2
+    if overwrite and os.path.exists(target) and not stat.S_ISREG(os.stat(target).st_mode):
+        # a fifo (or a directory, socket, device) is never opened: open() on a fifo
+        # blocks until a reader shows up and the check would never return
+        print(f'jdk_check.py: --out exists and is not a regular file, refusing to overwrite it: {path}',
               file=sys.stderr)
         return 2
     try:

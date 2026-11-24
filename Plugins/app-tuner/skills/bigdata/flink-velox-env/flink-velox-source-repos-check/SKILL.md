@@ -6,8 +6,8 @@ description: >
   apache main）对比——偏离只提示不判负。仓库根按 --repos-dir → GFV_REPOS_DIR → 向上找 repos/ 定位，单仓可用
   VELOX_HOME / VELOX4J_HOME / GLUTEN_HOME 指定。逐项 ok/warn/fail + fix + 唯一 next_step。只扫不改：不克隆、不 fetch。
   触发词：源码仓、velox / velox4j / gluten 克隆了没、在哪个分支、基线分支、repos 目录。不负责：C++ 依赖 →
-  flink-velox-cpp-deps-check；编译工具链 → flink-velox-toolchain-check；"能不能编译 GFV 栈"的总裁决 →
-  flink-velox-env-check；克隆与切分支 → 安装类 skill（规划中）。
+  flink-velox-cpp-deps-check；编译工具链 → flink-velox-toolchain-check；"能不能编译 GlutenFlink 栈"的总裁决 →
+  flink-velox-env-check；克隆与切分支 → 安装类 skill（审中 !322）。
 compatibility: Linux (aarch64/x86_64)，Python 3.7+ 标准库；分支与 HEAD 经 PATH 上的 git 读取
 metadata:
   skill_type: tool_assisted
@@ -19,23 +19,23 @@ metadata:
 
 # Flink-velox 源码仓检查
 
-GFV 栈从三个源码仓构建：velox（向量化执行引擎，bigo-sg 分支 `gluten-20260829`）、velox4j（它的 Java 绑定，同分支）、gluten（`apache/gluten` 的 `main`，取其 `gluten-flink` 模块）。少一个仓、clone 得不完整（缺标志文件）、或者停在了别的分支上，编译会在半途才报错，而且"分支不对"这类问题根本不报错——只是编出来的东西没经过验证。本 skill 只做一件事：**把三个仓逐个核一遍——在不在、完不完整、在哪个分支的哪个提交上**。它是 `flink-velox-env` 检查家族里"源码仓"这一具体项：只读、不改动机器、不克隆、不 fetch。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+GlutenFlink 栈从三个源码仓构建：velox（向量化执行引擎，bigo-sg 分支 `gluten-20260829`）、velox4j（它的 Java 绑定，同分支）、gluten（`apache/gluten` 的 `main`，取其 `gluten-flink` 模块）。少一个仓、clone 得不完整（缺标志文件）、或者停在了别的分支上，编译会在半途才报错，而且"分支不对"这类问题根本不报错——只是编出来的东西没经过验证。本 skill 只做一件事：**把三个仓逐个核一遍——在不在、完不完整、在哪个分支的哪个提交上**。它是 `flink-velox-env` 检查家族里"源码仓"这一具体项：只读、不改动机器、不克隆、不 fetch。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
 ## 使用场景
 
 ### 适用（应使用本 skill）
 
-- 搭 GFV 构建环境之前或之后，确认三个源码仓都克隆了、克隆完整
+- 搭 GlutenFlink 构建环境之前或之后，确认三个源码仓都克隆了、克隆完整
 - 编译报找不到 `CMakeLists.txt` / `pom.xml` / `gluten-flink/pom.xml` 时先查仓库完整性
 - 要知道三个仓各自在哪个分支、哪个提交，是否在基线分支上
 - 换机器、换 `repos/` 位置后确认 `--repos-dir` / `GFV_REPOS_DIR` / 单仓环境变量指向对
 
 ### 不适用（不要用本 skill）
 
-- 指望它克隆、fetch 或切分支——`fix` 与 `next_step` 只是工单，交给安装类 skill（规划中）
+- 指望它克隆、fetch 或切分支——`fix` 与 `next_step` 只是工单，交给安装类 skill（审中 !322）
 - velox 的 C++ 依赖、setup 脚本要装的源码级库 → `flink-velox-cpp-deps-check`
 - 编译工具链 / 构建辅助工具 → `flink-velox-toolchain-check` / `flink-velox-build-tools-check`
-- "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`
+- "这台机器能不能编译 GlutenFlink 栈"的总裁决 → 统筹 `flink-velox-env-check`
 
 ## 检查项
 
@@ -45,7 +45,7 @@ GFV 栈从三个源码仓构建：velox（向量化执行引擎，bigo-sg 分支
 | velox4j | `https://github.com/bigo-sg/velox4j.git` | `gluten-20260829` | `pom.xml` | `VELOX4J_HOME` |
 | gluten | `https://github.com/apache/gluten.git` | `main` | `gluten-flink/pom.xml` | `GLUTEN_HOME` |
 
-- 每个仓：目录存在 → 标志文件齐全 → `git -C <仓> rev-parse --abbrev-ref HEAD` / `rev-parse --short HEAD` / `remote get-url origin` 读分支、HEAD、远端
+- 每个仓：目录存在 → 标志文件齐全 → `git -C <仓> rev-parse --abbrev-ref HEAD` / `rev-parse --short HEAD` / `remote get-url origin` 读分支、HEAD、远端；`origin` 输出前脱敏——去掉 `user:password@` 与名字含 token / secret / password / credential 的查询参数，只留 scheme、主机、路径与其余参数（私有仓的 HTTPS 远端常内嵌访问令牌）
 - 分支 ≠ 基线：条目仍为 ok，detail 注明 `; baseline branch is <基线>`，`on_baseline: false`——只提示不判负
 - git 不在 PATH 或目录不是 git checkout：条目为 warn（分支与 HEAD 读不到），不阻断
 
@@ -53,7 +53,7 @@ GFV 栈从三个源码仓构建：velox（向量化执行引擎，bigo-sg 分支
 
 ### 步骤 1：定位置、扫描
 
-- 仓库根按下列顺序定位，定位不到才需要显式给：`--repos-dir` → `GFV_REPOS_DIR` → 从当前目录向上找含任一仓的 `repos/`；单个仓可用 `VELOX_HOME` / `VELOX4J_HOME` / `GLUTEN_HOME` 单独指定（优先于仓库根）
+- 仓库根按下列顺序定位：`--repos-dir` → `GFV_REPOS_DIR` → 从当前目录向上找 `repos/`。显式给出的 `--repos-dir` / `GFV_REPOS_DIR` 是目标指定：目录存在即直接作为根——不含仓时由逐仓条目判 fail、detail / fix 指向该目录；目录不存在才落到下一候选（`root_via` 记录实际命中者）。向上查找的 `repos/` 须含任一仓；单个仓可用 `VELOX_HOME` / `VELOX4J_HOME` / `GLUTEN_HOME` 单独指定（优先于仓库根）
 
 ```bash
 python3 <skill_dir>/scripts/source_repos_check.py [--repos-dir DIR] [--json] [--out FILE [--overwrite]]
@@ -68,7 +68,7 @@ python3 <skill_dir>/scripts/source_repos_check.py [--repos-dir DIR] [--json] [--
 1. 先看 `next:`——缺的仓给出一句完整的克隆命令（含基线分支与目标目录），不可用的给出重克隆；都在时提示偏离基线的仓。
 2. `on_baseline: false` 不是错误：可能是有意切到别的分支做实验，但要转述给用户——基线之外的分支编出来的栈没经过验证。
 3. warn（git 不在 PATH、不是 git checkout）不阻断，但意味着"在哪个分支"无法回答，要转述。
-4. 本 skill 不克隆、不切分支：把 `next:` 交给安装类 skill（规划中），做完重扫直到 READY。
+4. 本 skill 不克隆、不切分支：把 `next:` 交给安装类 skill（审中 !322），做完重扫直到 READY。
 
 ## 环境约定
 
@@ -114,4 +114,4 @@ python3 <skill_dir>/scripts/source_repos_check.py [--repos-dir DIR] [--json] [--
 - `flink-velox-cpp-deps-check`：velox 自带 setup 脚本里的源码级 C++ 库清单——它要的 velox checkout 正是本 skill 核对的那个
 - `flink-velox-toolchain-check`、`flink-velox-build-tools-check`：编译侧的兄弟检查项，触发词不重叠
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一
-- 克隆、fetch、切分支：同族安装类 skill（规划中，后续 PR）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复
+- 克隆、fetch、切分支：同族安装类 skill（审中 !322）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复

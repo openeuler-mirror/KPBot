@@ -3,11 +3,11 @@ name: flink-velox-jdk-check
 description: >
   Flink + GlutenFlink（velox 向量化栈）Java 环境只读检查，一遍回答三件事：机器上有没有 JDK 17（构建要用）、
   JAVA_HOME 是不是构建脚本该取的那个（它们优先读 JAVA_HOME）、Flink 守护进程跑的是哪个 Java 以及重启会选到哪个
-  （conf env.java.home → JAVA_HOME → PATH，/proc 读运行中进程）。goal=build 要求 Java 17（GFV jar 是 17 字节码），
+  （conf env.java.home → JAVA_HOME → PATH，/proc 读运行中进程）。goal=build 要求 Java 17（GlutenFlink jar 是 17 字节码），
   goal=native 接受 8/11/17。逐项 ok/warn/fail + fix + 唯一 next_step。只扫不改：不装 JDK、不改 conf、不重启集群。
   触发词：JDK 17 装了没、JAVA_HOME 对不对、Flink 用的哪个 Java、守护进程 Java、UnsupportedClassVersionError、
   java 版本。不负责：编译工具链 → flink-velox-toolchain-check；Flink 发行版与版本线 → flink-velox-flink-dist-check；
-  "能不能编译 GFV 栈"的总裁决 → flink-velox-env-check；重启集群 → 切换类 skill（规划中）且须用户同意。
+  "能不能编译 GlutenFlink 栈"的总裁决 → flink-velox-env-check；重启集群 → 切换类 skill（审中 !325）且须用户同意。
 compatibility: Linux (aarch64/x86_64)，Python 3.7+ 标准库；读 /proc 与 Flink conf
 metadata:
   skill_type: tool_assisted
@@ -19,29 +19,29 @@ metadata:
 
 # Flink-velox Java 环境检查
 
-GFV 栈对 Java 有两层要求：编译 velox4j 与 gluten-flink 要 JDK 17，而且构建脚本**优先读 JAVA_HOME**——JAVA_HOME 指向别的 JDK 时哪怕机器上有 JDK 17 也会编错；运行时 Flink 1.19 本身能在 Java 8 / 11 / 17 上跑，但 GFV 的 jar 是 Java 17 字节码，守护进程用 Java 8 跑会在类加载时报 `UnsupportedClassVersionError`。从这种报错倒查"到底哪个环节选错了 Java"很慢。本 skill 只做一件事：**把 JDK 17、JAVA_HOME、守护进程实际 Java 与重启将选的 Java 逐项核对**。它是 `flink-velox-env` 检查家族里"Java"这一具体项：只读、不改动机器。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+GlutenFlink 栈对 Java 有两层要求：编译 velox4j 与 gluten-flink 要 JDK 17，而且构建脚本**优先读 JAVA_HOME**——JAVA_HOME 指向别的 JDK 时哪怕机器上有 JDK 17 也会编错；运行时 Flink 1.19 本身能在 Java 8 / 11 / 17 上跑，但 GlutenFlink 的 jar 是 Java 17 字节码，守护进程用 Java 8 跑会在类加载时报 `UnsupportedClassVersionError`。从这种报错倒查"到底哪个环节选错了 Java"很慢。本 skill 只做一件事：**把 JDK 17、JAVA_HOME、守护进程实际 Java 与重启将选的 Java 逐项核对**。它是 `flink-velox-env` 检查家族里"Java"这一具体项：只读、不改动机器。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
 ## 使用场景
 
 ### 适用（应使用本 skill）
 
-- 搭 GFV 构建环境前后，确认 JDK 17 在、JAVA_HOME 指对了
+- 搭 GlutenFlink 构建环境前后，确认 JDK 17 在、JAVA_HOME 指对了
 - Flink 作业报 `UnsupportedClassVersionError`、类加载失败时，先查守护进程跑的 Java 版本
 - 改了 Flink conf 的 `env.java.home` 或 JAVA_HOME 之后、重启集群之前，确认重启会选到哪个 Java
 - 换机器、换容器后的 Java 环境确认
 
 ### 不适用（不要用本 skill）
 
-- 指望它装 JDK、改 conf 或重启集群——`fix` 与 `next_step` 只是工单；重启须用户同意，交给切换类 skill（规划中）
+- 指望它装 JDK、改 conf 或重启集群——`fix` 与 `next_step` 只是工单；重启须用户同意，交给切换类 skill（审中 !325）
 - git / cmake / gcc / g++ / mvn → `flink-velox-toolchain-check`；ninja / ccache 等 → `flink-velox-build-tools-check`
 - Flink 发行版是否齐全、是否在 1.19 版本线 → `flink-velox-flink-dist-check`
-- "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`
+- "这台机器能不能编译 GlutenFlink 栈"的总裁决 → 统筹 `flink-velox-env-check`
 
 ## 两种目标（goal）
 
 | goal | Java 要求 | 默认 |
 |---|---|---|
-| `build` | 守护进程实际 Java 与重启将选的 Java 都必须是 17（GFV jar 是 17 字节码） | 是 |
+| `build` | 守护进程实际 Java 与重启将选的 Java 都必须是 17（GlutenFlink jar 是 17 字节码） | 是 |
 | `native` | 8 / 11 / 17 均可（Flink 1.19 自身支持），能读到版本即可 | 用户问"能不能跑 native 侧"时 |
 
 JDK 17 与 JAVA_HOME 两项在任何目标下都检查——它们描述的是构建侧的事实。
@@ -53,9 +53,9 @@ JDK 17 与 JAVA_HOME 两项在任何目标下都检查——它们描述的是�
 | `jdk17` | 依次在 JAVA_HOME → PATH 上的 `java`（取其真实路径的上两级）→ `/usr/lib/jvm/java-17-*` 找**有 `bin/javac` 且版本主号为 17** 的目录；找不到为 fail |
 | `JAVA_HOME` | 未设为 warn（构建回退到找到的 JDK 17）；设了但不是 JDK（无 `bin/javac`）或主号不是 17 为 fail——构建脚本优先取它 |
 | `flink` | 定位 Flink 安装（`FLINK_HOME` → PATH 上的 `flink` → `/opt/flink` → `/usr/local/flink`）；找不到为 warn：读不到 conf 的 `env.java.home`、也无法把运行中的守护进程归属到本安装 |
-| `startup`（重启会选的 Java） | conf `env.java.home` → `JAVA_HOME` → PATH 上的 `java`，按 Flink 自身 `bash-java-utils.sh` 的顺序；路径无 `bin/java` 或版本读不出为 fail；`build` 下主号不是 17 为 fail |
-| `running`（守护进程实际 Java） | 扫 `/proc/*/cmdline`，主类是 JobManager / TaskManager 入口且 classpath 里的 `flink-dist*.jar` 位于**本安装**的 `lib/`（其它安装的守护进程不计）的进程，取其 `argv[0]` 真实路径的上两级为 Java home；版本判定同 `startup` |
-| `java`（合并） | 运行中的守护进程与重启将选的是同一 Java 时合并为一条，`found_via` 注明"the running daemons use it" |
+| `startup`（重启会选的 Java） | conf `env.java.home` → `JAVA_HOME` → PATH 上的 `java`，按 Flink 自身 `bash-java-utils.sh` 的顺序；`env.java.home` 只从 **Flink 实际读的那份配置**取（`flink-conf.yaml` 存在就是它，否则 `config.yaml`，两份不合并）；路径无 `bin/java` 或版本读不出为 fail；`build` 下主号不是 17 为 fail，`native` 下主号不在 8 / 11 / 17 为 fail |
+| `running`（守护进程实际 Java） | 扫 `/proc/*/cmdline`，主类是 JobManager / TaskManager 入口且 classpath 里的 `flink-dist*.jar` 位于**本安装**的 `lib/`（其它安装的守护进程不计）的**每一个**进程，各取其 `argv[0]` 真实路径的上两级为 Java home 并**逐个判定**——JobManager 已换到 17 而 TaskManager 还在 8 上时不会漏掉后者：失败项逐个写明角色、PID、实际版本与原因；版本判定同 `startup`；全部适用但各进程版本不一为 warn（重启后才会统一） |
+| `java`（合并） | 本安装的每个守护进程都与重启将选的是同一 Java 时合并为一条，`found_via` 注明"the N running daemon(s) use it" |
 
 ## 执行步骤
 
@@ -74,7 +74,7 @@ python3 <skill_dir>/scripts/jdk_check.py [--goal build|native] [--json] [--out F
 1. 先看 `next:`——它按"装 JDK 17 → 修 JAVA_HOME → 修守护进程/重启会选的 Java"的顺序给出唯一一个下一步。
 2. `running` 与 `startup` 都在时分别读：`running` fail 而 `startup` ok = 集群还在旧 Java 上，改了 conf 没重启；反之 = 重启会换到一个错的 Java。
 3. `JAVA_HOME` 的 warn 不是问题（构建回退到机器上的 JDK 17），但要转述；`flink` 的 warn 说明没找到安装，conf 与守护进程两项没查。
-4. 本 skill 不改任何东西：`fix` 里涉及重启的，交给切换类 skill 并**征得用户同意**；装 JDK、改 conf 由安装类 skill（规划中）执行，做完重扫直到 READY。
+4. 本 skill 不改任何东西：`fix` 里涉及重启的，交给切换类 skill 并**征得用户同意**；装 JDK、改 conf 由安装类 skill（审中 !322）执行，做完重扫直到 READY。
 
 ## 环境约定
 
@@ -85,7 +85,7 @@ python3 <skill_dir>/scripts/jdk_check.py [--goal build|native] [--json] [--out F
 
 ## 输出
 
-`--json` 打印的即契约；对话里汇报时给出同一结构，`success`、`goal`、`jdk17`、`cluster_java`、`running_java`、`missing`、`next_step`、`error_message` 必须保留（下例：集群还在 Java 8 上而 conf 未设，节选）：
+`--json` 打印的即契约；对话里汇报时给出同一结构，`success`、`goal`、`jdk17`、`cluster_java`、`running_javas`、`missing`、`next_step`、`error_message` 必须保留（下例：集群还在 Java 8 上而 conf 未设，节选）：
 
 ```json
 {
@@ -97,9 +97,9 @@ python3 <skill_dir>/scripts/jdk_check.py [--goal build|native] [--json] [--out F
     "jdk17": {"path": "/usr/lib/jvm/java-17-openjdk", "version": "17.0.18", "found_via": "JAVA_HOME"},
     "jdk8": "/usr/lib/jvm/java-1.8.0-openjdk",
     "java_home": "/usr/lib/jvm/java-17-openjdk",
-    "flink_home": {"path": "/usr/local/flink", "found_via": "FLINK_HOME"},
+    "flink_home": {"path": "/usr/local/flink", "found_via": "FLINK_HOME", "conf_file": "/usr/local/flink/conf/config.yaml"},
     "cluster_java": {"path": "/usr/lib/jvm/java-17-openjdk", "version": "17.0.18", "major": 17, "found_via": "JAVA_HOME"},
-    "running_java": {"path": "/usr/lib/jvm/java-1.8.0-openjdk", "version": "1.8.0_412", "major": 8, "found_via": "running process (pid 1234, taskmanager)"},
+    "running_javas": [{"path": "/usr/lib/jvm/java-1.8.0-openjdk", "version": "1.8.0_412", "major": 8, "found_via": "running process (pid 1234, taskmanager)", "pid": 1234, "role": "taskmanager"}],
     "items": [
       {"name": "jdk17", "status": "ok", "detail": "17.0.18 at /usr/lib/jvm/java-17-openjdk (via JAVA_HOME)"},
       {"name": "running", "status": "fail", "detail": "Java 1.8.0_412 (…, via running process (pid 1234, taskmanager)): the gluten jars carry Java 17 bytecode and fail to load on it (UnsupportedClassVersionError)", "fix": "set env.java.home in the Flink conf to a JDK 17 and restart the cluster (a restart needs the user consent)"},
@@ -112,7 +112,7 @@ python3 <skill_dir>/scripts/jdk_check.py [--goal build|native] [--json] [--out F
 }
 ```
 
-- 原始观测：`jdk17`（`path` / `version` / `found_via`）、`jdk8`（有则给出路径，仅信息）、`java_home`、`flink_home`、`cluster_java`（重启会选的：`path` / `version` / `major` / `found_via`）、`running_java`（守护进程实际的，无则为 null）；`items` 是逐项判定（`name` / `status` / `detail`，fail 与部分 warn 另带 `fix`），`status` 是全部条目的最差值
+- 原始观测：`jdk17`（`path` / `version` / `found_via`）、`jdk8`（有则给出路径，仅信息）、`java_home`、`flink_home`（`path` / `found_via` / `conf_file`）、`cluster_java`（重启会选的：`path` / `version` / `major` / `found_via`）、`flink_home.conf_file`（读的是哪份配置，无则 null）、`running_javas`（本安装的每个守护进程一条：`path` / `version` / `major` / `found_via` / `pid` / `role`，没有守护进程为空列表）；`items` 是逐项判定（`name` / `status` / `detail`，fail 与部分 warn 另带 `fix`），`status` 是全部条目的最差值
 - `success`：没有 fail。`missing`：fail 条目，形如 `running: Java 1.8.0_412 …`
 - 失败形态：`success: false`，`error_message` 形如 `1 item(s) missing: running`；检查崩溃：退出码 2，JSON 仍是完整契约形态（`status: fail`、空观测与条目、`next_step` 指向先修检查错误），`error_message` 以 `check aborted:` 开头
 
@@ -121,4 +121,4 @@ python3 <skill_dir>/scripts/jdk_check.py [--goal build|native] [--json] [--out F
 - `flink-velox-toolchain-check`、`flink-velox-build-tools-check`、`flink-velox-cpp-deps-check`：构建环境侧的兄弟检查项，触发词不重叠
 - `flink-velox-flink-dist-check`：Flink 安装、文件齐全与 1.19 版本线——本 skill 只借安装目录读 conf 与归属守护进程，不判版本
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一
-- 装 JDK、改 conf、重启集群：同族安装 / 切换类 skill（规划中，后续 PR）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复
+- 装 JDK、改 conf、重启集群：同族安装 / 切换类 skill（审中 !322、!325）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复

@@ -35,7 +35,7 @@
     },
     {
       "id": "q-overall",
-      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
       "should_trigger": false,
       "note": "总裁决 → 统筹 flink-velox-env-check"
     },
@@ -43,7 +43,7 @@
       "id": "q-clone",
       "prompt": "把 velox 克隆下来并切到基线分支",
       "should_trigger": false,
-      "note": "克隆/切分支 → 安装类 skill（规划中）；本 skill 只读"
+      "note": "克隆/切分支 → 安装类 skill（审中 !322）；本 skill 只读"
     }
   ]
 }

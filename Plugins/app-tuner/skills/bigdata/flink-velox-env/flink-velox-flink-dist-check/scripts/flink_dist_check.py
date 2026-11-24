@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""flink_dist_check.py — read-only check of the Flink installation the GFV stack runs on.
+"""flink_dist_check.py — read-only check of the Flink installation the GlutenFlink stack runs on.
 
-Locates the installation (FLINK_HOME, a flink on PATH, /opt/flink, /usr/local/flink;
-the first with bin/flink), checks that the stock scripts and exactly one
-lib/flink-dist*.jar are there, reads the version (jar name, else MANIFEST.MF) and
-holds it to the 1.19 line (major.minor only — the stack is built and verified on
-1.19.x, the patch level is free), notes a missing conf file, and resolves the REST
-URL the same way the sibling skills do (FLINK_REST_URL, conf rest.address/rest.port,
-stock localhost:8081). The script classifies only: it installs nothing, starts or
-stops nothing, writes nowhere except the optional --out file.
+Locates the installation: FLINK_HOME when set is the installation to check,
+exactly as given (an invalid one fails on its own path — a flink discoverable
+elsewhere is never silently judged instead); otherwise the first of a flink on
+PATH, /opt/flink, /usr/local/flink with bin/flink. Checks that the stock scripts
+and exactly one lib/**/flink-dist*.jar are there (the stock scripts scan lib/
+recursively — dot-named subdirectories included, as find does — and refuse to
+start with two dist jars), reads the version (jar name, else
+MANIFEST.MF) and holds it to the 1.19 line (major.minor only — the stack is built
+and verified on 1.19.x, the patch level is free), notes a missing conf file, and
+resolves the REST URL the same way the sibling skills do (FLINK_REST_URL, the
+rest.address / rest.port of the one conf file Flink actually reads, stock
+localhost:8081). The script classifies only: it installs nothing, starts or stops
+nothing, writes nowhere except the optional --out file.
 
 Usage:
   flink_dist_check.py [--json] [--out FILE [--overwrite]]
@@ -26,11 +31,11 @@ system path (/opt/flink, /usr/local/flink, ...).
 """
 import argparse
 import datetime
-import glob
 import json
 import os
 import re
 import shutil
+import stat
 import sys
 import zipfile
 
@@ -47,6 +52,8 @@ HINT_FLINK = ('install the official binary distribution '
               'flink-1.19.x-bin-scala_2.12.tgz and point FLINK_HOME at it')
 # Flink's stock REST endpoint; conf rest.address/rest.port override it.
 DEFAULT_REST_URL = 'http://localhost:8081'
+# Flink 1.19 reads flink-conf.yaml when both files exist and ignores config.yaml then.
+CONF_FILES = ('flink-conf.yaml', 'config.yaml')
 
 
 def sys_path(rel):
@@ -72,11 +79,16 @@ def worst(statuses):
 
 
 def find_flink_home():
-    """(path as given, source) — FLINK_HOME, a flink on PATH, /opt/flink,
-    /usr/local/flink; the first that has bin/flink."""
+    """(path as given, source) — FLINK_HOME when set is the installation to
+    check, exactly as given: an invalid one (no bin/flink, or not even a
+    directory) fails on its own path, the same sole-target rule the family
+    applies to every explicit locator — no fallback to PATH or the default
+    locations happens. Otherwise the first of a flink on PATH, /opt/flink,
+    /usr/local/flink that has bin/flink."""
+    explicit = os.environ.get('FLINK_HOME')
+    if explicit:
+        return explicit, 'FLINK_HOME'
     cands = []
-    if os.environ.get('FLINK_HOME'):
-        cands.append((os.environ['FLINK_HOME'], 'FLINK_HOME'))
     flink = shutil.which('flink')
     if flink:
         # a flink on PATH is <home>/bin/flink, often reached through a symlink
@@ -88,33 +100,40 @@ def find_flink_home():
     return (None, None)
 
 
-def load_flink_conf(flink_home):
-    """Flatten conf/config.yaml (nested maps) and conf/flink-conf.yaml (flat dotted
-    keys) into one dict, without a YAML dependency — the same reading the sibling
-    skills apply, so all of them derive the same REST URL. Scalar leaves only."""
+def effective_conf(flink_home):
+    """The one conf file Flink reads (flink-conf.yaml when it exists, else
+    config.yaml), or None when there is neither."""
+    for name in CONF_FILES:
+        if os.path.isfile(os.path.join(flink_home, 'conf', name)):
+            return os.path.join(flink_home, 'conf', name)
+    return None
+
+
+def load_flink_conf(conf_file):
+    """Flatten the one conf file Flink reads — config.yaml (nested maps) or
+    flink-conf.yaml (flat dotted keys) — without a YAML dependency; the same
+    reading the sibling skills apply, so all of them derive the same REST URL.
+    The two files are never merged. Scalar leaves only."""
     conf = {}
-    for name in ('config.yaml', 'flink-conf.yaml'):
-        try:
-            fh = open(os.path.join(flink_home, 'conf', name), encoding='utf-8', errors='replace')
-        except OSError:
-            continue
-        stack = []  # [(indent, dotted prefix)]
-        with fh:
-            for raw in fh:
-                line = re.sub(r'(^|\s)#.*$', r'\1', raw).rstrip()
-                if not line or line in ('---', '...'):
-                    continue
-                m = re.match(r'^(\s*)([A-Za-z0-9_.-]+):(?:\s+(.*))?$', line)
-                if not m:
-                    continue
-                indent, key, value = m.group(1), m.group(2), (m.group(3) or '').strip()
-                while stack and stack[-1][0] >= len(indent):
-                    stack.pop()
-                prefix = f'{stack[-1][1]}.' if stack else ''
-                if value:
-                    conf[prefix + key] = value.strip('\'"')
-                else:
-                    stack.append((len(indent), prefix + key))
+    if not conf_file:
+        return conf
+    stack = []  # [(indent, dotted prefix)]
+    with open(conf_file, encoding='utf-8', errors='replace') as fh:
+        for raw in fh:
+            line = re.sub(r'(^|\s)#.*$', r'\1', raw).rstrip()
+            if not line or line in ('---', '...'):
+                continue
+            m = re.match(r'^(\s*)([A-Za-z0-9_.-]+):(?:\s+(.*))?$', line)
+            if not m:
+                continue
+            indent, key, value = m.group(1), m.group(2), (m.group(3) or '').strip()
+            while stack and stack[-1][0] >= len(indent):
+                stack.pop()
+            prefix = f'{stack[-1][1]}.' if stack else ''
+            if value:
+                conf[prefix + key] = value.strip('\'"')
+            else:
+                stack.append((len(indent), prefix + key))
     return conf
 
 
@@ -137,17 +156,25 @@ def resolve_rest_url(conf):
 
 
 def dist_version(home):
-    """(version, jar name, where the version came from, every flink-dist jar name
-    in name order). The stock distribution names the jar flink-dist-<version>.jar;
+    """(version, jar path, where the version came from, every flink-dist jar path
+    relative to lib/). The stock distribution names the jar flink-dist-<version>.jar;
     a renamed one still carries its version as Implementation-Version in
-    META-INF/MANIFEST.MF. Read from the first jar in name order — the order
-    Flink's own config.sh lists lib/*.jar."""
-    names = [os.path.basename(j)
-             for j in sorted(glob.glob(os.path.join(home, 'lib', 'flink-dist*.jar')))]
+    META-INF/MANIFEST.MF. The version is read from the jar at the top of lib/
+    (the one an installation is identified by), then from nested ones by path."""
+    # the stock scripts scan lib/ recursively (find "$FLINK_LIB_DIR" ! -type d -name '*.jar'
+    # in config.sh; find "$LIB_DIR" -name 'flink-dist*.jar' in bash-java-utils.sh): a dist
+    # jar left anywhere under lib/ counts, in a dot-named directory too — os.walk enters
+    # those like find does, a recursive glob does not — paths are relative to lib/
+    lib = os.path.join(home, 'lib')
+    names = []
+    for dirpath, _dirnames, filenames in os.walk(lib):
+        names += [os.path.relpath(os.path.join(dirpath, fn), lib)
+                  for fn in filenames if fn.startswith('flink-dist') and fn.endswith('.jar')]
+    names.sort(key=lambda rel: (rel.count(os.sep), rel))  # the top of lib/ first, then nested by path
     if not names:
         return None, None, None, []
     name = names[0]
-    m = re.search(r'-(\d+\.\d+\.\d+)', name)
+    m = re.search(r'-(\d+\.\d+\.\d+)', os.path.basename(name))
     if m:
         return m.group(1), name, f'lib/{name}', names
     try:
@@ -167,14 +194,16 @@ def version_line_ok(version):
 def scan():
     home, source = find_flink_home()
     payload = {'path': home, 'found_via': source, 'version': None, 'on_1_19_line': None,
-               'version_source': None, 'dist_jars': [], 'rest_url': None, 'conf': {}}
+               'version_source': None, 'dist_jars': [], 'rest_url': None, 'conf_file': None, 'conf': {}}
     if not home:
         payload['rest_url'] = DEFAULT_REST_URL
         return payload, [make_item(
             'home', 'fail',
-            'Flink not found: FLINK_HOME is unset or has no bin/flink, no flink on PATH, '
+            'Flink not found: FLINK_HOME is unset, no flink on PATH, '
             'nothing under /opt/flink or /usr/local/flink', HINT_FLINK)]
-    conf = load_flink_conf(home)
+    conf_file = effective_conf(home)
+    payload['conf_file'] = conf_file
+    conf = load_flink_conf(conf_file)
     payload['rest_url'] = resolve_rest_url(conf)
     payload['conf'] = {k: conf[k] for k in ('rest.address', 'rest.port', 'env.java.home') if k in conf}
     items = [make_item('home', 'ok', f'Flink {payload["version"] or "?"} at {home} (via {source})')]
@@ -185,6 +214,17 @@ def scan():
     payload.update(version=version, version_source=version_source, dist_jars=dist_jars)
     items[0]['detail'] = (f'Flink {version or "?"} at {home} (via {source}'
                           + (f'; version from {version_source}' if version_source else '') + ')')
+    if source == 'FLINK_HOME' and 'bin/flink' in absent:
+        # FLINK_HOME is the installation to check, the same sole-target rule the family
+        # applies to every explicit locator: an invalid one fails on its own path —
+        # whatever flink is discoverable on PATH or under the default locations is
+        # never silently judged instead
+        where = 'does not exist' if not os.path.isdir(home) else 'has no executable bin/flink'
+        items[0] = make_item(
+            'home', 'fail',
+            f'FLINK_HOME is set to {home}, which {where} — it is the installation to check, '
+            'so a flink on PATH and the default locations were not looked at',
+            HINT_FLINK)
     if absent:
         items.append(make_item('files', 'fail', f'incomplete installation, missing {", ".join(absent)}',
                                'unpack the distribution again, or point FLINK_HOME at a complete one'))
@@ -192,10 +232,11 @@ def scan():
         # config.sh of the distribution: "Multiple flink-dist*.jar found ... Please resolve."
         items.append(make_item(
             'dist-jars', 'fail',
-            f'several flink-dist jars in lib: {", ".join(dist_jars)} — Flink\'s scripts refuse to '
-            'start with more than one (the version above is read from the first in name order)',
-            'keep only the flink-dist jar of the installed version in lib, then restart the cluster '
-            '(a restart needs the user consent)'))
+            f'several flink-dist jars under lib: {", ".join(dist_jars)} — the stock scripts scan '
+            'lib/ recursively and refuse to start with more than one (the version above is read '
+            'from the one at the top of lib/)',
+            'move every flink-dist jar but the installed version out of lib/ (e.g. to <lib>.bak/), '
+            'then restart the cluster (a restart needs the user consent)'))
     if not version:
         items.append(make_item(
             'version', 'fail',
@@ -217,13 +258,14 @@ def scan():
 
 def next_step(payload, items):
     by_name = {i['name']: i for i in items}
-    if not payload['path']:
+    if not payload['path'] or by_name.get('home', {}).get('status') == 'fail':
+        # no installation at all, or an explicit FLINK_HOME that is not one
         return HINT_FLINK + ', then rerun'
     if by_name.get('files', {}).get('status') == 'fail':
         return 'unpack the Flink distribution again (or point FLINK_HOME at a complete one), then rerun'
     if by_name.get('dist-jars', {}).get('status') == 'fail':
-        return 'keep only the flink-dist jar of the installed version in lib, then restart the ' \
-               'cluster (a restart needs the user consent), then rerun'
+        return 'move every flink-dist jar but the installed version out of lib/ (e.g. to <lib>.bak/), ' \
+               'then restart the cluster (a restart needs the user consent), then rerun'
     if not payload['version']:
         return 'reinstall the Flink 1.19.x runtime (its flink-dist jar carries no readable version), then rerun'
     if not payload['on_1_19_line']:
@@ -257,7 +299,7 @@ def aborted(exc):
         'checked_at': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
         'status': 'fail',
         'flink': {'path': None, 'found_via': None, 'version': None, 'on_1_19_line': None,
-                  'version_source': None, 'dist_jars': [], 'rest_url': None, 'conf': {}},
+                  'version_source': None, 'dist_jars': [], 'rest_url': None, 'conf_file': None, 'conf': {}},
         'items': [],
         'missing': [],
         'next_step': 'fix the check error first (see error_message), then rerun',
@@ -277,6 +319,12 @@ def write_out(path, result, overwrite):
         return 2
     if os.path.exists(target) and not overwrite:
         print(f'flink_dist_check.py: --out already exists, pass --overwrite to replace it: {path}',
+              file=sys.stderr)
+        return 2
+    if overwrite and os.path.exists(target) and not stat.S_ISREG(os.stat(target).st_mode):
+        # a fifo (or a directory, socket, device) is never opened: open() on a fifo
+        # blocks until a reader shows up and the check would never return
+        print(f'flink_dist_check.py: --out exists and is not a regular file, refusing to overwrite it: {path}',
               file=sys.stderr)
         return 2
     try:

@@ -4,7 +4,7 @@
 
 ## 1. 仓库根定位
 
-`--repos-dir` → `$GFV_REPOS_DIR` → 从当前目录向上找 `repos/`（须含 velox / velox4j / gluten 至少一个目录），首个命中者；向上查找默认到文件系统根，设置了 `ENV_CHECK_WALK_ROOT`（tier-A 缝）时走到该目录即停。单个仓可用 `VELOX_HOME` / `VELOX4J_HOME` / `GLUTEN_HOME` 单独指定，优先于仓库根（JSON 的 `pinned_via` 记录）。
+`--repos-dir` → `$GFV_REPOS_DIR` → 从当前目录向上找 `repos/`，首个命中者。显式给出的 `--repos-dir` / `$GFV_REPOS_DIR` 是目标指定：目录存在即直接作为根，是否含仓交给逐仓条目判定（detail / fix 指向该确切路径）；目录不存在才落到下一候选，`root_via` 记录实际命中者。向上查找的 `repos/` 须含 velox / velox4j / gluten 至少一个目录，默认到文件系统根，设置了 `ENV_CHECK_WALK_ROOT`（tier-A 缝）时走到该目录即停。单个仓可用 `VELOX_HOME` / `VELOX4J_HOME` / `GLUTEN_HOME` 单独指定，优先于仓库根（JSON 的 `pinned_via` 记录）。
 
 ## 2. 每个仓的探测与判定
 
@@ -22,7 +22,7 @@
 | velox4j | `pom.xml` | gluten-20260829 | https://github.com/bigo-sg/velox4j.git | VELOX4J_HOME |
 | gluten | `gluten-flink/pom.xml` | main | https://github.com/apache/gluten.git | GLUTEN_HOME |
 
-- git 以固定 argv 调用（`-C <仓> rev-parse --abbrev-ref HEAD` / `rev-parse --short HEAD` / `remote get-url origin`），10 秒超时，不 fetch
+- git 以固定 argv 调用（`-C <仓> rev-parse --abbrev-ref HEAD` / `rev-parse --short HEAD` / `remote get-url origin`），10 秒超时，不 fetch；`origin` 脱敏后输出：去掉 userinfo，去掉名字含 token / secret / password / credential 的查询参数
 - `on_baseline`：分支 == 基线 → true，否则 false（条目仍 ok）；读不到 HEAD 时为 null
 - `status` = 全部条目的最差值；`success` = 没有 fail；`missing` = `"仓: detail"` 列表
 
@@ -41,4 +41,4 @@
 
 ## 5. 来源
 
-三个仓、上游、基线分支与标志文件来自 GFV 安装器的 `GFVBOT_REPOS` 表与构建脚本读取的三个源码路径（velox / velox4j / gluten）；"偏离基线只提示不判负"与安装器一致（它也只记录分支，不强制切换）。
+三个仓、上游、基线分支与标志文件来自 GFVBot 安装器的 `GFVBOT_REPOS` 表与构建脚本读取的三个源码路径（velox / velox4j / gluten）；"偏离基线只提示不判负"与安装器一致（它也只记录分支，不强制切换）。

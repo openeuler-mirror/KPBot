@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import stat
 import unittest
 import zipfile
 from contextlib import redirect_stdout
@@ -83,10 +84,11 @@ class FakeMachine:
             zf.writestr("org/apache/flink/dummy.txt", "")
 
     def flink_home(self, home=None, version="1.19.2", dist=None, manifest_version=True,
-                   conf="none", rest=("127.0.0.1", "6123")):
+                   conf="none", rest=("127.0.0.1", "6123"), also=None):
         """Stock bin/ scripts, exactly one flink-dist jar (dist = another jar name;
         manifest_version: True = carries `version`, a string = that one, falsy = none)
-        and one conf layout (none / config.yaml / flink-conf.yaml)."""
+        and one conf layout (none / config.yaml / flink-conf.yaml; also = (name, text)
+        of a second conf file to put next to it)."""
         home = Path(home) if home else self.flink
         for stale in (home / "lib").glob("flink-dist*.jar"):
             stale.unlink()
@@ -102,6 +104,8 @@ class FakeMachine:
                        "rest:\n  # the REST endpoint\n  address: %s\n  port: %s\n" % rest)
         elif conf == "flink-conf.yaml":
             self.write(conf_dir / "flink-conf.yaml", "rest.address: %s\nrest.port: %s\n" % rest)
+        if also:
+            self.write(conf_dir / also[0], also[1])
 
     def env(self, **overrides):
         env = {"PATH": str(self.bin), "ENV_CHECK_SYSROOT": str(self.sys), "HOME": str(self.root),
@@ -188,6 +192,25 @@ class FlinkDistCase(unittest.TestCase):
         _, _, _, r = self.run_check("--json", env=self.m.env(FLINK_REST_URL="https://flink.example:8443"))
         self.assertEqual(r["flink"]["rest_url"], "https://flink.example:8443")
 
+    def test_only_the_conf_file_flink_reads_is_used(self):
+        # both files: Flink 1.19 reads flink-conf.yaml and ignores config.yaml — so does the check
+        self.m.flink_home(conf="config.yaml", rest=("127.0.0.1", "6123"),
+                          also=("flink-conf.yaml", "rest.address: flink.local\nrest.port: 8081\n"))
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["flink"]["conf_file"], r["flink"]["rest_url"], r["flink"]["conf"]),
+                         (str(self.m.flink / "conf" / "flink-conf.yaml"), "http://flink.local:8081",
+                          {"rest.address": "flink.local", "rest.port": "8081"}))  # nothing merged from config.yaml
+        self.assertNotIn("6123", r["flink"]["rest_url"])
+        # only config.yaml (what a 1.19 distribution ships): that one is read
+        self.m.flink_home(conf="config.yaml", rest=("127.0.0.1", "6123"))
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["flink"]["conf_file"], r["flink"]["rest_url"]),
+                         (str(self.m.flink / "conf" / "config.yaml"), "http://127.0.0.1:6123"))
+        # none: reported, nothing invented
+        self.m.flink_home(conf="none")
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["flink"]["conf_file"], r["flink"]["rest_url"]), (None, "http://localhost:8081"))
+
     def test_installation_lookup_order(self):
         # FLINK_HOME wins
         self.m.flink_home()
@@ -208,6 +231,37 @@ class FlinkDistCase(unittest.TestCase):
         _, _, _, r = self.run_check("--json", env=self.m.env(FLINK_HOME=None))
         self.assertEqual((r["flink"]["found_via"], r["flink"]["path"]), ("default", f"{self.m.sys}/usr/local/flink"))
 
+    def test_explicit_flink_home_is_the_installation_to_check(self):
+        # FLINK_HOME when set is the installation to check: an invalid one fails on
+        # its own path — a perfectly good flink discoverable on PATH is never judged
+        # instead (the sole-target rule the family applies to every explicit locator)
+        self.m.flink_home(home=self.m.local, conf="config.yaml", version="1.19.1")
+        (self.m.bin / "flink").symlink_to(self.m.local / "bin" / "flink")
+        bad = self.tmp / "not-flink"
+        bad.mkdir()
+        code, _, _, r = self.run_check("--json", env=self.m.env(FLINK_HOME=str(bad)))
+        self.assertEqual((code, r["success"]), (1, False))
+        self.assertEqual((r["flink"]["path"], r["flink"]["found_via"]), (str(bad), "FLINK_HOME"))
+        self.assertIsNone(r["flink"]["version"])  # not the 1.19.1 the PATH flink would give
+        home = self.item(r, "home")
+        self.assertEqual(home["status"], "fail")
+        self.assertEqual(home["detail"], f"FLINK_HOME is set to {bad}, which has no executable "
+                         "bin/flink — it is the installation to check, so a flink on PATH and "
+                         "the default locations were not looked at")
+        self.assertEqual(home["fix"], "install the official binary distribution "
+                         "flink-1.19.x-bin-scala_2.12.tgz and point FLINK_HOME at it")
+        self.assertEqual(r["next_step"], home["fix"] + ", then rerun")
+        self.assertIn(f"FLINK_HOME is set to {bad}, which has no executable bin/flink",
+                      self.run_check(env=self.m.env(FLINK_HOME=str(bad)))[1])
+        # a FLINK_HOME that does not exist: same rule — the exact path, still no fallback
+        gone = self.tmp / "gone"
+        _, _, _, r = self.run_check("--json", env=self.m.env(FLINK_HOME=str(gone)))
+        self.assertEqual((r["flink"]["path"], r["flink"]["found_via"]), (str(gone), "FLINK_HOME"))
+        home = self.item(r, "home")
+        self.assertEqual(home["detail"], f"FLINK_HOME is set to {gone}, which does not exist — it "
+                         "is the installation to check, so a flink on PATH and the default "
+                         "locations were not looked at")
+
     def test_not_found(self):
         code, out, _, r = self.run_check("--json", env=self.m.env(FLINK_HOME=None))
         self.assertEqual((code, r["success"], r["status"]), (1, False, "fail"))
@@ -218,7 +272,7 @@ class FlinkDistCase(unittest.TestCase):
                          "flink-1.19.x-bin-scala_2.12.tgz and point FLINK_HOME at it")
         self.assertEqual(r["flink"], {"path": None, "found_via": None, "version": None, "on_1_19_line": None,
                                       "version_source": None, "dist_jars": [], "rest_url": "http://localhost:8081",
-                                      "conf": {}})
+                                      "conf_file": None, "conf": {}})
         self.assertEqual(r["next_step"], home["fix"] + ", then rerun")
         self.assertEqual(r["error_message"], "1 item(s) missing: home")
         self.assertIn("NOT READY: 1 item(s) missing", self.run_check(env=self.m.env(FLINK_HOME=None))[1])
@@ -256,13 +310,59 @@ class FlinkDistCase(unittest.TestCase):
         self.assertEqual(r["flink"]["version"], "1.18.3")  # read from the first in name order
         item = self.item(r, "dist-jars")
         self.assertEqual(item["status"], "fail")
-        self.assertEqual(item["detail"], "several flink-dist jars in lib: flink-dist-1.18.3.jar, "
-                         "flink-dist-1.19.2.jar — Flink's scripts refuse to start with more than one "
-                         "(the version above is read from the first in name order)")
-        self.assertIn("a restart needs the user consent", item["fix"])
-        self.assertEqual(r["next_step"], "keep only the flink-dist jar of the installed version in lib, "
-                         "then restart the cluster (a restart needs the user consent), then rerun")
-        self.assertIn("        fix: keep only the flink-dist jar", self.run_check()[1])
+        self.assertEqual(item["detail"], "several flink-dist jars under lib: flink-dist-1.18.3.jar, "
+                         "flink-dist-1.19.2.jar — the stock scripts scan lib/ recursively and refuse to start "
+                         "with more than one (the version above is read from the one at the top of lib/)")
+        self.assertEqual(item["fix"], "move every flink-dist jar but the installed version out of lib/ "
+                         "(e.g. to <lib>.bak/), then restart the cluster (a restart needs the user consent)")
+        self.assertEqual(r["next_step"], "move every flink-dist jar but the installed version out of lib/ "
+                         "(e.g. to <lib>.bak/), then restart the cluster (a restart needs the user consent), "
+                         "then rerun")
+        self.assertIn("        fix: move every flink-dist jar but the installed version out of lib/", self.run_check()[1])
+
+    def test_a_dist_jar_left_in_a_subdirectory_of_lib_counts(self):
+        # the stock scripts scan lib/ recursively: an old jar parked in lib/backup/ is still seen by them
+        self.m.flink_home(conf="config.yaml")
+        self.m.jar(self.m.flink / "lib" / "backup" / "flink-dist-1.18.1.jar", "1.18.1")
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"]), (1, False))
+        self.assertEqual(r["flink"]["dist_jars"], ["flink-dist-1.19.2.jar", "backup/flink-dist-1.18.1.jar"])
+        self.assertEqual((r["flink"]["version"], r["flink"]["on_1_19_line"]), ("1.19.2", True))  # the top of lib/ decides
+        item = self.item(r, "dist-jars")
+        self.assertEqual(item["detail"], "several flink-dist jars under lib: flink-dist-1.19.2.jar, "
+                         "backup/flink-dist-1.18.1.jar — the stock scripts scan lib/ recursively and refuse "
+                         "to start with more than one (the version above is read from the one at the top of lib/)")
+        self.assertIn("  FAIL  dist-jars: several flink-dist jars under lib: flink-dist-1.19.2.jar, "
+                      "backup/flink-dist-1.18.1.jar", self.run_check()[1])
+        self.assertEqual(r["error_message"], "1 item(s) missing: dist-jars")
+        # and the other way round: the only dist jar sits in a subdirectory — still the installation's
+        (self.m.flink / "lib" / "flink-dist-1.19.2.jar").unlink()
+        (self.m.flink / "lib" / "backup" / "flink-dist-1.18.1.jar").unlink()
+        self.m.jar(self.m.flink / "lib" / "backup" / "flink-dist-1.19.4.jar", "1.19.4")
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["flink"]["version"], r["flink"]["version_source"]),
+                         (0, True, "1.19.4", "lib/backup/flink-dist-1.19.4.jar"))
+
+    def test_a_dist_jar_in_a_dot_directory_of_lib_counts(self):
+        # the stock scripts' find enters dot-prefixed directories (a recursive glob
+        # does not): an old jar parked in lib/.backup/ is seen by them and by the
+        # check alike — counting only one and judging ok would lie about startup
+        self.m.flink_home(conf="config.yaml")
+        self.m.jar(self.m.flink / "lib" / ".backup" / "flink-dist-1.18.0.jar", "1.18.0")
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"]), (1, False))
+        self.assertEqual(r["flink"]["dist_jars"],
+                         ["flink-dist-1.19.2.jar", ".backup/flink-dist-1.18.0.jar"])
+        self.assertEqual((r["flink"]["version"], r["flink"]["on_1_19_line"]), ("1.19.2", True))
+        item = self.item(r, "dist-jars")
+        self.assertEqual(item["status"], "fail")
+        self.assertEqual(item["detail"], "several flink-dist jars under lib: flink-dist-1.19.2.jar, "
+                         ".backup/flink-dist-1.18.0.jar — the stock scripts scan lib/ recursively "
+                         "and refuse to start with more than one (the version above is read from "
+                         "the one at the top of lib/)")
+        self.assertIn("  FAIL  dist-jars: several flink-dist jars under lib: flink-dist-1.19.2.jar, "
+                      ".backup/flink-dist-1.18.0.jar", self.run_check()[1])
+        self.assertEqual(r["error_message"], "1 item(s) missing: dist-jars")
 
     def test_version_from_manifest_when_the_jar_name_has_none(self):
         self.m.flink_home(conf="config.yaml", dist="flink-dist-custom.jar", manifest_version="1.19.1")
@@ -300,7 +400,7 @@ class FlinkDistCase(unittest.TestCase):
         self.assertEqual(set(r), {"success", "checked_at", "status", "flink", "items", "missing",
                                   "next_step", "error_message"})
         self.assertEqual(set(r["flink"]), {"path", "found_via", "version", "on_1_19_line", "version_source",
-                                           "dist_jars", "rest_url", "conf"})
+                                           "dist_jars", "rest_url", "conf_file", "conf"})
         module = load_module()
 
         def boom():
@@ -345,6 +445,18 @@ class FlinkDistCase(unittest.TestCase):
         self.assertIn("not a symlink", err)
         self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
         self.assertEqual(self.run_check("--json", "--out", str(archive), "--overwrite")[0], 0)
+
+    def test_out_never_opens_a_fifo(self):
+        self.m.flink_home(conf="config.yaml")
+        fifo = self.tmp / "project" / "pipe.json"
+        fifo.parent.mkdir()
+        os.mkfifo(str(fifo))
+        # open() on a fifo blocks until a reader appears: the guard must refuse instead
+        # (a blocked check would run into the subprocess timeout of run_check and error out)
+        code, out, err, _ = self.run_check("--json", "--out", str(fifo), "--overwrite")
+        self.assertEqual((code, stat.S_ISFIFO(fifo.lstat().st_mode)), (2, True))
+        self.assertIn("--out exists and is not a regular file, refusing to overwrite it", err)
+        self.assertIn(f"flink-dist  OK       Flink 1.19.2 at {self.m.flink}", self.run_check()[1])  # the verdict itself is unaffected
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")

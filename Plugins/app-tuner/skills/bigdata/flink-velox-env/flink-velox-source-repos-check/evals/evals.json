@@ -28,13 +28,13 @@
     },
     {
       "id": "not-overall",
-      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "query": "这台机器现在能不能编译并运行 GlutenFlink 栈",
       "expected": "不触发：总裁决属统筹 flink-velox-env-check"
     },
     {
       "id": "not-clone",
       "query": "把 velox 和 gluten 克隆下来，切到基线分支",
-      "expected": "不触发：本 skill 只读；克隆与切分支属安装类 skill（规划中），next_step 是交给它的工单"
+      "expected": "不触发：本 skill 只读；克隆与切分支属安装类 skill（审中 !322），next_step 是交给它的工单"
     }
   ]
 }

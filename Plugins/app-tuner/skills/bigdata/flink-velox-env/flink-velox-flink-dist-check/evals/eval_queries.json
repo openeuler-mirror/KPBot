@@ -29,13 +29,13 @@
     },
     {
       "id": "q-lib-state",
-      "prompt": "lib 里是 native 还是 GFV 的 jar",
+      "prompt": "lib 里是 native 还是 GlutenFlink 的 jar",
       "should_trigger": false,
-      "note": "lib 构建状态 → flink-velox-lib-state-check（规划中）"
+      "note": "lib 构建状态 → flink-velox-lib-state-check（!321 已合入）"
     },
     {
       "id": "q-overall",
-      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
       "should_trigger": false,
       "note": "总裁决 → 统筹 flink-velox-env-check"
     },
@@ -43,7 +43,7 @@
       "id": "q-install",
       "prompt": "把 Flink 1.19.2 装上并重启集群",
       "should_trigger": false,
-      "note": "安装/重启 → 同族安装/切换类 skill（规划中）；本 skill 只读"
+      "note": "安装/重启 → 同族安装/切换类 skill（审中 !322–!325）；本 skill 只读"
     }
   ]
 }

@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import stat
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -83,9 +84,10 @@ class FakeMachine:
         if release:
             self.write(home / "release", f'JAVA_VERSION="{version}"\nIMPLEMENTOR="fake"\n')
 
-    def flink_home(self, conf="none", env_java_home=None):
+    def flink_home(self, conf="none", env_java_home=None, also=None):
         """bin/flink plus one conf layout: none, config.yaml (nested rest block) or
-        flink-conf.yaml (flat keys)."""
+        flink-conf.yaml (flat keys); also = (name, text) of a second conf file next
+        to it."""
         self.script(self.flink / "bin" / "flink", "exit 0\n")
         self.write(self.lib / "flink-dist-1.19.2.jar", "not a real jar\n")
         for name in ("config.yaml", "flink-conf.yaml"):
@@ -102,6 +104,8 @@ class FakeMachine:
             name = name or "config.yaml"
         if name:
             self.write(self.flink / "conf" / name, text)
+        if also:
+            self.write(self.flink / "conf" / also[0], also[1])
 
     def daemon(self, pid, java_home, role="jobmanager", dist=None):
         """A Flink daemon in the fake /proc: <java>/bin/java -classpath <dist> <entry>."""
@@ -170,8 +174,9 @@ class JdkCase(unittest.TestCase):
         self.assertEqual((r["jdk17"]["path"], r["jdk17"]["version"], r["jdk17"]["found_via"]),
                          (str(self.m.jdk17), "17.0.18", "JAVA_HOME"))
         self.assertEqual(r["jdk8"], str(self.m.jdk8))
-        self.assertEqual(r["flink_home"], {"path": str(self.m.flink), "found_via": "FLINK_HOME"})
-        self.assertIsNone(r["running_java"])
+        self.assertEqual(r["flink_home"], {"path": str(self.m.flink), "found_via": "FLINK_HOME",
+                                           "conf_file": str(self.m.flink / "conf" / "config.yaml")})
+        self.assertEqual(r["running_javas"], [])
         self.assertEqual((r["cluster_java"]["path"], r["cluster_java"]["major"], r["cluster_java"]["found_via"]),
                          (str(self.m.jdk17), 17, "JAVA_HOME"))
         self.assertEqual([(i["name"], i["status"]) for i in r["items"]],
@@ -187,10 +192,10 @@ class JdkCase(unittest.TestCase):
         self.ready(daemons=[(101, self.m.jdk17, "jobmanager")])
         code, _, _, r = self.run_check("--json")
         self.assertEqual((code, r["success"]), (0, True))
-        self.assertEqual(r["running_java"]["path"], str(self.m.jdk17))
-        self.assertIn("pid 101, jobmanager", r["running_java"]["found_via"])
+        self.assertEqual(r["running_javas"], [{"path": str(self.m.jdk17), "found_via": "running process (pid 101, jobmanager)",
+                                               "version": "17.0.18", "major": 17, "pid": 101, "role": "jobmanager"}])
         self.assertEqual([i["name"] for i in r["items"]], ["jdk17", "JAVA_HOME", "java"])
-        self.assertTrue(r["cluster_java"]["found_via"].endswith("; the running daemons use it"))
+        self.assertTrue(r["cluster_java"]["found_via"].endswith("; the 1 running daemon(s) use it"))
 
     def test_running_daemon_on_java8_fails_build(self):
         self.ready(daemons=[(102, self.m.jdk8, "taskmanager")])
@@ -198,8 +203,10 @@ class JdkCase(unittest.TestCase):
         self.assertEqual((code, r["success"], r["status"]), (1, False, "fail"))
         running = self.item(r, "running")
         self.assertEqual(running["status"], "fail")
-        self.assertIn("Java 17 bytecode", running["detail"])
-        self.assertIn("a restart needs the user consent", running["fix"])
+        self.assertEqual(running["detail"], "not every running Flink daemon runs a suitable Java: taskmanager pid 102: "
+                         f"Java 1.8.0_412 ({self.m.jdk8}) — needs Java 17: the gluten jars carry Java 17 bytecode")
+        self.assertEqual(running["fix"], "set env.java.home in the Flink conf to a JDK 17 and restart the cluster "
+                         "(a restart needs the user consent)")
         self.assertEqual(self.item(r, "startup")["status"], "ok")
         self.assertEqual(r["missing"], [f"running: {running['detail']}"])
         self.assertEqual(r["error_message"], "1 item(s) missing: running")
@@ -207,15 +214,116 @@ class JdkCase(unittest.TestCase):
                          "cluster (a restart needs the user consent), then rerun")
         _, out, _, _ = self.run_check()
         self.assertIn("jdk         FAIL     1 item(s) missing", out)
-        self.assertIn("  FAIL  running: Java 1.8.0_412", out)
+        self.assertIn("  FAIL  running: not every running Flink daemon runs a suitable Java: taskmanager pid 102: "
+                      "Java 1.8.0_412", out)
         self.assertIn("NOT READY for goal 'build': 1 item(s) missing", out)
+
+    def test_every_daemon_is_looked_at_on_its_own(self):
+        # the JobManager already moved to Java 17, one TaskManager is still on Java 8:
+        # stopping at the first daemon found would call the installation clean
+        self.ready(daemons=[(101, self.m.jdk17, "jobmanager"), (102, self.m.jdk8, "taskmanager"),
+                            (103, self.m.jdk17, "taskmanager")])
+        code, out, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["error_message"]), (1, False, "1 item(s) missing: running"))
+        running = self.item(r, "running")
+        self.assertEqual(running["detail"], "not every running Flink daemon runs a suitable Java: "
+                         f"jobmanager pid 101: Java 17.0.18 ({self.m.jdk17}); "
+                         f"taskmanager pid 102: Java 1.8.0_412 ({self.m.jdk8}) — needs Java 17: the gluten jars carry "
+                         f"Java 17 bytecode; taskmanager pid 103: Java 17.0.18 ({self.m.jdk17})")
+        self.assertEqual(running["fix"], "set env.java.home in the Flink conf to a JDK 17 and restart the cluster "
+                         "(a restart needs the user consent)")
+        self.assertEqual([(e["pid"], e["role"], e["major"]) for e in r["running_javas"]],
+                         [(101, "jobmanager", 17), (102, "taskmanager", 8), (103, "taskmanager", 17)])
+        self.assertEqual((self.item(r, "startup")["status"], r["next_step"]), ("ok", running["fix"] + ", then rerun"))
+        report = self.run_check()[1]
+        self.assertIn("  FAIL  running: not every running Flink daemon runs a suitable Java: jobmanager pid 101: Java 17.0.18", report)
+        self.assertIn("taskmanager pid 102: Java 1.8.0_412", report)
+        # all daemons on one and the same Java as the restart would pick: a single verdict, all of them named
+        shutil.rmtree(self.m.proc)
+        self.ready(daemons=[(101, self.m.jdk17, "jobmanager"), (102, self.m.jdk17, "taskmanager")])
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual(([i["name"] for i in r["items"]], r["success"]), (["jdk17", "JAVA_HOME", "java"], True))
+        self.assertTrue(r["cluster_java"]["found_via"].endswith("; the 2 running daemon(s) use it"))
+        self.assertEqual(len(r["running_javas"]), 2)
+        # under the native goal both Javas are fine, but they differ: said so, as a warning
+        shutil.rmtree(self.m.proc)
+        self.ready(daemons=[(101, self.m.jdk17, "jobmanager"), (102, self.m.jdk8, "taskmanager")])
+        _, _, _, r = self.run_check("--json", "--goal", "native")
+        running = self.item(r, "running")
+        self.assertEqual((r["success"], running["status"]), (True, "warn"))
+        self.assertEqual(running["detail"], "the running daemons run different Java versions (a restart puts them all "
+                         f"on the startup Java): jobmanager pid 101: Java 17.0.18 ({self.m.jdk17}); "
+                         f"taskmanager pid 102: Java 1.8.0_412 ({self.m.jdk8})")
+
+    def test_a_java_17_directory_holding_another_jdk_is_not_taken(self):
+        decoy = self.m.sys / "usr" / "lib" / "jvm" / "java-17-aaa-decoy"  # sorts first, is not a JDK 17
+        self.m.jdk(decoy, "21.0.3")
+        self.m.jdk(self.m.jdk17, "17.0.18")
+        self.m.flink_home()
+        _, _, _, r = self.run_check("--json", env=self.m.env(JAVA_HOME=None))
+        self.assertEqual((r["jdk17"]["path"], r["jdk17"]["version"], r["jdk17"]["found_via"]), (str(self.m.jdk17), "17.0.18", "/usr/lib/jvm"))
+        # with nothing else on the machine the decoy is not passed off as a JDK 17 either
+        shutil.rmtree(self.m.jdk17)
+        code, _, _, r = self.run_check("--json", env=self.m.env(JAVA_HOME=None))
+        self.assertEqual((code, r["jdk17"], self.item(r, "jdk17")["status"]), (1, {"path": None, "version": None, "found_via": None}, "fail"))
+
+    def test_native_goal_accepts_java_8_11_17_only(self):
+        jdk21 = self.m.sys / "usr" / "lib" / "jvm" / "java-21-fake"
+        self.m.jdk(self.m.jdk17, "17.0.18")
+        self.m.jdk(jdk21, "21.0.3")
+        self.m.flink_home(env_java_home=self.m.jdk17)  # a restart would pick a fine Java …
+        self.m.daemon(105, jdk21, "taskmanager")  # … but one daemon runs Java 21
+        code, _, _, r = self.run_check("--json", "--goal", "native")
+        self.assertEqual((code, r["success"]), (1, False))
+        running, startup = self.item(r, "running"), self.item(r, "startup")
+        self.assertEqual(running["detail"], "not every running Flink daemon runs a suitable Java: taskmanager pid 105: "
+                         f"Java 21.0.3 ({jdk21}) — Flink 1.19 itself runs on Java 8, 11 or 17")
+        self.assertEqual(startup["status"], "ok")
+        report = self.run_check("--goal", "native")[1]
+        self.assertIn("NOT READY for goal 'native': 1 item(s) missing", report)
+        self.assertIn("  FAIL  running: not every running Flink daemon runs a suitable Java: taskmanager pid 105: Java 21.0.3", report)
+        shutil.rmtree(self.m.proc)  # no daemon left: only what a restart would pick is judged …
+        self.m.flink_home(env_java_home=jdk21)  # … and when that is Java 21 too
+        _, _, _, r = self.run_check("--json", "--goal", "native")
+        startup = self.item(r, "startup")
+        self.assertEqual(startup["detail"], f"Java 21.0.3 ({jdk21}, via flink conf env.java.home): Flink 1.19 itself "
+                         "runs on Java 8, 11 or 17, not on it")
+        self.assertEqual(r["next_step"], startup["fix"] + ", then rerun")
+        self.assertEqual(running["fix"], "set env.java.home in the Flink conf (or JAVA_HOME) to a JDK 8, 11 or 17 "
+                         "and restart the cluster (a restart needs the user consent)")
+        self.assertEqual(r["next_step"], running["fix"] + ", then rerun")
+        self.assertIn("NOT READY for goal 'native': 1 item(s) missing", self.run_check("--goal", "native")[1])
+        # the build goal says what it always did
+        _, _, _, r = self.run_check("--json")
+        self.assertIn("Java 17 bytecode", self.item(r, "startup")["detail"])
+
+    def test_only_the_conf_file_flink_reads_is_used(self):
+        self.m.jdk(self.m.jdk17, "17.0.18")
+        self.m.jdk(self.m.jdk8, "1.8.0_412")
+        # env.java.home only in config.yaml while flink-conf.yaml exists: Flink never sees it
+        self.m.flink_home(conf="flink-conf.yaml", also=("config.yaml", f"rest:\n  port: 8081\nenv.java.home: {self.m.jdk8}\n"))
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["success"], r["flink_home"]["conf_file"], r["cluster_java"]["found_via"]),
+                         (True, str(self.m.flink / "conf" / "flink-conf.yaml"), "JAVA_HOME"))
+        # in the file Flink reads: it wins over JAVA_HOME
+        self.m.flink_home(conf="config.yaml", env_java_home=self.m.jdk17,
+                          also=("flink-conf.yaml", f"rest.port: 8081\nenv.java.home: {self.m.jdk8}\n"))
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["success"], r["flink_home"]["conf_file"], r["cluster_java"]["found_via"], r["cluster_java"]["major"]),
+                         (False, str(self.m.flink / "conf" / "flink-conf.yaml"), "flink conf env.java.home", 8))
+        # only config.yaml (what a 1.19 distribution ships): that one is read
+        self.m.flink_home(conf="config.yaml", env_java_home=self.m.jdk17)
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["success"], r["flink_home"]["conf_file"], r["cluster_java"]["found_via"]),
+                         (True, str(self.m.flink / "conf" / "config.yaml"), "flink conf env.java.home"))
 
     def test_native_goal_tolerates_a_java8_daemon(self):
         self.ready(daemons=[(102, self.m.jdk8, "taskmanager")])
         code, _, _, r = self.run_check("--json", "--goal", "native")
         self.assertEqual((code, r["success"], r["goal"]), (0, True, "native"))
         self.assertEqual(self.item(r, "running")["status"], "ok")
-        self.assertIn("Java 1.8.0_412", self.item(r, "running")["detail"])
+        self.assertEqual(self.item(r, "running")["detail"],
+                         f"all 1 running daemon(s) run taskmanager pid 102: Java 1.8.0_412 ({self.m.jdk8})")
 
     def test_conf_env_java_home_beats_java_home(self):
         self.m.jdk(self.m.jdk17, "17.0.18")
@@ -300,8 +408,8 @@ class JdkCase(unittest.TestCase):
         self.m.jdk(self.m.jdk17, "17.0.18")
         code, out, _, r = self.run_check("--json", env=self.m.env(FLINK_HOME=None))
         self.assertEqual((code, r["success"]), (0, True))
-        self.assertEqual(r["flink_home"], {"path": None, "found_via": None})
-        self.assertIsNone(r["running_java"])
+        self.assertEqual(r["flink_home"], {"path": None, "found_via": None, "conf_file": None})
+        self.assertEqual(r["running_javas"], [])
         flink = self.item(r, "flink")
         self.assertEqual(flink["status"], "warn")
         self.assertIn("conf env.java.home not read", flink["detail"])
@@ -326,7 +434,7 @@ class JdkCase(unittest.TestCase):
                       dist=self.tmp / "other-flink" / "lib" / "flink-dist-1.19.2.jar")
         code, _, _, r = self.run_check("--json")
         self.assertEqual((code, r["success"]), (0, True))
-        self.assertIsNone(r["running_java"])
+        self.assertEqual(r["running_javas"], [])
         self.assertEqual([i["name"] for i in r["items"]], ["jdk17", "JAVA_HOME", "startup"])
 
     def test_conf_env_java_home_without_bin_java_fails(self):
@@ -341,7 +449,7 @@ class JdkCase(unittest.TestCase):
         self.ready()
         _, _, _, r = self.run_check("--json")
         self.assertEqual(set(r), {"success", "checked_at", "goal", "status", "jdk17", "jdk8", "java_home",
-                                  "flink_home", "cluster_java", "running_java", "items", "missing",
+                                  "flink_home", "cluster_java", "running_javas", "items", "missing",
                                   "next_step", "error_message"})
         self.assertEqual(set(r["cluster_java"]), {"path", "version", "major", "found_via"})
         self.assertEqual(set(self.item(r, "startup")), {"name", "status", "detail"})
@@ -357,7 +465,8 @@ class JdkCase(unittest.TestCase):
         a = json.loads(buffer.getvalue())[KEY]
         self.assertEqual((code, a["success"], a["status"], a["error_message"][:15]), (2, False, "fail", "check aborted: "))
         self.assertEqual(set(a), set(r))
-        self.assertEqual((a["items"], a["missing"], a["flink_home"], a["running_java"]), ([], [], {"path": None, "found_via": None}, None))
+        self.assertEqual((a["items"], a["missing"], a["flink_home"], a["running_javas"]),
+                         ([], [], {"path": None, "found_via": None, "conf_file": None}, []))
         self.assertTrue(a["next_step"].startswith("fix the check error first"))
 
     def test_out_file_matches_stdout_and_is_confined(self):
@@ -385,6 +494,18 @@ class JdkCase(unittest.TestCase):
         self.assertIn("not a symlink", err)
         self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
         self.assertEqual(self.run_check("--json", "--out", str(archive), "--overwrite")[0], 0)
+
+    def test_out_never_opens_a_fifo(self):
+        self.ready()
+        fifo = self.tmp / "project" / "pipe.json"
+        fifo.parent.mkdir()
+        os.mkfifo(str(fifo))
+        # open() on a fifo blocks until a reader appears: the guard must refuse instead
+        # (a blocked check would run into the subprocess timeout of run_check and error out)
+        code, _, err, _ = self.run_check("--json", "--out", str(fifo), "--overwrite")
+        self.assertEqual((code, stat.S_ISFIFO(fifo.lstat().st_mode)), (2, True))
+        self.assertIn("--out exists and is not a regular file, refusing to overwrite it", err)
+        self.assertIn("READY: the Java for the Flink daemons is in order", self.run_check()[1])  # the verdict itself is unaffected
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")

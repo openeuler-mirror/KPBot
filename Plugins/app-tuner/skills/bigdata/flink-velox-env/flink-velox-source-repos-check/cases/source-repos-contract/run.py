@@ -4,9 +4,10 @@
 Drives scripts/source_repos_check.py against a fake machine laid out in a scratch
 directory — three checkouts with their marker files and a .git/HEAD, a fake PATH
 whose git is an sh stub (or absent) — with nothing from the real machine in play;
-the script's seam ENV_CHECK_WALK_ROOT bounds the upward search. Pins the verdict
+nothing, writes nowhere except the optional --out file). Pins the verdict
 contract (exit codes, success, status, missing, next_step), every probe rule
-(root via --repos-dir / GFV_REPOS_DIR / repos walked upward, per-checkout pinning,
+(root via --repos-dir / GFV_REPOS_DIR / repos walked upward — an existing
+explicit candidate is the root as given, empty or not — per-checkout pinning,
 marker files, branch and HEAD through git, off-baseline reported not failed,
 git absent or not a checkout = warning), the JSON shape (also for a crash), --out
 safety (inside the project, no symlink, no silent overwrite) and that a check
@@ -23,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import stat
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -42,6 +44,7 @@ REPOS = {
     "velox4j": (("pom.xml",), "gluten-20260829", "https://github.com/bigo-sg/velox4j.git"),
     "gluten": (("gluten-flink/pom.xml",), "main", "https://github.com/apache/gluten.git"),
 }
+ENV_OF = {"velox": "VELOX_HOME", "velox4j": "VELOX4J_HOME", "gluten": "GLUTEN_HOME"}
 
 GIT_STUB = textwrap.dedent('''\
     # fake git: -C <repo> rev-parse ... / remote get-url
@@ -57,7 +60,7 @@ GIT_STUB = textwrap.dedent('''\
           *) echo main ;;
         esac; fi ;;
       "rev-parse --short") echo 0123abc ;;
-      "remote get-url") echo "https://example.invalid/$name.git" ;;
+      "remote get-url") echo "${FAKE_GIT_ORIGIN:-https://example.invalid/$name.git}" ;;
       *) exit 1 ;;
     esac
     ''')
@@ -207,6 +210,75 @@ class SourceReposCase(unittest.TestCase):
         _, _, _, r = self.run_check("--json", env=self.m.env(GFV_REPOS_DIR=None, ENV_CHECK_WALK_ROOT=None), cwd=str(elsewhere))
         self.assertEqual((r["root"], r["root_via"]), (str(ancestor), "repos/ walked up from the working directory"))
 
+    def test_explicit_repos_dir_is_the_root_as_given_empty_or_not(self):
+        self.m.checkouts()
+        empty = self.tmp / "empty"
+        empty.mkdir()
+        code, out, _, r = self.run_check("--json", "--repos-dir", str(empty))
+        self.assertEqual((code, r["success"], r["status"]), (1, False, "fail"))
+        self.assertEqual((r["root"], r["root_via"]), (str(empty), "--repos-dir"))
+        self.assertEqual(r["error_message"], "3 item(s) missing: velox, velox4j, gluten")
+        for name, (_, branch, url) in REPOS.items():
+            item = self.item(r, name)
+            self.assertEqual((item["status"], item["detail"]),
+                             ("fail", f"no {name} checkout at {empty / name}"))
+            self.assertEqual(item["fix"], f"git clone -b {branch} {url} into {empty}, or set {ENV_OF[name]}")
+            self.assertEqual(r["checkouts"][name]["error"], "missing")
+        self.assertTrue(r["next_step"].endswith(f"into {empty}, then rerun"))
+        self.assertNotIn(str(self.m.repos), out)  # the verdict is about the given dir, not another one
+        self.assertIn("NOT READY: 3 item(s) missing", self.run_check("--repos-dir", str(empty))[1])
+
+    def test_explicit_repos_dir_wins_over_a_qualified_repos_walked_up(self):
+        self.m.checkouts()
+        foreign = self.tmp / "foreign"
+        (foreign / "not-a-repo").mkdir(parents=True)
+        # the working directory sits in a tree whose repos/ holds all three: the
+        # given dir still wins, the walk-up is never used as a fallback
+        env = self.m.env(GFV_REPOS_DIR=None)
+        code, out, _, r = self.run_check("--json", "--repos-dir", str(foreign), env=env, cwd=str(self.m.root))
+        self.assertEqual((r["root"], r["root_via"]), (str(foreign), "--repos-dir"))
+        self.assertEqual((code, r["success"]), (1, False))
+        self.assertEqual(self.item(r, "velox")["detail"], f"no velox checkout at {foreign / 'velox'}")
+        self.assertEqual(self.item(r, "velox")["fix"],
+                         f"git clone -b gluten-20260829 https://github.com/bigo-sg/velox.git "
+                         f"into {foreign}, or set VELOX_HOME")
+        self.assertNotIn(str(self.m.repos), out)
+
+    def test_gfv_repos_dir_is_the_root_as_given_empty_or_not(self):
+        self.m.checkouts()
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        env = self.m.env(GFV_REPOS_DIR=str(bare))
+        code, out, _, r = self.run_check("--json", env=env, cwd=str(self.m.root))
+        self.assertEqual((r["root"], r["root_via"]), (str(bare), "GFV_REPOS_DIR"))
+        self.assertEqual((code, r["success"]), (1, False))
+        gluten = self.item(r, "gluten")
+        self.assertEqual((gluten["status"], gluten["detail"]), ("fail", f"no gluten checkout at {bare / 'gluten'}"))
+        self.assertEqual(gluten["fix"], f"git clone -b main https://github.com/apache/gluten.git "
+                         f"into {bare}, or set GLUTEN_HOME")
+        self.assertNotIn(str(self.m.repos), out)
+
+    def test_walk_up_skips_a_repos_dir_without_any_checkout(self):
+        self.m.checkouts()
+        nested = self.m.root / "a" / "b"
+        (nested / "repos").mkdir(parents=True)  # exists, holds none of the three
+        env = self.m.env(GFV_REPOS_DIR=None)
+        _, _, _, r = self.run_check("--json", env=env, cwd=str(nested))
+        self.assertEqual((r["root"], r["root_via"]),
+                         (str(self.m.repos), "repos/ walked up from the working directory"))
+        self.assertEqual(r["success"], True)
+
+    def test_repos_dir_that_does_not_exist_falls_to_the_next_candidate(self):
+        self.m.checkouts()
+        missing = self.tmp / "no-such-dir"
+        _, _, _, r = self.run_check("--json", "--repos-dir", str(missing))  # GFV_REPOS_DIR answers
+        self.assertEqual((r["root"], r["root_via"]), (str(self.m.repos), "GFV_REPOS_DIR"))
+        self.assertEqual(r["success"], True)
+        env = self.m.env(GFV_REPOS_DIR=None)
+        _, _, _, r = self.run_check("--json", "--repos-dir", str(missing), env=env, cwd=str(self.m.root))
+        self.assertEqual((r["root"], r["root_via"]),
+                         (str(self.m.repos), "repos/ walked up from the working directory"))
+
     def test_pinned_checkout_via_env(self):
         self.m.checkouts()
         other = self.m.checkout("velox", home=self.tmp / "elsewhere-velox")
@@ -265,6 +337,26 @@ class SourceReposCase(unittest.TestCase):
                          "baseline branch is gluten-20260829")
         self.assertIs(self.item(r, "velox")["on_baseline"], False)
         self.assertIn("not on the baseline branch: velox, velox4j, gluten", r["next_step"])
+
+    def test_origin_is_reported_without_its_secrets(self):
+        self.m.checkouts()
+        # a private fork reached with an embedded password and access tokens in the query
+        secret_url = ("https://build:Sup3r-Secret@github.com/org/velox.git"
+                      "?access_token=ghp_TopSecret&x-access-token=abc123&token=t0k&private_token=pv&foo=bar")
+        archive = self.tmp / "project" / "source-repos-check.json"
+        code, out, err, r = self.run_check("--json", "--out", str(archive), env=self.m.env(FAKE_GIT_ORIGIN=secret_url))
+        self.assertEqual((code, r["success"]), (0, True))
+        self.assertEqual(r["checkouts"]["velox"]["origin"], "https://github.com/org/velox.git?foo=bar")
+        for secret in ("Sup3r-Secret", "ghp_TopSecret", "abc123", "t0k", "private_token=pv", "build:"):
+            self.assertNotIn(secret, out)
+            self.assertNotIn(secret, archive.read_text(encoding="utf-8"))
+        # a user name without a password (ssh / scp-like syntax) is not a secret and stays
+        for given, expected in (("ssh://git@github.com/org/velox.git", "ssh://github.com/org/velox.git"),
+                                ("git@github.com:org/velox.git", "git@github.com:org/velox.git"),
+                                ("https://github.com/org/velox.git?token=only-secret", "https://github.com/org/velox.git"),
+                                ("https://x-access-token:ghp_x@github.com/org/velox.git", "https://github.com/org/velox.git")):
+            _, _, _, r = self.run_check("--json", env=self.m.env(FAKE_GIT_ORIGIN=given))
+            self.assertEqual(r["checkouts"]["gluten"]["origin"], expected, given)
 
     def test_git_not_on_path_is_a_warning(self):
         self.m.checkouts()
@@ -336,6 +428,18 @@ class SourceReposCase(unittest.TestCase):
         self.assertIn("not a symlink", err)
         self.assertEqual(target.read_text(encoding="utf-8"), "keep me\n")
         self.assertEqual(self.run_check("--json", "--out", str(archive), "--overwrite")[0], 0)
+
+    def test_out_never_opens_a_fifo(self):
+        self.m.checkouts()
+        fifo = self.tmp / "project" / "pipe.json"
+        fifo.parent.mkdir()
+        os.mkfifo(str(fifo))
+        # open() on a fifo blocks until a reader appears: the guard must refuse instead
+        # (a blocked check would run into the subprocess timeout of run_check and error out)
+        code, _, err, _ = self.run_check("--json", "--out", str(fifo), "--overwrite")
+        self.assertEqual((code, stat.S_ISFIFO(fifo.lstat().st_mode)), (2, True))
+        self.assertIn("--out exists and is not a regular file, refusing to overwrite it", err)
+        self.assertIn("source-repos OK", self.run_check()[1])  # the verdict itself is unaffected
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")

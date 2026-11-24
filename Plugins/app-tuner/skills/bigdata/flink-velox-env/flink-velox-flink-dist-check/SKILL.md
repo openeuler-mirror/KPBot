@@ -1,12 +1,13 @@
 ---
 name: flink-velox-flink-dist-check
 description: >
-  Flink + GlutenFlink（velox 向量化栈）所依赖的 Flink 发行版只读检查：定位安装目录（FLINK_HOME → PATH 上的 flink →
-  /opt/flink → /usr/local/flink），stock 脚本齐全、lib 里只有一个 flink-dist jar、版本在 1.19 版本线（只比 major.minor，
+  Flink + GlutenFlink（velox 向量化栈）所依赖的 Flink 发行版只读检查：定位安装目录（FLINK_HOME 设了即唯一目标、按原样判；
+  否则 PATH 上的 flink → /opt/flink → /usr/local/flink），stock 脚本齐全、lib 里只有一个 flink-dist jar（递归扫描，
+  点前缀子目录也进、与 find 一致）、版本在 1.19 版本线（只比 major.minor，
   版本取 jar 文件名、缺失时回退 MANIFEST.MF）、conf 文件存在、REST 地址解析；逐项 ok/warn/fail + fix + 唯一 next_step。
   只扫不改：不装 Flink、不重启集群。触发词：Flink 装了没、Flink 版本、是不是 1.19、flink-dist、lib 里有几个 dist jar、
-  FLINK_HOME 对不对。不负责：守护进程用的 Java → flink-velox-jdk-check；lib 里是 native 还是 GFV 构建 →
-  flink-velox-lib-state-check（规划中）；"能不能编译 GFV 栈"的总裁决 → flink-velox-env-check。
+  FLINK_HOME 对不对。不负责：守护进程用的 Java → flink-velox-jdk-check；lib 里是 native 还是 GlutenFlink 构建 →
+  flink-velox-lib-state-check；"能不能编译 GlutenFlink 栈"的总裁决 → flink-velox-env-check。
 compatibility: Linux (aarch64/x86_64)，Python 3.7+ 标准库
 metadata:
   skill_type: tool_assisted
@@ -18,13 +19,13 @@ metadata:
 
 # Flink 发行版检查
 
-GFV 栈以 `$FLINK_HOME` 里的 Flink 为宿主：velox4j 与 gluten-flink 的产物部署进它的 `lib/`，集群脚本从它的 `bin/` 起停。安装不全（少了 `bin/sql-client.sh`、没有 `flink-dist` jar）、lib 里混进两个版本的 `flink-dist` jar（Flink 自己的 `config.sh` 会拒绝启动）、或者装的根本不是 1.19 版本线——这些都会在编译部署或起集群时才炸。本 skill 只做一件事：**把 Flink 安装逐项核一遍——位置、文件、dist jar、版本线、conf、REST 地址**。它是 `flink-velox-env` 检查家族里"Flink 发行版"这一具体项：只读、不改动机器、不装 Flink、不重启集群。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+GlutenFlink 栈以 `$FLINK_HOME` 里的 Flink 为宿主：velox4j 与 gluten-flink 的产物部署进它的 `lib/`，集群脚本从它的 `bin/` 起停。安装不全（少了 `bin/sql-client.sh`、没有 `flink-dist` jar）、lib 里混进两个版本的 `flink-dist` jar（Flink 自己的 `config.sh` 会拒绝启动）、或者装的根本不是 1.19 版本线——这些都会在编译部署或起集群时才炸。本 skill 只做一件事：**把 Flink 安装逐项核一遍——位置、文件、dist jar、版本线、conf、REST 地址**。它是 `flink-velox-env` 检查家族里"Flink 发行版"这一具体项：只读、不改动机器、不装 Flink、不重启集群。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
 ## 使用场景
 
 ### 适用（应使用本 skill）
 
-- 搭 GFV 环境之前或之后，确认 Flink 装对了没有、在不在 1.19 版本线
+- 搭 GlutenFlink 环境之前或之后，确认 Flink 装对了没有、在不在 1.19 版本线
 - `bin/config.sh` 报 `Multiple flink-dist*.jar found`、`flink: command not found`、起集群失败时先查安装
 - 换机器、换容器、换了 `FLINK_HOME` 之后确认安装与 REST 地址
 - 要知道本机 Flink 的精确版本（jar 文件名或 MANIFEST）
@@ -33,18 +34,18 @@ GFV 栈以 `$FLINK_HOME` 里的 Flink 为宿主：velox4j 与 gluten-flink 的�
 
 - 指望它装 Flink、删多余 jar 或重启集群——`fix` 与 `next_step` 只是工单；重启须用户同意
 - 守护进程实际用哪个 Java、`env.java.home` → `flink-velox-jdk-check`
-- `lib/` 里是 native 还是 GFV 构建、部署齐不齐 → `flink-velox-lib-state-check`（规划中）
-- "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`
+- `lib/` 里是 native 还是 GlutenFlink 构建、部署齐不齐 → `flink-velox-lib-state-check`
+- "这台机器能不能编译 GlutenFlink 栈"的总裁决 → 统筹 `flink-velox-env-check`
 
 ## 检查项
 
 | 条目 | 怎么判 |
 |---|---|
-| `home` | 依次在 `FLINK_HOME` → PATH 上 `flink` 的真实路径上两级 → `/opt/flink` → `/usr/local/flink` 找**有 `bin/flink`** 的目录；找不到为 fail |
-| `files` | `bin/flink`、`bin/start-cluster.sh`、`bin/stop-cluster.sh`、`bin/sql-client.sh` 可执行，且 `lib/flink-dist*.jar` 存在；缺任一为 fail 并点名 |
-| `dist-jars` | `lib/flink-dist*.jar` 多于一个为 fail（发行版 `bin/config.sh` 的 `constructFlinkClassPath` 遇多个即报 `Multiple flink-dist*.jar found` 并退出，1.19.2 实测） |
-| `version` | 取文件名序第一个 `flink-dist*.jar`：文件名里的 `x.y.z`，缺失时读其 `META-INF/MANIFEST.MF` 的 `Implementation-Version`；读不到为 fail；只比 **major.minor = 1.19**，patch 不限；不在 1.19 线为 fail |
-| `conf` | `conf/config.yaml` 或 `conf/flink-conf.yaml` 至少一个存在；都不在为 warn（发行版自带一个） |
+| `home` | `FLINK_HOME` 设了即为**唯一检查目标**，按原样判定：目录不存在或没有可执行 `bin/flink` 时 `home` fail 并指向该确切路径，**不回退**（机器上另有可发现的 Flink 也不看）；未设置时在 PATH 上 `flink` 的真实路径上两级 → `/opt/flink` → `/usr/local/flink` 找**有 `bin/flink`** 的目录；找不到为 fail |
+| `files` | `bin/flink`、`bin/start-cluster.sh`、`bin/stop-cluster.sh`、`bin/sql-client.sh` 可执行，且 `lib/` 下（含子目录）有 `flink-dist*.jar`；缺任一为 fail 并点名 |
+| `dist-jars` | `lib/` 下**递归**（含所有子目录——`os.walk` 连点前缀目录如 `lib/.backup/` 也进，与 `find` 同范围）找到的 `flink-dist*.jar` 多于一个为 fail，按相对 `lib/` 的路径列出——发行版 `bin/config.sh` 的 `constructFlinkClassPath` 用 `find "$FLINK_LIB_DIR" ! -type d -name '*.jar'` 递归拼类路径，dist jar 多于一个即报 `Multiple flink-dist*.jar found` 并退出（1.19.2 实测）；旧 jar 留在 `lib/backup/`、`lib/.backup/` 里同样会被看到 |
+| `version` | 取 `lib/` 顶层的第一个 `flink-dist*.jar`（顶层没有才取子目录里路径序第一个）：文件名里的 `x.y.z`，缺失时读其 `META-INF/MANIFEST.MF` 的 `Implementation-Version`；读不到为 fail；只比 **major.minor = 1.19**，patch 不限；不在 1.19 线为 fail |
+| `conf` | `conf/config.yaml` 或 `conf/flink-conf.yaml` 至少一个存在；都不在为 warn（发行版自带一个）。REST 地址只取自 **Flink 实际读的那份**：两份并存时 Flink 1.19 只读 `flink-conf.yaml`、不读 `config.yaml`，本检查同样只读那一份、不合并 |
 | REST 地址 | `$FLINK_REST_URL` → conf `rest.address` / `rest.port` → `http://localhost:8081`，与家族其它 skill 同序，只解析不访问 |
 
 ## 执行步骤
@@ -62,9 +63,9 @@ python3 <skill_dir>/scripts/flink_dist_check.py [--json] [--out FILE [--overwrit
 ### 步骤 2：判读
 
 1. 先看 `next:`——按"装 Flink → 补齐文件 → 去掉多余 dist jar（需重启）→ 换到 1.19 版本线"的顺序给出唯一一个下一步。
-2. `READY` 只说明安装完整且在 1.19 线上，**不代表集群已起、lib 里是哪种构建**：那两项分别在 `cluster` / `lib_state` 类检查（规划中）里。
+2. `READY` 只说明安装完整且在 1.19 线上，**不代表集群已起、lib 里是哪种构建**：那两项分别在 `flink-velox-cluster-check` / `flink-velox-lib-state-check` 里。
 3. `conf` 的 warn 不阻断但要转述；`rest_url` 只告诉你地址，是否应答由集群类检查回答。
-4. 本 skill 不改任何东西：涉及删 jar 后重启的交给切换类 skill 并**征得用户同意**；装 Flink 由安装类 skill（规划中）执行，做完重扫直到 READY。
+4. 本 skill 不改任何东西：涉及删 jar 后重启的交给切换类 skill 并**征得用户同意**；装 Flink 由安装类 skill（审中 !323）执行，做完重扫直到 READY。
 
 ## 环境约定
 
@@ -83,7 +84,7 @@ python3 <skill_dir>/scripts/flink_dist_check.py [--json] [--out FILE [--overwrit
     "checked_at": "2026-11-24T09:40:00+08:00",
     "status": "fail",
     "flink": {"path": "/opt/flink", "found_via": "default", "version": null, "on_1_19_line": null,
-              "version_source": null, "dist_jars": [], "rest_url": "http://localhost:8081", "conf": {}},
+              "version_source": null, "dist_jars": [], "rest_url": "http://localhost:8081", "conf_file": null, "conf": {}},
     "items": [
       {"name": "home", "status": "ok", "detail": "Flink ? at /opt/flink (via default)"},
       {"name": "files", "status": "fail", "detail": "incomplete installation, missing lib/flink-dist-*.jar", "fix": "unpack the distribution again, or point FLINK_HOME at a complete one"},
@@ -97,13 +98,13 @@ python3 <skill_dir>/scripts/flink_dist_check.py [--json] [--out FILE [--overwrit
 }
 ```
 
-- 原始观测 `flink`：`path` / `found_via`（FLINK_HOME / PATH / default）、`version`、`on_1_19_line`（true / false→null）、`version_source`（`lib/<jar>` 或 `lib/<jar> MANIFEST.MF`）、`dist_jars`（全部 dist jar 名，按名序）、`rest_url`、`conf`（`rest.address` / `rest.port` / `env.java.home` 三个键的存在子集）；`items` 是逐项判定（`name` / `status` / `detail`，fail 与部分 warn 另带 `fix`），`status` 是全部条目的最差值
+- 原始观测 `flink`：`path` / `found_via`（FLINK_HOME / PATH / default）、`version`、`on_1_19_line`（true / false→null）、`version_source`（`lib/<jar>` 或 `lib/<jar> MANIFEST.MF`）、`dist_jars`（`lib/` 下递归找到的全部 dist jar，路径相对 `lib/`，顶层在前）、`rest_url`、`conf_file`（Flink 实际读的那份配置，无则 null）、`conf`（`rest.address` / `rest.port` / `env.java.home` 三个键的存在子集）；`items` 是逐项判定（`name` / `status` / `detail`，fail 与部分 warn 另带 `fix`），`status` 是全部条目的最差值
 - `success`：没有 fail。`missing`：fail 条目，形如 `files: incomplete installation, …`
 - 失败形态：`success: false`，`error_message` 形如 `2 item(s) missing: files, version`；检查崩溃：退出码 2，JSON 仍是完整契约形态（`status: fail`、空观测与条目、`next_step` 指向先修检查错误），`error_message` 以 `check aborted:` 开头
 
 ## 边界与相邻 skill
 
 - `flink-velox-jdk-check`：守护进程与重启会选的 Java——它借本 skill同一套安装定位与 conf 读取，但不判版本线
-- `flink-velox-lib-state-check`（规划中）：`lib/` 里是 native 还是 GFV 构建、运行依赖齐不齐
+- `flink-velox-lib-state-check`：`lib/` 里是 native 还是 GlutenFlink 构建、运行依赖齐不齐
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一
-- 装 Flink、删多余 jar、重启集群：同族安装 / 切换类 skill（规划中，后续 PR）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复
+- 装 Flink、删多余 jar、重启集群：同族安装 / 切换类 skill（审中 !323、!325）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复

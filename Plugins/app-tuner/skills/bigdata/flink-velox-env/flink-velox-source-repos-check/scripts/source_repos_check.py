@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""source_repos_check.py — read-only check of the three source checkouts the GFV stack is built from.
+"""source_repos_check.py — read-only check of the three source checkouts the GlutenFlink stack is built from.
 
 velox, velox4j and gluten: each must exist, be usable (the marker files of a
 complete checkout are there), and report its branch and HEAD through git. The
 branch is compared with the baseline the stack is built on; being elsewhere is
 reported, not failed. The script classifies only: it clones nothing, fetches
-nothing, writes nowhere except the optional --out file.
+nothing, writes nowhere except the optional --out file. A checkout's origin is
+reported without its secrets: no user:password, no access-token parameters.
 
 Usage:
   source_repos_check.py [--repos-dir DIR] [--json] [--out FILE [--overwrite]]
 
 The checkouts: --repos-dir, else $GFV_REPOS_DIR, else a repos/ directory holding
 at least one of them, walked upward from the working directory (bounded by
-ENV_CHECK_WALK_ROOT when that tier-A seam is set). A single checkout can be
-pinned with $VELOX_HOME / $VELOX4J_HOME / $GLUTEN_HOME.
+ENV_CHECK_WALK_ROOT when that tier-A seam is set). An explicit --repos-dir or
+$GFV_REPOS_DIR is the root as given as soon as it exists, empty or not — the
+per-checkout items then judge what is missing in it; one that does not exist is
+skipped for the next candidate. A single checkout can be pinned with $VELOX_HOME
+/ $VELOX4J_HOME / $GLUTEN_HOME.
 
 --out FILE also archives the JSON result. The file must be a regular path inside
 the project directory (the working directory) — a symlink or a path outside it
@@ -29,6 +33,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -59,12 +64,14 @@ def worst(statuses):
 
 
 def locate_repos_root(explicit):
-    """(root, how): --repos-dir, $GFV_REPOS_DIR, then a repos/ directory holding at
-    least one of the checkouts, walked upward from the working directory and
-    bounded by ENV_CHECK_WALK_ROOT when set (a tier-A seam; default: the root)."""
+    """(root, how): --repos-dir, $GFV_REPOS_DIR — an explicit candidate is the
+    root as given as soon as it exists, empty or not (the per-checkout items
+    then judge what is missing in it); a candidate that does not exist is
+    skipped for the next one — then a repos/ directory holding at least one of
+    the checkouts, walked upward from the working directory and bounded by
+    ENV_CHECK_WALK_ROOT when set (a tier-A seam; default: the root)."""
     for cand, how in ((explicit, '--repos-dir'), (os.environ.get('GFV_REPOS_DIR'), 'GFV_REPOS_DIR')):
-        if cand and os.path.isdir(cand) and any(
-                os.path.isdir(os.path.join(cand, name)) for name, _, _, _ in REPOS):
+        if cand and os.path.isdir(cand):
             return os.path.realpath(cand), how
     here = os.getcwd()
     boundary = os.path.realpath(os.environ.get('ENV_CHECK_WALK_ROOT') or '/')
@@ -89,6 +96,21 @@ def git_line(repo, *args):
     except (OSError, subprocess.SubprocessError):
         return None
     return proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else None
+
+
+def redact_url(url):
+    """A repository address with nothing secret in it: the user:password part and
+    every query parameter whose name mentions a token / secret / password /
+    credential are dropped; scheme / host / path and the other parameters stay."""
+    m = re.match(r'^([A-Za-z][A-Za-z0-9+.-]*://)([^/]*)(/.*)?$', url or '')
+    if not m:
+        return url  # scp-like syntax (git@host:path): a user name only, no password field
+    scheme, authority, rest = m.groups()
+    host = authority.rsplit('@', 1)[-1]
+    path, _, query = (rest or '').partition('?')
+    secret = re.compile(r'(?i)^([^=]*(token|secret|password|passwd|pwd|auth|credential)[^=]*)=')  # x-access-token, oauth_token, …
+    kept = [q for q in query.split('&') if q and not secret.match(q)]
+    return scheme + host + path + ('?' + '&'.join(kept) if kept else '')
 
 
 def scan(explicit_root):
@@ -119,7 +141,7 @@ def scan(explicit_root):
             else:
                 entry['branch'] = git_line(path, 'rev-parse', '--abbrev-ref', 'HEAD')
                 entry['head'] = git_line(path, 'rev-parse', '--short', 'HEAD')
-                entry['origin'] = git_line(path, 'remote', 'get-url', 'origin')
+                entry['origin'] = redact_url(git_line(path, 'remote', 'get-url', 'origin'))
                 if entry['head']:
                     entry['on_baseline'] = entry['branch'] == branch
                     note = '' if entry['on_baseline'] else f'; baseline branch is {branch}'
@@ -200,6 +222,12 @@ def write_out(path, result, overwrite):
         print(f'source_repos_check.py: --out already exists, pass --overwrite to replace it: {path}',
               file=sys.stderr)
         return 2
+    if overwrite and os.path.exists(target) and not stat.S_ISREG(os.stat(target).st_mode):
+        # a fifo (or a directory, socket, device) is never opened: open() on a fifo
+        # blocks until a reader shows up and the check would never return
+        print(f'source_repos_check.py: --out exists and is not a regular file, refusing to overwrite it: {path}',
+              file=sys.stderr)
+        return 2
     try:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, 'w' if overwrite else 'x', encoding='utf-8') as fh:  # 'x' never follows a symlink
@@ -238,8 +266,10 @@ def render(result):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Read-only check of the velox / velox4j / gluten source '
                                                  'checkouts for the Flink + GlutenFlink stack.')
-    parser.add_argument('--repos-dir', help='directory holding velox/ velox4j/ gluten/ (default: '
-                                            '$GFV_REPOS_DIR, then repos/ walked upward from here)')
+    parser.add_argument('--repos-dir', help='directory of the velox/ velox4j/ gluten/ checkouts; '
+                                             'used as given when it exists, empty or not (default: '
+                                             '$GFV_REPOS_DIR likewise, then a repos/ holding at least '
+                                             'one of them, walked upward from here)')
     parser.add_argument('--out', help='also write the JSON result to this file (inside the project '
                                       'directory; an existing file is kept unless --overwrite)')
     parser.add_argument('--overwrite', action='store_true', help='let --out replace an existing file')
