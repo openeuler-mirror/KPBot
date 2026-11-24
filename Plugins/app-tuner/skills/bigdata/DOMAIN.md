@@ -31,6 +31,9 @@
 |---|---|
 | [`flink-velox-env/`](flink-velox-env/DOMAIN.md) | 子域：Flink + GlutenFlink（velox 向量化栈）环境检查家族——具体项检查子 skill 各自独立安装与触发，统筹 skill 按目标（build / native）聚合并给出唯一 next_step；只扫不改，是本域安装/构建/验证类 skill 的共同前置裁决点，详见其 DOMAIN.md |
 | [`flink-velox-install/`](flink-velox-install/DOMAIN.md) | 子域：Flink + GlutenFlink 环境的安装部署家族（动作类，`plan` 默认只打印、`apply --yes` 才执行、`verify` 复查）——构建环境准备、Flink 运行时与 nexmark 安装、GlutenFlink 构建编译部署、切栈重启，成员分 PR 提交；是 `flink-velox-env` 检查家族各项修复动作的执行者，详见其 DOMAIN.md |
+| [`flink-velox-e2e-verify/`](flink-velox-e2e-verify/SKILL.md) | SQL 双跑等价性门禁：同一条 SQL 以固定输入在原生 Flink 与 GlutenFlink 两侧各跑一次（每侧过 lib 构建门 / FINISHED / 栈校验 / 捕获非空四道门），print sink changelog 多重集折叠后零容差精确对比，MATCH/MISMATCH 裁决与用例沉淀在项目根 e2e/ 证据树 |
+
+其它成员（分 PR 提交）：nexmark 吞吐基准 `flink-velox-performance-verify`（!371 审中）、nexmark 正确性校验（规划中）。
 
 ## 与其它域的边界
 
