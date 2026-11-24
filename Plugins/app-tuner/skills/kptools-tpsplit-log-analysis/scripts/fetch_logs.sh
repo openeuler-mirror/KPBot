@@ -6,7 +6,7 @@
 #   bash fetch_logs.sh --root /data/user1       # 首个 --root 替换默认根（不扫整个 /data）
 #   bash fetch_logs.sh --root /a --root /b      # 多根追加
 #   bash fetch_logs.sh --stage /tmp/ttft_fetch  # 暂存待下载（文件名含完整来源路径，防同名覆盖）
-#   bash fetch_logs.sh --expect-req 100         # BREAKDOWN 行数低于门槛 → 退出码非 0
+#   bash fetch_logs.sh --expect-req 100         # P 侧 BREAKDOWN 总行数（多 P 求和）低于门槛 → 退出码非 0
 #
 # 定位目标：
 #   P   日志   prefill.log                     （[TTFT][BREAKDOWN] + KVXFER + pool + shm + draft）
@@ -15,8 +15,8 @@
 #   压测     manual_*_dumpjsonl.json           （--save-detailed 结果）
 #
 # 注意：本脚本不内置任何节点/路径列表——路径一律由 --root 或位置参数传入；
-#       打点标记统计用 grep -cF（固定字符串，避免 [ ] 被当正则字符类）；
-#       同一文件（realpath 相同）只统计/暂存一次，防重复计数与覆盖。
+#       打点标记统计用 grep -oF 逐次计数（-c 只数行，单行多记录会漏计）；
+#       同一文件（realpath 相同）只统计/暂存/计入 found_* 一次，防重复计数与覆盖。
 
 set -u
 
@@ -67,6 +67,54 @@ count_marker() {  # count_marker FILE MARKER → 标记出现次数（grep -oF �
   fi
 }
 
+count_bench_records() {  # count_bench_records FILE → 压测记录条数（按 JSON 解析计）
+  # 与 analyze_ttft.py load_bench 同口径：'[' 开头整文件按 JSON 数组解析，
+  # 否则按 jsonl 逐行解析；每条 dict 记录计 1。不数字符串出现次数——
+  # 单条记录的字段值恰含 "client_send_ts" 字样时会误计（检视复核意见）。
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$1" <<'PYEOF'
+import json, sys
+try:
+    text = open(sys.argv[1], "r", encoding="utf-8", errors="replace").read().strip()
+except OSError:
+    print(-1); sys.exit(0)
+if not text:
+    print(0); sys.exit(0)
+def count(obj):
+    if isinstance(obj, dict):
+        return 1
+    if isinstance(obj, list):
+        return sum(count(x) for x in obj)
+    return 0
+n, bad = 0, 0
+if text.startswith("["):
+    try:
+        n = count(json.loads(text))
+    except ValueError:
+        bad = 1  # 整文件解析失败 → 退回逐行（解析器侧会显式报错）
+    else:
+        print(n); sys.exit(0)
+for line in text.splitlines():
+    s = line.strip().rstrip(",").strip()
+    if not s or s in ("[", "]"):
+        continue
+    try:
+        n += count(json.loads(s))
+    except ValueError:
+        bad += 1
+if bad:
+    print("[warn] %s 存在无法按 JSON 解析的内容（本地 analyze_ttft.py 解析时会显式报错）"
+          % sys.argv[1], file=sys.stderr)
+print(n)
+PYEOF
+    return
+  fi
+  # 宿主机无 python3 时的兜底：按 JSON 键字面量计数（“键”: 才计入，纯值不匹配；
+  # 仍可能漏计罕见转义形态，完整口径以本地 analyze_ttft.py 解析为准）
+  echo "[warn] 宿主机无 python3，压测请求数退化为键字面量计数，可能存在偏差" >&2
+  grep -oE '"client_send_ts"[[:space:]]*:' -- "$1" 2>/dev/null | wc -l
+}
+
 found_prefill=0; found_decode=0; found_lb=0; found_bench=0
 
 scan_one() {  # scan_one PATH KIND MARKER ROOT
@@ -76,11 +124,17 @@ scan_one() {  # scan_one PATH KIND MARKER ROOT
   local rp
   rp=$(realpath "$f" 2>/dev/null || readlink -f "$f" 2>/dev/null || echo "$f")
   if [ -n "${SEEN[$rp]:-}" ]; then
-    return 0
+    return 2  # 重复命中：外层 && 依赖退出码 0 才累加 found_*，非 0 即不重复计数
   fi
   SEEN["$rp"]=1
   local n size mtime
   n=$(count_marker "$f" "$marker")
+  if [ "$kind" = BENCH ]; then
+    # 压测请求数按解析出的请求记录计数（与 analyze_ttft.py load_bench 同口径），
+    # 不数字符串出现次数——jsonl / 单行多行 JSON 数组均按记录条数计
+    n=$(count_bench_records "$f")
+    [ "$n" -lt 0 ] && n=0
+  fi
   size=$(du -h "$f" 2>/dev/null | cut -f1)
   mtime=$(date -r "$f" "+%F %T" 2>/dev/null || stat -c '%y' "$f" 2>/dev/null)
   printf '%-8s %-60s %8s  %s  %s=%s\n' "$kind" "$f" "$size" "$mtime" "$marker" "$n"
@@ -97,9 +151,8 @@ scan_one() {  # scan_one PATH KIND MARKER ROOT
     fi
   fi
   if [ "$kind" = BENCH ]; then
-    # 压测请求数按解析出的请求记录计数（每条记录恰一个 client_send_ts 字段），
-    # 对 jsonl 与单行/多行 JSON 数组都成立；wc -l 会把单行数组数成 1、漏计无尾换行行
-    BENCH_LINE_TOTAL=$(( BENCH_LINE_TOTAL + $(count_marker "$f" "client_send_ts") ))
+    # n 已是解析出的记录条数（见上），直接累计为压测请求数
+    BENCH_LINE_TOTAL=$(( BENCH_LINE_TOTAL + n ))
   fi
   if [ -n "$STAGE" ]; then
     # 唯一目标名：完整路径的 / 换成 __（':' 一并换掉，防 Windows 盘符字符），
@@ -165,18 +218,16 @@ if [ "$found_prefill" -gt 0 ] && [ "$found_bench" -gt 0 ] && [ "$BENCH_LINE_TOTA
   fi
 fi
 
-# --expect-req 门槛校验：任一 P 日志 BREAKDOWN 行数低于门槛 → 非零退出
+# --expect-req 门槛校验（与上方偏差告警同口径）：按各 P 日志 BREAKDOWN 行数
+# 之和校验——多 P 场景每份日志只占总请求数的一部分，逐文件卡门槛会把
+# 合法采集误判为失败（多 P 是本 skill 的旗舰场景，evals 即双 P）
 if [ "$EXPECT_REQ" -gt 0 ]; then
   if [ "${#P_BREAKDOWN_COUNTS[@]}" -eq 0 ]; then
     echo "!! --expect-req $EXPECT_REQ 已给出，但未找到任何 P 日志"
     FAIL=1
-  else
-    for n in ${P_BREAKDOWN_COUNTS[@]+"${P_BREAKDOWN_COUNTS[@]}"}; do
-      if [ "$n" -lt "$EXPECT_REQ" ]; then
-        echo "!! BREAKDOWN 行数 $n < --expect-req $EXPECT_REQ（打点未生效或日志不完整）"
-        FAIL=1
-      fi
-    done
+  elif [ "$P_TOTAL" -lt "$EXPECT_REQ" ]; then
+    echo "!! P 侧 BREAKDOWN 总行数 $P_TOTAL < --expect-req $EXPECT_REQ（打点未生效或日志不完整）"
+    FAIL=1
   fi
 fi
 

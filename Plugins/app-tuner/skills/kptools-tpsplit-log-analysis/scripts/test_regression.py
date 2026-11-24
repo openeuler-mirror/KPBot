@@ -265,6 +265,33 @@ def check_edge_cases():
     finally:
         os.unlink(csv_path)
 
+    # ---- 7) split_label 盘符启发式平台门控：Linux 下 'D:/abs' 必须拆 LABEL+路径
+    #          （否则文档化用法 FileNotFoundError；Windows 盘符路径仍保持整体）
+    saved = os.name
+    try:
+        os.name = "posix"
+        lbl, p = m.split_label("D:/abs/decode.log")
+        check("edge: Linux 'D:/abs' 拆 LABEL+路径",
+              lbl == "D" and not str(p).startswith("D:"), f"{lbl}:{p}")
+        lbl, p = m.split_label("D:decode.log")
+        check("edge: Linux 'D:相对路径' 正常拆", lbl == "D", f"{lbl}")
+        os.name = "nt"
+        lbl, p = m.split_label("C:/x/y.log")
+        check("edge: Windows 盘符路径保持整体（不被当 LABEL）",
+              str(p).startswith("C:"), f"{p}")
+        lbl, p = m.split_label("D:decode.log")
+        check("edge: Windows LABEL:path 正常拆", lbl == "D", f"{lbl}")
+    finally:
+        os.name = saved
+
+    # ---- 8) --burst-gap 0 不被默认值静默替换（0 = 不聚合，逐请求成段）
+    rows0 = [{"ts": float(t), "burst": None} for t in (1.0, 1.4, 5.0, 5.2)]
+    n0, _note = m.assign_bursts(rows0, one_burst=False, burst_gap_s=0.0)
+    check("edge: burst_gap=0 不聚合（逐请求成段）", n0 == 4, f"n={n0}")
+    rows1 = [{"ts": float(t), "burst": None} for t in (1.0, 1.4, 5.0, 5.2)]
+    n1, _note1 = m.assign_bursts(rows1, one_burst=False, burst_gap_s=300.0)
+    check("edge: burst_gap=300 正常聚合", n1 == 1, f"n={n1}")
+
 
 def run_case(workdir, merge):
     d = os.path.join(workdir, "merge" if merge else "nomerge")

@@ -64,7 +64,8 @@ SHEET_ORDER = [
     "D节点Decode", "P节点KV传输", "LB分发", "回传对账",
 ]
 
-# 下游 kptools-tpsplit-report 的 ttft_table.csv 契约（references/stage-glossary.md §3）：
+# ttft_table.csv 契约（references/ttft_table_contract.md，仓内权威定义；
+# 下游消费方（TP 拆分收益对比等）暂在仓外）：
 # ttft = net_lb + fe_inputq + fe_addreq + sched_qwait + sched_total + fwd_pure
 #      + draft + kv_xfer + shm_dq + other
 CSV_HEADER = ["ts", "request_id", "input_len", "ttft_ms", "net_lb_ms",
@@ -93,11 +94,16 @@ def fnum(v, default=0.0):
 
 
 def split_label(spec, default_label=None):
-    """'LABEL:path' 拆分。兼容 Windows 盘符：'C:\\x'（单字母后跟 / 或 \\）视为路径。"""
+    """'LABEL:path' 拆分。Windows 盘符启发式仅在本机为 Windows 时启用：
+    'C:\\x' / 'C:/x'（单字母后跟 / 或 \\）视为路径。Linux/macOS 下
+    'D:/abs/path' 一律拆成 LABEL='D' + POSIX 路径——否则文档化用法在
+    Linux 直接 FileNotFoundError（检视意见 huangsibeier）。
+    """
     spec = spec.strip().strip('"')
     if ":" in spec:
         head, rest = spec.split(":", 1)
-        if head and not (len(head) == 1 and rest[:1] in ("/", "\\")):
+        drive_like = len(head) == 1 and rest[:1] in ("/", "\\")
+        if head and (os.name != "nt" or not drive_like):
             return head, os.path.normpath(rest)
     return default_label or os.path.splitext(os.path.basename(spec))[0], os.path.normpath(spec)
 
@@ -979,7 +985,8 @@ def main(argv=None):
     g.add_argument("--one-burst", action="store_true",
                    help="整份日志当一个 burst（默认）")
     g.add_argument("--burst-gap", type=float, metavar="N",
-                   help="按请求到达间隔 >N 秒切 burst")
+                   help="按请求到达间隔 >N 秒切 burst（0 = 不聚合，逐请求成段；"
+                        "默认 300s，且仅显式传入时生效）")
     ap.add_argument("--decode", help='"D:decode.log" D 节点日志')
     ap.add_argument("--kvxfer", action="append", default=[],
                     help='"102:P102.log" KVXFER/pool_worker/shm/draft 来源（可多次）')
@@ -988,7 +995,8 @@ def main(argv=None):
     ap.add_argument("--merge-p", action="store_true",
                     help="多 P 合并成一套完整请求，明细新增 IP 列")
     ap.add_argument("--csv-out", metavar="PATH",
-                    help="额外输出 ttft_table.csv（下游 kptools-tpsplit-report 契约，"
+                    help="额外输出 ttft_table.csv（契约见 references/"
+                         "ttft_table_contract.md，仓内权威定义；"
                          "ts/request_id/input_len/ttft_ms + 10 阶段列）")
     args = ap.parse_args(argv)
 
@@ -1038,10 +1046,11 @@ def main(argv=None):
         for r in rows:
             r["ip"] = r["machine"]
 
-    # ---- burst 分段 + 冷启动标记
+    # ---- burst 分段 + 冷启动标记（--burst-gap 0 是合法的“不聚合”语义，
+    #      不得被 or 静默替换为默认值）
+    burst_gap = args.burst_gap if args.burst_gap is not None else 300.0
     n_burst, burst_mode = assign_bursts(
-        rows, args.one_burst or (args.burst_gap is None),
-        args.burst_gap or 300.0)
+        rows, args.one_burst or (args.burst_gap is None), burst_gap)
     mark_cold_steps(rows)
 
     # ---- 回填管线（顺序固定：loadkv → draft → savekv → dequeue → finalize）
@@ -1058,7 +1067,7 @@ def main(argv=None):
     if lb_rows and bench_rows:
         recon, joined_n = reconcile(lb_rows, bench_rows)
 
-    # ---- CSV（下游 kptools-tpsplit-report 契约）
+    # ---- CSV（契约：references/ttft_table_contract.md）
     if args.csv_out:
         write_csv(rows, args.csv_out)
         print(f"CSV 已写出：{os.path.abspath(args.csv_out)}（ttft_table 契约，"

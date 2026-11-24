@@ -89,13 +89,15 @@ proxy：`[LB_DISPATCH] req= wall_recv= client_send= client2proxy_ms= dispatch_ms
    bash fetch_logs.sh --root /data/<user>          # 首个 --root 替换默认 /data（不扫整个共享目录）
    bash fetch_logs.sh --root /a --root /b          # 多根追加；同一文件（realpath 相同）只计一次
    bash fetch_logs.sh --root /data/<user> --stage /tmp/ttft_fetch   # 暂存待下载
-   bash fetch_logs.sh --root /data/<user> --expect-req 100          # BREAKDOWN 行数低于门槛 → 非零退出
+   bash fetch_logs.sh --root /data/<user> --expect-req 100          # BREAKDOWN 总行数（多 P 求和）低于门槛 → 非零退出
    ```
 
    Windows 写出的 .sh 带 CR：远端先 `tr -d '\r' < f > f2`（本 skill 脚本已是 LF，
    从别处同步的才需要）。脚本不内置任何节点/路径——root 一律显式传入；打点标记
-   统计用 `grep -cF` 固定字符串匹配；`--stage` 暂存文件名带完整来源路径（多 P
-   同名 prefill.log 不会互相覆盖），暂存冲突/复制失败非零退出。
+   统计用 `grep -oF` 逐次计数（固定字符串匹配，`-c` 只数行，单行多记录会漏计）；
+   压测请求数按解析出的 JSON 记录计数（与 `analyze_ttft.py` 同口径，宿主机无
+   python3 时退化为键字面量计数并打告警）；`--stage` 暂存文件名带完整来源路径
+   （多 P 同名 prefill.log 不会互相覆盖），暂存冲突/复制失败非零退出。
 2. **下载到同一本地目录**：P/D/proxy 日志 + 压测 result json（P 日志多台时建议
    命名 `P<ip>_prefill.log` 区分）。
 3. **校验**：fetch_logs.sh 的输出里 grep 到 `[TTFT][BREAKDOWN]`、`[TTFT_DECODE]`、
