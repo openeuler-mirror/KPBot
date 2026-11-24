@@ -437,6 +437,101 @@ def main():
               and not any(p["stage"] == "sched_qwait" for p in db.get("points", [])),
               json.dumps(db.get("stage_kinds")))
         check("混杂暂停在报告里明示", "负载混杂" in mdb and "暂停" in mdb)
+
+        # --- synth 写盘防护：不覆盖真实采集目录，--force 先备份 ---
+        pr = os.path.join(tmp, "protect")
+        os.makedirs(os.path.join(pr, "before_tp32ray"), exist_ok=True)
+        real_cfg = os.path.join(pr, "before_tp32ray", "config.json")
+        json.dump({"label": "real-capture"}, open(real_cfg, "w", encoding="utf-8"))
+        open(os.path.join(pr, "before_tp32ray", "ttft_table.csv"), "w",
+             encoding="utf-8").write("ts,request_id,ttft_ms,sched_qwait_ms\n")
+        r = run_py(SYNTH, ["--out", pr, "--num-prompts", "50"])
+        check("synth 拒绝覆盖非本工具生成的非空目录",
+              r.returncode != 0 and "请更换 --out" in (r.stdout + r.stderr)
+              and json.load(open(real_cfg, encoding="utf-8")).get("label") == "real-capture",
+              (r.stdout + r.stderr).strip()[:100])
+        r = run_py(SYNTH, ["--out", pr, "--num-prompts", "50", "--force"])
+        check("--force 覆盖前备份 *.bak（原内容可找回）",
+              r.returncode == 0
+              and json.load(open(real_cfg, encoding="utf-8")).get("data_source") == "synthetic"
+              and json.load(open(real_cfg + ".bak", encoding="utf-8")).get("label") == "real-capture",
+              r.stderr.strip()[:100])
+        pr2 = os.path.join(tmp, "protect2")
+        os.makedirs(os.path.join(pr2, "before_tp32ray"), exist_ok=True)
+        real_log = os.path.join(pr2, "before_tp32ray", "p_engine.log")
+        open(real_log, "w", encoding="utf-8").write("real evidence line\n")
+        r = run_py(SYNTH, ["--out", pr2, "--num-prompts", "50",
+                           "--scenario", "tables-only", "--force"])
+        check("tables-only 不删除来路不明的 .log（只清本工具产物）",
+              r.returncode == 0 and os.path.isfile(real_log)
+              and open(real_log, encoding="utf-8").read().startswith("real evidence"),
+              r.stderr.strip()[:100])
+
+        # --- bench 未核对/单侧声明：不假宣称「压测参数通过」；单侧声明触发暂停归因 ---
+        def measured_copy(src_root, dst_root, strip_after_bench=False,
+                          strip_before_bench=False, strip_all_bench=False):
+            for side in ("before_tp32ray", "after_tp8dp"):
+                os.makedirs(os.path.join(dst_root, side), exist_ok=True)
+                for fn in ("ttft_table.csv", "p_engine.log", "proxy.log", "config.json"):
+                    src = os.path.join(src_root, side, fn)
+                    if os.path.isfile(src):
+                        open(os.path.join(dst_root, side, fn), "wb").write(open(src, "rb").read())
+                cfg = json.load(open(os.path.join(src_root, side, "config.json"),
+                                     encoding="utf-8"))
+                cfg.pop("data_source", None)   # 去仿真标记，模拟实测数据
+                if isinstance(cfg.get("bench"), dict):
+                    cfg["bench"].pop("note", None)
+                if strip_all_bench or (side == "after_tp8dp" and strip_after_bench) \
+                        or (side == "before_tp32ray" and strip_before_bench):
+                    cfg.pop("bench", None)
+                json.dump(cfg, open(os.path.join(dst_root, side, "config.json"), "w",
+                                    encoding="utf-8"), ensure_ascii=False, indent=2)
+
+        nb = os.path.join(tmp, "bench_none")
+        measured_copy(os.path.join(tmp, "clean"), nb, strip_all_bench=True)
+        r = run_py(ANALYZE, ["--before", os.path.join(nb, "before_tp32ray"),
+                             "--after", os.path.join(nb, "after_tp8dp"),
+                             "--out", os.path.join(nb, "g")])
+        dnb = load_json(os.path.join(nb, "g.json")) if r.returncode == 0 else {}
+        mdnb = open(os.path.join(nb, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("bench 未核对（两侧无 bench）不再宣称「压测参数通过」",
+              r.returncode == 0
+              and dnb.get("bench", {}).get("status") == "unverified"
+              and "两侧压测参数未核对" in mdnb
+              and "压测参数均通过" not in mdnb,
+              json.dumps(dnb.get("bench")))
+        check("unverified 不触发暂停归因（sched_qwait 仍按判定给出）",
+              dnb.get("stage_kinds", {}).get("sched_qwait") == "benefit",
+              json.dumps(dnb.get("stage_kinds", {}).get("sched_qwait")))
+
+        ps = os.path.join(tmp, "bench_partial")
+        measured_copy(os.path.join(tmp, "clean"), ps, strip_after_bench=True)
+        r = run_py(ANALYZE, ["--before", os.path.join(ps, "before_tp32ray"),
+                             "--after", os.path.join(ps, "after_tp8dp"),
+                             "--out", os.path.join(ps, "g")])
+        dps = load_json(os.path.join(ps, "g.json")) if r.returncode == 0 else {}
+        mdps = open(os.path.join(ps, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("单侧声明 bench → partial：排队阶段暂停归因并明示",
+              r.returncode == 0
+              and dps.get("bench", {}).get("status") == "partial"
+              and dps.get("stage_kinds", {}).get("sched_qwait") == "confounded"
+              and "仅 before 侧声明了 bench 压测参数" in mdps,
+              json.dumps(dps.get("bench")))
+
+        okd = os.path.join(tmp, "bench_ok")
+        measured_copy(os.path.join(tmp, "clean"), okd)
+        r = run_py(ANALYZE, ["--before", os.path.join(okd, "before_tp32ray"),
+                             "--after", os.path.join(okd, "after_tp8dp"),
+                             "--out", os.path.join(okd, "g")])
+        dok = load_json(os.path.join(okd, "g.json")) if r.returncode == 0 else {}
+        mdok = open(os.path.join(okd, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("全项实测核对通过时固定文案才宣称「压测参数通过」（对照）",
+              r.returncode == 0 and dok.get("bench", {}).get("status") == "ok"
+              and "压测参数均通过" in mdok,
+              json.dumps(dok.get("bench")))
     finally:
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)

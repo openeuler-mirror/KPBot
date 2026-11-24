@@ -2,7 +2,8 @@
 """kptools-tpsplit-report：TP 拆分前后收益对比分析（TTFT 表格 + 打点日志 → 收益报告）。
 
 输入：两套数据目录（before/after），每套含：
-  ttft_table.csv   —— kptools-tpsplit-log-analysis 解析出的每请求 TTFT 分阶段表
+  ttft_table.csv   —— TTFT breakdown 解析工具输出的每请求 TTFT 分阶段表
+                     （口径见 references/stage-glossary.md 第 3 节）
   *.log            —— 打点原始日志（[TTFT][BREAKDOWN] v3 / [LB_DISPATCH] / [TTFT_KVXFER]
                         / [TTFT_DRAFT] / start_load_kv），可选；[SHM_DEQUEUE_BATCH] 等
                         batch 级行无 req 字段、不进证据链，不读入内存
@@ -389,13 +390,23 @@ def detect_source(cfg):
 
 
 def compare_bench(b_cfg, a_cfg):
-    """对比两侧 config 的 bench 压测参数；只声明在一侧或值不同都算不一致。"""
+    """对比两侧 config 的 bench 压测参数（忽略 note 文案）。
+
+    - 两侧都有 bench：值不同或键只声明在一侧 → mismatch；
+    - 只一侧有 bench：无法核对 → partial（同样触发排队阶段暂停归因）；
+    - 两侧都没有：unverified（未核对，不暂停归因但必须告警，不得宣称通过）。
+    """
     bb, ab = b_cfg.get("bench"), a_cfg.get("bench")
-    if not isinstance(bb, dict) or not isinstance(ab, dict):
-        return {"status": "unverified", "mismatch_keys": []}
+    b_has, a_has = isinstance(bb, dict), isinstance(ab, dict)
+    if not b_has and not a_has:
+        return {"status": "unverified", "mismatch_keys": [], "declared_side": None}
+    if b_has != a_has:
+        return {"status": "partial", "mismatch_keys": [],
+                "declared_side": "before" if b_has else "after"}
     keys = (set(bb) | set(ab)) - BENCH_IGNORE_KEYS
     mismatch = sorted(k for k in keys if bb.get(k) != ab.get(k))
-    return {"status": "mismatch" if mismatch else "ok", "mismatch_keys": mismatch}
+    return {"status": "mismatch" if mismatch else "ok", "mismatch_keys": mismatch,
+            "declared_side": None}
 
 
 def log_match_count(side):
@@ -406,6 +417,17 @@ def log_match_count(side):
     if not br:
         return 0
     return len({r["request_id"] for r in side["rows"]} & set(br))
+
+
+def bench_reason(ctx):
+    """排队类阶段暂停归因的原因描述；无暂停场景时返回 None。"""
+    st = ctx["bench"]["status"]
+    if st == "mismatch":
+        return "两侧压测参数不一致（%s）" % "、".join(ctx["bench"]["mismatch_keys"])
+    if st == "partial":
+        return ("仅 %s 侧声明了 bench 压测参数（另一侧 config 无 bench 字段）"
+                % ctx["bench"]["declared_side"])
+    return None
 
 
 def collect_flags(ctx):
@@ -450,6 +472,13 @@ def collect_flags(ctx):
         flags.append("两侧压测参数不一致（%s），排队类阶段（sched_qwait、fe_inputq）"
                      "已暂停收益归因（判「负载混杂」）"
                      % "、".join(ctx["bench"]["mismatch_keys"]))
+    elif ctx["bench"]["status"] == "partial":
+        flags.append("仅 %s 侧声明了 bench 压测参数（另一侧 config 无 bench 字段），"
+                     "流量可比性未验证；排队类阶段（sched_qwait、fe_inputq）"
+                     "已暂停收益归因（判「负载混杂」）" % ctx["bench"]["declared_side"])
+    elif ctx["bench"]["status"] == "unverified":
+        flags.append("两侧压测参数未核对（config 无 bench 字段），"
+                     "排队类阶段的可比性未验证——不得据此断言流量一致")
     if ctx["synthetic"]:
         flags.append("本次输入为仿真合成数据（synthetic，非现场实测），"
                      "数字仅供演示与回归，不能当作现场优化结果")
@@ -506,7 +535,7 @@ def render_md(ctx):
     else:
         src_txt = "数据性质：现场实测"
     L.append("> 工具：kptools-tpsplit-report v0.1.0 ｜ 生成：%s ｜ 数据来源：TTFT 表格"
-             "（kptools-tpsplit-log-analysis 口径）%s ｜ %s"
+             "（TTFT breakdown 口径）%s ｜ %s"
              % (time.strftime("%Y-%m-%d %H:%M:%S"),
                 "＋ 打点原始日志" if has_logs else "（未匹配到原始日志，证据止步表格层）",
                 src_txt))
@@ -614,9 +643,9 @@ def render_md(ctx):
             contrib_cell, KIND_CN[kind]))
     if any(k == "confounded" for k in ctx["kinds"].values()):
         L.append("")
-        L.append("> ⚠️ 两侧压测参数不一致（%s），排队类阶段（`sched_qwait`、`fe_inputq`）"
+        L.append("> ⚠️ %s，排队类阶段（`sched_qwait`、`fe_inputq`）"
                  "的 Δ 无法区分「TP 拆分」与「负载变化」，已暂停其收益/回退归因"
-                 "（判「负载混杂」）。" % "、".join(ctx["bench"]["mismatch_keys"]))
+                 "（判「负载混杂」）。" % bench_reason(ctx))
     L.append("")
     L.append("*贡献度 = 该阶段 Δms ÷ TTFT Δms（改善为负时，负贡献 = 拉低改善；总和 ≈ 100%）。"
              "Δ% 为「—（基线为 0）」时表示基线均值为 0、相对变化不可计算，该阶段判定仅依据绝对阈值；"
@@ -690,11 +719,10 @@ def render_md(ctx):
         L.append("- 两侧 config 未提供 bench 压测参数，流量一致性**未核对**，按声明一致处理；"
                  "若实际压测脚本/并发参数不同，排队类阶段（`sched_qwait`、`fe_inputq`）"
                  "的对比不成立。")
-    elif ctx["bench"]["status"] == "mismatch":
-        L.append("- 两侧压测参数不一致（%s），排队类阶段（`sched_qwait`、`fe_inputq`）已"
+    elif ctx["bench"]["status"] in ("mismatch", "partial"):
+        L.append("- %s，排队类阶段（`sched_qwait`、`fe_inputq`）已"
                  "**暂停收益归因**——这部分 Δ 更可能来自负载变化而非 TP 拆分，"
-                 "需要同参数重采后再对比。"
-                 % "、".join(ctx["bench"]["mismatch_keys"]))
+                 "需要同参数重采后再对比。" % bench_reason(ctx))
     else:
         L.append("- 两次采集的流量形态按 config 声明一致处理；若实际压测脚本/并发参数不同，"
                  "排队类阶段（`sched_qwait`、`fe_inputq`）的对比不成立。")
@@ -979,9 +1007,8 @@ def render_html(ctx):
                       fmt_num(safe_pct(as_["mean"], bs["mean"])), tag, KIND_CN[kind]))
     H.append("</table>")
     if any(k == "confounded" for k in ctx["kinds"].values()):
-        H.append("<p class='note'>两侧压测参数不一致（%s）：排队类阶段"
-                 "（sched_qwait、fe_inputq）已暂停收益归因（判「负载混杂」）。</p>"
-                 % esc("、".join(ctx["bench"]["mismatch_keys"])))
+        H.append("<p class='note'>%s：排队类阶段（sched_qwait、fe_inputq）已暂停收益归因"
+                 "（判「负载混杂」）。</p>" % esc(bench_reason(ctx)))
 
     for title, plist in (("收益点与证据链", benefits), ("风险与回退点", regressions)):
         H.append("<h2>%s</h2>" % esc(title))
@@ -1053,10 +1080,9 @@ def render_html(ctx):
     if ctx["bench"]["status"] == "unverified":
         bench_li = ("<li>两侧 config 未提供 bench 压测参数，流量一致性未核对，"
                     "按声明一致处理；实际不同则排队类阶段对比不成立。</li>")
-    elif ctx["bench"]["status"] == "mismatch":
-        bench_li = ("<li>两侧压测参数不一致（%s）：排队类阶段已"
-                    "<b>暂停收益归因</b>（判「负载混杂」），需同参数重采后再对比。</li>"
-                    % esc("、".join(ctx["bench"]["mismatch_keys"])))
+    elif ctx["bench"]["status"] in ("mismatch", "partial"):
+        bench_li = ("<li>%s：排队类阶段已<b>暂停收益归因</b>（判「负载混杂」），"
+                    "需同参数重采后再对比。</li>" % esc(bench_reason(ctx)))
     else:
         bench_li = ("<li>两次采集按 config 声明流量一致处理；"
                     "实际不同则排队类阶段对比不成立。</li>")
@@ -1140,7 +1166,8 @@ def main():
     th = {"benefit_ms": args.benefit_ms, "benefit_pct": args.benefit_pct,
           "regress_ms": args.regress_ms}
     bench = compare_bench(b["cfg"], a["cfg"])
-    kinds = compute_kinds(b["st"], a["st"], th, bench["status"] == "mismatch")
+    kinds = compute_kinds(b["st"], a["st"], th,
+                          bench["status"] in ("mismatch", "partial"))
     points = build_points(b["rows"], a["rows"], b["st"], a["st"],
                           b["logs"], a["logs"], th, kinds)
     quality = quality_report(b["rows"], a["rows"], b["meta"], a["meta"], args.min_samples)

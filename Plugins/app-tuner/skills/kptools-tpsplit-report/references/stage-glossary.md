@@ -1,6 +1,6 @@
 # TTFT 分阶段术语表与日志格式
 
-本 skill 的表格与日志口径来自 kptools-tpsplit-log-trace 部署的打点 patch（v3.2）、并由 kptools-tpsplit-log-analysis 解析出表。本文档是唯一的口径定义处：脚本与报告中的阶段名、字段名、日志行格式都以此为准。
+本 skill 的表格与日志口径来自 TTFT breakdown 打点 patch（v3.2）与配套解析工具（两者均为环境级独立交付，不在本仓库，调用方式见其自身文档）。本文档是唯一的口径定义处：脚本与报告中的阶段名、字段名、日志行格式都以此为准。
 
 ## 1. 守恒式（数据质量的锚）
 
@@ -35,7 +35,7 @@ ttft = net_lb + fe_inputq + fe_addreq + sched_qwait + sched_total
 - `defer_finalize=True` 下 producer 侧 `save_kv` 的 sentinel 恒 0、engine 侧 `load_kv` 恒 0——真实值在 pool_worker / kv_transfer 日志里，`kv_xfer` 以日志回填值为准。某侧整列恒 0 而另一侧非 0 的阶段，分析脚本会自动标「疑似未回填/口径不一致」并告警，该阶段 Δ% 记不可计算、判定仅用绝对阈值。
 - Ray 聚合日志（log_to_driver）里 worker 行会丢原始文件号，SHM_DEQUEUE 行没有 req 字段——它按 batch 打点，进不了证据链（脚本不读入内存）；证据链引用时只能给时间戳，不给 req_id。
 
-## 3. 表格格式（kptools-tpsplit-log-analysis 输出，CSV）
+## 3. 表格格式（TTFT breakdown 解析工具输出，CSV）
 
 文件名惯例 `ttft_table.csv`，UTF-8，首行表头，每请求一行：
 

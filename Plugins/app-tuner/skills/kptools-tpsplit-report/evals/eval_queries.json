@@ -6,7 +6,7 @@
     {"id": "AQ-03", "prompt": "TP 拆分前后各采了一次数据，帮我把 TTFT 拆开看看哪个阶段降了，每个收益点要能对回原始日志", "should_trigger": true, "note": "阶段归因"},
     {"id": "AQ-04", "prompt": "拆完 TP 之后 P99 好像好了不少，帮我确认收益点，并基于打点日志给出证据", "should_trigger": true, "note": "分位数收益"},
     {"id": "AQ-05", "prompt": "对比这两套目录 before_tp32ray 和 after_tp8dp，出一个 TP 拆分收益归因报告，表格和日志都在里面", "should_trigger": true, "note": "目录对比"},
-    {"id": "AQ-06", "prompt": "kptools-tpsplit-log-analysis 的 TTFT 表出来了，帮我评估一下这次 tpsplit 的收益", "should_trigger": true, "note": "上游出表"},
+    {"id": "AQ-06", "prompt": "TTFT breakdown 解析出的 TTFT 表出来了，帮我评估一下这次 tpsplit 的收益", "should_trigger": true, "note": "上游出表"},
     {"id": "AQ-07", "prompt": "TP32 改 TP8+DP 的效果量化一下，重点看 sched_qwait 是不是真的降了，收益分析对比报告发我", "should_trigger": true, "note": "qwait 主战场"},
     {"id": "AQ-08", "prompt": "拆分前后的 TTFT breakdown 表都在，但 after 那次压测请求长度好像偏短，这样的对比可信吗？收益到底多少", "should_trigger": true, "note": "混杂怀疑"},
     {"id": "AQ-09", "prompt": "这次对比只有两张 TTFT 表格，原始日志没留下来，还能做收益对比吗", "should_trigger": true, "note": "降级模式"},

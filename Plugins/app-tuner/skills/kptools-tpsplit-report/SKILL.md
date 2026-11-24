@@ -1,8 +1,8 @@
 ---
 name: kptools-tpsplit-report
 description: 分析 TP 拆分（tpsplit）前后两套 TTFT 分阶段表格与打点日志，生成收益分析对比报告（Markdown + HTML），明确收益点并给出三级证据链（claim → 表格分位数 → 原始日志行）。当用户提到 TP 拆分前后对比、tpsplit 收益、收益分析、收益对比报告、收益归因、收益点、证据链、TTFT 对比、拆了之后效果怎么样、TP32 改 TP8 值不值、优化效果评估、before/after 数据对比、收益点要有日志证据时务必使用本技能，即使用户只说"帮我看下拆分赚了多少"。输入是两套本地数据目录（ttft_table.csv + 打点 .log + config.json），输出 .md/.html/.json 三件套。数据在远端时先让用户回传（本 skill 不做 SSH 采集）；只对比 TTFT 及其阶段拆解，吞吐/显存/长稳不在范围内要明说。
-license: Proprietary
-compatibility: 纯 Python 3 标准库，本地运行（Windows/Linux 均可），不连远端、不改引擎、只读输入目录。输入表格口径来自 kptools-tpsplit-log-analysis（解析）与 kptools-tpsplit-log-trace（打点部署）；字段与日志格式定义见 references/stage-glossary.md。
+license: MulanPSL-2.0
+compatibility: 纯 Python 3 标准库，本地运行（Windows/Linux 均可），不连远端、不改引擎、只读输入目录。输入表格口径来自 TTFT breakdown 打点 patch（v3.2）及配套解析工具（均为环境级独立交付，不在本仓库）；字段与日志格式定义见 references/stage-glossary.md。
 metadata:
   skill_type: tool_assisted
   category: analysis
@@ -28,9 +28,9 @@ metadata:
 1. 用户给了两套数据目录要对比 → 走完整流程（下节）
 2. 只有表格没日志 → 照跑，报告自动降级（L3 缺失标「止步于表格层」），交付时向用户说明
 3. 控制台/报告出现**数据质量告警** → 先向用户解释告警（守恒违例/混杂/低样本各自什么含义），给结论时以分层对比为准，建议是否补采
-4. 数据在远端机器 → 本 skill 不做 SSH、也不自带日志解析器（本仓库未随技能交付该工具）：先把表格+日志回传到本地。原始日志需出表时，用运行环境里已安装的 TTFT breakdown 解析工具（如 `kptools-tpsplit-log-analysis`，调用命令见该 skill 自身的 SKILL.md）生成 `ttft_table.csv`；环境里没有该工具，就要求调用方按 `references/stage-glossary.md` 第 3 节的 CSV 口径（表头、字段名、守恒式）自行导出——缺表格无法分析，缺日志可降级
+4. 数据在远端机器 → 本 skill 不做 SSH、也不自带日志解析器：先把表格+日志回传到本地。原始日志需出表时，用运行环境里已安装的 TTFT breakdown 解析工具（环境级独立交付，调用命令见其自身文档）生成 `ttft_table.csv`；环境里没有该工具，就要求调用方按 `references/stage-glossary.md` 第 3 节的 CSV 口径（表头、字段名、守恒式）自行导出——缺表格无法分析，缺日志可降级
 5. 用户要对比吞吐/显存/长稳 → 超出范围，明说（报告第 8 节也写明了未测项）
-6. 只是演示/测试/冒烟 → 用 `scripts/synth_samples.py` 造仿真数据再跑
+6. 只是演示/测试/冒烟 → 用 `scripts/synth_samples.py` 造仿真数据再跑；`--out` 必须指向与真实采集目录**分离的 demo 目录**（子目录名与真实采集约定相同，目标目录已有非空同名文件时脚本会拒绝执行；`--force` 可强制覆盖且每个被覆盖文件先备份为 *.bak）
 7. 用户追问"这个收益点的证据给我看" → 直接引用报告第 5 节对应证据链，必要时按链里的 req_id 去 grep 原始日志给更多行
 
 ## 输入约定
@@ -97,7 +97,8 @@ python scripts/analyze_tpsplit_report.py \
 - **均值改善 ≠ 普遍改善**：qwait 的 burst 尾部（P99）和常态（P50）可能差好几倍，收益要分位数+分层一起看再下结论。
 - **守恒违例先怀疑管道，别怀疑用户**：多半是 log-analysis 解析或打点字段缺失；报告只标比例，定位要回到 log-trace 的第 4 节环境变量排查。全部行缺阶段列时守恒校验会标「不可判定」而不是假通过。
 - **`kv_xfer` 的口径**：`defer_finalize` 下 engine 侧 load_kv 恒 0 属已知设计，真实值靠日志回填——对比它时先确认两侧都是回填值；脚本会自动检出「某阶段一侧整列恒 0」并告警（疑似未回填/口径不一致），此时该阶段 Δ% 记不可计算、判定只用绝对阈值。
-- **两侧压测参数不同**（QPS、并发、输出长度）：脚本会对比两侧 config 的 `bench` 参数，不一致时自动把排队类阶段（`sched_qwait`、`fe_inputq`）的收益/回退改判「负载混杂」并暂停归因——此时要重采而不是解释；config 没写 bench 参数时报告会声明「未核对」。
+- **两侧压测参数不同**（QPS、并发、输出长度）：脚本会对比两侧 config 的 `bench` 参数——不一致时排队类阶段（`sched_qwait`、`fe_inputq`）改判「负载混杂」并暂停归因（要重采而不是解释）；只一侧声明 bench 时同样暂停归因；**两侧都没写 bench 时标「未核对」并告警**，报告不会宣称压测参数通过。
+- **仿真数据误指真实目录**：`synth_samples.py` 的子目录名（before_tp32ray/after_tp8dp）与真实采集约定相同，`--out` 指到真实回传数据根目录会**拒绝执行**（非空同名文件防护，真实数据往往只有一份）；`--force` 覆盖前自动备份 *.bak，tables-only 只清理本工具自己生成的 .log，来路不明的日志一律不动。
 - **input_len 列缺失或全空**：脚本按有效行算覆盖率，任一侧无有效 input_len 时分布一致性检查标「不可判定」、分层对比不可用（告警会明示）——均值差可能含长度混杂，别硬下结论。
 - **仿真数据会被标记**：`synth_samples.py` 生成的 config 带 `data_source: synthetic`，报告的 md/html/json 三处都会标「仿真数据（非现场实测）」——单独转发报告时不会被误当现场结果。
 - **Windows 控制台打印中文可能乱码**（GBK 控制台）：产物文件本身 UTF-8 正常，让用户直接开文件，别对着控制台校对。

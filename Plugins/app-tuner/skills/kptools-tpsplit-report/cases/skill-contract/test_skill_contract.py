@@ -143,6 +143,7 @@ class TestSelfContained(unittest.TestCase):
         for path in scanned_files():
             text = read(path)
             for token in ("kptools-tpsplit-check", "kptools-tpsplit-optimization",
+                          "kptools-tpsplit-log-analysis", "kptools-tpsplit-log-trace",
                           "collect_env.sh", "deploy_ttft_full.sh"):
                 if token in text:
                     hits.append("%s: %s" % (path.relative_to(SKILL_DIR), token))
