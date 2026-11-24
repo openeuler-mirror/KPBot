@@ -1,0 +1,8 @@
+[LB_DISPATCH] req=req_0000 wall_recv=1732000100001 client_send=1732000100000 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=363.400 prefiller=102 decoder=D103
+[LB_DISPATCH] req=req_0001 wall_recv=1732000101501 client_send=1732000101500 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=375.529 prefiller=103 decoder=D103
+[LB_DISPATCH] req=req_0002 wall_recv=1732000103001 client_send=1732000103000 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=799.171 prefiller=102 decoder=D103
+[LB_DISPATCH] req=req_0003 wall_recv=1732000104501 client_send=1732000104500 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=797.934 prefiller=103 decoder=D103
+[LB_DISPATCH] req=req_0004 wall_recv=1732002000001 client_send=1732002000000 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=358.171 prefiller=102 decoder=D103
+[LB_DISPATCH] req=req_0005 wall_recv=1732002001501 client_send=1732002001500 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=401.573 prefiller=103 decoder=D103
+[LB_DISPATCH] req=req_0006 wall_recv=1732002003001 client_send=1732002003000 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=392.886 prefiller=102 decoder=D103
+[LB_DISPATCH] req=req_0007 wall_recv=1732002004501 client_send=1732002004500 client2proxy_ms=1.2 dispatch_ms=2.8 wait_p_ms=15.0 first_token_ms=374.961 prefiller=103 decoder=D103

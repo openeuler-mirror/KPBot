@@ -1,0 +1,3 @@
+# 本地环境配置（事件名→原始事件编码映射），不提交入库。
+# 模板见 topdown-events.local.example。
+topdown-events.local

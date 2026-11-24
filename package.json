@@ -20,9 +20,11 @@
   "files": [
     "bin/",
     "adapters/dsh/",
+    "adapters/windows/InstallTree.cs",
     "Plugins/",
     ".claude-plugin/",
     "install.sh",
+    "install.ps1",
     "docs/STANDARDS.md",
     "docs/dsh.md",
     "docs/dsh-validation.md",

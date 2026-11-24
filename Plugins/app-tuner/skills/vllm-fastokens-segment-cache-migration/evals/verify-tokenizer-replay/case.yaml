@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: verify-tokenizer-replay
+expected_outcome: |
+  仅使用已有回放文件和候选目录执行 verify，不重新生成会话或安装包。
+  保存两组的 report.json 与 report.md，候选组段缓存预算为 64 MiB；按证据报告 token 一致性、实际并发线程数、缓存命中、分词耗时和 RSS。
+  不把整体配置的性能差异归因于段缓存，也不从分词器层结果推断服务端到端耗时。

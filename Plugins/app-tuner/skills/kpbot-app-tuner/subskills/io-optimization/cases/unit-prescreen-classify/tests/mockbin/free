@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# mock free -m — 行为由 $MOCK_SCENARIO 控制。
+scenario="${MOCK_SCENARIO:-idle}"
+
+echo "              total        used        free      shared  buff/cache   available"
+if [ "${scenario}" = "memory" ]; then
+  # used/total = 0.951 > 0.9 -> memory_capacity
+  echo "Mem:          767410      730000      10000       24000       27410      20400"
+  echo "Swap:          1023        1023           0"
+else
+  echo "Mem:          767410      380000     100000       24000      287410     359000"
+  echo "Swap:          1023           0        1023"
+fi

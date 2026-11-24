@@ -1,0 +1,5 @@
+// Extracted from CubeSandbox v0.7.1. SPDX-License-Identifier: Apache-2.0
+func isReplicaSchedulableNow(ctx context.Context, replica ReplicaStatus) bool {
+	_ = ctx
+	return strings.TrimSpace(replica.Status) == ReplicaStatusReady
+}

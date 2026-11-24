@@ -18,10 +18,19 @@
     "network",
     "pps",
     "forwarding",
+    "vllm",
+    "load-balancing",
+    "dp",
+    "llm-serving",
+    "profiling",
+    "report",
     "precision",
     "accuracy",
     "regression",
-    "quantization"
+    "quantization",
+    "topdown",
+    "pmu",
+    "collection-quality"
   ],
   "platforms": [
     "claude",

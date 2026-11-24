@@ -150,13 +150,39 @@ parse_npu_utilization() {
 parse_host_cpu() {
   # Reuse the already-computed host CPU utilization (mpstat-based) for NPU feed bottleneck detection.
   # Caller passes the output_dir; we read mpstat.txt if available, otherwise echo 0.
+  # Column mapping is header-name based with a locale shift: the header line
+  # carries a timestamp prefix (1 or 2 fields, e.g. "11:16:03" / "11:16:03 AM")
+  # that Average rows lack, so header indices shift left by the prefix length.
+  # Fixed column numbers silently dropped %irq on sysstat >= 12 ($8 is %soft,
+  # $9 is %steal after %guest/%gnice were inserted) and under-read exactly in
+  # the IRQ-heavy NPU feed scenario this function serves.
   local output_dir="$1"
   local mpstat_path="${output_dir}/workload_running/mpstat.txt"
   if [[ ! -r "${mpstat_path}" ]]; then
     echo "0"
     return
   fi
-  awk '/Average/ && $2 !~ /CPU/ {usr+=$3; sys+=$5; irq+=$8; soft+=$9; n++} END {if (n==0) print 0; else printf "%.0f", usr+sys+irq+soft}' "${mpstat_path}" 2>/dev/null
+  awk '
+    $0 ~ /%usr/ && $0 ~ /%idle/ {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "CPU") cpu_i = i
+        else if ($i == "%usr") usr_i = i
+        else if ($i == "%sys") sys_i = i
+        else if ($i == "%irq") irq_i = i
+        else if ($i == "%soft") soft_i = i
+      }
+      next
+    }
+    $1 == "Average:" && usr_i && cpu_i {
+      shift = cpu_i - 2
+      usr += $(usr_i - shift)
+      sys += $(sys_i - shift)
+      irq += $(irq_i - shift)
+      soft += $(soft_i - shift)
+      n++
+    }
+    END { if (n == 0) print 0; else printf "%.0f", usr + sys + irq + soft }
+  ' "${mpstat_path}" 2>/dev/null
 }
 
 detect_npu_bottleneck() {
@@ -225,26 +251,88 @@ memory_pressure_hint="unknown"
 confidence="low"
 fallback_notes=()
 
-# mpstat: core-level CPU utilization (primary tool, includes %irq)
+# mpstat: core-level CPU utilization (primary tool, includes %irq).
+# Column indices are resolved from the header line because sysstat >= 12
+# inserts %guest/%gnice before %idle, which breaks fixed field numbers.
+# - cpu_pct_mpstat: aggregate busy core-percent (sum over per-core Average
+#   rows), comparable against the cores * 85 threshold below
+# - irq_pct_mpstat / idle_pct_mpstat: average %irq / %idle (from the "all"
+#   row when present, otherwise per-core mean)
 if have_cmd mpstat; then
   mpstat_args=(-P ALL 1 "${DURATION}")
   [[ -n "${CORE_LIST}" ]] && mpstat_args=(-P "${CORE_LIST}" 1 "${DURATION}")
-  cpu_pct_mpstat="$( { mpstat "${mpstat_args[@]}" 2>/dev/null || true; } | awk '/Average/ && $2 !~ /CPU/ {usr+=$3; sys+=$5; irq+=$8; soft+=$9; idle+=$10; n++} END {if (n==0) print "null"; else printf "%.2f", (usr+sys+irq+soft)}')"
-  irq_pct_mpstat="$( { mpstat "${mpstat_args[@]}" 2>/dev/null || true; } | awk '/Average/ && $2 !~ /CPU/ {sum+=$8; n++} END {if (n==0) print "null"; else printf "%.2f", sum}')"
-  idle_pct_mpstat="$( { mpstat "${mpstat_args[@]}" 2>/dev/null || true; } | awk '/Average/ && $2 !~ /CPU/ {sum+=$10; n++} END {if (n==0) print "null"; else printf "%.2f", sum}')"
+  mpstat_values="$( { mpstat "${mpstat_args[@]}" 2>/dev/null || true; } | awk '
+    $0 ~ /%usr/ && $0 ~ /%idle/ {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "CPU") cpu_i = i
+        else if ($i == "%usr") usr_i = i
+        else if ($i == "%sys") sys_i = i
+        else if ($i == "%irq") irq_i = i
+        else if ($i == "%soft") soft_i = i
+        else if ($i == "%idle") idle_i = i
+      }
+      next
+    }
+    $1 == "Average:" && usr_i && cpu_i {
+      # Average rows lack the timestamp prefix the header carries; shift
+      # header indices left by it (1 in C locale, 2 with AM/PM).
+      shift = cpu_i - 2
+      if ($2 == "all") {
+        all_busy = $(usr_i - shift) + $(sys_i - shift) + $(irq_i - shift) + $(soft_i - shift)
+        all_irq = $(irq_i - shift)
+        all_idle = $(idle_i - shift)
+        all_seen = 1
+      } else {
+        busy_sum += $(usr_i - shift) + $(sys_i - shift) + $(irq_i - shift) + $(soft_i - shift)
+        irq_sum += $(irq_i - shift)
+        idle_sum += $(idle_i - shift)
+        core_rows++
+      }
+    }
+    END {
+      if (core_rows == 0 && all_seen == 0) { print "null null null"; exit }
+      cpu = (core_rows > 0) ? busy_sum : all_busy
+      if (all_seen) { irq = all_irq; idle = all_idle }
+      else { irq = irq_sum / core_rows; idle = idle_sum / core_rows }
+      printf "%.2f %.2f %.2f\n", cpu, irq, idle
+    }
+  ')"
+  read -r cpu_pct_mpstat irq_pct_mpstat idle_pct_mpstat <<<"${mpstat_values}"
 else
   fallback_notes+=("mpstat_missing")
 fi
 
 # pidstat: process-level usr/sys breakdown (supplementary)
 if have_cmd pidstat; then
-  cpu_pct="$( { pidstat -p "${PID}" 1 "${DURATION}" 2>/dev/null || true; } | awk '/Average/ {sum += $(NF-6)} END {if (sum == "") print "null"; else printf "%.2f", sum}')"
+  # pidstat: process-level %CPU. Resolve the %CPU column by header name with
+  # a locale shift (the header carries a timestamp prefix Average rows lack);
+  # a fixed $(NF-6) landed on %usr on sysstat >= 12 and drifted further with
+  # multi-word process names.
+  cpu_pct="$( { pidstat -p "${PID}" 1 "${DURATION}" 2>/dev/null || true; } | awk '
+    $0 ~ /%CPU/ && $0 ~ /Command/ {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "UID") uid_i = i
+        else if ($i == "%CPU") cpu_i = i
+      }
+      next
+    }
+    $1 == "Average:" {
+      if (cpu_i && uid_i) sum += $(cpu_i - (uid_i - 2))
+      else sum += $(NF - 6)
+      n++
+    }
+    END { if (n == 0 || sum == "") print "null"; else printf "%.2f", sum }
+  ')"
 else
   fallback_notes+=("pidstat_missing")
 fi
 
 if have_cmd vmstat; then
-  iowait_pct="$( { vmstat 1 "${DURATION}" 2>/dev/null || true; } | awk 'NR>2 {sum += $16; count++} END {if (count==0) print "null"; else printf "%.2f", sum/count}')"
+  # procps vmstat's first data row is the since-boot average (same window
+  # semantics as iostat's first section); skip it and average the sampling
+  # window only. An empty window (e.g. DURATION=1) degrades honestly.
+  iowait_pct="$( { vmstat 1 "${DURATION}" 2>/dev/null || true; } | awk 'NR>3 {sum += $16; count++} END {if (count==0) print "null"; else printf "%.2f", sum/count}')"
+  [[ "${iowait_pct}" == "null" ]] && fallback_notes+=("vmstat_since_boot_only")
 else
   fallback_notes+=("vmstat_missing")
 fi
@@ -299,7 +387,8 @@ if have_cmd ss; then
       network_hint="socket_backlog_sampled"
     else
       network_hint="socket_view_available_but_pid_not_found"
-      fallback_notes+=("ss_pid_socket_not_found")
+      # Informational only: reported via network_hint; must NOT enter
+      # fallback_notes because it would block no_active_bottleneck.
     fi
   else
     network_hint="socket_view_available"

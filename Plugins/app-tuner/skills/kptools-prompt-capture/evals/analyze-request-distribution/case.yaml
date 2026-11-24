@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: analyze-request-distribution
+expected_outcome: |
+  只对指定窗口做宏观统计，返回请求表及摘要；有数据则执行分析，没有 token 计数的指标不填零。不运行会话分析，不要求线上接入信息。

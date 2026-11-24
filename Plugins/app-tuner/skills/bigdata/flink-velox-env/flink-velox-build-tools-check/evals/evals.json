@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-build-tools-check",
+  "evals": [
+    {
+      "id": "missing-ninja",
+      "query": "velox4j 构建报 ninja: command not found，看看缺什么构建工具",
+      "expected": "触发本 skill：跑 scripts/build_tools_check.py，逐项读九件的 ok/fail，按 next_step 转述 dnf install ninja-build；只报告不装包"
+    },
+    {
+      "id": "before-build",
+      "query": "搭 GlutenFlink 构建环境之前，先确认 ninja ccache autoconf automake libtool flex bison python3 patchelf 都在",
+      "expected": "触发本 skill：九件逐项检查，齐了报 READY 与各版本，缺了逐项 fail + fix（ninja 给 ninja-build）"
+    },
+    {
+      "id": "versions",
+      "query": "这台机器的 ninja 和 ccache 是什么版本",
+      "expected": "触发本 skill：从 --json 的 tools.ninja.version / tools.ccache.version 读版本作答；版本只报告不设门槛"
+    },
+    {
+      "id": "not-toolchain",
+      "query": "cmake 和 g++ 装了没",
+      "expected": "不触发：编译工具链属 flink-velox-toolchain-check"
+    },
+    {
+      "id": "not-cpp-deps",
+      "query": "libevent 和 openssl 的头文件在不在",
+      "expected": "不触发：C++ 库头文件属 flink-velox-cpp-deps-check"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译 GlutenFlink 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check，本 skill 只是它的输入之一"
+    },
+    {
+      "id": "not-install",
+      "query": "把缺的 ninja-build 装上",
+      "expected": "不触发：本 skill 只读；装包属同族安装类 skill，next_step 是交给它的工单"
+    }
+  ]
+}
