@@ -5,7 +5,7 @@
   "queries": [
     {
       "id": "q-prepare-build-env",
-      "prompt": "准备 GFV 的构建环境，装依赖、克隆源码仓",
+      "prompt": "准备 GlutenFlink 的构建环境，装依赖、克隆源码仓",
       "should_trigger": true,
       "note": "场景入口类触发词：准备构建环境、装依赖、克隆源码仓"
     },
@@ -31,13 +31,13 @@
       "id": "q-runtime-install",
       "prompt": "安装 Flink 1.19 运行时和 nexmark",
       "should_trigger": false,
-      "note": "Flink 运行时 → flink-velox-runtime-install（规划中）"
+      "note": "Flink 运行时 → flink-velox-runtime-install（见 !323）"
     },
     {
       "id": "q-stack-build",
       "prompt": "编译 velox4j 和 gluten-flink 并部署进 lib",
       "should_trigger": false,
-      "note": "编译部署 → flink-velox-stack-build（规划中）"
+      "note": "编译部署 → flink-velox-stack-build（见 !324）"
     }
   ]
 }
