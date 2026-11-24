@@ -24,6 +24,10 @@ _SYNTHETIC_KIND = "synthetic"
 _USER_KIND = "user-provided-jpeg-directory"
 
 
+class OutputExistsError(ValueError):
+    """Caller error: --output must name a directory that does not exist."""
+
+
 def inspect_jpegs(directory, limit):
     """Resolve, validate content and read the header of each selected JPEG."""
     from PIL import Image
@@ -210,7 +214,7 @@ def execute(args):
     try:
         args.output.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
-        raise ValueError(
+        raise OutputExistsError(
             f"output directory already exists: {args.output}; "
             "choose a new --output"
         ) from None
@@ -372,6 +376,11 @@ def main():
         raise SystemExit(code)
     try:
         result = execute(args)
+    except OutputExistsError as exc:
+        # Caller error: reuse of an existing --output is a usage error (2),
+        # not an input/dependency/runtime failure (1). The no-overwrite check
+        # runs before any write, so existing result bytes stay untouched.
+        parser.error(str(exc))
     except (OSError, ValueError, ImportError) as exc:
         parser.exit(1, f"pipeline failed: {exc}\n")
     print(json.dumps(result))

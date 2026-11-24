@@ -15,5 +15,5 @@ RUN export PIP_NO_INDEX="${PIP_NO_INDEX}" PIP_FIND_LINKS="${PIP_FIND_LINKS}" \
     && python -m pip freeze > /installed-packages.txt
 COPY SKILL.md ./
 COPY scripts/check_environment.py scripts/make_fixture.py scripts/run_pipeline.py ./scripts/
-COPY cases/image-smoke/case.yaml cases/image-smoke/check.py cases/image-smoke/run.sh ./cases/image-smoke/
+COPY cases/image-smoke/case.yaml cases/image-smoke/check.py cases/image-smoke/run.sh cases/image-smoke/test_exit_codes.py ./cases/image-smoke/
 CMD ["python", "scripts/check_environment.py"]

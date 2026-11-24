@@ -13,3 +13,4 @@
 !cases/image-smoke/case.yaml
 !cases/image-smoke/check.py
 !cases/image-smoke/run.sh
+!cases/image-smoke/test_exit_codes.py

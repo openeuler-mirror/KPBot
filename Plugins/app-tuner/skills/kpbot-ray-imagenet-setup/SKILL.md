@@ -50,7 +50,7 @@ docker run --rm --name kpbot-ray-imagenet-setup-smoke --cpus 4 --memory 8g --shm
   bash cases/image-smoke/run.sh
 ```
 
-每次运行创建新的 `results/runs/<UTC时间>-<pid>` 结果目录，旧轮次产物保持不变；`results/image-smoke/result.json` 是供用例断言使用的当前结果索引，会更新为本次成功或失败结果。需要显式目录时运行 `python cases/image-smoke/check.py --output-dir results/my-run`，目标已存在会以退出码 2 拒绝并提示换目录。不要把不同实验复用同一个结果目录。
+每次运行创建新的 `results/runs/<UTC时间>-<pid>` 结果目录，旧轮次产物保持不变；`results/image-smoke/result.json` 是供用例断言使用的当前结果索引，会更新为本次成功或失败结果。需要显式目录时运行 `python cases/image-smoke/check.py --output-dir results/my-run`，目标已存在会以退出码 2 拒绝并提示换目录；`run.sh` 对已存在的运行目录同样以退出码 2 拒绝。不要把不同实验复用同一个结果目录。
 
 用例生成 16 张确定性 JPEG（重复生成逐字节一致），经真实 Ray Data 执行；逐行比较串行参考的预处理 tensor SHA-256、shape、有限数值及模拟标签。MockActor 在 Actor 内对实际收到的每行 tensor 重新计算 SHA-256，因此同形状 tensor 错位会被发现。还验证类 ImageNet 的嵌套目录、大小写后缀和非 JPEG 忽略、损坏/缺失/空 JPEG、改名为 `.jpg` 的 PNG、越界符号链接、非法参数、像素上限与解码内存预检、已有输出不被覆盖、外层超时返回 124，并检查测试结束后没有残留 Ray 进程。读取本次结果目录的 `result.json`（或 `results/image-smoke/result.json`），必须 `success=true`；同时保留输入清单、逐行指纹、Dataset stats、stdout/stderr。合成数据不属于 ImageNet，也不证明全量数据、模型推理或性能收益。
 
@@ -68,6 +68,6 @@ docker run --rm --name kpbot-ray-imagenet-setup-check --cpus 4 --memory 8g --shm
 
 `IMAGENET_DIR` 指向用户实际数据目录；`/input` 是该命令明确创建的容器挂载位置。用户入口默认把数据记录为 `user-provided-jpeg-directory`，即使目录中碰巧存在 `fixture.json` 也不会改标为合成数据；只有合成验收入口显式传入 `--dataset-kind synthetic` 且校验 `make_fixture.py` 写入的标记后才记录为 `synthetic`。输出目录必须不存在；每次实验换用新的 `--output`。缺失、空目录、无 JPEG、无法解码、越界链接、改名 PNG 或结果不一致时失败，不伪造数据、不跳过坏图。输入只读挂载。命令超时会终止自身进程组，容器 `--rm` 在退出后回收本次 Ray 进程。被中断后核对这个确切容器名，不使用全局 `ray stop`、`pkill` 或 Docker prune。
 
-填写[安装与验收记录](references/record.md)，注明数据是合成还是用户数据，不能将行数通过写成完整 ImageNet 已验证。脚本退出 0 表示通过，1 表示输入/依赖/运行/内存预检失败，参数错误或结果目录已存在退出 2，外层等待超时退出 124。参数错误、输入校验和内存/像素预检失败发生在创建输出目录之前；进入执行后的失败会在 stderr 和已创建输出目录的 result.json 中记录，超时可能只有部分文件或没有结果文件。
+填写[安装与验收记录](references/record.md)，注明数据是合成还是用户数据，不能将行数通过写成完整 ImageNet 已验证。`scripts/run_pipeline.py` 退出 0 表示通过，1 表示输入/依赖/运行/内存预检失败，2 表示调用方参数错误或 `--output` 目录已存在，124 表示外层等待超时；父进程原样传递子 worker 的退出码，因此已有输出目录在父 CLI 和子 worker 两个入口都返回 2，且不写入、不覆盖已有字节。验收入口 `cases/image-smoke/check.py`（及 `run.sh`）对已存在的结果目录同样以 2 拒绝，其余验收失败仍返回 1。参数错误、输入校验和内存/像素预检失败发生在创建输出目录之前；进入执行后的失败会在 stderr 和已创建输出目录的 result.json 中记录，超时可能只有部分文件或没有结果文件。
 
 公开依据与依赖边界见[来源](references/sources.md)。环境安装与本次正确性验收到此结束；需要定位吞吐瓶颈时，将这些产物交给性能分析流程，不自动打框架补丁。

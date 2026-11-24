@@ -215,7 +215,7 @@ def run(out):
         out,
         "no-overwrite",
         pipeline,
-        expected=1,
+        expected=2,
         require_stderr="output directory already exists",
     )
     if (
@@ -223,6 +223,12 @@ def run(out):
         != before
     ):
         raise ValueError("existing evidence was changed")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_exit_codes import check as check_exit_codes
+
+    (out / "exit-codes.json").write_text(
+        json.dumps(check_exit_codes(), indent=2), encoding="utf-8"
+    )
 
     user = out / "user-layout"
     for name in ("class-a", "class-b"):
@@ -513,6 +519,8 @@ def run(out):
         renamed_png_rejected=True,
         symlink_escape_rejected=True,
         existing_evidence_preserved=True,
+        existing_output_exit_code_2=True,
+        worker_output_exit_code_2=True,
         missing_or_empty_input_rejected=True,
         invalid_arguments_rejected=True,
         invalid_timeout_rejected=True,
