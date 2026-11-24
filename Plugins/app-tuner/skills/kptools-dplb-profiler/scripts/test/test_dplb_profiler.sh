@@ -1,9 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# kptools-dplb-profiler 测试套件
-# 覆盖：脚本语法、采集端 parse_row 行为（TPOT 指标名/命中率 counter 口径/负 queue
+# kptools-dplb-profiler 测试套件（采集端）
+# 覆盖：脚本语法、采集端 parse_row 行为（TPOT 指标名命中/counter 口径/负 queue
 #       修正/PD 双池数组分离）、回采端纯函数（幽灵 tag/模糊建议/queue_fixed/fnum/
-#       未导出列剔除）、报告端回归（评级分级/小样本护栏/短窗口说明/硬失败/主机解析）
+#       未导出列剔除）。
+#       报告端回归见 kptools-dplb-report/scripts/test/test_dplb_report.sh。
 # 用法: bash scripts/test/test_dplb_profiler.sh
 # =============================================================================
 set +e
@@ -56,10 +57,11 @@ run_py_suite() {
 }
 
 echo "== 0. 语法检查 =="
-for s in extract_metric_v2.sh extract_metric_pd.sh extract_metric_single.sh; do
+for s in extract_metric_v2.sh extract_metric_pd.sh extract_metric_single.sh lbprof_common.sh; do
     if "$BASH_BIN" -n "$SCRIPTS/$s" 2>/dev/null; then pass "$s syntax"; else fail "$s syntax"; fi
 done
-for p in extract_metric_prom.py generate_report.py; do
+if awk -f "$SCRIPTS/lbprof_common.awk" </dev/null 2>/dev/null; then pass "lbprof_common.awk syntax"; else fail "lbprof_common.awk syntax"; fi
+for p in extract_metric_prom.py; do
     if "$PY_BIN" -c "import ast,sys; ast.parse(open(sys.argv[1],encoding='utf-8').read())" "$SCRIPTS/$p" 2>/dev/null; then
         pass "$p syntax"
     else
@@ -68,9 +70,11 @@ for p in extract_metric_prom.py generate_report.py; do
 done
 
 echo "== 1. 采集端 parse_row（v2：TPOT/命中率/负queue/列数） =="
-sed -n '/^parse_row()/,/^}$/p' "$SCRIPTS/extract_metric_v2.sh" > "$TMP/parse_row.sh"
+sed -n '/^lbprof_parse_row_v2()/,/^}$/p' "$SCRIPTS/lbprof_common.sh" > "$TMP/parse_row.sh"
 # shellcheck disable=SC1090
 source "$TMP/parse_row.sh"
+# 行发射依赖公共 awk 库（唯一副本）经变量拼接加载
+LBPROF_AWK_LIB="$(cat "$SCRIPTS/lbprof_common.awk")"
 
 BODY='# HELP vllm:num_requests_running
 vllm:num_requests_running{model="x",engine="0"} 5
@@ -95,7 +99,7 @@ vllm:request_time_per_output_token_seconds_count{engine="0"} 1200
 vllm:e2e_request_latency_seconds_sum{engine="0"} 4350.5
 vllm:e2e_request_latency_seconds_count{engine="0"} 150'
 
-ROW=$(printf '%s' "$BODY" | parse_row "2026-11-17 11:33:34" "10.0.0.1:9100")
+ROW=$(printf '%s' "$BODY" | lbprof_parse_row_v2 "2026-11-17 11:33:34" "10.0.0.1:9100")
 NCOLS=$(echo "$ROW" | awk -F, '{print NF}')
 check "v2: 输出 33 列" "$NCOLS" "33"
 
@@ -114,7 +118,7 @@ check "v2: prefill_sum 吸收负 queue (4300-4242.17=57.83)" "$(get 27)" "57.83"
 check "v2: queue_fixed=1" "$(get 33)" "1"
 
 # 无负 queue 的正常行
-ROW2=$(printf '%s' "$BODY" | sed 's/-4242.17/2.5/' | parse_row "t" "10.0.0.1:9101")
+ROW2=$(printf '%s' "$BODY" | sed 's/-4242.17/2.5/' | lbprof_parse_row_v2 "t" "10.0.0.1:9101")
 get2() { echo "$ROW2" | awk -F, -v i="$1" '{print $i}'; }
 check "v2: 正常 queue_sum 保留 2.5" "$(get2 25)" "2.5"
 check "v2: 正常行 queue_fixed=0" "$(get2 33)" "0"
@@ -122,16 +126,28 @@ check "v2: 正常行 queue_fixed=0" "$(get2 33)" "0"
 # 旧版 gauge 命中率回退（无 counter 时）
 ROW3=$(printf '%s\nvllm:prefix_cache_hit_rate{engine="0"} 0.65\nvllm:external_prefix_cache_hit_rate{engine="0"} 0.75' "$BODY" \
     | sed '/prefix_cache_hits_total/d;/prefix_cache_queries_total/d;/external_prefix_cache_hits_total/d;/external_prefix_cache_queries_total/d' \
-    | parse_row "t" "10.0.0.1:9102")
+    | lbprof_parse_row_v2 "t" "10.0.0.1:9102")
 get3() { echo "$ROW3" | awk -F, -v i="$1" '{print $i}'; }
 check "v2: gauge 回退本地命中率 0.65" "$(get3 14)" "0.65"
 check "v2: gauge 回退外部命中率 0.75" "$(get3 16)" "0.75"
+
+# sum 缺失但 count 存在：派生 avg 必须写 -1 而非 0（评审修复回归：sum/count 双检，
+# 与 Prometheus 回采缺失口径统一，防止下游把同一缺口解释为零延迟）
+ROW5=$(printf '%s' "$BODY" | sed '/time_to_first_token_seconds_sum/d' | lbprof_parse_row_v2 "t" "10.0.0.1:9104")
+get5() { echo "$ROW5" | awk -F, -v i="$1" '{print $i}'; }
+check "v2: ttft_sum 缺失时 ttft_avg 记 -1（非 0）" "$(get5 18)" "-1"
+check "v2: ttft_sum 落盘为 -1" "$(get5 23)" "-1"
+check "v2: ttft_count 正常保留" "$(get5 24)" "150"
+ROW6=$(printf '%s' "$BODY" | sed '/request_queue_time_seconds_sum/d' | lbprof_parse_row_v2 "t" "10.0.0.1:9105")
+get6() { echo "$ROW6" | awk -F, -v i="$1" '{print $i}'; }
+check "v2: queue_sum 缺失时 queue_avg 记 -1（非 0）" "$(get6 19)" "-1"
+check "v2: queue_sum 缺失不触发负 queue 修正" "$(get6 33)" "0"
 
 # 畸形/边界取值：NaN/Inf/缺值/带时间戳的行不再被 awk 隐式转 0 或误取时间戳
 EDGE='vllm:num_requests_running{engine="0"} NaN
 vllm:num_requests_waiting{engine="0"} 3 1700000000000
 vllm:num_requests_swapped{engine="0"}'
-ROW4=$(printf '%s' "$EDGE" | parse_row "t" "10.0.0.1:9103")
+ROW4=$(printf '%s' "$EDGE" | lbprof_parse_row_v2 "t" "10.0.0.1:9103")
 get4() { echo "$ROW4" | awk -F, -v i="$1" '{print $i}'; }
 check "v2: NaN 值记为缺失 -1（不再隐式转 0）" "$(get4 3)" "-1"
 check "v2: 带时间戳行取 value 而非时间戳" "$(get4 4)" "3"
@@ -182,11 +198,12 @@ printf 'http://x";$(id);"\n' > d_inject2.txt
 "$BASH_BIN" "$SCRIPTS/extract_metric_pd.sh" 1 p_ok.txt d_inject2.txt > inject2.log 2>&1
 check "pd-inject: 命令替换形态同样拒绝" "$?" "1"
 
-echo "== 3. single.sh：TPOT 新指标名 + 负 queue 修正（avg 口径） =="
-sed -n '/^parse_row()/,/^}$/p' "$SCRIPTS/extract_metric_single.sh" > "$TMP/parse_row_single.sh"
+echo "== 3. single.sh：TPOT 新指标名 + 负 queue 修正（avg 口径，公共库 lbprof_parse_row_legacy） =="
+sed -n '/^lbprof_parse_row_legacy()/,/^}$/p' "$SCRIPTS/lbprof_common.sh" > "$TMP/parse_row_single.sh"
 # shellcheck disable=SC1090
 source "$TMP/parse_row_single.sh"
-SROW=$(printf '%s' "$BODY" | parse_row "t" "10.0.0.1:9100")
+LBPROF_AWK_LIB="$(cat "$SCRIPTS/lbprof_common.awk")"
+SROW=$(printf '%s' "$BODY" | lbprof_parse_row_legacy "t" "10.0.0.1:9100")
 SNCOLS=$(echo "$SROW" | awk -F, '{print NF}')
 check "single: 输出 22 列" "$SNCOLS" "22"
 sget() { echo "$SROW" | awk -F, -v i="$1" '{print $i}'; }
@@ -195,17 +212,30 @@ check "single: queue_avg 负值修正为 0" "$(sget 19)" "0"
 check "single: prefill_avg 吸收负 queue" "$(sget 20)" "0.385533"
 
 # 畸形/边界取值（与 v2 同口径：parse_row 值解析逻辑三脚本一致）
-SROW2=$(printf '%s' "$EDGE" | parse_row "t" "10.0.0.1:9103")
+SROW2=$(printf '%s' "$EDGE" | lbprof_parse_row_legacy "t" "10.0.0.1:9103")
 sget2() { echo "$SROW2" | awk -F, -v i="$1" '{print $i}'; }
 check "single: NaN 值记为缺失 -1（不再隐式转 0）" "$(sget2 3)" "-1"
 check "single: 带时间戳行取 value 而非时间戳" "$(sget2 4)" "3"
 check "single: 无值畸形行记为缺失 -1" "$(sget2 5)" "-1"
 
+# sum 缺失但 count 存在：single 与 v2 同口径（评审修复回归）
+SROW3=$(printf '%s' "$BODY" | sed '/time_to_first_token_seconds_sum/d' | lbprof_parse_row_legacy "t" "10.0.0.1:9104")
+sget3() { echo "$SROW3" | awk -F, -v i="$1" '{print $i}'; }
+check "single: ttft_sum 缺失时 ttft_avg 记 -1（非 0）" "$(sget3 18)" "-1"
+
+# 负 queue 修正顺序：先修 sum 再求平均（评审修复回归：queue -6/3 + prefill 20/2
+# 契约口径 (20-6)/2=7，旧 avg 级相加实现 20/2+(-6/3)=8；字段缺失与有效负值按存在性区分）
+QBODY='vllm:request_queue_time_seconds_sum{engine="0"} -6
+vllm:request_queue_time_seconds_count{engine="0"} 3
+vllm:prefill_time_seconds_sum{engine="0"} 20
+vllm:prefill_time_seconds_count{engine="0"} 2'
+QROW=$(printf '%s' "$QBODY" | lbprof_parse_row_legacy "t" "10.0.0.1:9106")
+qget() { echo "$QROW" | awk -F, -v i="$1" '{print $i}'; }
+check "single: 负 queue 按 sum 级修正后求平均 (20-6)/2=7（非 8）" "$(qget 20)" "7"
+check "single: 修正后 queue_avg=0" "$(qget 19)" "0"
+
 echo "== 4. 回采端单测（extract_metric_prom.py 纯函数） =="
 run_py_suite "回采单测套件" "$TEST_DIR/test_extract_metric_prom.py"
-
-echo "== 5. 报告端回归（generate_report.py，合成 CSV） =="
-run_py_suite "报告回归套件" "$TEST_DIR/test_generate_report.py"
 
 echo ""
 echo "== dplb-profiler 套件结果: PASS=$TEST_PASSED FAIL=$TEST_FAILED =="

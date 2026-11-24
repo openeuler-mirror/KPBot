@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # extract_metric_pd.sh - vLLM PD split cluster dual-pool (P/D) simultaneous load metrics collection (v2, 30 data-column spec)
 # One run simultaneously samples all nodes in both P and D pools in the same round, producing two v2-spec CSVs with aligned timestamps
 # Usage: ./extract_metric_pd.sh <sampling duration (seconds)> <p_urls file> <d_urls file>
@@ -16,6 +16,11 @@ D_URLS_FILE="${3:-}"
 SAMPLE_INTERVAL="${SAMPLE_INTERVAL:-10}"
 CURL_TIMEOUT="${CURL_TIMEOUT:-5}"
 
+LIBDIR="${LBPROF_LIB_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+# 公共库（唯一实现，避免多脚本逐字复制）：URL 白名单、33 列行发射 lbprof_parse_row_v2；
+# PD 特有的双池并行采样循环与分组加载保留在本脚本
+. "$LIBDIR/lbprof_common.sh"
+
 if [ -z "$DURATION" ] || [ -z "$P_URLS_FILE" ] || [ -z "$D_URLS_FILE" ] || [ ! -f "$P_URLS_FILE" ] || [ ! -f "$D_URLS_FILE" ]; then
   echo "Usage: $0 <sampling duration (seconds)> <p_urls file> <d_urls file>" >&2
   exit 1
@@ -24,29 +29,21 @@ case "$DURATION" in (*[!0-9]*|'') echo "Error: sampling duration must be a posit
 
 load_urls() {
   # $1 = urls file, $2 = target array name prefix ("P" or "D")
-  # Security: url files are typically generated from ticket/chat/wiki text and are
-  #   NOT fully trusted. Each line must pass a strict whitelist (http(s):// plus a
-  #   URL-safe charset) and is appended via direct array assignment in explicit
-  #   branches -- never eval. (eval re-parses the line, so quotes/$()/backticks in
-  #   a malicious node list could escape the array assignment and execute commands
-  #   on the collector host.)
+  # 每行过 http(s) 白名单校验后经显式分支做直接数组赋值追加 -- 从不 eval。
+  #（eval 会重新解析行内容，恶意节点列表里的引号/$()/反引号可逃出数组赋值在
+  #   采集机上执行命令；安全规则与白名单唯一实现见 lbprof_common.sh。）
   local f="$1" prefix="$2"; local line tag
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%%#*}"
     line="$(echo "$line" | tr -d '[:space:]')"
     [ -z "$line" ] && continue
-    if ! printf '%s' "$line" | grep -qE '^https?://[A-Za-z0-9._:/-]+$'; then
-      echo "Error: invalid URL line in $f (expect http(s)://host[:port]/path; allowed chars: A-Za-z0-9 . _ : / -): $line" >&2
-      exit 1
-    fi
+    lbprof_check_url "$line" "$f"
     if [ "$prefix" = "P" ]; then
       P_URLS_ALL+=("$line")
-      tag="${line#http://}"; tag="${tag#https://}"; tag="${tag%%/*}"
-      P_TAGS_ALL+=("$tag")
+      P_TAGS_ALL+=("$(lbprof_url_tag "$line")")
     else
       D_URLS_ALL+=("$line")
-      tag="${line#http://}"; tag="${tag#https://}"; tag="${tag%%/*}"
-      D_TAGS_ALL+=("$tag")
+      D_TAGS_ALL+=("$(lbprof_url_tag "$line")")
     fi
   done < "$f"
 }
@@ -70,93 +67,16 @@ HEADER="timestamp,ip_port,num_requests_running,num_requests_waiting,num_requests
 echo "$HEADER" > "$OUT_P"
 echo "$HEADER" > "$OUT_D"
 
-parse_row() {
-  awk -v ts="$1" -v tag="$2" '
-    function val(s) { return (s == "" ? -1 : s + 0) }
-    function acc(name, v) { if (v != "") seen[name] = 1; got[name] += v }
-    function pick(pri, alt) { return (seen[pri] ? got[pri] : (seen[alt] ? got[alt] : "")) }
-    function out2(pri, alt) { v = pick(pri, alt); printf "%s,", val(v) }
-    # 命中率：优先 hits/queries counter 累计比（queries=0 时记 0），回退旧版 gauge
-    function hrate(h, q, g) {
-      if (seen[q]) {
-        if (got[q] + 0 > 0) { hv = seen[h] ? got[h] + 0 : 0; return hv / (got[q] + 0) }
-        return 0
-      }
-      if (seen[g]) return got[g] + 0
-      return ""
-    }
-    {
-      gsub(/\r/, "")
-      if ($1 ~ /^#/) next
-      name = $1; sub(/\{.*$/, "", name)
-      # 值 = 最后一个纯数值字段：NaN/Inf/缺值/含空格 label 的非数值尾段一律记缺失
-      # （acc 收 ""，不被 awk 隐式转 0——与 extract_metric_prom.py 的 NaN 过滤口径一致）；
-      # 带 OpenMetrics 可选时间戳（name value ts，末两字段均为数值）时取倒数第二个
-      v = ""
-      if ($NF ~ /^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$/) {
-        v = $NF
-        if (NF >= 3 && $(NF-1) ~ /^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$/) v = $(NF-1)
-      }
-      acc(name, v)
-    }
-    END {
-      printf "%s,%s,", ts, tag
-      out2("vllm:num_requests_running", "")
-      out2("vllm:num_requests_waiting", "")
-      out2("vllm:num_requests_swapped", "")
-      out2("vllm:request_success_total", "")
-      out2("vllm:request_failure_total", "")
-      out2("vllm:num_preemptions_total", "")
-      out2("vllm:prompt_tokens_total", "")
-      out2("vllm:generation_tokens_total", "")
-      out2("vllm:request_validation_time_total", "")
-      out2("vllm:gpu_cache_usage_perc", "vllm:kv_cache_usage_perc")
-      out2("vllm:cpu_cache_usage_perc", "")
-      printf "%s,", val(hrate("vllm:prefix_cache_hits_total", "vllm:prefix_cache_queries_total", "vllm:prefix_cache_hit_rate"))
-      out2("vllm:pending_prefix_cache_hit_rate", "")
-      printf "%s,", val(hrate("vllm:external_prefix_cache_hits_total", "vllm:external_prefix_cache_queries_total", "vllm:external_prefix_cache_hit_rate"))
-      out2("process_start_time_seconds", "")
-      hs = pick("vllm:time_to_first_token_seconds_sum", "")
-      hc = pick("vllm:time_to_first_token_seconds_count", "")
-      printf "%s,", (hc != "" && hc + 0 > 0) ? hs / hc : -1
-      qs = pick("vllm:request_queue_time_seconds_sum", "")
-      qc = pick("vllm:request_queue_time_seconds_count", "")
-      ps = pick("vllm:prefill_time_seconds_sum", "vllm:request_prefill_time_seconds_sum")
-      pc = pick("vllm:prefill_time_seconds_count", "vllm:request_prefill_time_seconds_count")
-      # negative queue 修正（已知 vLLM 导出 bug）：queue_sum<0 -> queue=0, prefill_sum+=queue_sum
-      qfix = 0
-      if (qs != "" && qs + 0 < 0) { qfix = 1; if (ps != "") ps = ps + qs; qs = 0 }
-      printf "%s,", (qc != "" && qc + 0 > 0) ? qs / qc : -1
-      printf "%s,", (pc != "" && pc + 0 > 0) ? ps / pc : -1
-      tps = pick("vllm:request_time_per_output_token_seconds_sum", "vllm:time_per_output_token_seconds_sum")
-      tpc = pick("vllm:request_time_per_output_token_seconds_count", "vllm:time_per_output_token_seconds_count")
-      printf "%s,", (tpc != "" && tpc + 0 > 0) ? tps / tpc : -1
-      es = pick("vllm:e2e_request_latency_seconds_sum", "vllm:request_latency_seconds_sum")
-      ec = pick("vllm:e2e_request_latency_seconds_count", "vllm:request_latency_seconds_count")
-      printf "%s", (ec != "" && ec + 0 > 0) ? es / ec : -1
-      printf ","
-      out2("vllm:time_to_first_token_seconds_sum", "")
-      out2("vllm:time_to_first_token_seconds_count", "")
-      printf "%s,", val(qs)
-      printf "%s,", val(qc)
-      printf "%s,", val(ps)
-      printf "%s,", val(pc)
-      out2("vllm:request_time_per_output_token_seconds_sum", "vllm:time_per_output_token_seconds_sum")
-      out2("vllm:request_time_per_output_token_seconds_count", "vllm:time_per_output_token_seconds_count")
-      out2("vllm:e2e_request_latency_seconds_sum", "vllm:request_latency_seconds_sum")
-      printf "%s,%s\n", val(pick("vllm:e2e_request_latency_seconds_count", "vllm:request_latency_seconds_count")), qfix
-    }'
-}
-
 TMPDIR_LB="$(mktemp -d /tmp/lbprof_pd.XXXXXX 2>/dev/null || mktemp -d)"
 trap 'rm -rf "$TMPDIR_LB"' EXIT
 
 fetch_one() {
+  # 单行解析（33 列 v2 口径）由公共库 lbprof_parse_row_v2 提供（唯一副本）
   local url="$1" tag="$2" ts="$3" out="$4"
   local body
   body=$(curl -sS --noproxy '*' --max-time "$CURL_TIMEOUT" "$url" 2>/dev/null) || body=""
   if [ -n "$body" ]; then
-    printf '%s' "$body" | parse_row "$ts" "$tag" > "$out"
+    printf '%s' "$body" | lbprof_parse_row_v2 "$ts" "$tag" > "$out"
   else
     echo "${ts},${tag},-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1" > "$out"
   fi
@@ -191,7 +111,7 @@ echo "Sampling duration has been reached ($(( $(date +%s) - START )) seconds), p
 for i in "${!P_URLS_ALL[@]}"; do
   BODY=$(curl -sS --noproxy '*' --max-time "$CURL_TIMEOUT" "${P_URLS_ALL[$i]}" 2>/dev/null) || BODY=""
   if [ -n "$BODY" ]; then
-    LAST=$(printf '%s' "$BODY" | parse_row "final" "${P_TAGS_ALL[$i]}")
+    LAST=$(printf '%s' "$BODY" | lbprof_parse_row_v2 "final" "${P_TAGS_ALL[$i]}")
     echo "  [P/${P_TAGS_ALL[$i]}] request_success_total=$(echo "$LAST" | cut -d, -f6) prompt_tokens_total=$(echo "$LAST" | cut -d, -f9) generation_tokens_total=$(echo "$LAST" | cut -d, -f10)"
   else
     echo "  [P/${P_TAGS_ALL[$i]}] final snapshot failed (unreachable)"
@@ -200,7 +120,7 @@ done
 for i in "${!D_URLS_ALL[@]}"; do
   BODY=$(curl -sS --noproxy '*' --max-time "$CURL_TIMEOUT" "${D_URLS_ALL[$i]}" 2>/dev/null) || BODY=""
   if [ -n "$BODY" ]; then
-    LAST=$(printf '%s' "$BODY" | parse_row "final" "${D_TAGS_ALL[$i]}")
+    LAST=$(printf '%s' "$BODY" | lbprof_parse_row_v2 "final" "${D_TAGS_ALL[$i]}")
     echo "  [D/${D_TAGS_ALL[$i]}] request_success_total=$(echo "$LAST" | cut -d, -f6) prompt_tokens_total=$(echo "$LAST" | cut -d, -f9) generation_tokens_total=$(echo "$LAST" | cut -d, -f10)"
   else
     echo "  [D/${D_TAGS_ALL[$i]}] final snapshot failed (unreachable)"
