@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Synthetic, Ray-free regression tests; not a real workload benchmark."""
 
+from contextlib import redirect_stderr, redirect_stdout
 import copy
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -11,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import ModuleType, SimpleNamespace
 import unittest
 
 
@@ -20,6 +23,15 @@ SKILL = Path(__file__).resolve().parents[2]
 def load(name):
     spec = importlib.util.spec_from_file_location(
         name, SKILL / "scripts" / f"{name}.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_boundary_check():
+    spec = importlib.util.spec_from_file_location(
+        "real_ray_check", SKILL / "cases" / "real-ray" / "check.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -342,6 +354,132 @@ class EnvironmentTests(unittest.TestCase):
             second = subprocess.run(command, capture_output=True, check=False)
             self.assertEqual(second.returncode, 1)
             self.assertEqual(output.read_bytes(), saved)
+
+
+class RealRayShmBoundaryTests(unittest.TestCase):
+    """Ray-free checks that preflight matches the requested object store."""
+
+    MiB = 1024 * 1024
+
+    def setUp(self):
+        self.check = load_boundary_check()
+
+    def test_case_module_does_not_import_ray(self):
+        self.assertNotIn("ray", sys.modules)
+
+    def test_object_store_constant_is_shared(self):
+        expected = 256 * self.MiB
+        self.assertEqual(self.check.OBJECT_STORE_MEMORY_BYTES, expected)
+        options = self.check.ray_init_options("/tmp/session")
+        self.assertEqual(options["object_store_memory"], expected)
+        self.assertEqual(options["_temp_dir"], "/tmp/session")
+
+    def test_free_between_old_and_new_thresholds_is_rejected(self):
+        total = 1024 * self.MiB
+        for free in (128 * self.MiB, 192 * self.MiB, 256 * self.MiB - 1):
+            with self.subTest(free=free):
+                usage = SimpleNamespace(total=total, free=free, used=0)
+                self.assertIsNotNone(self.check.shm_problem(usage))
+
+    def test_adequate_free_memory_passes(self):
+        for free in (256 * self.MiB, 512 * self.MiB):
+            with self.subTest(free=free):
+                usage = SimpleNamespace(
+                    total=1024 * self.MiB, free=free, used=0
+                )
+                self.assertIsNone(self.check.shm_problem(usage))
+        usage = SimpleNamespace(
+            total=256 * self.MiB, free=256 * self.MiB, used=0
+        )
+        self.assertIsNone(self.check.shm_problem(usage))
+
+    def test_total_below_object_store_is_rejected(self):
+        usage = SimpleNamespace(
+            total=256 * self.MiB - 1, free=256 * self.MiB - 1, used=0
+        )
+        self.assertIsNotNone(self.check.shm_problem(usage))
+
+    def test_preflight_reports_boundary_as_environment_problem(self):
+        total = 1024 * self.MiB
+        usage = SimpleNamespace(total=total, free=192 * self.MiB, used=0)
+        original = self.check.shutil.disk_usage
+        self.check.shutil.disk_usage = lambda path: usage
+        try:
+            problems = self.check.preflight()
+        finally:
+            self.check.shutil.disk_usage = original
+        self.assertTrue(any("/dev/shm" in item for item in problems), problems)
+
+    def _run_main(self, module):
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            return module.main()
+
+    def test_preflight_problem_exits_three_without_ray(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            module = self.check
+            original_preflight, original_root = module.preflight, module.ROOT
+            module.preflight = lambda: ["synthetic missing prerequisite"]
+            module.ROOT = Path(temporary)
+            try:
+                self.assertNotIn("ray", sys.modules)
+                code = self._run_main(module)
+            finally:
+                module.preflight, module.ROOT = (
+                    original_preflight,
+                    original_root,
+                )
+            saved = json.loads(
+                (Path(temporary) / "results/real-ray/result.json").read_text()
+            )
+        self.assertEqual(code, 3)
+        self.assertTrue(saved["env_not_satisfied"])
+        self.assertFalse(saved["success"])
+        self.assertNotIn("error", saved)
+
+    def test_ray_init_failure_is_not_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            module = self.check
+            fake_ray = ModuleType("ray")
+            fake_ray.__version__ = "synthetic"
+
+            def fail_init(**options):
+                self.assertEqual(
+                    options["object_store_memory"],
+                    module.OBJECT_STORE_MEMORY_BYTES,
+                )
+                raise RuntimeError("synthetic object store allocation failure")
+
+            fake_ray.init = fail_init
+            fake_ray.shutdown = lambda: None
+            original_preflight, original_root = module.preflight, module.ROOT
+            original_run, original_ray = (
+                module.subprocess.run,
+                sys.modules.get("ray"),
+            )
+            module.preflight = lambda: []
+            module.ROOT = Path(temporary)
+            module.subprocess.run = lambda *args, **kwargs: None
+            sys.modules["ray"] = fake_ray
+            try:
+                code = self._run_main(module)
+            finally:
+                module.preflight, module.ROOT = (
+                    original_preflight,
+                    original_root,
+                )
+                module.subprocess.run = original_run
+                if original_ray is None:
+                    sys.modules.pop("ray", None)
+                else:
+                    sys.modules["ray"] = original_ray
+            saved = json.loads(
+                (Path(temporary) / "results/real-ray/result.json").read_text()
+            )
+        self.assertEqual(code, 1)
+        self.assertIn(
+            "synthetic object store allocation failure", saved["error"]
+        )
+        self.assertNotIn("env_not_satisfied", saved)
 
 
 class RunnerTests(unittest.TestCase):

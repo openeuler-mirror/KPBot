@@ -16,7 +16,33 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED = {"ray": "2.52.0", "numpy": "2.1.3", "pyarrow": "19.0.1"}
-MIN_SHM_BYTES = 256 * 1024 * 1024
+# The object store is backed by /dev/shm/plasma, so preflight and ray.init
+# must agree on this exact capacity.
+OBJECT_STORE_MEMORY_BYTES = 256 * 1024 * 1024
+
+
+def ray_init_options(temp_dir):
+    """Keep the requested object store equal to the preflight threshold."""
+    return {
+        "num_cpus": 2,
+        "include_dashboard": False,
+        "object_store_memory": OBJECT_STORE_MEMORY_BYTES,
+        "_temp_dir": temp_dir,
+    }
+
+
+def shm_problem(usage):
+    """Return why /dev/shm cannot host the object store, or None."""
+    if (
+        usage.total < OBJECT_STORE_MEMORY_BYTES
+        or usage.free < OBJECT_STORE_MEMORY_BYTES
+    ):
+        return (
+            "/dev/shm is too small for the object store: "
+            f"total={usage.total} free={usage.free} "
+            f"required={OBJECT_STORE_MEMORY_BYTES} bytes"
+        )
+    return None
 
 
 def load(name):
@@ -61,11 +87,9 @@ def preflight():
     except OSError:
         problems.append("/dev/shm is unavailable")
     else:
-        if shm.total < MIN_SHM_BYTES or shm.free < MIN_SHM_BYTES // 2:
-            problems.append(
-                "/dev/shm is too small: "
-                f"total={shm.total} free={shm.free} bytes"
-            )
+        problem = shm_problem(shm)
+        if problem:
+            problems.append(problem)
     return problems
 
 
@@ -122,12 +146,7 @@ def main():
         )
         import ray
 
-        ray.init(
-            num_cpus=2,
-            include_dashboard=False,
-            object_store_memory=256 * 1024 * 1024,
-            _temp_dir=session.name,
-        )
+        ray.init(**ray_init_options(session.name))
         context = {
             "workload": "generated-integer-etl",
             "input_id": "range-256-square-v1",
