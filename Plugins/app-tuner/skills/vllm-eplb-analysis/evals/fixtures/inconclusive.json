@@ -1,0 +1,5 @@
+{
+  "service": "dsv41-prefill",
+  "window": "2026-11-19T12:00Z / 2min / 2 windows",
+  "balancedness": [0.88, 0.87]
+}

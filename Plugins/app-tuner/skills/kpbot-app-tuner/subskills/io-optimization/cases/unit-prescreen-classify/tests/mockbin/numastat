@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# mock numastat — 4 节点固定统计，供 collect_memory_evidence.sh 消费。
+# 系统 remote miss 率 = sum(miss) / sum(hit+miss) ≈ 2.61%。
+cat <<'EOF'
+                           node0           node1           node2           node3
+numa_hit              12416999195     12160114539      4299675484      4767225282
+numa_miss                68141726       412558724       147288317       274519787
+numa_foreign            319340235        40274273       303204934       239689112
+interleave_hit              1764            1257            1768            1255
+local_node            12163631352     11896796368      4148545391      4548414205
+other_node              634417435       289411895       294021410       475940864
+EOF

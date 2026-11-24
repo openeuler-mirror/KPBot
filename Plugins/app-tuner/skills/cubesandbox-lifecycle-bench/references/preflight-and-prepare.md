@@ -1,12 +1,19 @@
 # 预检、准备与故障处理
 
-## 两种模式
+## 执行模式与聚焦入口
 
-- `check`：只读。不安装依赖、不改文件、不删接口、不重启、不创建沙箱。
+- `check`：只读。不安装依赖、不改启动文件、不删接口、不重启、不创建沙箱；可选 `--output`
+  或 `cubesandbox-bench-preflight` 仅额外写预检 JSON 报告。输出只 resolve 可信父目录，最终报告为符号链接时
+  拒绝；0600 唯一临时文件独占创建并由 `os.replace` 原子发布，不跟随替换竞态中的最终符号链接。缺少
+  `cubemastercli` 转为 `template.ready=FAIL`，本次 `ok=false` 报告覆盖旧结果并返回 1。
+- `cubesandbox-bench-prepare`：复用下述独立 `prepare`，只准备和复验，不运行性能章节。
 - `run --prepare`：用户明确确认后才执行准备，再重新完整预检和冒烟；准备失败不会开测。
 - 独立 `prepare`：只准备并复验，不跑基准。必须显式模板/NUMA，并带
   `--yes --exclusive-confirmed --approved-plan-hash <prepare-only哈希>`；哈希通过相同环境参数的
   `show-plan --operation prepare --tap-evidence <check证据>` 获取。证据写入 `--output-root/prepare_*`。
+  授权/参数检查、模板解析和宿主锁获取发生在创建运行目录前，这些早期失败没有 `prepare.json`，调用方看
+  退出码与 stderr；进入准备状态机后先写 `in_progress`，准备动作失败则写 `status=failed` 并保留完整
+  `actions` journal，调用方只有此时才读取失败 journal。
 
 ## NUMA 绑定
 

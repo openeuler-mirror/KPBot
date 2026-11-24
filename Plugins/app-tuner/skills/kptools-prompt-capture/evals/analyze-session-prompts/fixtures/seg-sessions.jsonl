@@ -1,0 +1,13 @@
+{"t":"h","v":1}
+{"t":"m","h":"msg-1","d":{"role":"user","content":"SESSION_PRIVATE_SENTINEL"}}
+{"t":"m","h":"msg-2","d":{"role":"user","content":"next turn"}}
+{"t":"n","h":"node-1","m":"msg-1","i":0,"r":"user","c":24}
+{"t":"n","h":"node-2","m":"msg-2","p":"node-1","i":1,"r":"user","c":9}
+{"t":"r","id":"turn-1","ts":1700000000,"ep":"chat","lvl":"text","sess":"fp:fixture","ss":"fp","nm":1,"ml":"node-1"}
+{"t":"e","id":"turn-1","st":"ok","t0":1700000000,"t_end":1700000000.1}
+{"t":"r","id":"turn-2","ts":1700000001,"ep":"chat","lvl":"meta","sess":"fp:fixture","ss":"fp","nm":2,"ml":"node-2"}
+{"t":"e","id":"turn-2","st":"ok","t0":1700000001,"t_end":1700000001.1}
+{"t":"r","id":"turn-3","ts":1700000002,"ep":"chat","lvl":"text","sess":"fp:fixture","ss":"fp","nm":2,"ml":"node-2"}
+{"t":"e","id":"turn-3","st":"ok","t0":1700000002,"t_end":1700000002.1}
+{"t":"r","id":"other-session","ts":1700000003,"ep":"chat","lvl":"meta","sess":"not-selected","nm":1}
+{"t":"e","id":"other-session","st":"ok","t0":1700000003,"t_end":1700000003.1}

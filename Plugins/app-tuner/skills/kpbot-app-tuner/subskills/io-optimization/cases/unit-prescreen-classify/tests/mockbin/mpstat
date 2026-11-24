@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# mock mpstat — 行为由 $MOCK_SCENARIO 控制。
+# 默认输出 sysstat >= 12 新表头（含 %guest/%gnice），mpstat_old_format 场景
+# 输出旧表头，两者共同看守 detect_bottleneck.sh 的表头动态列解析。
+scenario="${MOCK_SCENARIO:-idle}"
+NEW_HEADER="11:00:00 CPU %usr %nice %sys %iowait %irq %soft %steal %guest %gnice %idle"
+OLD_HEADER="11:00:00 CPU %usr %nice %sys %iowait %irq %soft %steal %idle"
+
+case "${scenario}" in
+  cpu)
+    # 2000 个 per-core Average 行，busy 聚合 ~199k，超过任何合理核数的 cores*85 阈值
+    echo "Linux mock (mock) 11/19/2026 _aarch64_ (2000 CPU)"
+    echo "${NEW_HEADER}"
+    echo "11:00:01 all 99.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 0.44"
+    echo "Average: all 99.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 0.44"
+    i=0
+    while [ "${i}" -lt 2000 ]; do
+      echo "Average: ${i} 99.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 0.44"
+      i=$((i + 1))
+    done
+    ;;
+  mpstat_old_format)
+    echo "Linux mock (mock) 11/19/2026 _aarch64_ (4 CPU)"
+    echo "${OLD_HEADER}"
+    echo "11:00:01 all 1.00 0.00 0.50 0.00 0.04 0.02 0.00 98.44"
+    echo "Average: all 1.00 0.00 0.50 0.00 0.04 0.02 0.00 98.44"
+    for i in 0 1 2 3; do
+      echo "Average: ${i} 1.00 0.00 0.50 0.00 0.04 0.02 0.00 98.44"
+    done
+    ;;
+  mpstat_am_pm)
+    # 12 小时 locale 表头（时间占两列）：看守表头动态解析的 locale 偏移
+    echo "Linux mock (mock) 11/19/2026 _aarch64_ (4 CPU)"
+    echo "11:00:00 AM CPU %usr %nice %sys %iowait %irq %soft %steal %guest %gnice %idle"
+    echo "11:00:01 AM all 1.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 98.44"
+    echo "Average: all 1.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 98.44"
+    for i in 0 1 2 3; do
+      echo "Average: ${i} 1.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 98.44"
+    done
+    ;;
+  *)
+    echo "Linux mock (mock) 11/19/2026 _aarch64_ (4 CPU)"
+    echo "${NEW_HEADER}"
+    echo "11:00:01 all 1.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 98.44"
+    echo "Average: all 1.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 98.44"
+    for i in 0 1 2 3; do
+      echo "Average: ${i} 1.00 0.00 0.50 0.00 0.04 0.02 0.00 0.00 0.00 98.44"
+    done
+    ;;
+esac
