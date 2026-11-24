@@ -8,6 +8,7 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 | Skill | 职责 |
 |---|---|
 | [`cubesandbox-guest-rpc-overlap`](cubesandbox-guest-rpc-overlap/SKILL.md) | Evaluate concurrent guest clock setup and RNG reseeding during snapshot restore, including the create barrier and failure semantics. |
+| [`cubesandbox-monitor-connection-reuse`](cubesandbox-monitor-connection-reuse/SKILL.md) | Reuse an installed Guest agent ttrpc connection when the health monitor would otherwise perform a second vsock handshake. Select this bounded probe and reconnect fallback in place of the Scheme 1 monitor hunk. |
 | [`cubesandbox-create-optimize`](cubesandbox-create-optimize/SKILL.md) | CubeSandbox 完整创建路径与多机制组合调优：核对 Guest 预连接、Master 解析缓存与异步 spec、rootfs 影子预派生池之间的交互，做组合消融与端到端归因 |
 | [`cubesandbox-replica-metadata-ttl`](cubesandbox-replica-metadata-ttl/SKILL.md) | Opt-in, process-local reuse of READY replica metadata by template for one second, with per-request placement checks. The reference patch is mutually exclusive with `scheme2-rsi-cache.patch`. |
 
