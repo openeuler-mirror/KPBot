@@ -13,11 +13,11 @@
       "id": "q-switch-native",
       "prompt": "切到 native 侧，把 gluten jar 移出 lib 再重启",
       "should_trigger": true,
-      "note": "切换类触发词：切 native、切 GFV、移出 jar"
+      "note": "切换类触发词：切 native、切 GlutenFlink、移出 jar"
     },
     {
       "id": "q-switch-back",
-      "prompt": "从备份把 GFV 的 jar 切回来",
+      "prompt": "从备份把 GlutenFlink 的 jar 切回来",
       "should_trigger": true,
       "note": "回切：lib.gfv-backup、--to gfv"
     },
@@ -35,7 +35,7 @@
     },
     {
       "id": "q-lib-state",
-      "prompt": "lib 里是 native 还是 GFV 构建",
+      "prompt": "lib 里是 native 还是 GlutenFlink 构建",
       "should_trigger": false,
       "note": "lib 分类 → flink-velox-lib-state-check"
     }
