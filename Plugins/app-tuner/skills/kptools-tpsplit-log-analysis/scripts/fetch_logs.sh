@@ -56,10 +56,11 @@ case "$EXPECT_REQ" in
   ''|*[!0-9]*) echo "!! --expect-req 需要非负整数，收到：$EXPECT_REQ"; exit 2 ;;
 esac
 
-count_marker() {  # count_marker FILE MARKER → 含固定字符串标记的行数（不存在输出 -1）
+count_marker() {  # count_marker FILE MARKER → 标记出现次数（grep -oF 逐次计数，
+                   # 单行多记录（如单行 JSON 数组）也数对；不存在输出 -1）
   if [ -f "$1" ]; then
     local n
-    n=$(grep -cF -- "$2" "$1" 2>/dev/null)
+    n=$(grep -oF -- "$2" "$1" 2>/dev/null | wc -l)
     echo "${n:-0}"
   else
     echo -1
@@ -96,7 +97,9 @@ scan_one() {  # scan_one PATH KIND MARKER ROOT
     fi
   fi
   if [ "$kind" = BENCH ]; then
-    BENCH_LINE_TOTAL=$(( BENCH_LINE_TOTAL + $(wc -l < "$f" 2>/dev/null || echo 0) ))
+    # 压测请求数按解析出的请求记录计数（每条记录恰一个 client_send_ts 字段），
+    # 对 jsonl 与单行/多行 JSON 数组都成立；wc -l 会把单行数组数成 1、漏计无尾换行行
+    BENCH_LINE_TOTAL=$(( BENCH_LINE_TOTAL + $(count_marker "$f" "client_send_ts") ))
   fi
   if [ -n "$STAGE" ]; then
     # 唯一目标名：完整路径的 / 换成 __（':' 一并换掉，防 Windows 盘符字符），
