@@ -1,6 +1,8 @@
 ---
 name: multimedia-knowledge
 description: 为 multimedia-code-optimizer 检索与目标算子相关的优化知识，返回简短方法与条件。
+tools: Read, Grep, Glob
+model: inherit
 mode: subagent
 skills: []
 ---

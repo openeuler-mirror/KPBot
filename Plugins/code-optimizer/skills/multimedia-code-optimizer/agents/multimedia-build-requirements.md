@@ -1,6 +1,8 @@
 ---
 name: multimedia-build-requirements
 description: 为 multimedia-code-optimizer 只读识别项目构建需求，交付工具、依赖、配置依据和构建入口。
+tools: Read, Grep, Glob
+model: inherit
 mode: subagent
 skills: []
 ---
