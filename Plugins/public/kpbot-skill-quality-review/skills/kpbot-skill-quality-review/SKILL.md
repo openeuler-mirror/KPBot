@@ -32,7 +32,7 @@ description: 按 KPBot 四维质量规范静态评审 Agent Skill。适用于开
 | `unverified` | 检查项适用，现有证据不足 |
 | `not_applicable` | 根据目标职责和实际执行链可判定该行为不适用 |
 
-每个 ID 恰好出现一次，附相对路径与行号或标题，或者指出具体缺少哪份文件和哪段逻辑。每个 `fail` 或 `unverified` 至少对应一条问题和可执行建议。可通过静态材料核对的契约，按静态证据判定并注明实机验证范围。
+完整评审中，每个规则 ID 必须在所属维度的 `checks` 中恰好出现一次。附相对路径与行号或标题，或者指出具体缺少哪份文件和哪段逻辑。每个 `fail` 或 `unverified` 至少对应一条问题和可执行建议，同一检查有多条问题时可复用其规则 ID。可通过静态材料核对的契约，按静态证据判定并注明实机验证范围。
 
 - `blocker`：已证实关键入口或必需路径失效、实际高风险操作越权、存在真实凭据或未经授权的外传、核心验收错误放行。核对关键入口、实际高风险执行边界或核心验收分支所必需的材料缺失时，也记为阻断，说明缺失的证据。
 - `major`：影响主流程、可比性或可维护性。
@@ -50,4 +50,9 @@ description: 按 KPBot 四维质量规范静态评审 Agent Skill。适用于开
 
 报告包括评审对象、版本或工作区状态、目标端、缺失证据、四维总览与分数、逐项结论、问题总数和修改建议。可在对话中输入「按 KPBot 静态质量规范评审 `evolve-skill`，列出阻断项并输出 JSON」。
 
-请求 JSON 时，输出符合静态质量检测规则汇总口径的对象，顶层含 `total`、`qualified`、`convention`、`completeness`、`safety`、`executability`、`grade`、`summary`、`issues`。`qualified` 仅在无阻断且总分至少 6.0 时为真。每个维度含 `score`、`ruleCount`、`overview`、`checks`。每条检查含 `item`、`passed`、`status`、`evidence`，仅 `pass` 的 `passed` 为真。每条问题含 `dimension`、`checkItem`、`severity`、`description`、`suggestion`。无问题时使用空数组。评审未完成时，在 `summary` 说明缺项，`total`、`grade`、`qualified` 和无法计算的维度 `score` 均为 `null`。
+请求 JSON 时，输出符合静态质量检测规则汇总口径的对象，顶层含 `total`、`qualified`、`convention`、`completeness`、`safety`、`executability`、`grade`、`summary`、`issues`。`qualified` 仅在无阻断且总分至少 6.0 时为真。每个维度含 `score`、`ruleCount`、`overview`、`checks`。
+
+- 每条 `checks` 记录含 `id`、`item`、`passed`、`status`、`evidence`。`id` 和 `item` 分别取自规则文件，例如 `"id": "C01"` 和 `"item": "入口与名称"`。仅 `pass` 的 `passed` 为真。
+- 每条 `issues` 记录含 `id`、`dimension`、`checkItem`、`severity`、`description`、`suggestion`。`id` 必须等于对应 `checks` 条目的 `id`，`dimension` 为该检查所属维度，`checkItem` 为其 `item`。无问题时使用空数组。
+
+评审未完成时，在 `summary` 说明缺项，`total`、`grade`、`qualified` 和无法计算的维度 `score` 均为 `null`。
