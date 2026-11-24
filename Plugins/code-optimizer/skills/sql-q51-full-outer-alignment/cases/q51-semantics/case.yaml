@@ -1,0 +1,59 @@
+name: q51-semantics
+skill: sql-q51-full-outer-alignment
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: ordered_rows_equal
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: rejects_nullable_keys
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: rejects_duplicate_keys
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: covers_negative_and_null_sales
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: empty_sides_equivalent
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: one_sided_null_amount_retained
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: matched_all_null_amount_retained
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: rejects_web_only_duplicates
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: rejects_store_only_duplicates
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: fallback_preserves_multiplicity
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unauthorized_rewrite_falls_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: type_guard_falls_back
+    expect: true

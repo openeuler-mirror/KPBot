@@ -15,7 +15,7 @@ description: 在识别到网络侧瓶颈或次级网络瓶颈时，分析网卡�
 - `mpstat` 显示 `%soft`/`%irq` 高、单个 IRQ CPU 饱和、业务 CPU 压不满但网络 CPU 已满。
 - `sar -n DEV,TCP,ETCP`、`ethtool -S`、`netstat -s` 显示 drops、errors、retrans、backlog overflow 或 queue imbalance。
 - 远程压测时 RTT、客户端能力、服务端网卡 NUMA/IRQ/RPS 与应用绑核之间存在可疑关系。
-- 主流程或 `io-memory-network-bottleneck-analysis` 把瓶颈分类为 network 或 network-secondary。
+- 主流程或 `io-optimization` 把瓶颈分类为 network 或 network-secondary。
 
 ## 必读 Reference
 

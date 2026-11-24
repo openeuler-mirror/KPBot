@@ -1,0 +1,19 @@
+# topdown-events.local 模板
+#
+# 用途: 当平台内核未导出 Kunpeng PMU 事件名时, topdown.sh 依据本文件把事件名
+#       映射为原始事件编码后再交给 perf 采集。
+# 用法: 复制本文件为同目录下的 topdown-events.local, 填入真实编码后生效;
+#       该文件属于本地环境配置, 不要提交入库。
+# 格式: 每行一条, 事件名=原始事件编码; 编码以鲲鹏 PMU 事件文档为准。
+#       rXXXX 仅为格式占位符, 不是真实编码。
+#
+#   memstall_anyload=rXXXX
+#   memstall_store=rXXXX
+#   memstall_L1miss=rXXXX
+#   LD_CANCEL_MISALIGN=rXXXX
+#   LD_CANCEL_FWD_HZD=rXXXX
+#   LD_CANCEL_LQ_FULL=rXXXX
+#   ST_SCA_FULL=rXXXX
+#   ST_ORDER_FAIL=rXXXX
+#   vfp_ptag_stall=rXXXX
+#   vpd_ptag_stall=rXXXX

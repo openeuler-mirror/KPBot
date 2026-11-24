@@ -1,0 +1,65 @@
+{
+  "skill_name": "sql-rollup-reuse",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "reuse-and-level-identity",
+      "prompt": "同一批销售参与 ROLLUP(类别, 商品)。有一笔 20 元饮料销售，另有商品字段本来就是 NULL。我准备共享金额和类别哈希，并用 NULL 判断小计层级。如何设计？",
+      "expected_output": "同一确定性表达式可按输入批次复用，类别前缀在行映射一致时续算。保留分组标识区分真实 NULL 与 ROLLUP 合成的 NULL。各层独立加 20 元，核对输出。",
+      "files": [],
+      "assertions": [
+        "保留真实 NULL 与展开 NULL 的区别",
+        "金额共享后仍分别累加",
+        "说明分组前缀复用的行映射条件"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "decimal-fallback",
+      "prompt": "另一个引擎把十进制定点累加器表示为数值加单独的溢出状态。我想照搬只检查高 64 位和直接相加的做法，负数结果会不会不对？",
+      "expected_output": "先证明该引擎的数值布局、高位条件、溢出累积、空值及最终精度契约。未证明时使用原路径，覆盖正负交替、边界和最终溢出。",
+      "files": [],
+      "assertions": [
+        "没有把高位条件和具体引擎解绑",
+        "同时验证状态与最终值",
+        "保留未证明状态的溢出处理"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "partial-sum-input-width",
+      "prompt": "高 64 位全零的 128 位累加器，准备加一个 128 位 partial sum。另有同对象向量被复用于新批次。可以直接沿用 SUM 快路径和金额缓存吗？",
+      "expected_output": "64 位输入证明不覆盖 128 位 partial 状态，保留合并与溢出检查；对象相同不足以证明批次和行映射相同，缓存失效。",
+      "files": [],
+      "assertions": [
+        "检查输入宽度与 partial/final 状态",
+        "不按向量对象地址单独判缓存有效",
+        "保留精度和溢出状态"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "mutable-vector-cache",
+      "prompt": "同一向量对象被复用到新批次，其金额内容、选行或字典索引变了。仅凭对象地址复用金额安全吗？",
+      "expected_output": "不安全。保持同一缓存跨调用，绑定批次代次、内容版本、选行和字典映射，分别变化测试重算；没有版本或不可变证明时失效并走原路径。",
+      "files": [],
+      "assertions": [
+        "不以对象地址单独判断",
+        "覆盖跨批次和映射变化",
+        "缺少代次时拒绝复用"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "duplicate-grouping-instances",
+      "prompt": "GROUP BY ALL GROUPING SETS ((a),(a))，输入a=7金额10。键和GROUPING(a)位掩码相同，能共享累加状态加两次吗？",
+      "expected_output": "不能合成一行20。保留实例身份和独立累加，或原有正确的重复输出机制；结果必须是两行各10。金额计算可复用一次，但核对结果多重集。",
+      "files": [],
+      "assertions": [
+        "区分掩码与实例身份",
+        "两行金额10",
+        "复用表达式不合并累加状态"
+      ]
+    }
+  ]
+}

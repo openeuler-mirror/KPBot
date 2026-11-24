@@ -10,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-HELPER = Path(__file__).resolve().parents[1] / "Plugins/code-optimizer/skills/faiss-build/scripts/build_faiss.sh"
+HELPER = Path(__file__).resolve().parents[1] / "Plugins/code-optimizer/skills/vectordb/faiss/faiss-build/scripts/build_faiss.sh"
 BASH = Path("C:/Program Files/Git/bin/bash.exe") if os.name == "nt" else Path(shutil.which("bash") or "/bin/bash")
 
 

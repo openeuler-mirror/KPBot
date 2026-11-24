@@ -4,7 +4,7 @@
 
 | Profiling 问题 | KPBot 入口 | 写入条目的证据 |
 | --- | --- | --- |
-| CPU、内存、磁盘、网络是否饱和或发生错误？ | io-memory-network-bottleneck-analysis、use-analysis、kptools-proc-collector、kptools-os-collector、kptools-network-collector、kptools-nmon | 指定进程或设备的利用率、排队、错误和观测窗口 |
+| CPU、内存、磁盘、网络是否饱和或发生错误？ | io-optimization、use-analysis、kptools-proc-collector、kptools-os-collector、kptools-network-collector、kptools-nmon | 指定进程或设备的利用率、排队、错误和观测窗口 |
 | 时间集中在哪个线程、函数、库或调用者？ | kpbot-app-tuner、analyze-hotspot、analyze-caller-context | perf 事件、火焰图、自身与含子调用的占比，链接调用栈 |
 | 停顿、缓存、地址翻译及访存延迟由什么贡献？ | kpbot-app-tuner 的 PMU 路线、kptools-devkit、arm-spe-analysis | 指令和周期、缓存与 TLB 事件、SPE 的 PC、数据来源和延迟；注明复用与丢样 |
 | 热点代码中哪些机制可解释观测？ | analyze-architecture、arm-instructions-query、kunpeng-microarch、llvm-mca-analysis、register-pressure-analysis | 反汇编、依赖链和静态模型；单列其动态执行证据 |

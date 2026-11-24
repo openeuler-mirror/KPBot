@@ -9,7 +9,8 @@ mkdir -p "${RESULTS_DIR}"
 
 python3 -m py_compile \
   "${SKILL_DIR}/scripts/lib_cubesandbox.py" \
-  "${SKILL_DIR}/scripts/cubesandbox_bench.py"
+  "${SKILL_DIR}/scripts/cubesandbox_bench.py" \
+  "${SKILL_DIR}/scripts/cubesandbox_skill.py"
 python3 -m unittest discover -s "${CASE_DIR}" -p 'test_*.py' -v
 
 python3 - "${RESULTS_DIR}/result.json" <<'PY'

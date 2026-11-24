@@ -1,0 +1,29 @@
+# 用例：Ray Data 真实执行与测量工具链回归（tier B）
+# 前置（env_requires）：隔离的 Python 3.11 环境（独立 venv 或专用容器）+
+# ray[data]==2.52.0 numpy==2.1.3 pyarrow==19.0.1、Linux、
+# GNU coreutils timeout（支持 --kill-after）、至少 2 CPU、足够 /dev/shm 共享内存。
+# 环境不满足时 entrypoint 写出 env_not_satisfied 原因并退出 3（环境不满足，非用例失败）。
+name: ray-data-real-ray
+skill: kpbot-ray-data-performance-analysis
+tier: B
+entrypoint: ["bash", "cases/real-ray/run.sh"]
+env_requires:
+  - 隔离的 Python 3.11 环境（独立 venv 或专用容器）
+  - ray[data]==2.52.0
+  - numpy==2.1.3
+  - pyarrow==19.0.1
+  - Linux
+  - GNU coreutils timeout（支持 --kill-after）
+  - 至少 2 CPU
+  - 足够的 /dev/shm 共享内存
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/real-ray/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/real-ray/result.json
+    field: verified_rounds
+    expect: 6
