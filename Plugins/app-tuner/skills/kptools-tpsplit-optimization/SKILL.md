@@ -17,7 +17,7 @@ metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
@@ -43,6 +43,7 @@ metadata:
 ### 1.1 确定 TP size 来源（二选一）
 
 - **用户直接输入**：确认目标 TP size（如 8）。追问一句是只改 P 侧还是 D 侧也要动——本 skill 默认场景是 **P 侧 Prefill TP 变更**（D 侧 Decode 通常 tp=1 不动，但其 KV_TRANSFER_CONFIG 里的 prefill 段必须同步改）。若用户确实要改 D 侧拓扑，同样流程，但 D 侧实例布局也要重排
+- **用户没给 TP size 时按卡数推导默认值再求证**：16 卡机 → TP8 × 2 实例；8 卡机 → TP8 × 1；4 卡机 → TP4 × 1（原则：TP 不超过单机卡数，优先 8 的约数便于卡切分）。推导出默认值后向用户求证一轮即可，不要空手反问"你要多大 TP"
 - **上游可行性分析 .md**：读取报告，提取推荐 TP size 与拓扑建议。报告格式不固定——找"推荐 TP / recommended_tp_size / 结论 / 建议部署 / 实例布局"等关键信息。**提取后必须向用户复述确认**（"报告建议 TP8、全局 20 个 P 实例，按这个部署吗？"），报告没写的信息（主机清单、路径、Proxy 类型）继续问用户。报告结论与用户口头说法冲突时以用户为准并提醒差异
 
 ### 1.2 必须收集的拓扑信息
@@ -131,11 +132,13 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 - **去 Ray 残留（仅旧方案有 Ray 时）**：检查旧启动脚本与用户 shell 环境，确认无 `--distributed-executor-backend ray`、无 Ray 相关环境变量（RAY_ADDRESS 等），新脚本中不引入。旧方案本来就没有 Ray 时这步无事可做，直接过
 - **防火墙/安全组**：DP 组跨主机时，组内所有主机对 16600 互通；Proxy 到各实例 http 端口可达
 - ⚠️ **新旧拓扑禁止混跑**：切换窗口内 D 侧必须整体指向同一套 P 拓扑。"先改一半 D 实例试试" = KV 错配，不允许分批切换 P 拓扑
+- **SSH/容器操作约定（工具链实测）**：ssh-mcp-server 的 `download` 不会自动创建本地父目录，**下载前先本地建目录**；**复杂校验/长命令不拼内联**——嵌套引号与 heredoc 经 `ssh-mcp → docker exec bash -c` 多层转义必挂，一律本地写好脚本 `upload` 到远端（容器可见的 bind mount 路径，如 /data）再执行；容器内产物写 bind mount 目录——/tmp 不与宿主机共享，落 /tmp 宿主机看不见，需归档的先 cp 到 /data
+- **资源占用协调（拉起前置条件）**：预检发现卡被其他业务/容器占用（`npu-smi` 有占用但不是本集群旧实例），或 kv_port / mooncake_master 等端口被外部业务占用时——**并入"拉起前置条件"清单交用户协调**，本 skill 不静默处理。注意跨业务并存时冲突不止是卡：http / kv_port / mooncake_master 端口同样会撞（端口三连占），只停卡不够
 - 预检发现端口被占、卡数对不上、旧进程清不掉，立即反馈用户并停下，不要自行换端口/换卡继续
 
 ## 阶段 4：生成脚本与配置分发
 
-基于 `references/templates/prefill-tp8-instance.sh`（新方案占位符模板）为每个 P 实例生成启动脚本。旧方案基线见 `references/templates/legacy-prefill-tp32.sh`（识别现有部署、对比差异用）；legacy 基线只是 **TP32+Ray 形态的样例**，现场旧脚本的后端/TP size/KV connector 以实际读取为准，不要硬套基线。
+基于 `references/templates/prefill-tp8-instance.sh`（新方案占位符模板）为每个 P 实例生成启动脚本。**形态取舍判据（先判后生成）**：现场已有驱动编排（如 `launch_online_dp.py` 驱动 + 位置参数模板 `run_dp_template.sh`）时，**保留驱动形态，只改模板与传参内容**——运维习惯不变，改动面最小；现场无编排（每实例独立脚本）才用本模板生成独立脚本。两种形态下布局表、守恒自检、L0 静态检查的验证口径完全一致。旧方案基线见 `references/templates/legacy-prefill-tp32.sh`（识别现有部署、对比差异用）；legacy 基线只是 **TP32+Ray 形态的样例**，现场旧脚本的后端/TP size/KV connector 以实际读取为准，不要硬套基线。
 
 占位符与数据来源：
 
@@ -154,7 +157,7 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 
 - 新脚本**不写 `--distributed-executor-backend`**（TP 单机闭环用默认后端即可）。旧脚本带 ray backend 的，生成时删除；旧脚本本来就没有的，保持没有——新方案任何情况下都不引入该旗标
 - 每实例单独一份脚本，实例间差异项只有 `--data-parallel-rank` / `ASCEND_RT_VISIBLE_DEVICES` / `--port` 三处，其余参数全组一致——生成后 diff 一遍，差异项之外的改动都是笔误
-- DP 组网参数口径（对齐 vLLM 官方旗标）：`--data-parallel-size`（组大小）、`--data-parallel-rank`（本实例 rank）、`--data-parallel-address`（组主节点 IP）、`--data-parallel-rpc-port 16600`（组内统一）。注意 `--data-parallel-rank` 外部 LB 模式适用于 **MoE 模型**（GLM 系列 `--enable-expert-parallel` 场景即 MoE）；现场 vLLM-Ascend 版本若旗标名不同，以 `vllm serve --help | grep -i data-parallel` 实际输出为准
+- DP 组网参数口径（对齐 vLLM 官方旗标）：`--data-parallel-size`（组大小）、`--data-parallel-rank`（本实例 rank）、`--data-parallel-address`（组主节点 IP）、`--data-parallel-rpc-port 16600`（组内统一）。注意 `--data-parallel-rank` 外部 LB 模式适用于 **MoE 模型**（GLM 系列 `--enable-expert-parallel` 场景即 MoE）；现场 vLLM-Ascend 版本若旗标名不同，以 `vllm serve --help | grep -i data-parallel` 实际输出为准——**该命令在无 NPU 的裁剪容器裸 shell 中可能直接失败**（torch_npu 加载报错），此时兜底口径：grep vllm 源码 `vllm/engine/arg_utils.py`（源码仓或 site-packages 内）确认旗标存在
 - **生成脚本保持现场现有的传参形态**：参数在脚本内定义的，生成脚本内定义（模板形态）；参数从 env 文件 source 进来的，生成脚本继续 source 同一文件、只改 env 文件里的值——**不要把调用链改造成自己的习惯形态**，那会让后续运维找不到参数在哪
 - **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**；两个值改在 1.3 梳理出的**源头定义处**（共享 env 文件就改 env 文件，脚本自包含才改脚本）；改前备份原文件。这一原则不依赖 KV connector 的具体结构——旧脚本无论用 MultiConnector 还是其他 connector，改动面都只是 prefill 段的 dp/tp 两个值，模板里的 MultiConnector 结构以现场旧脚本实际结构为准
 - **旧脚本与配置一律备份后再改**（同目录 `*.bak.<日期>` 或 backup/ 子目录，禁止原地覆盖删除）——回滚靠的就是这些备份
@@ -165,10 +168,12 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 
 拓扑迁移的故障多数不是"起不来"，而是"起来了但 KV 错配/容量不够/性能回退"——所以测试必须分层铺开，每层有明确通过标准。
 
-**L0 静态检查（拉起前）**
+**L0 静态检查（拉起前）——标准验证产物，固化执行**
 - `bash -n` 过全部脚本；KV_TRANSFER_CONFIG 抽出 `json.loads` 校验
 - 实例间 diff：差异项只有 rank / 卡 / http 端口三处，其余不一致都是笔误
 - 共享 env 形态下：env 文件改动后逐消费方 grep 确认读到的是新值
+- 守恒自检：prefill.dp_size == 实例总数；无 Ray 残留（脚本 grep 无 ray backend 旗标）
+- 参考实现：`references/l0_static_check.py`（对生成的脚本/配置直接做全套静态检查，不依赖 NPU 环境）；现场另一种等价形态是 stub 掉 vllm 可执行捕获实际命令行再按同口径检查
 
 **L1 单实例启动验证**
 - 按 DP 组序拉起：先启组内 rank 0（主节点）再启其余（rendezvous 依赖主节点）；同机双实例无顺序要求。nohup 后台 + 日志落盘（`nohup bash xxx.sh > xxx.log 2>&1 &`）
@@ -194,6 +199,7 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 
 **L6 稳定性观察**
 - 上线后持续观察（建议 ≥24h 或用户指定窗口）：KV 报错率、偶发 NPU 错误、DP 组掉员、实例重启
+- 已知环境偏斜（如 mooncake_master 与引擎跨 python/运行时版本）列入观察项：历史能跑通不代表升级后能跑通，**任一侧升级后必须回归 L3**
 - 观察通过才算交付完成
 
 **失败处理**：L0-L2 失败 = 配置/环境问题，修复后从 L1 重来；L3 失败优先怀疑 Mooncake 错配或新旧混跑；L4 失败检查容量参数（回 2.3 复核项）；L5 不达标走回滚或调参决策。测试结果逐层记录进部署指南。
@@ -216,10 +222,11 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 
 ## 回滚
 
-任一环节失败且短期修不好时：停新实例（按 PID），恢复备份的旧脚本/配置，按旧方案**原样**重启集群（旧方案含 Ray 就含 Ray，不含就不含——一切以备份的旧脚本为准），D 侧 KV_TRANSFER_CONFIG 恢复旧 prefill 段。回滚步骤在部署指南中写完整命令，不要临场发挥。
+任一环节失败且短期修不好时：停新实例（按 PID），恢复备份的旧脚本/配置，按旧方案**原样**重启集群（旧方案含 Ray 就含 Ray，不含就不含——一切以备份的旧脚本为准），D 侧 KV_TRANSFER_CONFIG 恢复旧 prefill 段。**回滚前先确认旧形态的全部依赖可达**——旧形态常是跨机/依赖外部组件的（跨机 Ray worker、mooncake_master 等），缺一台/缺一个组件 = 回滚不完整；依赖不可达时回滚清单里写明先恢复什么。回滚步骤在部署指南中写完整命令，不要临场发挥。
 
 ## 模板与参考
 
 - `references/templates/prefill-tp8-instance.sh` — 新方案实例启动模板（TP 闭环 + 显式 DP + 无 Ray，占位符版）
 - `references/templates/legacy-prefill-tp32.sh` — 旧方案基线（TP32 + Ray + Mooncake MultiConnector），识别现有部署/对比差异用
+- `references/l0_static_check.py` — L0 静态检查参考实现（KV JSON 校验/守恒自检/卡互斥/端口错开/实例 diff/无 Ray 核验，不依赖 NPU）
 - `references/tp-topology-principles.md` — 拓扑变更原理与风险详解（两层 DP、Mooncake 分片对齐、故障域、收益代价分析）
