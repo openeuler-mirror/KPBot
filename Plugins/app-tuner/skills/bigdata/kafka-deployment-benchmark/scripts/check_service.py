@@ -213,6 +213,11 @@ def check(args):
         "cleanup": "no topic created",
     }
 
+    def write_result():
+        (args.output / "result.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8"
+        )
+
     def tool(name, parameters, data=None, config_flag=None):
         script = args.kafka_dir / "bin" / name
         argv = [
@@ -274,8 +279,13 @@ def check(args):
         create = ["--create", "--topic", topic, "--partitions", "1"]
         if args.replication_factor is not None:
             create += ["--replication-factor", str(args.replication_factor)]
+        result["cleanup"] = (
+            "topic creation result unknown; verify topic before cleanup"
+        )
+        write_result()
         tool("kafka-topics.sh", create, config_flag="--command-config")
         result["cleanup"] = "topic retained"
+        write_result()
         tool(
             "kafka-topics.sh",
             ["--describe", "--topic", topic],
@@ -312,9 +322,7 @@ def check(args):
     except (OSError, ValueError) as exc:
         result["error"] = str(exc)
     finally:
-        (args.output / "result.json").write_text(
-            json.dumps(result, indent=2), encoding="utf-8"
-        )
+        write_result()
     return result
 
 

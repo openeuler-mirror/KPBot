@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/check_service.py"
+GUIDE = Path(__file__).resolve().parents[2] / "references/guide.md"
 spec = importlib.util.spec_from_file_location("kafka_check", SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -28,6 +29,7 @@ if os.environ.get("JAVA_HOME"):
         JAVA = str(candidate)
 if JAVA is None:
     JAVA = shutil.which("java")
+BASH = shutil.which("bash")
 
 JDK_PROPERTIES_SOURCE = """import java.io.FileInputStream;
 import java.io.InputStreamReader;
@@ -169,8 +171,46 @@ class KafkaCheckTests(unittest.TestCase):
 
     def test_create_failure_stops_without_producing(self):
         self.fail_at = 0
-        self.assertEqual(self.run_check()["status"], "failed")
+        result = self.run_check()
+        self.assertEqual(result["status"], "failed")
         self.assertEqual(len(self.calls), 1)
+        self.assertEqual(
+            result["cleanup"],
+            "topic creation result unknown; verify topic before cleanup",
+        )
+        create_topic = self.calls[0][self.calls[0].index("--topic") + 1]
+        self.assertEqual(result["topic"], create_topic)
+
+    def test_create_timeout_persists_unknown_status_before_request(self):
+        self.timeout_at = 0
+        snapshots = []
+
+        def process(argv, **kwargs):
+            snapshots.append(
+                json.loads((self.output / "result.json").read_text())
+            )
+            return self.process(argv, **kwargs)
+
+        with (
+            patch.object(module.subprocess, "Popen", side_effect=process),
+            patch.object(module.os, "killpg", create=True),
+        ):
+            result = module.check(self.args)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(len(snapshots), 1)
+        pending = snapshots[0]
+        self.assertEqual(pending["topic"], result["topic"])
+        self.assertEqual(
+            pending["cleanup"],
+            "topic creation result unknown; verify topic before cleanup",
+        )
+        self.assertEqual(result["cleanup"], pending["cleanup"])
+        self.assertNotEqual(result["cleanup"], "no topic created")
+        self.assertEqual(
+            result, json.loads((self.output / "result.json").read_text())
+        )
+        self.assertTrue((self.output / "00.stderr").exists())
 
     def test_produce_failure_never_reports_delivery_success(self):
         self.fail_at = 2
@@ -381,6 +421,90 @@ class KafkaCheckTests(unittest.TestCase):
             consumer[consumer.index("--group") + 1],
             result["consumer_group"],
         )
+
+
+@unittest.skipUnless(BASH, "bash executable not available")
+class KafkaBenchmarkGuideTests(unittest.TestCase):
+    def run_example(self, fail_at, block_exit_log=False):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bin").mkdir()
+            (root / "count").write_text("0\n", encoding="utf-8")
+            tool = root / "bin/kafka-producer-perf-test.sh"
+            tool.write_text(
+                """#!/usr/bin/env bash
+count=$(cat "$ROOT/count")
+count=$((count + 1))
+printf '%s\\n' "$count" > "$ROOT/count"
+printf 'invocation %s\\n' "$count"
+if [ "$count" -eq "$FAIL_AT" ]; then
+    exit 42
+fi
+""",
+                encoding="utf-8",
+            )
+            tool.chmod(0o755)
+            guide = GUIDE.read_text(encoding="utf-8")
+            start = guide.index("mkdir -p results\nEXP=results/bench-001")
+            end = guide.index("\n```", start)
+            script = guide[start:end]
+            if block_exit_log:
+                script = script.replace(
+                    "# 预热：少量消息，单独文件",
+                    'mkdir "$EXP/exit-codes.log"\n\n# 预热：少量消息，单独文件',
+                )
+            completed = subprocess.run(
+                [BASH, "-e", "-s"],
+                input=script,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=dict(os.environ, ROOT=str(root), FAIL_AT=str(fail_at)),
+            )
+            results = root / "results/bench-001"
+            logs = {
+                path.name: path.read_text(encoding="utf-8")
+                for path in results.glob("*.log")
+                if path.is_file()
+            }
+            calls = int((root / "count").read_text(encoding="utf-8"))
+            return completed, logs, calls
+
+    def test_exit_code_log_write_failure_stops_after_warmup(self):
+        completed, logs, calls = self.run_example(0, block_exit_log=True)
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("exit-codes.log", completed.stderr)
+        self.assertEqual(calls, 1)
+        self.assertEqual(logs, {"warmup-1.log": "invocation 1\n"})
+
+    def test_example_stops_on_failure_and_retains_each_exit_code(self):
+        rounds = ("warmup-1", "round-1", "round-2", "round-3")
+        for fail_at in range(len(rounds) + 1):
+            with self.subTest(fail_at=fail_at):
+                completed, logs, calls = self.run_example(fail_at)
+                attempted = fail_at if fail_at else len(rounds)
+                expected_code = 42 if fail_at else 0
+                self.assertEqual(
+                    completed.returncode, expected_code, completed.stderr
+                )
+                self.assertEqual(calls, attempted)
+                expected_exit_codes = "".join(
+                    f"{name} exit_code={42 if index + 1 == fail_at else 0}\n"
+                    for index, name in enumerate(rounds[:attempted])
+                )
+                self.assertEqual(
+                    logs["exit-codes.log"], expected_exit_codes
+                )
+                self.assertEqual(
+                    set(logs),
+                    {"exit-codes.log"}
+                    | {f"{name}.log" for name in rounds[:attempted]},
+                )
+                for index, name in enumerate(rounds[:attempted], start=1):
+                    self.assertEqual(
+                        logs[f"{name}.log"], f"invocation {index}\n"
+                    )
 
 
 class KafkaScriptEndToEndTests(unittest.TestCase):

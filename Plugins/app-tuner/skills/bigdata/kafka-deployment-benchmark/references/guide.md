@@ -31,7 +31,7 @@ printf 'kpbot-1\nkpbot-2\nkpbot-3\n' | bin/kafka-console-producer.sh --bootstrap
 bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic kpbot-smoke-001 --from-beginning --max-messages 3 --timeout-ms 10000
 ```
 
-检查 Leader 与 ISR，并确认消费内容恰为三条消息。自动入口 `scripts/check_service.py` 会创建唯一 topic、写入三条消息并验证消费内容；测试结束保留 topic 名与原始证据，用户需要时再清理该 topic，不删除共享资源。
+检查 Leader 与 ISR，并确认消费内容恰为三条消息。自动入口 `scripts/check_service.py` 会创建唯一 topic、写入三条消息并验证消费内容；测试结束保留 topic 名与原始证据，用户需要时再清理该 topic，不删除共享资源。脚本在发出创建请求前就把 topic 名和 `cleanup=topic creation result unknown; verify topic before cleanup` 写入 `result.json`；创建命令超时或非零退出时该状态保持不变，不能据此认定 topic 未创建，应先按记录的 topic 名用 `--describe` 核实，再决定清理。只有创建请求发出前的配置校验失败才报告 `no topic created`。
 
 ## 有限生产压测
 
@@ -49,16 +49,32 @@ mkdir -p results
 EXP=results/bench-001   # 每次实验换新编号
 mkdir "$EXP" || { echo "结果目录 $EXP 已存在；换新编号后重试" >&2; exit 1; }
 
+# 预热与测量共用同一执行函数；逐轮保存退出码，失败即停
+run_round() {
+    local name="$1"
+    local records="$2"
+    local rc=0
+    bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records "$records" --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/$name.log" 2>&1 || rc=$?
+    if ! printf '%s exit_code=%s\n' "$name" "$rc" >> "$EXP/exit-codes.log"; then
+        printf '%s 的退出码写入 %s/exit-codes.log 失败，停止后续轮次\n' "$name" "$EXP" >&2
+        return 1
+    fi
+    if [ "$rc" -ne 0 ]; then
+        printf '%s 失败（退出码 %s），停止后续轮次；日志保留在 %s\n' "$name" "$rc" "$EXP" >&2
+        return "$rc"
+    fi
+}
+
 # 预热：少量消息，单独文件
-bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 10000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/warmup-1.log" 2>&1
+run_round warmup-1 10000 || exit $?
 
 # 测量轮次：每轮独立文件，不覆盖
-bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/round-1.log" 2>&1
-bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/round-2.log" 2>&1
-bin/kafka-producer-perf-test.sh --topic kpbot-bench-001 --num-records 100000 --record-size 1024 --throughput 10000 --producer-props bootstrap.servers=localhost:9092 acks=all compression.type=none batch.size=16384 linger.ms=0 > "$EXP/round-3.log" 2>&1
+run_round round-1 100000 || exit $?
+run_round round-2 100000 || exit $?
+run_round round-3 100000 || exit $?
 ```
 
-先完成少量消息 smoke，再预热并进行三轮，每轮独立输出文件。保留工具报告的实际发送成功数、错误、records/s、MB/s 与延迟，不能仅凭退出码判断投递完整。消费端另行记录测试前后各分区 offset 增量并核对消息数量。固定消息大小、分区/副本、acks、压缩、批量、生产者数量和限速；不同投递语义不作直接收益比较。
+先完成少量消息 smoke，再预热并进行三轮，每轮独立输出文件。预热或任一测量轮次非零退出时，将该轮退出码追加到 `exit-codes.log` 并立即停止，不执行后续轮次，也不删除已写入日志；成功的轮次同样记录退出码。保留工具报告的实际发送成功数、错误、records/s、MB/s 与延迟，不能仅凭退出码判断投递完整。消费端另行记录测试前后各分区 offset 增量并核对消息数量。固定消息大小、分区/副本、acks、压缩、批量、生产者数量和限速；不同投递语义不作直接收益比较。
 
 需要吞吐上限测试时按实验计划调整限速；先估算总数据量并检查磁盘。topic 清理只作用于本次创建的测试资源。
 

@@ -17,14 +17,14 @@ description: 部署或验证 Apache Kafka，运行健康检查、正确性验证
 
 ## 随附测试
 
-Python 3.10+、Linux/Bash 和目标 Kafka 版本所需的 JDK，并安装场景指南指定的官方客户端。以下命令在 skill 根目录执行；相对路径均相对当前调用目录。脚本输出新结果目录，拒绝覆盖旧证据；压测同样为每次实验创建新结果目录，预热与各测量轮次写入独立文件。Kafka 验证会创建测试 topic 并写入三条消息，在已授权测试环境中运行。
+Python 3.10+、Linux/Bash 和目标 Kafka 版本所需的 JDK，并安装场景指南指定的官方客户端。以下命令在 skill 根目录执行；相对路径均相对当前调用目录。脚本输出新结果目录，拒绝覆盖旧证据；压测同样为每次实验创建新结果目录，预热与各测量轮次写入独立文件并逐轮记录退出码，任一轮失败立即停止且保留日志。Kafka 验证会创建测试 topic 并写入三条消息，在已授权测试环境中运行。
 
 ```text
 python3 scripts/check_service.py --kafka-dir kafka --bootstrap localhost:9092 --output results/smoke-001
 python3 cases/client-check/test_client_check.py
 ```
 
-`check_service.py --help` 列出连接、客户端、超时与副本参数。`--client-config` 仅接受连接/认证项，含 `group.id` 时脚本在创建任何 topic 之前以退出码 2 拒绝，并为每轮消费者分配唯一组；`--replication-factor` 默认继承 broker 默认，单节点实验显式传 `1`。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。
+`check_service.py --help` 列出连接、客户端、超时与副本参数。`--client-config` 仅接受连接/认证项，含 `group.id` 时脚本在创建任何 topic 之前以退出码 2 拒绝，并为每轮消费者分配唯一组；`--replication-factor` 默认继承 broker 默认，单节点实验显式传 `1`。创建请求发出前，`result.json` 已保存生成的 topic 名和创建结果待核实状态；创建超时或失败后必须按该名称查询实际状态，不能把 topic 当作未创建直接跳过清理。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。
 
 运行产物隔离测试需 Git：`python3 cases/output-isolation/test_output_isolation.py`。随附忽略规则覆盖示例结果、实验与源码目录；自定义输出位置需自行检查 Git 状态，凭据始终保存在工作树外或通过环境注入。
 
