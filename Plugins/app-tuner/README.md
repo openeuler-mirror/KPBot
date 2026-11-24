@@ -132,6 +132,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键 Workflow/路由与共享执行器(保留计划哈希、预检、准备、29 档全矩阵、冒烟、差集清理与证据归档) |
 | [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
+| [`kptools-cpuoffload-analyzer`](skills/kptools-cpuoffload-analyzer/SKILL.md) | torchtitan-npu CPU offload 内存分析器(bundle 离线三自检：node 映射自洽/L1 存活配对交叉核对/采样放大；nova 重建与骤降按共同 rank 对齐判定；bundle 只读，报告写 bundle 同级目录) |
 
 #### CubeSandbox 单项基准入口（10 个）
 
