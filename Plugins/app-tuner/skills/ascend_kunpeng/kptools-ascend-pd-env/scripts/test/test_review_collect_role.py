@@ -11,6 +11,7 @@ import unittest
 SKILL = pathlib.Path(__file__).resolve().parents[2]
 CHILD = pathlib.Path('subskills/collect-environment/scripts/collect_role.sh')
 CONTAINER_ID = 'a' * 64
+SECOND_ID = 'b' * 64
 
 
 class CollectRole(unittest.TestCase):
@@ -28,8 +29,9 @@ class CollectRole(unittest.TestCase):
                 'test "$DOCKER_HOST" = "$EXPECTED_ENDPOINT"\n'
                 'printf "%s\\n" "$*" >> "$LOG"\n'
                 'case "$1" in\n'
-                'info) printf "node-fixture\\n" ;;\n'
-                'container) printf "' + CONTAINER_ID + ' /%s\\n" "${@: -1}" ;;\n'
+                'info) printf "%s\\n" "$MOCK_NODE" ;;\n'
+                'container) [ "${@: -1}" != missing ] || exit 42; '
+                'printf "%s /%s\\n" "$MOCK_ID" "${@: -1}" ;;\n'
                 'version) printf "test\\n" ;;\n'
                 '*) exit 1 ;;\n'
                 'esac\n', encoding='utf-8')
@@ -37,30 +39,46 @@ class CollectRole(unittest.TestCase):
             (scripts / 'discover.sh').write_text('docker version\n', encoding='utf-8')
             (scripts / 'collect.sh').write_text(
                 'set -eu\n'
-                'test "$1" = "' + CONTAINER_ID + '"\n'
+                'test "$1" = "$MOCK_ID"\n'
                 'test "$DOCKER_HOST" = "$EXPECTED_ENDPOINT"\n'
                 'mkdir -p "$5/采集"\n'
                 'printf "%s\\n" "$3" > "$5/采集/SUMMARY.txt"\n'
-                'if [ "$3" = D ]; then exit 130; fi\n'
+                'if [ "$3" = D ]; then touch leftover; exit 130; fi\n'
                 'touch "$5/采集.tar.gz"\n', encoding='utf-8')
             endpoint, log = root / 'd.sock', root / 'calls'
-            env = dict(os.environ, PATH=str(root) + ':' + os.environ['PATH'],
+            env = dict(os.environ, PATH=str(root) + ':' + os.environ['PATH'], TMPDIR=str(root),
                        DOCKER_HOST='tcp://unrelated:2375', DOCKER_CONTEXT='remote',
                        EXPECTED_ENDPOINT='unix://' + str(endpoint), LOG=str(log))
-            with socket.socket(socket.AF_UNIX) as server:
+            with socket.socket(socket.AF_UNIX) as server, socket.socket(socket.AF_UNIX) as other:
                 server.bind(str(endpoint))
-                def run(node, name, role, out):
-                    return subprocess.run(['bash', str(wrapper), str(endpoint), node, name, role, out],
-                                          cwd=str(root), env=env, stdout=subprocess.PIPE,
+                second = root / 'p.sock'
+                other.bind(str(second))
+                def run(node, name, role, out, sock=endpoint, mock_node='node-fixture',
+                        ident=CONTAINER_ID):
+                    test_env = dict(env, EXPECTED_ENDPOINT='unix://' + str(sock),
+                                    MOCK_NODE=mock_node, MOCK_ID=ident)
+                    return subprocess.run(['bash', str(wrapper), str(sock), node, name, role, out],
+                                          cwd=str(root), env=test_env, stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE, encoding='utf-8')
                 rejected = run('wrong-node', 'other', 'P', 'no-out')
                 self.assertEqual(rejected.returncode, 2)
                 self.assertEqual(log.read_text().splitlines(), ["info --format {{.Name}}"])
                 p = run('node-fixture', 'vllm-p.tgz', 'P', 'p-out')
                 d = run('node-fixture', 'vllm-d', 'D', 'd-out')
+                first = run('node-fixture', 'engine.tar.gz', 'P', 'first')
+                second_result = run('node-two', 'engine.tar.gz', 'P', 'second',
+                                    second, 'node-two', SECOND_ID)
+                missing = run('node-fixture', 'missing', 'P', 'missing-out')
             self.assertEqual(p.returncode, 0, p.stderr)
             self.assertIn('vllm-p.tgz (' + CONTAINER_ID + ')', p.stdout)
             self.assertEqual(d.returncode, 130, d.stderr)
+            self.assertNotIn('rmdir', d.stderr)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertIn('engine.tar.gz (' + CONTAINER_ID + ')', first.stdout)
+            self.assertEqual(second_result.returncode, 0, second_result.stderr)
+            self.assertIn('engine.tar.gz (' + SECOND_ID + ')', second_result.stdout)
+            self.assertEqual(missing.returncode, 1, missing.stderr)
+            self.assertFalse((root / 'missing-out').exists())
             self.assertTrue((root / 'p-out/采集.tar.gz').exists())
             self.assertTrue((root / 'd-out/采集/SUMMARY.txt').exists())
             self.assertFalse((root / 'd-out/采集.tar.gz').exists())

@@ -15,7 +15,10 @@ fi
 
 unset DOCKER_CONTEXT
 export DOCKER_HOST="unix://$socket"
-actual_node=$(docker info --format '{{.Name}}')
+if ! actual_node=$(docker info --format '{{.Name}}'); then
+    printf 'Could not query the Docker daemon at %s\n' "$DOCKER_HOST" >&2
+    exit 2
+fi
 if [ -z "$node" ] || [ "$actual_node" != "$node" ]; then
     printf 'Docker node mismatch: expected %s, got %s\n' "$node" "$actual_node" >&2
     exit 2
@@ -23,7 +26,10 @@ fi
 
 scripts="$(cd "$(dirname "$0")/../../../scripts" && pwd)"
 bash "$scripts/discover.sh"
-record=$(docker container inspect --format '{{.Id}} {{.Name}}' -- "$container")
+if ! record=$(docker container inspect --format '{{.Id}} {{.Name}}' -- "$container"); then
+    printf 'Could not inspect container %s on %s\n' "$container" "$actual_node" >&2
+    exit 1
+fi
 read -r id name <<< "$record"
 if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]] || [ -z "$name" ]; then
     printf 'Could not verify a unique container ID for %s\n' "$container" >&2
@@ -33,7 +39,7 @@ fi
 # collect.sh also accepts paths. Resolve the output before changing directory.
 case "$out" in /*) ;; '') exit 1 ;; *) out="$PWD/$out" ;; esac
 work=$(mktemp -d)
-trap 'rmdir "$work"' EXIT
+trap 'cd / && rmdir -- "$work" 2>/dev/null || true' EXIT
 cd "$work"
 printf 'Docker: %s (%s), container: %s (%s)\n' "$actual_node" "$DOCKER_HOST" "${name#/}" "$id"
 args=("$id" --role "$role" --out "$out")
