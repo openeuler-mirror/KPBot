@@ -9,20 +9,21 @@ description: >
   的 tp/dp 对齐、配置调用链梳理（追踪参数来源文件）、单机双实例 9000/9001 分流、
   ASCEND_RT_VISIBLE_DEVICES 切分、按可行性分析结论部署新拓扑、迁移后分层测试
   （单实例/DP 组网/KV 链路/功能/性能/稳定性）。新 TP size 可能来自用户直接输入，也可能来自
-  上游可行性分析 skill 输出的 .md 报告，两种入口都要支持。即使用户只说"帮我把集群改成 TP8"
-  或"按上次分析的结论重新部署"，也应使用此技能。
+  上游 skill kptools-tpsplit-check 输出的 .md 可行性报告，两种入口都要支持。即使用户只说
+  "帮我把集群改成 TP8"、"按 tpsplit-check 的结论部署"或"按上次分析的结论重新部署"，
+  也应使用此技能。
 license: Proprietary
 compatibility: 远端 Linux（openEuler/EulerOS 等，aarch64）；需要 SSH 访问所有涉及主机（P 侧与 D 侧）；NPU 环境（npu-smi、ASCEND_RT_VISIBLE_DEVICES）；vLLM（支持 --data-parallel-size 外部 DP 拉起口径）+ Mooncake/AscendStore KV 传输（MultiConnector）；连接方式优先 ssh-mcp-server 的 upload/execute-command/download，无 MCP 时回退本地 ssh/scp
 metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.5.1"
+  version: "0.5.2"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
 
-把推理集群从旧 TP 拓扑（典型：跨机 TP32 + Ray 托管）迁移部署到新 TP 拓扑（典型：单机 TP8 闭环 + 显式 DP 组网 + Mooncake 对齐 + 单机双实例）。新 TP size 来自用户输入或上游可行性分析 `.md` 报告。产出：已拉起并验证的新集群 + 一份部署指南 `.md`。
+把推理集群从旧 TP 拓扑（典型：跨机 TP32 + Ray 托管）迁移部署到新 TP 拓扑（典型：单机 TP8 闭环 + 显式 DP 组网 + Mooncake 对齐 + 单机双实例）。新 TP size 来自用户输入，或来自上游 skill `kptools-tpsplit-check` 输出的可行性分析 `.md` 报告。产出：已拉起并验证的新集群 + 一份部署指南 `.md`。
 
 核心原则（背后的原理详见 `references/tp-topology-principles.md`，动手前先读）：
 
@@ -34,7 +35,7 @@ metadata:
 ## 快速决策
 
 1. 用户直接给了新 TP size（数字）→ 阶段 1 收集其余拓扑信息
-2. 用户给了可行性分析报告（.md 路径）或说"按上次分析的结论部署" → 阶段 1 先解析 .md 提取推荐 TP size 与拓扑结论并向用户复述确认，再补齐报告里没有的信息（主机清单等）
+2. 用户给了可行性分析报告（.md 路径，通常由上游 skill `kptools-tpsplit-check` 产出）或说"按上次分析的结论部署" → 阶段 1 先解析 .md 提取推荐 TP size 与拓扑结论并向用户复述确认，再补齐报告里没有的信息（主机清单等）
 3. 用户只要生成部署脚本和配置（远端自己拉）→ 走完阶段 1-4，阶段 5/6 的分层测试与 Proxy 切换改为写进部署指南由用户执行
 4. 部署完成后出现 KV 报错 / NPU 偶发错误 / hangs → 优先对照阶段 5 的 L3/L4 排查配置一致性（大概率是 Mooncake tp/dp 错配或新旧混跑），再考虑回滚
 
@@ -52,7 +53,7 @@ metadata:
 
 - **用户直接输入**：确认目标 TP size（如 8）。追问一句是只改 P 侧还是 D 侧也要动——本 skill 默认场景是 **P 侧 Prefill TP 变更**（D 侧 Decode 通常 tp=1 不动，但其 KV_TRANSFER_CONFIG 里的 prefill 段必须同步改）。若用户确实要改 D 侧拓扑，同样流程，但 D 侧实例布局也要重排
 - **用户没给 TP size 时按卡数推导默认值再求证**：16 卡机 → TP8 × 2 实例；8 卡机 → TP8 × 1；4 卡机 → TP4 × 1（原则：TP 不超过单机卡数，优先 8 的约数便于卡切分）。推导出默认值后向用户求证一轮即可，不要空手反问"你要多大 TP"
-- **上游可行性分析 .md**：读取报告，提取推荐 TP size 与拓扑建议。报告格式不固定——找"推荐 TP / recommended_tp_size / 结论 / 建议部署 / 实例布局"等关键信息。**提取后必须向用户复述确认**（"报告建议 TP8、全局 20 个 P 实例，按这个部署吗？"），报告没写的信息（主机清单、路径、Proxy 类型）继续问用户。报告结论与用户口头说法冲突时以用户为准并提醒差异
+- **上游 kptools-tpsplit-check 的可行性报告**（交接契约：其结论经用户认可后，报告路径交由本 skill 执行部署）：同目录同时产出 `.json` 与 `.md` 时**优先解析 `.json`**（机器可读），`.md` 用于向用户复述。JSON 关键字段：`recommended.tp` / `current.*` / `candidates[]`（含 `dp_per_group`、`cluster_dp`、`verdict`）。**两层 DP 映射固定**：`cluster_dp`（报告"集群DP"）→ Mooncake `dp_size`（全局实例总数）；`dp_per_group`（报告"组内DP" = ep_group÷tp）→ vLLM `--data-parallel-size`（每组大小）。⚠️ 报告"建议启动参数 diff"节里的 `--data-parallel-size` 写的是"单 serve 拉起"形态的集群级建议值，**显式 DP 组网形态下取 `dp_per_group`，不得照抄**——照抄会把每组配成集群规模，组网直接失败。**提取后必须向用户复述确认**（"报告推荐 TP8、组内 DP 4、集群 DP 20，按这个部署吗？"），报告没写的信息（主机清单、路径、Proxy 类型）继续问用户。报告结论与用户口头说法冲突时以用户为准并提醒差异
 
 ### 1.2 必须收集的拓扑信息
 
