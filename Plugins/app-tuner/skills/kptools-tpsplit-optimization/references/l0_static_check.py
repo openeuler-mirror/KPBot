@@ -8,7 +8,8 @@
   2. KV_TRANSFER_CONFIG 抽取 + json.loads 校验
   3. 守恒自检：prefill.dp_size == 实例总数（--expect-dp 指定期望值则按期望值核对）
   4. TP / 后端 / DP 旗标核验（TP 值；无 --distributed-executor-backend；DP 组网四旗标）
-  5. KV 旧字段保留核验（engine_id / kv_port / lookup_rpc_port / decode 段，--keep-legacy 可关）
+  5. KV 旧字段保留核验（engine_id / kv_port / lookup_rpc_port / decode 段按 legacy 基线；
+     现场基线不同时 --no-keep-legacy 关闭，以现场旧脚本实际值为准）
   6. 同机卡互斥（ASCEND_RT_VISIBLE_DEVICES）与 http 端口错开
   7. 实例间 diff：剥离注释并遮蔽实例级差异（rank/卡/http 端口）与组级差异
      （DP 组大小/主节点 IP）后，各实例应完全一致；混合分组（如 4+4+2）用
@@ -162,8 +163,10 @@ def main() -> int:
     ap.add_argument('--group-size', default='4',
                     help='期望 DP 组大小，单值或多值逗号分隔（如 "4" 或 "4,2" 支持混合分组，默认 4）')
     ap.add_argument('--rpc-port', type=int, default=16600, help='期望 DP rpc 端口（默认 16600）')
-    ap.add_argument('--keep-legacy', action='store_true', default=True,
-                    help='核验 KV 旧字段保留（engine_id=0/kv_port=30000/lookup=10001/decode 不动）')
+    ap.add_argument('--keep-legacy', action=argparse.BooleanOptionalAction, default=True,
+                    help='核验 KV 旧字段保留（engine_id=0/kv_port=30000/lookup=10001/decode 64-1，'
+                         '按 legacy 基线核验；现场基线不同时用 --no-keep-legacy 关闭，'
+                         '以现场旧脚本实际值为准）')
     args = ap.parse_args()
     allowed_sizes = {int(x) for x in str(args.group_size).split(',')}
 
@@ -228,7 +231,7 @@ def main() -> int:
                                  and (lp is None or lp == '10001')
                                  and str(dec['dp_size']) == '64' and str(dec['tp_size']) == '1')
                     # 注：decode 64/1 与 engine_id/kv_port 旧值按 legacy 基线核验，
-                    # 现场基线不同时以 --keep-legacy=False 关闭并以现场旧脚本为准
+                    # 现场基线不同时以 --no-keep-legacy 关闭并以现场旧脚本为准
                     record(name, 'kv-legacy-fields', legacy_ok,
                            'engine_id=%s kv_port=%s lookup=%s decode=%s/%s' % (
                                kv.get('engine_id'), mc.get('kv_port'), lp, dec['dp_size'], dec['tp_size']))

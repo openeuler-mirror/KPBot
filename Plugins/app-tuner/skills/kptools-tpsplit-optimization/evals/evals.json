@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "帮我把 Prefill 从 TP32 改成 TP8 重新部署，10 台 16 卡机器，DP 组大小 4，Mooncake dp_size 20，Decode 64 实例 TP1 不动。",
-      "expected_output": "先 SSH 只读梳理配置调用链（source 引用/systemd/容器 env），产出《配置修改点清单》（每个要改的参数→真正定义的文件→消费方）；推导实例布局：每台 16÷8=2 实例共 20 个、卡 0-7/8-15 互斥、5 个 DP 组、同机 http 9000/9001；守恒自检 20=Mooncake dp_size；生成每实例启动脚本：--tensor-parallel-size 8、不含 --distributed-executor-backend、含 --data-parallel-rank/--data-parallel-address/--data-parallel-rpc-port 16600/--data-parallel-size 4，KV_TRANSFER_CONFIG 只改 prefill dp/tp 两个值、engine_id/kv_port/lookup_rpc_port/decode 段原样保留；方案经用户确认前不在远端做变更，旧集群绝不静默停。",
+      "expected_output": "先 SSH 只读梳理配置调用链（source 引用/systemd/容器 env），产出《配置修改点清单》（每个要改的参数→真正定义的文件→消费方）；按形态判据生成：现场已有驱动编排（如 launch_online_dp.py + 位置参数模板）则保留驱动形态只改模板与传参，无编排才生成每实例独立脚本；推导实例布局：每台 16÷8=2 实例共 20 个、卡 0-7/8-15 互斥、5 个 DP 组、同机 http 9000/9001；守恒自检 20=Mooncake dp_size；产出脚本特征：--tensor-parallel-size 8、不含 --distributed-executor-backend、含 --data-parallel-rank/--data-parallel-address/--data-parallel-rpc-port 16600/--data-parallel-size 4，KV_TRANSFER_CONFIG 只改 prefill dp/tp 两个值、engine_id/kv_port/lookup_rpc_port/decode 段原样保留；方案经用户确认前不在远端做变更，旧集群绝不静默停。",
       "files": []
     },
     {

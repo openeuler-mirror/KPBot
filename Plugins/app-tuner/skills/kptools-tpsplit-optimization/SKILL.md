@@ -17,7 +17,7 @@ metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
@@ -37,6 +37,14 @@ metadata:
 2. 用户给了可行性分析报告（.md 路径）或说"按上次分析的结论部署" → 阶段 1 先解析 .md 提取推荐 TP size 与拓扑结论并向用户复述确认，再补齐报告里没有的信息（主机清单等）
 3. 用户只要生成部署脚本和配置（远端自己拉）→ 走完阶段 1-4，阶段 5/6 的分层测试与 Proxy 切换改为写进部署指南由用户执行
 4. 部署完成后出现 KV 报错 / NPU 偶发错误 / hangs → 优先对照阶段 5 的 L3/L4 排查配置一致性（大概率是 Mooncake tp/dp 错配或新旧混跑），再考虑回滚
+
+## SSH/容器操作约定（工具链实测，贯穿全程）
+
+从阶段 1 的调用链梳理到阶段 6 的交付，所有远端操作遵循：
+
+- ssh-mcp-server 的 `download` **不会自动创建本地父目录**——下载前先本地建目录
+- **复杂校验/长命令不拼内联**：嵌套引号与 heredoc 经 `ssh-mcp → docker exec bash -c` 多层转义必挂，一律本地写好脚本 `upload` 到远端（容器可见的 bind mount 路径，如 /data）再执行
+- 容器内产物写 bind mount 目录——/tmp 不与宿主机共享，落 /tmp 宿主机看不见，需归档的先 cp 到 /data
 
 ## 阶段 1：输入解析与信息收集（缺什么问什么，不要猜）
 
@@ -132,7 +140,6 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 - **去 Ray 残留（仅旧方案有 Ray 时）**：检查旧启动脚本与用户 shell 环境，确认无 `--distributed-executor-backend ray`、无 Ray 相关环境变量（RAY_ADDRESS 等），新脚本中不引入。旧方案本来就没有 Ray 时这步无事可做，直接过
 - **防火墙/安全组**：DP 组跨主机时，组内所有主机对 16600 互通；Proxy 到各实例 http 端口可达
 - ⚠️ **新旧拓扑禁止混跑**：切换窗口内 D 侧必须整体指向同一套 P 拓扑。"先改一半 D 实例试试" = KV 错配，不允许分批切换 P 拓扑
-- **SSH/容器操作约定（工具链实测）**：ssh-mcp-server 的 `download` 不会自动创建本地父目录，**下载前先本地建目录**；**复杂校验/长命令不拼内联**——嵌套引号与 heredoc 经 `ssh-mcp → docker exec bash -c` 多层转义必挂，一律本地写好脚本 `upload` 到远端（容器可见的 bind mount 路径，如 /data）再执行；容器内产物写 bind mount 目录——/tmp 不与宿主机共享，落 /tmp 宿主机看不见，需归档的先 cp 到 /data
 - **资源占用协调（拉起前置条件）**：预检发现卡被其他业务/容器占用（`npu-smi` 有占用但不是本集群旧实例），或 kv_port / mooncake_master 等端口被外部业务占用时——**并入"拉起前置条件"清单交用户协调**，本 skill 不静默处理。注意跨业务并存时冲突不止是卡：http / kv_port / mooncake_master 端口同样会撞（端口三连占），只停卡不够
 - 预检发现端口被占、卡数对不上、旧进程清不掉，立即反馈用户并停下，不要自行换端口/换卡继续
 
@@ -156,7 +163,7 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 生成要点：
 
 - 新脚本**不写 `--distributed-executor-backend`**（TP 单机闭环用默认后端即可）。旧脚本带 ray backend 的，生成时删除；旧脚本本来就没有的，保持没有——新方案任何情况下都不引入该旗标
-- 每实例单独一份脚本，实例间差异项只有 `--data-parallel-rank` / `ASCEND_RT_VISIBLE_DEVICES` / `--port` 三处，其余参数全组一致——生成后 diff 一遍，差异项之外的改动都是笔误
+- 每实例单独一份脚本（**独立脚本形态下**；驱动形态则是改模板+传参，验证口径相同）：实例间差异项只有 `--data-parallel-rank` / `ASCEND_RT_VISIBLE_DEVICES` / `--port` 三处（组级差异：DP 主节点 IP / 组大小），其余参数全组一致——生成后 diff 一遍，差异项之外的改动都是笔误
 - DP 组网参数口径（对齐 vLLM 官方旗标）：`--data-parallel-size`（组大小）、`--data-parallel-rank`（本实例 rank）、`--data-parallel-address`（组主节点 IP）、`--data-parallel-rpc-port 16600`（组内统一）。注意 `--data-parallel-rank` 外部 LB 模式适用于 **MoE 模型**（GLM 系列 `--enable-expert-parallel` 场景即 MoE）；现场 vLLM-Ascend 版本若旗标名不同，以 `vllm serve --help | grep -i data-parallel` 实际输出为准——**该命令在无 NPU 的裁剪容器裸 shell 中可能直接失败**（torch_npu 加载报错），此时兜底口径：grep vllm 源码 `vllm/engine/arg_utils.py`（源码仓或 site-packages 内）确认旗标存在
 - **生成脚本保持现场现有的传参形态**：参数在脚本内定义的，生成脚本内定义（模板形态）；参数从 env 文件 source 进来的，生成脚本继续 source 同一文件、只改 env 文件里的值——**不要把调用链改造成自己的习惯形态**，那会让后续运维找不到参数在哪
 - **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**；两个值改在 1.3 梳理出的**源头定义处**（共享 env 文件就改 env 文件，脚本自包含才改脚本）；改前备份原文件。这一原则不依赖 KV connector 的具体结构——旧脚本无论用 MultiConnector 还是其他 connector，改动面都只是 prefill 段的 dp/tp 两个值，模板里的 MultiConnector 结构以现场旧脚本实际结构为准
@@ -170,7 +177,7 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 
 **L0 静态检查（拉起前）——标准验证产物，固化执行**
 - `bash -n` 过全部脚本；KV_TRANSFER_CONFIG 抽出 `json.loads` 校验
-- 实例间 diff：差异项只有 rank / 卡 / http 端口三处，其余不一致都是笔误
+- 实例间 diff：实例级差异只允许 rank / 卡 / http 端口三处（组级差异：DP 主节点 IP / 组大小），其余不一致都是笔误
 - 共享 env 形态下：env 文件改动后逐消费方 grep 确认读到的是新值
 - 守恒自检：prefill.dp_size == 实例总数；无 Ray 残留（脚本 grep 无 ray backend 旗标）
 - 参考实现：`references/l0_static_check.py`（对生成的脚本/配置直接做全套静态检查，不依赖 NPU 环境）；现场另一种等价形态是 stub 掉 vllm 可执行捕获实际命令行再按同口径检查
@@ -178,7 +185,7 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 **L1 单实例启动验证**
 - 按 DP 组序拉起：先启组内 rank 0（主节点）再启其余（rendezvous 依赖主节点）；同机双实例无顺序要求。nohup 后台 + 日志落盘（`nohup bash xxx.sh > xxx.log 2>&1 &`）
 - 每实例探活：`curl -m 5 http://127.0.0.1:<http_port>/v1/models`
-- 日志确认：`tensor_parallel_size=8` 生效；`npu-smi info` 对照各实例占用卡与布局表一致（没绑错卡、没互踩）
+- 日志确认：`tensor_parallel_size` 与目标一致（如 8）；`npu-smi info` 对照各实例占用卡与布局表一致（没绑错卡、没互踩）
 
 **L2 DP 组网验证**
 - 组内 rank 0/1/2/… 全部入组（日志确认，无掉队/重试报错）
