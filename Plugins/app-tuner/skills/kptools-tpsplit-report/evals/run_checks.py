@@ -335,6 +335,39 @@ def main():
               any(z["stage"] in ("draft", "kv_xfer") for z in dz.get("zero_sides", []))
               and "恒 0" in mdz)
 
+        # --- 总 ΔTTFT 近零（阶段对冲）：贡献度记不可计算，不输出无界大数/假 0% ---
+        nz = os.path.join(tmp, "nearzero")
+        # fwd_pure −10ms 与 kv_xfer +10ms 对冲，other 再差 0.02ms → 总 ΔTTFT=0.02ms
+        for side, dirname, fwd, kvx, oth in (("b", "before_tp32ray", 40.0, 2.0, 4.0),
+                                             ("a", "after_tp8dp", 30.0, 12.0, 4.02)):
+            os.makedirs(os.path.join(nz, dirname), exist_ok=True)
+            with open(os.path.join(nz, dirname, "ttft_table.csv"), "w",
+                      encoding="utf-8", newline="") as f:
+                f.write(zheader + "\n")
+                for i in range(30):
+                    st = [3.0, 2.0, 1.0, 20.0 + i * 0.1, 15.0, fwd, 8.0, kvx, 5.0, oth]
+                    f.write(",".join(str(x) for x in
+                                     ["2026-11-23 10:00:%02d.000" % (i % 60),
+                                      "req-%03d" % i, 2048, "%.2f" % sum(st)]
+                                     + ["%.2f" % v for v in st]) + "\n")
+        r = run_py(ANALYZE, ["--before", os.path.join(nz, "before_tp32ray"),
+                             "--after", os.path.join(nz, "after_tp8dp"),
+                             "--out", os.path.join(nz, "g")])
+        dnz = load_json(os.path.join(nz, "g.json")) if r.returncode == 0 else {}
+        mdnz = open(os.path.join(nz, "g.md"), encoding="utf-8").read() \
+            if r.returncode == 0 else ""
+        check("总 ΔTTFT 近零（对冲）时贡献度记不可计算",
+              r.returncode == 0
+              and any(p["stage"] == "fwd_pure" and p["kind"] == "benefit"
+                      and p["contrib_pct"] is None for p in dnz.get("points", []))
+              and any(p["stage"] == "kv_xfer" and p["kind"] == "regression"
+                      and p["contrib_pct"] is None for p in dnz.get("points", []))
+              and "—（总 ΔTTFT≈0）" in mdnz
+              and "贡献占比不可算（总 ΔTTFT≈0）" in mdnz
+              and re.search(r"贡献 [\d.]{4,}", mdnz) is None,
+              json.dumps([{k: p[k] for k in ("stage", "kind", "d_ms", "contrib_pct")}
+                          for p in dnz.get("points", [])]))
+
         # --- input_len 缺失：不可判定而非假通过 ---
         ni = os.path.join(tmp, "noinputlen")
         for side in ("before_tp32ray", "after_tp8dp"):

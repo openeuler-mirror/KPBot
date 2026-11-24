@@ -49,6 +49,10 @@ INLEN_BUCKETS = [(0, 1024, "<1024"), (1024, 2048, "1024-2048"),
 QUEUE_STAGES = ("sched_qwait", "fe_inputq")
 # bench 对比时忽略的键（note 是说明文字，不是压测参数）
 BENCH_IGNORE_KEYS = {"note"}
+# 贡献度（阶段 Δ ÷ 总 ΔTTFT）的分母保护阈值：|总 ΔTTFT| 低于该值（ms）时记 None。
+# 近零对冲下贡献度是无界大数（如 +10ms/-10ms 对冲、总 Δ≈0.01ms → 贡献 62069%），
+# 恰为零时又会被误报成 0%——两者都不可信，与 safe_pct 对 Δ% 的保护同级。
+CONTRIB_MIN_TTFT_D = 1.0
 
 
 def log(msg):
@@ -71,6 +75,14 @@ def safe_pct(new, base):
     if base is None or base != base or base == 0:
         return None
     val = (new / base - 1.0) * 100.0
+    return None if val != val else val
+
+
+def safe_contrib(d_ms, ttft_d):
+    """贡献度；总 ΔTTFT 近零（对冲/无变化）时返回 None，不产出无界大数或假 0%。"""
+    if ttft_d is None or ttft_d != ttft_d or abs(ttft_d) < CONTRIB_MIN_TTFT_D:
+        return None
+    val = d_ms / ttft_d * 100.0
     return None if val != val else val
 
 
@@ -281,7 +293,7 @@ def build_points(b_rows, a_rows, b_st, a_st, logs_b, logs_a, th, kinds):
         b, a = b_st[s], a_st[s]
         d_ms = a["mean"] - b["mean"]
         d_pct = safe_pct(a["mean"], b["mean"])
-        contrib = (d_ms / ttft_d * 100.0) if ttft_d else 0.0
+        contrib = safe_contrib(d_ms, ttft_d)
         chain = build_chain(s, b_rows, a_rows, logs_b, logs_a)
         points.append({"stage": s, "kind": kinds[s], "d_ms": d_ms, "d_pct": d_pct,
                        "contrib_pct": contrib, "before": b, "after": a, "chain": chain})
@@ -479,6 +491,10 @@ def render_md(ctx):
         dp = safe_pct(new_v, base_v)
         return "%s%%" % fmt_ms(dp, 1) if dp is not None else "Δ% 不可算（基线为 0）"
 
+    def contrib_frag(v):
+        return ("贡献 %s%%" % fmt_ms(abs(v))) if v is not None \
+            else "贡献不可算（总 ΔTTFT≈0）"
+
     L.append("# %s" % title)
     L.append("")
     has_logs = ctx["has_logs"]
@@ -510,11 +526,11 @@ def render_md(ctx):
                 pct_frag(ttft_b["p99"], ttft_a["p99"]),
                 verdict))
     if benefits:
-        top = ", ".join("%s（%s ms / %s，贡献 %s%%）" % (
+        top = ", ".join("%s（%s ms / %s，%s）" % (
             STAGE_CN[p["stage"]], fmt_ms(p["d_ms"]),
             ("%s%%" % fmt_ms(p["d_pct"])) if p["d_pct"] is not None
             else "Δ% 不可算（基线为 0）",
-            fmt_ms(abs(p["contrib_pct"]))) for p in benefits[:3])
+            contrib_frag(p["contrib_pct"])) for p in benefits[:3])
         L.append("- **主要收益点**（按 |Δms| 排序）：%s。" % top)
     if regressions:
         top = ", ".join("%s（+%s ms / %s）" % (
@@ -589,11 +605,13 @@ def render_md(ctx):
             continue
         d_ms = as_["mean"] - bs["mean"]
         kind = ctx["kinds"][s]
-        contrib = d_ms / d_mean * 100 if d_mean else 0
-        L.append("| %s（%s） | %s | %s | %s | %s | %s | %s%% | %s |" % (
+        contrib = safe_contrib(d_ms, d_mean)
+        contrib_cell = ("%s%%" % fmt_ms(contrib)) if contrib is not None \
+            else "—（总 ΔTTFT≈0）"
+        L.append("| %s（%s） | %s | %s | %s | %s | %s | %s | %s |" % (
             STAGE_CN[s], s, STAGE_GROUP[s], fmt_ms(bs["mean"]), fmt_ms(as_["mean"]),
             fmt_ms(d_ms), fmt_pct_cell(safe_pct(as_["mean"], bs["mean"])),
-            fmt_ms(contrib), KIND_CN[kind]))
+            contrib_cell, KIND_CN[kind]))
     if any(k == "confounded" for k in ctx["kinds"].values()):
         L.append("")
         L.append("> ⚠️ 两侧压测参数不一致（%s），排队类阶段（`sched_qwait`、`fe_inputq`）"
@@ -601,7 +619,9 @@ def render_md(ctx):
                  "（判「负载混杂」）。" % "、".join(ctx["bench"]["mismatch_keys"]))
     L.append("")
     L.append("*贡献度 = 该阶段 Δms ÷ TTFT Δms（改善为负时，负贡献 = 拉低改善；总和 ≈ 100%）。"
-             "Δ% 为「—（基线为 0）」时表示基线均值为 0、相对变化不可计算，该阶段判定仅依据绝对阈值。")
+             "Δ% 为「—（基线为 0）」时表示基线均值为 0、相对变化不可计算，该阶段判定仅依据绝对阈值；"
+             "贡献度为「—（总 ΔTTFT≈0）」时表示总改善近零（阶段间对冲），"
+             "此时贡献比是无界大数，记不可计算。")
     L.append("")
 
     # 5. 收益点与证据链
@@ -698,10 +718,12 @@ def emit_point(L, p, ctx):
     d_ms_str = ("%+.1f" % p["d_ms"]) if p["d_ms"] > 0 else fmt_ms(p["d_ms"])
     dp_str = ("%s%%" % fmt_ms(p["d_pct"])) if p["d_pct"] is not None \
         else "Δ% 不可算（基线为 0）"
-    L.append("- **L1 Claim**：%s mean %s → %s ms（%s ms，%s，占 TTFT 变化的 %s%%）；"
+    contrib_str = ("占 TTFT 变化的 %s%%" % fmt_ms(abs(p["contrib_pct"]))) \
+        if p["contrib_pct"] is not None else "贡献占比不可算（总 ΔTTFT≈0）"
+    L.append("- **L1 Claim**：%s mean %s → %s ms（%s ms，%s，%s）；"
              "P90 %s → %s ms。"
              % (STAGE_CN[p["stage"]], fmt_ms(p["before"]["mean"]), fmt_ms(p["after"]["mean"]),
-                d_ms_str, dp_str, fmt_ms(abs(p["contrib_pct"])),
+                d_ms_str, dp_str, contrib_str,
                 fmt_ms(p["before"]["p90"]), fmt_ms(p["after"]["p90"])))
     L.append("- **L2 支撑数据**（表格实测，mean/P50/P90/P99）：" + "  ".join(
         "%s %s/%s/%s/%s ms" % (side, fmt_ms(p[side]["mean"]), fmt_ms(p[side]["p50"]),
@@ -967,9 +989,13 @@ def render_html(ctx):
             H.append("<p class='note'>未检测到满足阈值的阶段。</p>")
             continue
         for i, p in enumerate(plist, 1):
-            H.append("<details open><summary>%d. %s（%s：%s ms / %s%%，贡献 %s%%）</summary>" % (
+            dp_h = ("%s%%" % fmt_num(p["d_pct"])) if p["d_pct"] is not None \
+                else "Δ% 不可算（基线为 0）"
+            contrib_h = ("贡献 %s%%" % fmt_num(abs(p["contrib_pct"]))) \
+                if p["contrib_pct"] is not None else "贡献不可算（总 ΔTTFT≈0）"
+            H.append("<details open><summary>%d. %s（%s：%s ms / %s，%s）</summary>" % (
                 i, esc(STAGE_CN[p["stage"]]), p["stage"], fmt_num(p["d_ms"]),
-                fmt_num(p["d_pct"]), fmt_num(abs(p["contrib_pct"]))))
+                dp_h, contrib_h))
             H.append("<table><tr><th>侧</th><th>mean</th><th>P50</th><th>P90</th>"
                      "<th>P99</th></tr>")
             for side in ("before", "after"):
@@ -1184,8 +1210,10 @@ def main():
            ("%s%%" % fmt_num(dp)) if dp is not None else "Δ% 不可算"))
     for p in points[:8]:
         dp_s = ("%+6.1f%%" % p["d_pct"]) if p["d_pct"] is not None else "   —  "
-        log("  [%s] %-14s %+9.1f ms (%s)  贡献 %5.1f%%"
-            % (p["kind"][:4], p["stage"], p["d_ms"], dp_s, p["contrib_pct"]))
+        contrib_s = ("%5.1f%%" % p["contrib_pct"]) if p["contrib_pct"] is not None \
+            else "  —  "
+        log("  [%s] %-14s %+9.1f ms (%s)  贡献 %s"
+            % (p["kind"][:4], p["stage"], p["d_ms"], dp_s, contrib_s))
     if ctx["flags"]:
         log("数据质量：有告警 %d 条（详见报告第 1 节）：%s"
             % (len(ctx["flags"]), "；".join(ctx["flags"])))
