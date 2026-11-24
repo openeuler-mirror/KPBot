@@ -47,3 +47,15 @@
 - 当前版本帮助、指标公式及不同平台的差异。
 
 没有真机验收前，不承诺所有 DevKit 版本均兼容。
+
+## PR 审核修订验证（2026-11-24）
+
+- 增加 SIGINT/SIGTERM 处理，等待采集退出并返回 interrupted 状态供 manifest 保存。
+- 保留 interrupted_by，区分操作者中断信号与子进程最终终止信号。
+- 全部指标缺测时返回 unusable，同时保留原始行及警告。
+- 拒绝显式空 PID/CPU 参数，选项与参数值使用相同的目标存在性判据。
+- eval_queries.json 改为 skill_name / queries 对象包装，保留八条行为评估场景。
+- 补全文档中的 manifest 字段及负退出码、error 的含义。
+- node --check 通过，node --test 共 26 项全部通过。
+- 信号回归测试在 Windows 使用 process.emit 触发处理器并终止模拟子进程。
+- 本次未执行 Linux 内核信号和真实 DevKit 进程组验收，不将模拟测试等同真机验证。

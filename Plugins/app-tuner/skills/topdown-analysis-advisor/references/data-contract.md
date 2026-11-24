@@ -26,19 +26,27 @@ analyze 生成 summary；context 和 findings 由执行诊断的 Agent 编写。
 
 | 字段 | 含义 |
 | --- | --- |
+| schema_version | 数据结构版本，当前为 1.0 |
+| source_skill | 生成者标识 topdown-analysis-advisor |
+| environment | 采集器运行平台 platform 与架构 architecture，不替代 CPU/DevKit 版本记录 |
+| error | 启动或进程管理失败的人类可读原因，无错误时为 null；失败时应优先检查 |
 | command | 实际执行的程序及参数数组 |
 | target | pid 或 cpus，保留输入范围 |
 | scope | user / kernel / all |
 | duration_seconds | 请求的采集时长 |
 | profile | DevKit profile 选择 |
 | started_at / ended_at | UTC ISO 时间，包含工具启动开销 |
-| exit_code / signal | 工具进程结果 |
+| exit_code / signal | 工具进程退出码与终止信号；信号退出时 code 可为 null，spawn 失败时可为负的 libuv errno（例如 ENOENT 为 -2），并非工具业务退出码，应结合 error 判断 |
 | timed_out | 是否触发采集器时限 |
-| status | collected / failed / timeout |
+| interrupted_by | 操作者发送的 SIGINT / SIGTERM；未中断时为 null，与子进程最终终止信号不同 |
+| status | collected / failed / timeout / interrupted |
 | files | stdout 与 stderr 的 SHA-256 |
 | context | 可选的人类描述，不替代环境记录 |
 
 collected 仅表示工具以零退出，不保证数据有效。
+收到 SIGINT/SIGTERM 后终止本次采集进程组，等待采集进程退出再写入 manifest。
+一秒内未退出时升级 SIGKILL；原始输出和中断状态仍保留。
+SIGKILL、断电等不可捕获终止不保证生成 manifest。
 实际采样窗口可能短于进程运行区间，优先使用原始报告窗口。
 manifest 哈希用于一致性检查，不是来源真实性认证。
 

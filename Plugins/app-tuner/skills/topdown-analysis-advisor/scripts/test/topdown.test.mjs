@@ -69,6 +69,52 @@ test('missing values stay null', () => {
   assert.equal(result.blocks[0].metrics.find(row => row.name === 'Backend Bound').value, null);
 });
 
+test('all missing metrics are unusable without losing original rows', () => {
+  const text = `Top-down metrics of the system:
+  Top-down Metrics                        Bound(%)
+  Bad Speculation                         N/A
+  Frontend Bound                          N/A
+  Retiring                                N/A
+  Backend Bound                           N/A`;
+  const result = parseText(text);
+  assert.equal(result.status, 'unusable');
+  assert.equal(result.blocks[0].metrics.length, 4);
+  assert.ok(result.blocks[0].metrics.every(row => row.value === null && row.raw));
+  assert.ok(result.blocks[0].warnings.length);
+  assert.equal(parseText(text.replace('Retiring                                N/A',
+    'Retiring                                0')).status, 'needs_review');
+});
+
+test('explicit empty targets are rejected even when the other target is valid', () => {
+  for (const target of [
+    { pid: '', cpus: '0-3' }, { cpus: '', pid: '123' },
+    { pid: ' ' }, { cpus: '' },
+  ]) assert.throws(() => collectionArgs({ duration: '1', ...target }), /must not be empty/);
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test(`interruption ${signal} waits for exit, records state and removes handlers`, async t => {
+    const directory = temporary(t);
+    const before = process.listenerCount(signal);
+    const pending = capture(process.execPath, ['-e', 'setInterval(()=>{}, 1000)'], directory, 5000);
+    process.emit(signal);
+    const result = await pending;
+    assert.equal(result.status, 'interrupted');
+    assert.equal(result.interrupted_by, signal);
+    assert.equal(result.timed_out, false);
+    assert.equal(process.listenerCount(signal), before);
+    writeNewJson(path.join(directory, 'manifest.json'), result);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'))).status, 'interrupted');
+  });
+}
+
+test('evaluation queries use the repository object convention', () => {
+  const data = JSON.parse(fs.readFileSync(new URL('../../evals/eval_queries.json', import.meta.url)));
+  assert.equal(data.skill_name, 'topdown-analysis-advisor');
+  assert.equal(data.queries.length, 8);
+  assert.ok(data.queries.every(row => row.id && row.query && row.expected));
+});
+
 test('unknown format does not produce plausible percentages', () => {
   assert.equal(parseText('frontend_bound 0.3\nbackend_bound 0.7').status, 'unusable');
   assert.equal(parseText('').blocks.length, 0);

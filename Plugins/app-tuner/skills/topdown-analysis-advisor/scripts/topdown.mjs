@@ -169,7 +169,8 @@ export function parseText(text, source = {}) {
   });
   if (!blocks.length) issue(warnings, 'no_supported_table', null,
     'No supported DevKit table found; retain original and inspect manually');
-  const count = blocks.reduce((sum, entry) => sum + entry.metrics.length, 0);
+  const count = blocks.reduce((sum, entry) => sum + entry.metrics.filter(
+    row => Number.isFinite(row.value) && row.value >= 0 && row.value <= 100).length, 0);
   const hasWarnings = warnings.length || blocks.some(entry => entry.warnings.length);
   return {
     schema_version: '1.0',
@@ -207,13 +208,21 @@ function positive(text, label, max) {
 }
 
 export function collectionArgs(options) {
+  for (const key of ['pid', 'cpus']) {
+    if (Object.hasOwn(options, key) &&
+        (typeof options[key] !== 'string' || !options[key].trim())) {
+      throw new Error(`--${key} must not be empty`);
+    }
+  }
+  const hasPid = Object.hasOwn(options, 'pid');
+  const hasCpus = Object.hasOwn(options, 'cpus');
   const duration = positive(options.duration, 'duration', 3600);
   const interval = positive(options.interval ?? '1', 'interval', duration);
   const level = options.level ?? '1';
   if (!/^[0-6]$/.test(level)) throw new Error('level must be 0..6');
   const scope = options.scope ?? 'all';
   if (!['all', 'user', 'kernel'].includes(scope)) throw new Error('Invalid scope');
-  if (Boolean(options.pid) === Boolean(options.cpus)) {
+  if (hasPid === hasCpus) {
     throw new Error('Specify exactly one of --pid or --cpus');
   }
   if (options.pid && !/^[1-9]\d*(?:,[1-9]\d*)*$/.test(options.pid)) {
@@ -229,7 +238,7 @@ export function collectionArgs(options) {
     }
   }
   return ['tuner', 'top-down', '-d', String(duration), '-i', String(interval),
-    '-L', level, '-r', scope, options.pid ? '-p' : '-c', options.pid ?? options.cpus];
+    '-L', level, '-r', scope, hasPid ? '-p' : '-c', hasPid ? options.pid : options.cpus];
 }
 
 // Executable and argv are separate; no shell interpolation of user input.
@@ -258,6 +267,7 @@ export async function capture(executable, argv, directory, timeoutMs) {
     fs.closeSync(stderr);
   }
   let timedOut = false;
+  let interruptedBy = null;
   let spawnError = null;
   function stop(signal) {
     if (!child.pid) return;
@@ -269,10 +279,21 @@ export async function capture(executable, argv, directory, timeoutMs) {
     }
   }
   let forceTimer;
+  function terminate(signal) {
+    stop(signal);
+    forceTimer ??= setTimeout(() => stop('SIGKILL'), 1000);
+  }
+  function interrupt(signal) {
+    interruptedBy ??= signal;
+    terminate(signal);
+  }
+  const onInt = () => interrupt('SIGINT');
+  const onTerm = () => interrupt('SIGTERM');
+  process.on('SIGINT', onInt);
+  process.on('SIGTERM', onTerm);
   const timer = setTimeout(() => {
     timedOut = true;
-    stop('SIGTERM');
-    forceTimer = setTimeout(() => stop('SIGKILL'), 1000);
+    terminate('SIGTERM');
   }, timeoutMs);
   const result = await new Promise(resolve => {
     child.once('error', error => { spawnError = error.message; });
@@ -280,16 +301,20 @@ export async function capture(executable, argv, directory, timeoutMs) {
   });
   clearTimeout(timer);
   // On Linux a child may exit before its descendants: finish the timed-out group.
-  if (timedOut) stop('SIGKILL');
+  if (timedOut || interruptedBy) stop('SIGKILL');
   clearTimeout(forceTimer);
+  process.removeListener('SIGINT', onInt);
+  process.removeListener('SIGTERM', onTerm);
   return {
     started_at: started,
     ended_at: new Date().toISOString(),
     exit_code: result.code,
     signal: result.signal,
     timed_out: timedOut,
+    interrupted_by: interruptedBy,
     error: spawnError,
-    status: timedOut ? 'timeout' : spawnError || result.code !== 0 ? 'failed' : 'collected',
+    status: interruptedBy ? 'interrupted' : timedOut ? 'timeout' :
+      spawnError || result.code !== 0 ? 'failed' : 'collected',
   };
 }
 

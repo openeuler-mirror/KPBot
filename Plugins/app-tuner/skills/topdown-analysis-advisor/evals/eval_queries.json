@@ -1,42 +1,45 @@
-[
-  {
-    "id": "online-pid",
-    "query": "采集鲲鹏服务器 PID 1234 的 topdown，解释瓶颈并给建议，不改代码。",
-    "expected": "核对目标和工具，有限时采集，保留原件，分析并交付待验证建议，不执行优化。"
-  },
-  {
-    "id": "offline-no-platform",
-    "query": "这是别人发来的 topdown 输出，不知道机器型号，帮我分析。",
-    "expected": "离线解析并标记平台与公式未知，不把命名映射成跨平台确定结论。"
-  },
-  {
-    "id": "missing-pmu",
-    "query": "容器里 PMU 不可用，输出全零，告诉我瓶颈是什么。",
-    "expected": "说明无有效证据，提供补采或宿主机方案，不以零值判定无瓶颈。"
-  },
-  {
-    "id": "memory-ambiguity",
-    "query": "Memory Bound 很高，是不是加预取就行？",
-    "expected": "区分延迟、带宽、TLB 与访问位置，明确预取前提及验证，不承诺收益。"
-  },
-  {
-    "id": "mixed-windows",
-    "query": "这里有六个不同时间段的表，请给一个总体瓶颈结论。",
-    "expected": "保留各窗口，检查业务阶段，不能无依据简单平均或默认最后表为总表。"
-  },
-  {
-    "id": "counter-only",
-    "query": "只有 L1I miss 和 LLC miss 摘要，帮我生成四大类。",
-    "expected": "拒绝补造四大类，说明可解释范围并提出补采。"
-  },
-  {
-    "id": "before-after",
-    "query": "优化后 Memory Bound 降低 10 个百分点，能否宣布提速？",
-    "expected": "检查可比性、业务指标与绝对成本，区分局部指标变化和端到端收益。"
-  },
-  {
-    "id": "dependency-missing",
-    "query": "独立安装了这个 skill，没有 kptools-devkit，也没有报告 skill。",
-    "expected": "可离线分析并用本地模板交付；在线明确依赖缺口，不虚构工具路径。"
-  }
-]
+{
+  "skill_name": "topdown-analysis-advisor",
+  "queries": [
+    {
+      "id": "online-pid",
+      "query": "采集鲲鹏服务器 PID 1234 的 topdown，解释瓶颈并给建议，不改代码。",
+      "expected": "核对目标和工具，有限时采集，保留原件，分析并交付待验证建议，不执行优化。"
+    },
+    {
+      "id": "offline-no-platform",
+      "query": "这是别人发来的 topdown 输出，不知道机器型号，帮我分析。",
+      "expected": "离线解析并标记平台与公式未知，不把命名映射成跨平台确定结论。"
+    },
+    {
+      "id": "missing-pmu",
+      "query": "容器里 PMU 不可用，输出全零，告诉我瓶颈是什么。",
+      "expected": "说明无有效证据，提供补采或宿主机方案，不以零值判定无瓶颈。"
+    },
+    {
+      "id": "memory-ambiguity",
+      "query": "Memory Bound 很高，是不是加预取就行？",
+      "expected": "区分延迟、带宽、TLB 与访问位置，明确预取前提及验证，不承诺收益。"
+    },
+    {
+      "id": "mixed-windows",
+      "query": "这里有六个不同时间段的表，请给一个总体瓶颈结论。",
+      "expected": "保留各窗口，检查业务阶段，不能无依据简单平均或默认最后表为总表。"
+    },
+    {
+      "id": "counter-only",
+      "query": "只有 L1I miss 和 LLC miss 摘要，帮我生成四大类。",
+      "expected": "拒绝补造四大类，说明可解释范围并提出补采。"
+    },
+    {
+      "id": "before-after",
+      "query": "优化后 Memory Bound 降低 10 个百分点，能否宣布提速？",
+      "expected": "检查可比性、业务指标与绝对成本，区分局部指标变化和端到端收益。"
+    },
+    {
+      "id": "dependency-missing",
+      "query": "独立安装了这个 skill，没有 kptools-devkit，也没有报告 skill。",
+      "expected": "可离线分析并用本地模板交付；在线明确依赖缺口，不虚构工具路径。"
+    }
+  ]
+}
