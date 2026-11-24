@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# mock pidstat — AM/PM locale 表头 + 多词进程名。
+# 看守点：detect_bottleneck.sh 必须按表头定位 %CPU 列（8.00）；
+# 固定 $(NF-6) 在此格式下指向 %guest（0.00），单词命令时指向 %usr（5.00）。
+echo "Linux mock (mock) 11/23/2026 _aarch64_ (4 CPU)"
+echo ""
+echo "09:45:20 AM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command"
+echo "09:45:21 AM     0      4242     5.00     3.00    0.00    0.00     8.00     0  mock proc name"
+echo "Average:        0      4242     5.00     3.00    0.00    0.00     8.00     0  mock proc name"

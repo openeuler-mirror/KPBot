@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# mock perf stat — 供 collect_memory_evidence.sh 消费。
+# cache-miss 率 = 2312148269 / 105169642811 ≈ 2.20%。
+cat <<'EOF'
+
+ Performance counter stats for 'system wide':
+
+       2,312,148,269      cache-misses                     #    2.20% of all cache refs
+     105,169,642,811      cache-references
+
+       1.003285337 seconds time elapsed
+EOF

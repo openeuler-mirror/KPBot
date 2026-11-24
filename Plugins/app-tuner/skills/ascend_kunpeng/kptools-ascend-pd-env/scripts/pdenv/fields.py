@@ -68,9 +68,7 @@ def unreliable_categories(payload, packages_ok):
 
     跳过（skip）表示这项在当前环境不适用，不是失败，不计入。
     """
-    status = payload.get('collection_status') or {}
-    broken = set(status.get('failed') or {})
-    broken.update(status.get('never_started') or [])
+    broken = failed_probe_items(payload.get('collection_status') or {})
     out = set()
     for item, categories in CATEGORY_SOURCE_ITEMS.items():
         if item in broken:
@@ -78,6 +76,10 @@ def unreliable_categories(payload, packages_ok):
     if not packages_ok:
         out.update((CATEGORY_CORE, CATEGORY_OTHER))
     return out
+
+
+def failed_probe_items(status):
+    return set(status.get('failed') or {}) | set(status.get('never_started') or [])
 
 
 def is_perf_relevant(category, name):
@@ -353,6 +355,7 @@ def build_entry(label, bundle, container):
         'packages_ok': packages_ok,
         'profile_source': profile.get('environment_source') or MISSING,
         'unreliable_categories': unreliable_categories(payload, packages_ok),
+        'cgroup_unavailable': 'cgroup' in failed_probe_items(status),
         'items': {},
     }
     if error:

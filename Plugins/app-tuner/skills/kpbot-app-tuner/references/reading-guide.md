@@ -41,7 +41,7 @@ skills/kpbot-app-tuner/
     accelerator-optimization/SKILL.md
     hardware-upgrade-analysis/SKILL.md
     other-optimization/SKILL.md
-    io-memory-network-bottleneck-analysis/SKILL.md
+    io-optimization/SKILL.md
     database-workload-analysis/SKILL.md
   scripts/                 ← 辅助脚本（环境备份、瓶颈检测等）
   agents/
