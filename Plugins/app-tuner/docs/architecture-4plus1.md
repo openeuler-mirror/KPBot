@@ -140,7 +140,7 @@ kpbot-app-tuner 4+1 视图
   │    (采集 / 检查 / 任务包 / 报告)   │
   └──► subskills ─────────────────────┤
        │                              │
-       ├── io-memory-network-bottleneck-analysis
+       ├── io-optimization
         ├── cpu-affinity-optimization ──► scripts/ (诊断+策略+验证+回滚)
         ├── os-optimization
         ├── bios-optimization
@@ -248,7 +248,7 @@ kpbot-app-tuner 4+1 视图
 
 | 子 skill | 职责 | 特殊边界 |
 |---|---|---|
-| `io-memory-network-bottleneck-analysis` | 判断网络、磁盘、内存、CPU 等瓶颈并输出统一分类 | 性能采集层，不直接实施优化 |
+| `io-optimization` | 判断磁盘、内存、CPU 等瓶颈并输出统一分类；网络仅轻量判定并路由 | 预筛与专项证据采集层；系统参数候选动作由 os-optimization 唯一产出 |
 | `cpu-affinity-optimization` | 绑核、NUMA、内存绑定、线程 CPU 均衡、中断冲突 | 内置 scripts/ 诊断+策略+验证+回滚 |
 | `os-optimization` | Kernel、THP、HugePages、irqbalance、sysctl 等建议 | 区分在线、服务重启和系统重启动作 |
 | `bios-optimization` | Power Profile、SMT、C-State、NUMA BIOS 配置建议 | 默认只输出人工确认建议 |
@@ -307,7 +307,7 @@ skills/kpbot-app-tuner/   # [唯一主源]
     microservice-go-syncpool-optimization/
     cpu-affinity-optimization/
     database-workload-analysis/
-    io-memory-network-bottleneck-analysis/
+    io-optimization/
     network-optimization/
     performance-library-selection/
 

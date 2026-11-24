@@ -30,7 +30,7 @@ def bundle_label(source):
     return name or 'bundle'
 
 
-def load_entries(sources, workdir, problems, failed=None):
+def load_entries(sources, workdir, problems, failed=None, require_process_args=False):
     """加载所有采集包；单个包失败只记录问题，不中断。
 
     每个采集对象（容器）成为一列，列名就是容器名；两个包里有同名容器时，
@@ -71,6 +71,8 @@ def load_entries(sources, workdir, problems, failed=None):
         used.add(label)
         try:
             entry = fields.build_entry(label, data, container)
+            if require_process_args:
+                require_observed_args(entry, container['inventory'] or {})
         except Exception as e:      # 解析任何一份采集都不应拖垮整体
             problems.append('%s 解析失败，已跳过：%s: %s' % (label, type(e).__name__, e))
             continue
@@ -80,6 +82,24 @@ def load_entries(sources, workdir, problems, failed=None):
                             % (label, entry['error']))
         entries.append(entry)
     return entries
+
+
+def require_observed_args(entry, inventory):
+    """D history needs an observed process on both sides, not just Docker defaults."""
+    status = inventory.get('collection_status') or {}
+    process = fields.pick_serving_process(inventory) or {}
+    argv = process.get('args') or []
+    identity = ' '.join([str(process.get('comm') or '')] + [str(arg) for arg in argv]).lower()
+    if (any('processes' in (status.get(key) or ()) for key in
+            ('failed', 'skipped', 'never_started')) or len(argv) < 2
+            or fields._is_shell_wrapper(process)
+            or not any(name in identity for name in ('vllm', 'enginecore'))):
+        items = entry['items']
+        for key in list(items):
+            if key[0] == fields.CATEGORY_ARGS:
+                del items[key]
+        items[fields.CATEGORY_ARGS, '进程命令(完整)'] = fields.FAILED
+        entry['unreliable_categories'].add(fields.CATEGORY_ARGS)
 
 
 def run(args):
@@ -101,7 +121,8 @@ def run(args):
     failed = []
     generated_at = dt.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %z')
     with tempfile.TemporaryDirectory(prefix='pdenv_') as tmp:
-        entries = load_entries(args.sources, pathlib.Path(tmp), problems, failed)
+        entries = load_entries(args.sources, pathlib.Path(tmp), problems, failed,
+                               require_process_args=getattr(args, 'require_process_args', False))
         # 先输出，保证失败提示排在成功汇总之前
         if failed:
             print('有 %d 个采集包没有读进来：' % len(failed), file=sys.stderr)
@@ -173,6 +194,8 @@ def main(argv=None):
     parser.add_argument('sources', nargs='+', metavar='采集包',
                         help='采集目录或 .tar.gz，至少两个')
     parser.add_argument('--out', required=True, metavar='目录', help='报告输出目录')
+    parser.add_argument('--require-process-args', action='store_true',
+                        help='任一侧没有实际服务进程参数时，不计为启动参数变化')
     args = parser.parse_args(argv)
     return run(args)
 

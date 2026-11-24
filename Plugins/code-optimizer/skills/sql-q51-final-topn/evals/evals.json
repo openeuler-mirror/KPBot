@@ -1,0 +1,53 @@
+{
+  "skill_name": "sql-q51-final-topn",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "offset-needs-k-plus-m",
+      "prompt": "两个分区是 [1,2,3]、[4,5,6]，LIMIT 2 OFFSET 2。我打算各取局部 2 条再合并。",
+      "expected_output": "局部 2 会丢掉 3 而错取 [4,5]；需局部保留 K+M=4，再全局得到 [3,4]，否则回退。",
+      "files": [],
+      "assertions": [
+        "明确 K+M",
+        "给出正确结果3和4",
+        "未支持时回退"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "null-direction-and-ties",
+      "prompt": "排序是日期 DESC NULLS FIRST。我直接 reverse 一个 ASC NULLS FIRST 的结果，并把 WITH TIES 当 LIMIT K。",
+      "expected_output": "整体反转也反转 NULL 位置，应保持各字段独立方向和 NULL 规则。WITH TIES 可超过 K，普通局部截断不够，使用支持路径或回退。",
+      "files": [],
+      "assertions": [
+        "保持独立 NULL 规则",
+        "识别 WITH TIES",
+        "不随意添加稳定排序键"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "limit-before-cumulative-filter",
+      "prompt": "为了省内存，先取每商品最早的 100 行，再算累计 MAX 和 web_cumulative > store_cumulative。",
+      "expected_output": "不能穿过窗口或比较提前截断。它改变累计输入或选中最终被过滤的行，候选放在完整窗口和过滤之后，并保留全部输出列。",
+      "files": [],
+      "assertions": [
+        "固定末端边界",
+        "指出结果变化反例",
+        "保留原输出列"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "actual-merge-work",
+      "prompt": "查询已经命中 TopN，最终返回100行。我能说合并阶段只处理100行，直接据此报告倍数吗？",
+      "expected_output": "最终行数不等于合并输入。分别计分区过滤后行、局部候选、合并字节和最终行，核对已有路径，再配对测末端与完整查询。",
+      "files": [],
+      "assertions": [
+        "区分输出与合并输入",
+        "检查基线已命中",
+        "不从行数推断时间"
+      ]
+    }
+  ]
+}

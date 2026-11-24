@@ -1,0 +1,23 @@
+{
+  "skill_name": "vllm-eplb-analysis",
+  "queries": [
+    {"id": "AQ-01", "prompt": "P 节点 TTFT 长尾很严重，怀疑是 MoE 专家热点，帮我判断要不要开 EPLB", "should_trigger": true, "note": "核心场景"},
+    {"id": "AQ-02", "prompt": "balancedness 0.93 到底算不算负载不均衡", "should_trigger": true, "note": "阈值解释"},
+    {"id": "AQ-03", "prompt": "已经开了 dynamic EPLB，balancedness 一直 0.92，需要加冗余专家吗", "should_trigger": true, "note": "复核摆放"},
+    {"id": "AQ-04", "prompt": "EPLB 开了以后压测没变快，是不是本来就不均衡", "should_trigger": true, "note": "归因"},
+    {"id": "AQ-05", "prompt": "怎么从 vllm metrics 看每个 rank 的排队和 TTFT 差异", "should_trigger": true, "note": "指标口径"},
+    {"id": "AQ-06", "prompt": "帮我把 prefill 日志和 /metrics 一起分析下，出个不均衡结论", "should_trigger": true, "note": "多源交叉"},
+    {"id": "AQ-07", "prompt": "专家并行负载不均，但不知道是不是它拖慢了 TTFT", "should_trigger": true, "note": "因果判别"},
+    {"id": "AQ-08", "prompt": "上线前想确认专家摆放是不是瓶颈，有没有比直接开 EPLB 更稳的办法", "should_trigger": true, "note": "force 探针"},
+    {"id": "AQ-09", "prompt": "num_requests_waiting 在 engine 之间差很多，这个是不是 EPLB 能解决的", "should_trigger": true, "note": "指标归因"},
+    {"id": "AQ-10", "prompt": "只捞到两行 balancedness，能判断要不要开 EPLB 吗", "should_trigger": true, "note": "inconclusive"},
+    {"id": "NQ-01", "prompt": "帮我把 run_dp_template.sh 切成 dynamic EPLB，冗余专家 16", "should_trigger": false, "note": "用户已确认要开，直接改模板；本技能只做诊断"},
+    {"id": "NQ-02", "prompt": "帮我造一份不均衡压测数据集，验证 EPLB 收益", "should_trigger": false, "note": "数据准备与压测不在本技能范围"},
+    {"id": "NQ-03", "prompt": "vLLM 服务 P99 抖动，帮我抓 profiling 看算子耗时", "should_trigger": false, "note": "routes to profiling 采集"},
+    {"id": "NQ-04", "prompt": "模型精度掉了，对比优化前后准确率", "should_trigger": false, "note": "routes to model-precision-analysis"},
+    {"id": "NQ-05", "prompt": "allreduce 很慢，查下 RoCE 错包和网口 link", "should_trigger": false, "note": "routes to 集群网络采集"},
+    {"id": "NQ-06", "prompt": "专家并行度设多少合适，TP=8 还是 DP=8", "should_trigger": false, "note": "EP 拓扑配置"},
+    {"id": "NQ-07", "prompt": "MoE 的 router 为什么总是选 top-k=8 个专家", "should_trigger": false, "note": "原理问答"},
+    {"id": "NQ-08", "prompt": "vLLM 分词后端换成 fastokens，顺便开段缓存", "should_trigger": false, "note": "routes to fastokens 迁移"}
+  ]
+}

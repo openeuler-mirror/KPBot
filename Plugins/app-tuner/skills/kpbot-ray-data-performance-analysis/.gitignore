@@ -1,0 +1,4 @@
+/results/
+/experiment/
+/cases/*/results/
+__pycache__/

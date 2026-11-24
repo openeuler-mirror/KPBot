@@ -11,7 +11,7 @@
 
 本域后续迁入（逐个独立 PR）：
 
-- code-optimizer 侧：`dpdk-optimization`（数据面转发热路径代码的五阶段优化）
+- code-optimizer 侧：`go-gc-bottleneck-diagnosis`（Go GC 瓶颈诊断：gctrace + GOMEMLIMIT 证伪，堆峰值/next-GC goal/GOGC/STW 四判据，注入生效验证与透传坑）、`dpdk-optimization`（数据面转发热路径代码的五阶段优化）
 - app-tuner 侧（`Plugins/app-tuner/skills/microservice/`）：`nginx-optimization`（L1 环境 / L2 配置 / L3 鲲鹏加速库分层调优）、
   `kptools-dpdk-tuning`（DPDK 应用诊断 + 顾问双模式）
 

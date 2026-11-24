@@ -1,0 +1,79 @@
+name: topn-contract
+skill: sql-q51-final-topn
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: local_merge_equivalent
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: limit_before_filter_changes_result
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: sort_nulls_first_retained
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: null_and_direction_variants
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: different_k_equivalent
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: offset_requires_extra_candidates
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: with_ties_fallback_preserves_peers
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unknown_local_capability_falls_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: candidate_row_count_correct
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: local_limit_before_filter_rejected
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: matrix_cases
+    expect: 72
+  - type: json_field
+    file: results/result.json
+    field: qualified_rows
+    expect: 330
+  - type: json_field
+    file: results/result.json
+    field: local_candidate_rows
+    expect: 300
+  - type: json_field
+    file: results/result.json
+    field: final_rows
+    expect: 100
+  - type: json_field
+    file: results/result.json
+    field: payload_columns_preserved
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: matrix_mismatch_count
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: matrix_mismatches
+    expect: []

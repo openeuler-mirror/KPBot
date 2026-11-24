@@ -1,0 +1,49 @@
+{
+  "skill_name": "flink-velox-build-tools-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-missing-ninja",
+      "prompt": "构建报 ninja: command not found，缺什么构建工具",
+      "should_trigger": true,
+      "note": "判据类触发词：command not found、缺什么构建工具"
+    },
+    {
+      "id": "q-build-tools",
+      "prompt": "构建工具齐不齐，ninja ccache patchelf 都在吗",
+      "should_trigger": true,
+      "note": "场景入口类触发词：构建工具、build tools"
+    },
+    {
+      "id": "q-ninja-version",
+      "prompt": "ninja 和 ccache 的版本是多少",
+      "should_trigger": true,
+      "note": "版本查询类触发词：ninja 版本、ccache 版本"
+    },
+    {
+      "id": "q-toolchain",
+      "prompt": "cmake、gcc、mvn 装了没",
+      "should_trigger": false,
+      "note": "编译工具链 → flink-velox-toolchain-check"
+    },
+    {
+      "id": "q-cpp-deps",
+      "prompt": "re2 和 zstd 的头文件在不在",
+      "should_trigger": false,
+      "note": "C++ 库头文件 → flink-velox-cpp-deps-check"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-install",
+      "prompt": "把缺的 patchelf 装上",
+      "should_trigger": false,
+      "note": "装包 → 同族安装类 skill；本 skill 只读"
+    }
+  ]
+}

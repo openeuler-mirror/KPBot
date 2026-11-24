@@ -1,0 +1,2 @@
+INFO 11-14 22:13:20 [TTFT_DEBUG][Tokenizer] req=matching render=0.001 tokenize=0.002 tokens=8 chars=30
+INFO 11-14 22:13:21 [TTFT_DEBUG][Tokenizer] render=0.004 tokenize=0.005 tokens=8 chars=35

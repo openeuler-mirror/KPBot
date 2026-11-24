@@ -96,6 +96,8 @@ P/D 分离部署里 Prefill 和 Decode 跑在不同容器、经常在不同机�
 采集包是自包含的：一个目录 + 一个同名 `.tar.gz`，拷到任何有 python3 的机器上都能读。
 
 **跨机器**（A、B 两台都有容器）：
+只按角色留档时，先看 [P/D 环境采集](../subskills/collect-environment/SKILL.md)，
+在指定宿主机固定 Docker 端点并分别记录 P、D 的采集状态。
 
 ```bash
 # 在 A 上

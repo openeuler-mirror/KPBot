@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""Generate a nested timeline SVG from CubeSandbox profile results.
+"""Generate a nested timeline SVG from CubeSandbox analysis results.
 
-Reads stage-latency data from profile-results-*.xlsx (or stage-latency.csv)
-and draws a Gantt-style timeline using the EXACT stage_name from the data.
-
-Positions are computed recursively from the stage topology: each child bar is
-scaled to fit inside its parent's bar, so containment always holds visually
-even when avg durations don't compose across components.
+The split path reads analysis.json plus stage-latency.csv directly and does not
+import Excel libraries. The historical XLSX positional input remains supported.
 
 Usage:
+    python gen_timeline.py --analysis analysis.json --csv stage-latency.csv \
+        --output timeline.svg [--metadata timeline-render.json]
     python gen_timeline.py [path/to/profile-results.xlsx] [output.svg]
 """
 
+import argparse
+import csv
+import html
+import json
 import math
 import sys
 from pathlib import Path
-from openpyxl import load_workbook
 
 # ── SVG constants ─────────────────────────────────────────
 BAR_H, GAP = 24, 10
@@ -33,8 +34,28 @@ COMPONENT_COLORS = {
 }
 
 # ── data loading ──────────────────────────────────────────
+def validate_disjoint_paths(entries):
+    """Reject every input/output alias before creating or writing a file."""
+    seen = {}
+    for label, path in entries:
+        candidate = Path(path)
+        try:
+            resolved = candidate.resolve()
+        except (OSError, RuntimeError) as error:
+            raise ValueError(f"cannot resolve {label} path {candidate}: {error}") from error
+        if resolved in seen:
+            other_label, other_path = seen[resolved]
+            raise ValueError(
+                f"path collision: {other_label} ({other_path}) and {label} ({candidate}) "
+                f"both resolve to {resolved}; all inputs and outputs must be distinct"
+            )
+        seen[resolved] = (label, candidate)
+
+
 def load_data(excel_path):
-    """Return {stage_id: {name, component, avg_ms, parent_id, depth, notes}}."""
+    """Legacy XLSX loader; openpyxl is imported only on this path."""
+    from openpyxl import load_workbook
+
     wb = load_workbook(excel_path)
     ws = wb["Stage Latency"]
     stages = {}
@@ -50,6 +71,52 @@ def load_data(excel_path):
                 "notes": rest[-1] if rest else "",
             }
     return stages
+
+
+def load_analysis_csv(analysis_path, csv_path):
+    """Load and validate the split JSON/CSV contract without Excel."""
+    try:
+        analysis = json.loads(Path(analysis_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid analysis JSON: {error}") from error
+    if not isinstance(analysis, dict) or not isinstance(analysis.get("benchmark"), dict):
+        raise ValueError("invalid analysis JSON: benchmark object is required")
+
+    required = {"depth", "component", "stage_id", "stage_name", "parent_stage_id", "avg_ms"}
+    try:
+        handle = Path(csv_path).open(encoding="utf-8", newline="")
+    except OSError as error:
+        raise ValueError(f"invalid stage CSV: {error}") from error
+    stages = {}
+    with handle:
+        reader = csv.DictReader(handle)
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"invalid stage CSV: missing columns: {', '.join(sorted(missing))}")
+        for line_number, row in enumerate(reader, 2):
+            stage_id = (row.get("stage_id") or "").strip()
+            if not stage_id:
+                raise ValueError(f"invalid stage CSV line {line_number}: stage_id is empty")
+            if stage_id in stages:
+                raise ValueError(f"invalid stage CSV line {line_number}: duplicate stage {stage_id}")
+            try:
+                avg_ms = float(row["avg_ms"]) if row["avg_ms"] else 0.0
+                depth = int(row["depth"] or 0)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"invalid stage CSV line {line_number}: non-numeric timing/depth") from error
+            if not math.isfinite(avg_ms) or avg_ms < 0 or depth < 0:
+                raise ValueError(f"invalid stage CSV line {line_number}: timing/depth out of range")
+            stages[stage_id] = {
+                "stage_name": row.get("stage_name") or stage_id,
+                "component": row.get("component") or "",
+                "avg_ms": round(avg_ms, 6),
+                "parent_id": row.get("parent_stage_id") or "",
+                "depth": depth,
+                "notes": row.get("notes") or "",
+            }
+    if not stages:
+        raise ValueError("invalid stage CSV: no stages")
+    return analysis, stages
 
 # ── layout definition ─────────────────────────────────────
 # Each entry: (stage_id, est_offset, kind)
@@ -181,7 +248,11 @@ def render_svg(bars, output_path):
     LABEL_BASE = 6   # base x for depth=0 labels
 
     for i, b in enumerate(bars):
-        label, comp, kind, note, depth = b["label"], b["comp"], b["kind"], b["note"], b["depth"]
+        label = html.escape(str(b["label"]))
+        comp = html.escape(str(b["comp"]))
+        kind = b["kind"]
+        note = html.escape(str(b["note"]))
+        depth = b["depth"]
         y = TOP + i * (BAR_H + GAP)
         bx = x_for(b["x"])
         bw = w_for(b["w"])
@@ -249,29 +320,102 @@ def render_svg(bars, output_path):
         f'子阶段宽度按父阶段窗口等比缩放，标签为真实 avg_ms</text>')
 
     add('</svg>')
-    Path(output_path).write_text("\n".join(lines), encoding="utf-8")
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Saved: {output_path}  ({len(bars)} stages, axis 0-{total_max_ms}ms)")
+    return total_max_ms
 
 # ── main ─────────────────────────────────────────────────
-if __name__ == "__main__":
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv in (["-h"], ["--help"]):
+        print(__doc__)
+        return 0
     script_dir = Path(__file__).resolve().parent
+    analysis = None
+    metadata_path = None
 
-    if len(sys.argv) > 1:
-        xlsx = Path(sys.argv[1])
+    if "--analysis" in argv or "--csv" in argv:
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--analysis", required=True)
+        parser.add_argument("--csv", required=True)
+        parser.add_argument("--output", required=True)
+        parser.add_argument("--metadata")
+        args = parser.parse_args(argv)
+        source = Path(args.csv)
+        out = Path(args.output)
+        metadata_path = Path(args.metadata) if args.metadata else None
+        entries = [
+            ("analysis input", Path(args.analysis)),
+            ("stage CSV input", source),
+            ("SVG output", out),
+        ]
+        if metadata_path is not None:
+            entries.append(("metadata output", metadata_path))
+        try:
+            validate_disjoint_paths(entries)
+            analysis, stages = load_analysis_csv(args.analysis, args.csv)
+        except ValueError as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 2
     else:
-        # Auto-detect
-        candidates = sorted(script_dir.glob("profile-results-*.xlsx"))
-        xlsx = candidates[0] if candidates else script_dir / "profile-results-90.90-v2.xlsx"
-
-    if not xlsx.exists():
-        print(f"ERROR: {xlsx} not found")
-        sys.exit(1)
-
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else script_dir / "timeline.svg"
-
-    stages = load_data(str(xlsx))
-    print(f"Loaded {len(stages)} stages from {xlsx.name}")
+        if len(argv) > 2:
+            print("Usage: gen_timeline.py [RESULT.xlsx] [OUTPUT.svg]", file=sys.stderr)
+            return 2
+        if argv:
+            source = Path(argv[0])
+        else:
+            candidates = sorted(script_dir.glob("profile-results-*.xlsx"))
+            source = candidates[0] if candidates else script_dir / "profile-results-90.90-v2.xlsx"
+        if not source.exists():
+            print(f"ERROR: {source} not found", file=sys.stderr)
+            return 2
+        if source.suffix.lower() == ".csv":
+            print("ERROR: split CSV input requires --analysis, --csv, and --output", file=sys.stderr)
+            return 2
+        out = Path(argv[1]) if len(argv) > 1 else script_dir / "timeline.svg"
+        try:
+            validate_disjoint_paths([("Excel input", source), ("SVG output", out)])
+        except ValueError as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 2
+        try:
+            stages = load_data(str(source))
+        except Exception as error:
+            print(f"ERROR: invalid Excel input: {error}", file=sys.stderr)
+            return 2
 
     bars = build_bars(stages)
+    if not bars:
+        print("ERROR: no renderable LAYOUT stages in input", file=sys.stderr)
+        return 2
+    if not any(bar["dur"] > 0 for bar in bars):
+        print("ERROR: all renderable stage durations are zero", file=sys.stderr)
+        return 2
     compute_positions(bars, stages)
-    render_svg(bars, str(out))
+    axis_max_ms = render_svg(bars, str(out))
+    print(f"Loaded {len(stages)} stages from {source.name}")
+
+    if metadata_path is not None:
+        metadata = {
+            "schema_version": 1,
+            "status": "success",
+            "source_format": "analysis-json+stage-csv",
+            "analysis_json": str(Path(args.analysis).resolve()),
+            "stage_latency_csv": str(source.resolve()),
+            "timeline_svg": str(out.resolve()),
+            "case": analysis.get("case", "unknown"),
+            "correlated_instances": analysis.get("correlated_instances", 0),
+            "stage_count": len(stages),
+            "rendered_bar_count": len(bars),
+            "axis_max_ms": axis_max_ms,
+            "excel_dependency": False,
+        }
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

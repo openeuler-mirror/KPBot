@@ -1,0 +1,91 @@
+{
+  "skill_name": "lance-rle-sve-optimize",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "entry-versus-batch",
+      "prompt": "合成结果中，自建 u64、4096值、fixed32 的直接 RLE 入口快 1.24 倍，官方 int64、8192值 的 decode_batch 快 1.004 倍。能把前者当官方 RLE 成绩吗？",
+      "expected_output": "不能；输入和计时层次不同，分别报告直接完整入口、展开内核和批次。",
+      "files": [],
+      "assertions": [
+        "标为自建用例",
+        "不把完整入口改称纯展开",
+        "不相减不同入口得到精确外层时间"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "prefix-on-error",
+      "prompt": "C SVE 只在成功时写 initialized，前两个run写完后第三个无效并报错，Rust信任返回前缀。请审查协议。",
+      "expected_output": "错误返回也要准确发布已写前缀；验证状态和长度，结果成功且写满后才暴露。",
+      "files": [],
+      "assertions": [
+        "覆盖部分初始化错误出口",
+        "成功和预期长度双重核对",
+        "不删除检查换收益"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "size-does-not-predict-gain",
+      "prompt": "合成矩阵显示小 fixed32 变快、大 fixed32 变慢、大 mixed 变快。只解释并提出下一组控制实验，不要执行。",
+      "expected_output": "报告规模和分布交互及退化，固定入口、宽度、布局等条件后分析生成指令与run分布。",
+      "files": [],
+      "assertions": [
+        "不声称越大越快",
+        "保留固定重复退化",
+        "不把u32结果外推u64",
+        "不执行benchmark"
+      ]
+    },
+    {
+      "id": 3,
+      "files": [],
+      "eval_name": "copy-output-error-contract",
+      "prompt": "u64 原生解码部分写入后报错，Rust始终保持Vec长度零，随后不读内容直接丢弃。必须建Drop guard或set_len到前缀吗？另一个成功返回称initialized超过expected，如何处理？",
+      "expected_output": "简单Copy值的零长度Vec不强制需要guard或错误set_len；超限成功是协议失败，不能发布，且返回检查不能补救原生越界。",
+      "assertions": [
+        "不强制自定义guard",
+        "设置长度前拒绝超限",
+        "不声称返回检查能防止已发生越界"
+      ]
+    },
+    {
+      "id": 4,
+      "files": [],
+      "eval_name": "sve2-vl-and-count-width",
+      "prompt": "RLE分派只检查AArch64，C使用SVE2并固定4个u64通道，U16次数按字节塞给U8接口。只测了单一向量长度的u32。请给出验收要求，不运行测试。",
+      "expected_output": "检测准确指令集，按执行线程长度计算通道，不伪装次数类型；u64、多向量长度与非SVE回退分别验证或标待办。",
+      "assertions": [
+        "AArch64或SVE不足以支持SVE2",
+        "按执行线程获取向量长度",
+        "拒绝次数宽度伪装",
+        "不外推单类型单向量长度结果"
+      ]
+    },
+    {
+      "eval_name": "strict-clamp-prefix-example",
+      "prompt": "按 run 检查、超量 run 写入前拒绝的接口：values=[7,9]、lengths=[2,4]、N=5。strict 和 clamp 的状态、initialized 与输出分别是什么？u64 的 initialized 是否为字节数？",
+      "expected_output": "strict 报错，initialized=2，已写[7,7]；clamp 成功，initialized=5，输出[7,7,9,9,9]。计数单位为元素，u64 不能写成40；失败前缀不发布为成功 Vec，先全量校验的接口可能在写前报错且前缀0。",
+      "assertions": [
+        "区分 strict 错误前缀2与 clamp成功5",
+        "明确示例前提与元素计数",
+        "失败不暴露未初始化数据"
+      ],
+      "id": 5,
+      "files": []
+    },
+    {
+      "id": 6,
+      "eval_name": "clamp-stop-after-overflow",
+      "prompt": "固定提交中 values=[7,9]、N=2。clamp 对 lengths=[3,0] 与 [2,0] 是否都成功？",
+      "expected_output": "[3,0] 截断首段后退出而成功；[2,0] 恰好写满后仍继续检查，遇零次数报错。候选保持这个错误及停止顺序，不能统一按已写满退出或全量预扫描。",
+      "files": [],
+      "assertions": [
+        "区分大于剩余量与恰好相等",
+        "保持跳过与检查后续 run 的差别",
+        "不把部分前缀当成功输出"
+      ]
+    }
+  ]
+}
