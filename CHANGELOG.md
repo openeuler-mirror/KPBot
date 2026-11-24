@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Added
+- app-tuner 新增独立平铺 `kptools-kafka-environment-check` skill：仅对现有 Kafka 安装执行有超时的只读 CLI/JDK、实时 metadata、认证配置、空专用 topic、授权声明与负载资源探针；逐项 JSON 证据区分 ready/blocked/unknown 及 absent/wrong_version/timeout/auth/error，安全文件脱敏、输出独占创建；附 probes/metrics references、tier-A 契约回归与触发评估集。
+- app-tuner 新增独立平铺 `kptools-kafka-benchmark` skill：内嵌实时前置检查，以官方 Kafka CLI 执行三条消息精确收发、独立预热和默认三轮有界 monotonic producer perf；保存原生吞吐/延迟/计数、wall timing、partition offset 增量、逐轮全量消息身份多重集校验与日志，预热不入聚合，计数或任一身份不符即失败；仅在显式授权时创建 UUID topic/随机 group 并清理确认拥有的精确资源，分别保留 workload/cleanup 状态及 RPC 模糊创建证据；附 probes/metrics references、tier-A 契约回归与触发评估集。
 - app-tuner 新增 `flink-velox-env` 检查子域（`skills/bigdata/flink-velox-env/`，DOMAIN.md 含准入判据：只读 / 单一诉求 / 自带契约）及 3 个检查 skill：`flink-velox-toolchain-check`（git cmake gcc g++ mvn，PATH 探测取版本，g++ → gcc-c++、mvn → maven）、`flink-velox-build-tools-check`（ninja ccache autoconf automake libtool flex bison python3 patchelf，ninja → ninja-build）、`flink-velox-cpp-deps-check`（两层：13 个包管理器级库按头文件在 /usr/include（含 <triplet>/ 子目录）与 /usr/local/include 探测并给 -devel 包名；源码级库清单解析自 velox checkout 自带 setup 脚本的 install_velox_deps 调用序列（去包管理器与 conda 条目、止于函数右括号），按 /usr/local 下 cmake 配置目录 / include / 头文件 / 探针二进制探测；没有 checkout 时为 skipped 不判负）；每个 skill 独立 Python 标准库脚本，JSON + 人读报告、退出码 0/1/2、唯一 next_step，只扫不改；统筹 skill `flink-velox-env-check` 与其余 6 个具体项检查子 skill 分后续 PR 提交；附各自 tier-A 契约用例（11 / 11 / 16 测试，假机器不触真机）与触发评估集
 - code-optimizer 新增 `sql-shuffle-string-codec` skill：列式 SQL 引擎 join 输出与原生 Shuffle 的字符串搬运、重建和 LZ4 候选查找优化；附 tier-A 用例 `cases/shuffle-contract` 与 3 条模型评估规格。
 - app-tuner 为 `kptools-prompt-capture` 新增八项任务技能，覆盖 proxy 检查与接入、限时采集、请求分布与会话分析、分词核验、vLLM 日志关联及汇总；仅元数据的采集窗口拒绝热更为全文或 golden，附合成数据评测。
