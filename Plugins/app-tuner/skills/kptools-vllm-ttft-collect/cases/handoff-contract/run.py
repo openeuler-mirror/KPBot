@@ -27,9 +27,9 @@ class Handoff(unittest.TestCase):
         self.assertEqual(proc.returncode, status, proc.stderr)
         return proc
 
-    def collect(self, request, status=0):
+    def collect(self, request, status=0, *, origin='existing_logs'):
         return self.cli('collect', '--log', self.log, '--request-id', request,
-                        '--origin', 'existing_logs', status=status)
+                        '--origin', origin, status=status)
 
     def test_exact_request_and_digest(self):
         for request in ('chatcmpl-fixture-7', 'cmpl-fixture-7'):
@@ -43,6 +43,16 @@ class Handoff(unittest.TestCase):
                 self.log.write_text(line + '# appended\n', encoding='utf-8')
                 result = self.cli('verify', self.receipt, '--log', self.log, status=1)
                 self.assertIn('no longer match', result.stderr)
+
+    def test_live_request_origin_survives_verification(self):
+        request = 'chatcmpl-live-fixture'
+        self.log.write_text(f'[TTFT][BREAKDOWN] req={request} steps=1 ttft=0.5\n',
+                            encoding='utf-8')
+        self.receipt.write_text(self.collect(request, origin='live_request').stdout,
+                                encoding='utf-8')
+        result = json.loads(self.cli('verify', self.receipt, '--log', self.log).stdout)
+        self.assertEqual(result['origin'], 'live_request')
+        self.assertEqual(result['request_id'], request)
 
     def test_verify_requires_explicit_log_even_when_sender_path_exists(self):
         self.log.write_text('[TTFT][BREAKDOWN] req=chatcmpl-a steps=1\n', encoding='utf-8')
@@ -64,4 +74,16 @@ class Handoff(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(Handoff)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    success = result.wasSuccessful() and result.testsRun > 0 and not result.skipped
+    results = Path(__file__).resolve().parent / 'results'
+    results.mkdir(exist_ok=True)
+    (results / 'result.json').write_text(json.dumps({
+        'success': success,
+        'tests_run': result.testsRun,
+        'failures': len(result.failures),
+        'errors': len(result.errors),
+        'skipped': len(result.skipped),
+    }, indent=2) + '\n', encoding='utf-8')
+    sys.exit(0 if success else 1)
