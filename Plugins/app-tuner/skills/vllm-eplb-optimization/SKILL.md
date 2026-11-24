@@ -100,17 +100,17 @@ EPLB 只在"专家负载确实倾斜、且这个倾斜就是瓶颈"时才有收�
 ```bash
 python3 <skill>/scripts/apply_eplb.py --template <P节点 run_dp_template.sh> --mode check    # 只读诊断
 python3 <skill>/scripts/apply_eplb.py --template <...> --mode force --dry-run                # 看 diff 不写
-python3 <skill>/scripts/apply_eplb.py --template <...> --mode dynamic
+python3 <skill>/scripts/apply_eplb.py --template <...> --mode dynamic --ep-size 16
 python3 <skill>/scripts/apply_eplb.py --template <...> --mode off
 
-# dynamic 调参（默认 16 / 1000 / 1000；--ep-size 用于校验冗余副本的整除性）
+# dynamic 调参（默认 16 / 1000 / 1000；--ep-size 为 dynamic 必填，用于校验冗余副本的整除性）
 python3 <skill>/scripts/apply_eplb.py --template <...> --mode dynamic \
     --ep-size 16 --redundant-experts 16 --window-size 1000 --step-interval 1000
 ```
 
 | 参数 | 默认 | 含义 |
 |---|---|---|
-| `--ep-size` | 未提供 | EP rank 数；提供后校验/向上取整 `--redundant-experts`，避免写入非整数倍 |
+| `--ep-size` | dynamic 必填 | EP rank 数；提供后校验/向上取整 `--redundant-experts`，避免写入非整数倍；`--mode dynamic` 未提供时直接拒绝写入 |
 | `--redundant-experts` | 16 | 冗余专家副本数。越多越能削峰，但显存与重排搬运量同步上升（比例与显存换算见下） |
 | `--window-size` | 1000 | 负载统计滑动窗口（步），决定判断"谁热"看多长的历史 |
 | `--step-interval` | 1000 | 重平衡周期（步）。压测短于这个周期就永远不触发，收益会是 0 |
@@ -130,7 +130,8 @@ physical_per_rank= (num_logical_experts + num_redundant_experts) / ep_size
 ```
 
 `num_redundant_experts` 必须是 `ep_size` 的整数倍——vLLM 自动取值时也是向上取整到 `ep_size` 的倍数，
-手填一个非倍数会得到与你预期不同的实际值。
+手填一个非倍数会得到与你预期不同的实际值。因此 `--mode dynamic` 必须提供 `--ep-size`（缺省直接拒绝写入），
+脚本据此把非整数倍向上取整并显式提示，绝不把未经整除校验的值落盘。
 
 单副本成本按 `NUM_MOE_LAYERS × BYTES_PER_EXPERT` 估算——这是"每个 rank 多一个专家槽位"的成本，
 等价于全局增加 `ep_size` 个冗余专家；DeepSeekV3 的参考值约 **2.4 GiB**。因此每 rank 增量 =
@@ -167,8 +168,10 @@ physical_per_rank= (num_logical_experts + num_redundant_experts) / ep_size
 
 脚本保证：只接受 `kv_role=kv_producer` 的 P 节点模板；拒绝没有 `vllm serve` 的脚本；没有
 `--enable-expert-parallel` 时拒绝开 dynamic（EP 是 EPLB 的前提）；EPLB 参数与其它参数写在同一行时
-拒绝改写（避免误删 `--port` 之类相邻参数）；对三个参数做域校验（`window/step >= 1`、`redundant > 0`，
-给了 `--ep-size` 时校验整除）；符号链接先解析到真实文件；备份为
+拒绝改写（避免误删 `--port` 之类相邻参数；布尔开关 `--eplb-config.log_balancedness` 后跟另一个 flag
+同样按同行处理拒绝）；对三个参数做域校验（`window/step >= 1`、`redundant > 0`，且 dynamic 必须给
+`--ep-size` 并据其校验整除、非整数倍向上取整）；`--mode off` 只按**有效配置**（忽略注释）判断
+模板是否开过 EPLB，仅有注释提及 `DYNAMIC_EPLB` 的 V1 模板不会被翻转 V2 runner；符号链接先解析到真实文件；备份为
 `run_dp_template.sh.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>`；写入用唯一临时文件 + 原子替换；重复执行同一
 模式不再改动；写后 `bash -n` 失败自动回滚，`bash` 不可用时明确标注"未验证"；最后按目标状态逐项校验。
 
@@ -240,8 +243,8 @@ python3 <skill>/scripts/gen_imbalanced_dataset.py --out imbalanced_100x100k.json
 | dynamic 无收益 | 数据集是不是不均衡的？`window_size/step_interval` 是不是大到没触发？第 1 轮剔掉了吗？ |
 | 只想看当前状态 | `--mode check`，只读不改 |
 | 想回退 | `--mode off`（只移除 EPLB 配置；模板从未开过 EPLB 时不会改动 V2 runner）；更彻底就用备份覆盖 |
-| 报"EPLB 参数没有独占一行" | 模板把 `--enable-eplb` 与 `--port` 等写在同一行；先拆成独立行，避免误删 |
-| dynamic 写入的参数与预期不符 | 没给 `--ep-size` 时不做整除校验；补上后脚本会取整并提示 |
+| 报"EPLB 参数没有独占一行" | 模板把 `--enable-eplb`/`--eplb-config.*` 与其它参数写在同一行；布尔开关后跟另一 flag 也算同行；先拆成独立行，避免误删 |
+| dynamic 写入的参数与预期不符 | `--ep-size` 为 dynamic 必填；未提供会被拒绝写入，提供后非整数倍会取整并提示 |
 | force 探针"没有效果" | 确认运行的是本站点分支：上游 vLLM 不认识 `enable_force_eplb`，探针会静默失效 |
 | `--mode check` 报"不明确/混合" | 标记互相矛盾（如 `DYNAMIC_EPLB` 不是 `"true"`、缺 eplb 参数）；用 off/dynamic 之一修正 |
 

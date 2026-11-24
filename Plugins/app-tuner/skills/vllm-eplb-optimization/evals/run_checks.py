@@ -125,7 +125,7 @@ def main():
 
         no_ep = os.path.join(tmp, "no_ep.sh")
         write(no_ep, base_template("vllm serve /models/x \\\n" + KV + "    --port 8000\n"))
-        rn = run([APPLY, "--template", no_ep, "--mode", "dynamic"])
+        rn = run([APPLY, "--template", no_ep, "--mode", "dynamic", "--ep-size", "16"])
         check("guard: 无 --enable-expert-parallel 时拒绝 dynamic",
               rn.returncode == 1 and "expert-parallel" in rn.stdout)
 
@@ -219,6 +219,35 @@ def main():
         check("param: 非整除被取整并提示",
               rr.returncode == 0 and "--eplb-config.num_redundant_experts 16" in read(val)
               and "取整" in rr.stdout)
+
+        # dynamic without --ep-size must refuse (no unverified redundant value on disk)
+        val2 = os.path.join(tmp, "val_ep_required.sh")
+        shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), val2)
+        before = read(val2)
+        rne = run([APPLY, "--template", val2, "--mode", "dynamic", "--redundant-experts", "7"])
+        check("param: dynamic 缺 --ep-size 拒绝 (rc=2) 且不落盘",
+              rne.returncode == 2 and read(val2) == before and "ep-size" in rne.stdout)
+
+        # --- 5f2. boolean switch sharing a line with another flag is refused ---
+        bsame = os.path.join(tmp, "bool_same_line.sh")
+        write(bsame, base_template("vllm serve /models/x \\\n" + KV +
+                                   "    --enable-expert-parallel \\\n"
+                                   "    --eplb-config.log_balancedness --trust-remote-code \\\n"
+                                   "    --port 8000\n"))
+        before = read(bsame)
+        rbs = run([APPLY, "--template", bsame, "--mode", "off"])
+        check("same-line 布尔开关+其它 flag 被拒绝且不改文件",
+              rbs.returncode != 0 and read(bsame) == before and "独占一行" in rbs.stdout)
+
+        # --- 5f3. off ignores EPLB markers that only appear in comments ---
+        v1c = os.path.join(tmp, "v1_comment.sh")
+        write(v1c, '#!/bin/bash\n# legacy: export DYNAMIC_EPLB="true" used earlier\n'
+                   "export VLLM_USE_V2_MODEL_RUNNER=0\nvllm serve /models/x \\\n" +
+                   KV + "    --port 8000\n")
+        before = read(v1c)
+        rv1c = run([APPLY, "--template", v1c, "--mode", "off"])
+        check("off: 仅注释提及 DYNAMIC_EPLB 的 V1 模板不被翻转",
+              rv1c.returncode == 0 and read(v1c) == before)
 
         # --- 5g. check_state: loose markers must not be reported as dynamic ---
         bad = os.path.join(tmp, "bad_dyn.sh")

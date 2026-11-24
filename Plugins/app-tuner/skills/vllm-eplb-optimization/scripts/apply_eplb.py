@@ -18,8 +18,9 @@ Usage:
 
 Modes (mutually exclusive target states):
     off      baseline: no DYNAMIC_EPLB, no EPLB flags, no enable_force_eplb.
-             Only rewrites VLLM_USE_V2_MODEL_RUNNER when the file actually
-             carried EPLB markers; a plain/V1 template is left untouched.
+             Only rewrites VLLM_USE_V2_MODEL_RUNNER when the live (non-comment)
+             config actually carried EPLB markers; a plain/V1 template -- or one
+             that merely mentions the knob in a comment -- is left untouched.
     dynamic  V2 model runner + export DYNAMIC_EPLB="true" + --enable-eplb
              + --eplb-config.* flags   (优化手段)
     force    V1 model runner (VLLM_USE_V2_MODEL_RUNNER=0) + unset DYNAMIC_EPLB
@@ -33,7 +34,11 @@ Safety behavior:
     and templates without a role are refused, not guessed.
   * Refuses templates without a `vllm serve` command.
   * Refuses EPLB flags that share a line with other serve arguments, because
-    removing them would silently delete neighbouring flags.
+    removing them would silently delete neighbouring flags. A boolean switch
+    (--eplb-config.log_balancedness) followed by another flag is treated as a
+    shared line and refused, not parsed as "value".
+  * Requires --ep-size for --mode dynamic and validates/rounds
+    --redundant-experts against it before writing (no unverified value on disk).
   * Symlinked templates are resolved first, so the real file is edited.
   * Makes a timestamped backup (.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>) before writing.
   * Merges into the existing --additional-config JSON instead of adding a
@@ -63,6 +68,9 @@ RE_SERVE_LINE = re.compile(r'^\s*vllm\s+serve\b')
 RE_AC_SINGLE = re.compile(r"^(\s*)--additional-config\s+'(\{.*\})'\s*(\\?)\s*$")
 RE_AC_OPEN = re.compile(r"^(\s*)--additional-config\s+'\{(.*)$")
 RE_AC_CLOSE = re.compile(r"^\s*\}'(.*)$")
+
+# eplb-config keys that are boolean switches (take no value)
+EPLB_BOOL_KEYS = ('log_balancedness',)
 
 
 def die(msg, code=1):
@@ -122,6 +130,26 @@ def find_serve(lines):
     return None
 
 
+def _is_single_eplb_arg(body):
+    """True only if `body` is exactly one standalone EPLB serve arg.
+
+    A value-taking `--eplb-config.<key>` must be followed by a value that is not
+    another flag; a boolean key (e.g. log_balancedness) must not take a value.
+    Anything else means the EPLB arg shares its line with other arguments.
+    """
+    if body == '--enable-eplb':
+        return True
+    m = re.fullmatch(r'--eplb-config\.([A-Za-z0-9_]+)(?:\s+(\S+))?', body)
+    if not m:
+        return False
+    key, val = m.group(1), m.group(2)
+    if key in EPLB_BOOL_KEYS:
+        # boolean switch: a following token is another argument, not its value
+        return val is None
+    # value key: require an explicit value that is not another flag
+    return val is not None and not val.startswith('-')
+
+
 def strip_eplb_args(lines):
     """Remove standalone EPLB serve args; refuse args sharing a line with others."""
     out = []
@@ -134,14 +162,30 @@ def strip_eplb_args(lines):
             out.append(line)
             continue
         body = stripped[:-1].rstrip() if stripped.endswith('\\') else stripped
-        sole_flag = (re.fullmatch(r'--enable-eplb', body) or
-                     re.fullmatch(r'--eplb-config\.[A-Za-z0-9_]+(\s+\S+)?', body))
-        if sole_flag:
+        if _is_single_eplb_arg(body):
             continue
         raise ValueError(
-            'EPLB 参数没有独占一行（%r）。为避免误删同一行的其它参数（例如 --port），'
+            'EPLB 参数没有独占一行（%r）。为避免误删同一行的其它参数（例如 --port，'
+            '或布尔开关 --eplb-config.log_balancedness 后跟的另一个 flag），'
             '请先把 EPLB 参数拆成独立行再运行。' % stripped)
     return out
+
+
+def _has_effective_eplb_markers(lines):
+    """True only when live (non-comment) config actually carries EPLB markers.
+
+    Comments mentioning DYNAMIC_EPLB / --eplb-config must not count, otherwise
+    `--mode off` would flip the V2 runner on a V1 baseline just because a comment
+    names the knob.
+    """
+    code = '\n'.join(ln for ln in lines if not ln.lstrip().startswith('#'))
+    return bool(re.search(
+        r'^\s*export\s+DYNAMIC_EPLB\s*='
+        r'|^\s*unset\s+DYNAMIC_EPLB\b'
+        r'|^\s*--enable-eplb\b'
+        r'|^\s*--eplb-config\.'
+        r'|"enable_force_eplb"\s*:\s*true',
+        code, re.M))
 
 
 def _serve_indent(lines, serve_idx):
@@ -161,7 +205,7 @@ def transform(src, mode, redundant, window, interval):
     if find_serve(lines) is None:
         raise ValueError("no `vllm serve` command found -- is this a vLLM launch template?")
 
-    has_markers = bool(re.search(r'DYNAMIC_EPLB|--enable-eplb|--eplb-config\.|enable_force_eplb', src))
+    has_markers = _has_effective_eplb_markers(lines)
 
     # Drop existing DYNAMIC_EPLB lines and standalone EPLB args first.
     out = []
@@ -412,8 +456,9 @@ def validate_params(mode, redundant, window, interval, ep_size):
         die('ERROR: --redundant-experts 0 只有重排价值，不构成冗余副本；'
             '如需纯重排请显式评估后再手工配置。', 2)
     if ep_size is None:
-        notes.append('未提供 --ep-size，未校验 num_redundant_experts 的整除性')
-        return redundant, notes
+        die('ERROR: --mode dynamic 必须提供 --ep-size（用于校验 num_redundant_experts '
+            '能否被 EP 整除，并在必要时向上取整）；未提供时拒绝写入，'
+            '避免落盘一个与预期不符的实际生效值。', 2)
     if ep_size < 1:
         die('ERROR: --ep-size 必须 >= 1', 2)
     rounded = ((redundant + ep_size - 1) // ep_size) * ep_size
@@ -428,7 +473,8 @@ def main():
     ap.add_argument('--template', required=True, help='path to run_dp_template.sh (P node)')
     ap.add_argument('--mode', required=True, choices=['off', 'dynamic', 'force', 'check'])
     ap.add_argument('--ep-size', type=int, default=None,
-                    help='expert-parallel size, used to validate/round --redundant-experts')
+                    help='expert-parallel size; REQUIRED for --mode dynamic to validate/round '
+                         '--redundant-experts')
     ap.add_argument('--redundant-experts', type=int, default=16,
                     help='eplb-config.num_redundant_experts (default 16)')
     ap.add_argument('--window-size', type=int, default=1000,
