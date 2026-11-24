@@ -36,11 +36,11 @@ def main():
     store = one_section(patch, f"{base}/store.go")
     hunks = [
         hunk for hunk in re.split(r"(?m)(?=^@@ )", store)[1:]
-        if "readReplicaMetadata" in hunk
+        if "func ResolveTemplateReadyReplica(" in hunk
     ]
-    if len(hunks) != 2:
-        raise ValueError(f"expected both resolver hunks, found {len(hunks)}")
-    resolver_diff = "--- a/store.go.txt\n+++ b/store.go.txt\n" + "".join(hunks)
+    if len(hunks) != 1:
+        raise ValueError(f"expected one resolver hunk, found {len(hunks)}")
+    resolver_diff = "--- a/store.go.txt\n+++ b/store.go.txt\n" + hunks[0]
 
     with tempfile.TemporaryDirectory(prefix="replica-ttl-") as directory:
         root = Path(directory)
@@ -62,14 +62,11 @@ def main():
         (root / base / "ready_replica_ttl.go").rename(root / "ready_replica_ttl.go")
 
         resolver = excerpt.read_text(encoding="utf-8")
-        functions = [
-            re.search(rf"(?ms)^func {name}\(.*?^}}$", resolver).group()
-            for name in ("ResolveTemplateReadyReplica", "readReplicaMetadata")
-        ]
+        selection = re.search(r"(?ms)^func ResolveTemplateReadyReplica\(.*?^}$", resolver).group()
         predicate = (CASE / "fixtures/predicate.go.txt").read_text(encoding="utf-8")
         source = 'package templatecenter\nimport ("context"; "strings")\n'
-        functions.append(predicate.replace("func isReplicaSchedulableNow", "func baselinePredicate"))
-        (root / "resolver.go").write_text(source + "\n\n".join(functions), encoding="utf-8")
+        predicate = predicate.replace("func isReplicaSchedulableNow", "func baselinePredicate")
+        (root / "resolver.go").write_text(source + selection + "\n\n" + predicate, encoding="utf-8")
         (root / "cache_test.go").write_bytes((CASE / "fixtures/harness_test.go.txt").read_bytes())
         (root / "go.mod").write_text("module replica-ttl-check\n\ngo 1.20\n", encoding="utf-8")
         subprocess.run(

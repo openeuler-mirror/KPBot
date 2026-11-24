@@ -20,12 +20,16 @@ type ReplicaStatus struct {
 type blockedNodeKey struct{}
 
 var list func(context.Context, string) ([]ReplicaStatus, error)
+var convertedRows int
 
 func isReady() bool { return true }
 
 func ListReplicas(ctx context.Context, id string) ([]ReplicaStatus, error) { return list(ctx, id) }
 
-func replicaModelToStatus(row ReplicaStatus) ReplicaStatus { return row }
+func replicaModelToStatus(row ReplicaStatus) ReplicaStatus {
+	convertedRows++
+	return row
+}
 
 // Simulate a target with an additional, request-time placement restriction.
 func isReplicaSchedulableNow(ctx context.Context, row ReplicaStatus) bool {
@@ -34,6 +38,7 @@ func isReplicaSchedulableNow(ctx context.Context, row ReplicaStatus) bool {
 
 func setup(enabled bool) *time.Time {
 	now := time.Unix(1, 0)
+	convertedRows = 0
 	readyReplicaTTLEnabled = enabled
 	readyReplicaCache = readyReplicaTTLCache{now: func() time.Time { return now }}
 	return &now
@@ -100,6 +105,17 @@ func TestExpiryStartsAtQueryEntry(t *testing.T) {
 	checkReads(t, reads, 2)
 }
 
+func TestDisabledPathConvertsOnlyThroughFirstMatch(t *testing.T) {
+	setup(false)
+	list = func(context.Context, string) ([]ReplicaStatus, error) {
+		return []ReplicaStatus{ready("a"), ready("b"), ready("c")}, nil
+	}
+	checkNode(t, context.Background(), "", "a")
+	if convertedRows != 1 {
+		t.Fatalf("converted %d rows for a first-row match; want 1", convertedRows)
+	}
+}
+
 func TestFailuresAndMissingReadyRowsAreNeverCached(t *testing.T) {
 	setup(true)
 	reads := 0
@@ -146,6 +162,27 @@ func TestLocalWritesInvalidateOnlyAfterSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkNode(t, ctx, "", "b")
+	checkReads(t, reads, 2)
+}
+
+func TestWriteDoesNotRetryAFailedRead(t *testing.T) {
+	setup(true)
+	reads := 0
+	dbErr := errors.New("first query failed")
+	list = func(context.Context, string) ([]ReplicaStatus, error) {
+		reads++
+		if reads == 1 {
+			invalidateReadyReplicaTTL()
+			return nil, dbErr
+		}
+		return []ReplicaStatus{ready("new")}, nil
+	}
+	ctx := context.Background()
+	if _, err := ResolveTemplateReadyReplica(ctx, "template", ""); !errors.Is(err, dbErr) {
+		t.Fatalf("got error %v; want the original query error %v", err, dbErr)
+	}
+	checkReads(t, reads, 1)
+	checkNode(t, ctx, "", "new")
 	checkReads(t, reads, 2)
 }
 

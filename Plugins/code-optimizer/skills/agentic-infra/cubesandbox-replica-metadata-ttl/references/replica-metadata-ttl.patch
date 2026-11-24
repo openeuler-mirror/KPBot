@@ -77,10 +77,10 @@ index 11a2d31..5d04daf 100644
  	if err := store.db.WithContext(ctx).Unscoped().Table(constants.TemplateDefinitionTableName).
 diff --git a/CubeMaster/pkg/templatecenter/ready_replica_ttl.go b/CubeMaster/pkg/templatecenter/ready_replica_ttl.go
 new file mode 100644
-index 0000000..47d95d5
+index 0000000..abb350a
 --- /dev/null
 +++ b/CubeMaster/pkg/templatecenter/ready_replica_ttl.go
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,160 @@
 +// SPDX-License-Identifier: Apache-2.0
 +
 +package templatecenter
@@ -103,6 +103,35 @@ index 0000000..47d95d5
 +	readyReplicaTTLEnabled = os.Getenv("CUBEMASTER_READY_REPLICA_TTL") == "1"
 +	readyReplicaCache      = readyReplicaTTLCache{now: time.Now}
 +)
++
++func resolveCachedReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
++	replicas, err := readyReplicaCache.load(ctx, templateID, readReplicaMetadata)
++	if err != nil {
++		return ReplicaStatus{}, err
++	}
++	preferredNodeID = strings.TrimSpace(preferredNodeID)
++	for _, replica := range replicas {
++		if !isReplicaSchedulableNow(ctx, replica) {
++			continue
++		}
++		if preferredNodeID == "" || strings.TrimSpace(replica.NodeID) == preferredNodeID {
++			return replica, nil
++		}
++	}
++	return ReplicaStatus{}, ErrTemplateHasNoReadyReplica
++}
++
++func readReplicaMetadata(ctx context.Context, templateID string) ([]ReplicaStatus, error) {
++	rows, err := ListReplicas(ctx, templateID)
++	if err != nil {
++		return nil, err
++	}
++	metadata := make([]ReplicaStatus, 0, len(rows))
++	for _, row := range rows {
++		metadata = append(metadata, replicaModelToStatus(row))
++	}
++	return metadata, nil
++}
 +
 +type readyReplicaTTLEntry struct {
 +	rows      []ReplicaStatus
@@ -137,10 +166,13 @@ index 0000000..47d95d5
 +
 +		// Each miss reads independently. The lock is never held across SQL.
 +		rows, err := query(ctx, templateID)
++		if err != nil {
++			return nil, err
++		}
 +		if err := ctx.Err(); err != nil {
 +			return nil, err
 +		}
-+		cacheable := err == nil && len(rows) <= readyReplicaTTLRows && containsReadyReplica(rows)
++		cacheable := len(rows) <= readyReplicaTTLRows && containsReadyReplica(rows)
 +		c.mu.Lock()
 +		if epoch != c.epoch {
 +			c.mu.Unlock()
@@ -154,7 +186,7 @@ index 0000000..47d95d5
 +			c.publish(templateID, started.Add(readyReplicaTTL), rows)
 +		}
 +		c.mu.Unlock()
-+		return rows, err
++		return rows, nil
 +	}
 +}
 +
@@ -242,7 +274,7 @@ index 056c31b..ba3fa36 100644
  
  func deleteSnapshotMetadataOnly(ctx context.Context, snapshotID string) error {
 diff --git a/CubeMaster/pkg/templatecenter/store.go b/CubeMaster/pkg/templatecenter/store.go
-index 31312a3..03af4c8 100644
+index 31312a3..a0415d8 100644
 --- a/CubeMaster/pkg/templatecenter/store.go
 +++ b/CubeMaster/pkg/templatecenter/store.go
 @@ -1982,12 +1982,12 @@ func UpsertReplica(ctx context.Context, templateID, instanceType string, replica
@@ -262,44 +294,13 @@ index 31312a3..03af4c8 100644
  }
  
  func EnsureReadyReplica(ctx context.Context, templateID string) error {
-@@ -2007,13 +2007,18 @@ func EnsureReadyReplica(ctx context.Context, templateID string) error {
+@@ -2007,6 +2007,9 @@ func EnsureReadyReplica(ctx context.Context, templateID string) error {
  }
  
  func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
--	replicas, err := ListReplicas(ctx, templateID)
-+	var replicas []ReplicaStatus
-+	var err error
 +	if readyReplicaTTLEnabled && isReady() {
-+		replicas, err = readyReplicaCache.load(ctx, templateID, readReplicaMetadata)
-+	} else {
-+		replicas, err = readReplicaMetadata(ctx, templateID)
++		return resolveCachedReadyReplica(ctx, templateID, preferredNodeID)
 +	}
+ 	replicas, err := ListReplicas(ctx, templateID)
  	if err != nil {
  		return ReplicaStatus{}, err
- 	}
- 	preferredNodeID = strings.TrimSpace(preferredNodeID)
--	for _, item := range replicas {
--		replica := replicaModelToStatus(item)
-+	for _, replica := range replicas {
- 		if !isReplicaSchedulableNow(ctx, replica) {
- 			continue
- 		}
-@@ -2024,6 +2029,18 @@ func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeI
- 	return ReplicaStatus{}, ErrTemplateHasNoReadyReplica
- }
- 
-+func readReplicaMetadata(ctx context.Context, templateID string) ([]ReplicaStatus, error) {
-+	rows, err := ListReplicas(ctx, templateID)
-+	if err != nil {
-+		return nil, err
-+	}
-+	metadata := make([]ReplicaStatus, 0, len(rows))
-+	for _, row := range rows {
-+		metadata = append(metadata, replicaModelToStatus(row))
-+	}
-+	return metadata, nil
-+}
-+
- func isTemplateReplicaSchedulable(ctx context.Context, templateID, nodeID string) bool {
- 	if !isReady() || strings.TrimSpace(templateID) == "" || strings.TrimSpace(nodeID) == "" {
- 		return false

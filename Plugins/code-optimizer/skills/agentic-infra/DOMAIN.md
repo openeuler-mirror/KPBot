@@ -11,7 +11,7 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 
 **场景收益 / 定位**（原插件 README 技能表条目）：面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口。
 
-[`cubesandbox-replica-metadata-ttl`](cubesandbox-replica-metadata-ttl/SKILL.md) covers short-lived READY replica metadata reuse for sequential creates with per-request placement checks.
+[`cubesandbox-replica-metadata-ttl`](cubesandbox-replica-metadata-ttl/SKILL.md) covers opt-in READY replica metadata reuse for sequential creates with per-request placement checks. Its reference patch and `scheme2-rsi-cache.patch` are mutually exclusive variants of the same CubeMaster cache path.
 
 本域后续迁入（逐个独立 PR）：
 
