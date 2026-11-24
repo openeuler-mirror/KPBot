@@ -142,6 +142,12 @@ def synth(out_dir, n_req, seed):
             "sum13_log": (tokenize + dispatch + add_req + mm_hash + queue_wait
                           + wait_exec + load_kv_log + forward + sample
                           + save_kv_log + step_other_log + out_delivery),
+            # CSV 10 阶段 ground truth（供回归断言逐值校验，防映射改坏）
+            # net_lb：--lb 时按 proxy 口径回填 client2proxy+dispatch
+            "net_lb": c2p + disp, "fe_inputq": 1.0, "fe_addreq": 2.0,
+            "sched_qwait": queue_wait, "sched_total": 4.0,
+            "fwd_pure": forward, "draft": draft_max,
+            "kv_xfer": pool_max + put_total, "shm_dq": deq_exp,
         })
 
     expectations["bursts"] = {str(b): len(v) for b, v in burst_bounds.items()}

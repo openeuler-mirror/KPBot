@@ -306,21 +306,32 @@ def load_bench(path, machine):
 # ---------------------------------------------------------------- Burst 分段
 
 def assign_bursts(rows, one_burst, burst_gap_s):
-    """按时间戳分段；无 ts 或 --one-burst 时整段一个 burst。"""
+    """按时间戳分段；无 ts 或 --one-burst 时整段一个 burst。
+
+    混合输入（部分行有 ts、部分缺）：缺 ts 的行归入最后一个 burst，
+    并在返回的说明里注明归组方式，避免 None 参与数值运算。
+    """
     if not rows:
         return 0, "no rows"
-    if one_burst or all(r["ts"] is None for r in rows):
+    have_ts = [r for r in rows if r["ts"] is not None]
+    no_ts = [r for r in rows if r["ts"] is None]
+    if one_burst or not have_ts:
         for r in rows:
             r["burst"] = 1
-        return 1, "one-burst" if one_burst else "no-ts (fallback one-burst)"
-    rows.sort(key=lambda r: (r["ts"] is None, r["ts"]))
+        return 1, ("one-burst" if one_burst else "no-ts (fallback one-burst)")
+    have_ts.sort(key=lambda r: r["ts"])
     burst, prev = 1, None
-    for r in rows:
+    for r in have_ts:
         if prev is not None and r["ts"] - prev > burst_gap_s:
             burst += 1
         r["burst"] = burst
         prev = r["ts"]
-    return burst, f"burst-gap {burst_gap_s}s"
+    note = f"burst-gap {burst_gap_s}s"
+    if no_ts:
+        for r in no_ts:
+            r["burst"] = burst
+        note += f"；{len(no_ts)} 条缺时间戳请求归入最后一个 burst"
+    return burst, note
 
 
 def mark_cold_steps(rows):
@@ -719,18 +730,23 @@ def fmt_ts(ts):
 
 
 def write_csv(rows, path):
-    """写 ttft_table.csv（下游 kptools-tpsplit-report 契约）。
+    """写 ttft_table.csv（契约见 references/ttft_table_contract.md）。
 
-    v3 列 → 术语表 10 阶段映射：
+    v3 列 → 10 阶段映射：
       net_lb=lb_dispatch / fe_inputq=add_req_iq / fe_addreq=add_req_proc /
       sched_qwait=queue_wait / sched_total=sched_total / fwd_pure=forward /
       draft=mtp / kv_xfer=load_kv+save_kv / shm_dq=dequeue /
-      other=ttft−Σ(引擎内 9 阶段)（tokenize/dispatch/add_req/mm_hash/wait_exec/
-      sample/return/out_delivery/residual 兜底）。
-    注意：v3 引擎侧 ttft **不含** net_lb（client→proxy 网络在引擎外），因此
-    Σ10 阶段 − ttft = net_lb（量级 ~几 ms，处于下游 max(2ms, 2%·ttft) 容差内）。
+      other=引擎侧 ttft−Σ(引擎内 8 阶段)（tokenize/dispatch/add_req/mm_hash/
+      wait_exec/sample/return/out_delivery/residual 兜底）。
+    时间边界（与阶段和一致）：ttft_ms = net_lb + 引擎侧 ttft，因此
+    Σ10 阶段 = ttft_ms 精确成立（回填增量超出 step_other 信封的行除外：
+    other 钳 0，溢出量表现为守恒差值 |Σ10 − ttft_ms|，供下游质量检查；
+    此类行对应 v3 口径 conserv_err>0，写 CSV 时打 stderr 告警）。
+    ttft_ms 与 BREAKDOWN 行的 ttft= 相差 net_lb（对账/证据链引用时注意）。
     """
     import csv
+    import sys as _sys
+    n_neg = 0
     with open(path, "w", encoding="utf-8", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(CSV_HEADER)
@@ -746,17 +762,29 @@ def write_csv(rows, path):
                 "kv_xfer": r["load_kv"] + r["save_kv"],
                 "shm_dq": r["dequeue"],
             }
-            engine_sum = sum(stages[k] for k in stages if k != "net_lb")
+            engine_sum = sum(v for k, v in stages.items() if k != "net_lb")
             other = r["ttft"] - engine_sum
+            if other < 0:
+                # 回填增量超出 step_other 信封（对应 v3 conserv_err>0 行）：
+                # 按契约 other 钳 0，溢出量保留在守恒差值里给下游质量检查
+                n_neg += 1
+                print(f"[warn] CSV other<0 已钳 0（req={r['req']}，"
+                      f"other={other:.3f}，回填增量超出 step_other 信封，"
+                      f"守恒差值={-other:.3f}）", file=_sys.stderr)
+                other = 0.0
+            ttft_total = r["ttft"] + stages["net_lb"]
             w.writerow([
                 fmt_ts(r["ts"]), r["req"], fnum(r.get("_input_len")),
-                f"{r['ttft']:.2f}",
+                f"{ttft_total:.2f}",
                 f"{stages['net_lb']:.2f}", f"{stages['fe_inputq']:.2f}",
                 f"{stages['fe_addreq']:.2f}", f"{stages['sched_qwait']:.2f}",
                 f"{stages['sched_total']:.2f}", f"{stages['fwd_pure']:.2f}",
                 f"{stages['draft']:.2f}", f"{stages['kv_xfer']:.2f}",
                 f"{stages['shm_dq']:.2f}", f"{other:.2f}",
             ])
+    if n_neg:
+        print(f"[warn] 共 {n_neg} 行 other<0 已钳 0（回填增量超出 step_other "
+              f"信封，守恒差值暴露给下游质量检查）", file=_sys.stderr)
 
 
 # ---------------------------------------------------------------- 对账
@@ -766,32 +794,59 @@ def reconcile(lb_rows, bench_rows):
 
     client_ttft ≈ client2proxy(网络) + first_token(分发+P处理+P→D交接+D首token)
     + return(proxy→client)；同机回环 return≈0。
+
+    匹配规则（防串算）：
+    * 排序仅按时间戳键（不同请求同 ts 时不再比较字典，避免 TypeError）；
+    * 已被匹配的 LB 记录从候选中排除，两条 bench 不会命中同一条 LB；
+    * 多候选时优先精确时间戳相等，其次用请求 ID 消歧；
+    * 仍无法唯一匹配的行标 joined=ambiguous（不算 joined，不参与 return 统计）。
     """
-    recon = []
-    used = set()
-    sends = sorted((l["client_send"], l) for l in lb_rows if l["client_send"] > 0)
     import bisect
+    from collections import defaultdict
+
+    recon = []
+    used = set()  # 已匹配 LB 行的 id()，防串算
+    by_req = defaultdict(list)
+    for l in lb_rows:
+        if l["req"]:
+            by_req[str(l["req"])].append(l)
+    sends = sorted(((l["client_send"], l) for l in lb_rows
+                    if l["client_send"] > 0), key=lambda t: t[0])
     keys = [s for s, _ in sends]
+
+    def pick(b, avail):
+        """从候选中选唯一匹配：精确 ts > 请求 ID 消歧；返回 (row, why)。"""
+        if not avail:
+            return None, "unmatched"
+        exact = [c for c in avail if c["client_send"] == b["client_send_ts"]]
+        pool = exact if exact else avail
+        if len(pool) > 1 and b["req"]:
+            req_hits = [c for c in pool if str(c["req"]) == str(b["req"])]
+            if req_hits:
+                pool = req_hits
+        if len(pool) == 1:
+            return pool[0], ""
+        if len(pool) > 1:
+            return None, "ambiguous"
+        return None, "unmatched"
+
     for b in bench_rows:
         row = {"req": b["req"], "client_send_ts": b["client_send_ts"],
                "client_ttft": b["client_ttft"] or 0.0,
                "client2proxy_ms": None, "dispatch_ms": None,
                "first_token_ms": None, "return_ms": None,
                "sum_id": None, "err_ms": None, "joined": ""}
-        if not sends or b["client_send_ts"] <= 0:
-            recon.append(row)
-            continue
-        i = bisect.bisect_left(keys, b["client_send_ts"] - 2)
-        match = None
-        while i < len(keys) and keys[i] <= b["client_send_ts"] + 2:
-            if sends[i][1]["client_send"] == b["client_send_ts"]:
-                match = sends[i][1]
-                break
-            if abs(keys[i] - b["client_send_ts"]) <= 2:
-                match = sends[i][1]
-                break
-            i += 1
+        if b["client_send_ts"] > 0 and sends:
+            i = bisect.bisect_left(keys, b["client_send_ts"] - 2)
+            window = [sends[j][1] for j in range(i, len(keys))
+                      if keys[j] <= b["client_send_ts"] + 2
+                      and id(sends[j][1]) not in used]
+            match, why = pick(b, window)
+        else:
+            # 无时间戳可比时按请求 ID 兜底
+            match, why = pick(b, list(by_req.get(str(b["req"]), [])))
         if match is None:
+            row["joined"] = "" if why == "unmatched" else why
             recon.append(row)
             continue
         used.add(id(match))
@@ -804,7 +859,7 @@ def reconcile(lb_rows, bench_rows):
         row["sum_id"] = match["client2proxy_ms"] + match["first_token_ms"] + ret
         row["err_ms"] = row["client_ttft"] - row["sum_id"]
         recon.append(row)
-    return recon, len(used)
+    return recon, sum(1 for r in recon if r["joined"] == "lb")
 
 
 # ---------------------------------------------------------------- 文字结论

@@ -70,11 +70,21 @@ def close(a, b, tol=TOL):
 
 
 def check_csv(workdir, merge):
-    """CSV 契约断言（下游 kptools-tpsplit-report 的 ttft_table.csv）。"""
+    """CSV 契约断言（references/ttft_table_contract.md）。
+
+    非 tautology 设计：不依赖 other 的定义式自证，而是
+    ① 逐阶段与 ground truth（expectations）对值（映射改坏即 FAIL）；
+    ② other 与 max(0, ttft−Σ8_ground_truth) 对值，负值落盘 = FAIL；
+    ③ 守恒差值：正常行 ≈0；截断行（conserv_err>0）= 溢出量（下游质量信号）。
+    """
     import csv as csvmod
     synth = os.path.join(workdir, "synth")
     csv_path = os.path.join(workdir, "merge" if merge else "nomerge", "ttft_table.csv")
     tag = "merge" if merge else "nomerge"
+    exp = json.load(open(os.path.join(synth, "expectations.json"),
+                         encoding="utf-8"))
+    exp_idx = {(e["machine"], e["req"]): e for e in exp["rows"]}
+    # machine 归并口径：merge 与 nomerge 的行集相同（60+20 台各自 30/50 请求）
     with open(csv_path, encoding="utf-8") as fh:
         rdr = list(csvmod.reader(fh))
     header = rdr[0]
@@ -83,30 +93,148 @@ def check_csv(workdir, merge):
                      "sched_total_ms", "fwd_pure_ms", "draft_ms", "kv_xfer_ms",
                      "shm_dq_ms", "other_ms"]
     check(f"[{tag}] CSV 表头契约", header == expect_header, f"{header}")
-    check(f"[{tag}] CSV 行数", len(rdr) - 1 == 80, f"{len(rdr) - 1}")
-    n_cons = 0
-    for row in rdr[1:]:
-        d = dict(zip(header, row))
+    csv_rows = [dict(zip(header, r)) for r in rdr[1:]]
+    check(f"[{tag}] CSV 行数", len(csv_rows) == 80, f"{len(csv_rows)}")
+
+    stage_keys = ["net_lb", "fe_inputq", "fe_addreq", "sched_qwait",
+                  "sched_total", "fwd_pure", "draft", "kv_xfer", "shm_dq"]
+    n_match = n_neg = 0
+    for d in csv_rows:
+        req = d["request_id"]
         ttft = float(d["ttft_ms"])
-        engine9 = (float(d["fe_inputq_ms"]) + float(d["fe_addreq_ms"])
-                   + float(d["sched_qwait_ms"]) + float(d["sched_total_ms"])
-                   + float(d["fwd_pure_ms"]) + float(d["draft_ms"])
-                   + float(d["kv_xfer_ms"]) + float(d["shm_dq_ms"])
-                   + float(d["other_ms"]))
-        # 引擎内 9 阶段 + other == ttft（精确守恒；net_lb 在引擎 ttft 之外）
-        if abs(engine9 - ttft) <= 0.02:
-            n_cons += 1
-    check(f"[{tag}] CSV 引擎守恒（Σ9+other==ttft）", n_cons == 80,
-          f"{n_cons}/80")
-    # kv_xfer 回填口径抽查：等于 load_kv+save_kv（TP-max 回填后）
-    with open(csv_path, encoding="utf-8") as fh:
-        rows_csv = list(csvmod.DictReader(fh))
-    kv_vals = [float(r["kv_xfer_ms"]) for r in rows_csv]
-    check(f"[{tag}] CSV kv_xfer 非哨兵（回填生效）",
-          abs(sum(kv_vals) / len(kv_vals) - 60.0) < 3.0,
-          f"mean={sum(kv_vals) / len(kv_vals):.1f}（预期≈load40+save20）")
-    print(f"[{tag}] CSV: {len(rows_csv)} 行，引擎守恒 {n_cons}/80，"
-          f"kv_xfer mean={sum(kv_vals) / len(kv_vals):.1f}ms")
+        # ① ground truth 对值（同 req 名全局唯一）
+        e = next(v for k, v in exp_idx.items() if k[1] == req)
+        ok = True
+        for st in stage_keys:
+            if abs(float(d[st + "_ms"]) - e[st]) > 0.02:
+                check(f"[{tag}] CSV {st} 对值 ({req})",
+                      False, f"csv={d[st + '_ms']} exp={e[st]:.3f}")
+                ok = False
+        if ok:
+            n_match += 1
+        # ttft_ms = net_lb + 引擎侧 ttft（同边界守恒）
+        check(f"[{tag}] CSV ttft_ms 含 net_lb ({req})",
+              abs(ttft - (e["ttft"] + e["net_lb"])) <= 0.02,
+              f"csv={ttft} exp={e['ttft'] + e['net_lb']:.3f}")
+        # ② other：正常行 = 引擎侧 other（ttft − Σ8，非负）；截断行钳 0，
+        #    溢出量转成守恒差值（供下游质量检查，对应 conserv_err>0）
+        sum8 = (e["sched_qwait"] + 1.0 + 2.0 + 4.0 + e["fwd_pure"] + e["draft"]
+                + e["kv_xfer"] + e["shm_dq"])
+        other_exp = max(0.0, e["ttft"] - sum8)
+        other = float(d["other_ms"])
+        if other < -0.005:
+            n_neg += 1
+            check(f"[{tag}] CSV other<0 落盘 ({req})", False, f"other={other}")
+        check(f"[{tag}] CSV other 对值/钳 0 ({req})",
+              abs(other - other_exp) <= 0.02,
+              f"csv={other} exp={other_exp:.3f}")
+        # ③ 守恒差值：正常行 |Σ10−ttft_ms|≈0；截断行 = Σ8 超出引擎实测 ttft
+        #    的毫秒数（other 已钳 0，回填溢出以差值暴露给下游质量检查）
+        sum10 = sum(float(d[st + "_ms"]) for st in stage_keys) + other
+        viol = sum10 - ttft
+        if e["clamp"]:
+            check(f"[{tag}] CSV 截断行守恒差值=回填溢出 ({req})",
+                  abs(viol - (sum8 - e["ttft"])) <= 0.05,
+                  f"viol={viol:.3f} exp={sum8 - e['ttft']:.3f}")
+        else:
+            check(f"[{tag}] CSV 精确守恒 ({req})", abs(viol) <= 0.02,
+                  f"viol={viol:.3f}")
+    check(f"[{tag}] CSV 阶段对值 80/80", n_match == 80, f"{n_match}/80")
+    check(f"[{tag}] CSV other 无负值落盘", n_neg == 0, f"{n_neg} 行")
+    print(f"[{tag}] CSV: {len(csv_rows)} 行，阶段对值 {n_match}/80，"
+          f"other 负值 {n_neg}")
+
+
+def check_edge_cases():
+    """检视意见修复的边界用例：重复时间戳排序 / 匹配串算 / 混合 ts 分段 / 负 other。"""
+    import importlib.util
+    import io
+    import contextlib
+    spec = importlib.util.spec_from_file_location("analyze_ttft_mod", ANALYZE)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+
+    # ---- 1) reconcile：两个 LB 行 client_send 相同（旧实现 sorted 比较字典 → TypeError）
+    def lb(req, send, ft):
+        return {"machine": "PROXY", "req": req, "wall_recv": 0, "client_send": send,
+                "client2proxy_ms": 1.0, "dispatch_ms": 2.0, "wait_p_ms": 0.0,
+                "first_token_ms": ft, "prefiller": "", "decoder": ""}
+    def bench(req, send, cttft):
+        return {"machine": "BENCH", "req": req, "client_send_ts": send,
+                "first_token_ts": None, "client_ttft": cttft}
+    lb_rows = [lb("r1", 1000, 10.0), lb("r2", 1000, 20.0), lb("r3", 1001, 30.0)]
+    bench_rows = [bench("r1", 1000, 11.5), bench("r2", 1000, 21.5),
+                  bench("r3", 1001, 31.5), bench("q1", 2000, 99.0)]
+    try:
+        recon, joined = m.reconcile(lb_rows, bench_rows)
+        check("edge: reconcile 重复时间戳不抛 TypeError", True)
+    except TypeError as e:
+        check("edge: reconcile 重复时间戳不抛 TypeError", False, str(e))
+        return
+    idx = {r["req"]: r for r in recon}
+    check("edge: 同 ts 用请求 ID 消歧，3/3 对上", joined == 3, f"joined={joined}")
+    check("edge: r1 匹配自身（first_token=10）",
+          abs(idx["r1"]["first_token_ms"] - 10.0) < 1e-9)
+    check("edge: r2 匹配自身（first_token=20）",
+          abs(idx["r2"]["first_token_ms"] - 20.0) < 1e-9)
+    check("edge: 每条 LB 只被用一次（return 各 0.5）",
+          all(abs(idx[k]["return_ms"] - 0.5) < 1e-9 for k in ("r1", "r2", "r3")))
+
+    # ---- 2) ambiguous：同 ts 多候选且请求 ID 均不命中 → 标记而非乱配
+    lb2 = [lb("x1", 3000, 10.0), lb("x2", 3000, 20.0)]
+    b2 = [bench("q9", 3000, 12.0)]
+    recon2, joined2 = m.reconcile(lb2, b2)
+    check("edge: 无唯一匹配标 ambiguous（不算 joined）",
+          joined2 == 0 and recon2[0]["joined"] == "ambiguous",
+          f"joined={joined2} tag={recon2[0]['joined']}")
+    # ---- 2b) 已用记录不再参与（防串算）：第一条用掉 x1 后第二条只剩 x2
+    lb3 = [lb("x1", 3000, 10.0), lb("x2", 3000, 20.0)]
+    b3 = [bench("x1", 3000, 12.0), bench("x2", 3000, 22.0)]
+    recon3, joined3 = m.reconcile(lb3, b3)
+    i3 = {r["req"]: r for r in recon3}
+    check("edge: 已用 LB 排除后两条都能唯一对上", joined3 == 2, f"joined={joined3}")
+    check("edge: x2 匹配 x2（不被 x1 抢占）",
+          abs(i3["x2"]["first_token_ms"] - 20.0) < 1e-9)
+
+    # ---- 3) assign_bursts：混合 ts（部分缺）不崩溃，缺 ts 归入最后 burst
+    rows = [{"ts": 1.0, "burst": None}, {"ts": 2.0, "burst": None},
+            {"ts": None, "burst": None}, {"ts": 100.0, "burst": None}]
+    n_burst, note = m.assign_bursts(rows, one_burst=False, burst_gap_s=10.0)
+    check("edge: 混合 ts 不抛异常且分段正确", n_burst == 2, f"n={n_burst}")
+    check("edge: 缺 ts 归入最后一个 burst", rows[2]["burst"] == 2,
+          f"burst={rows[2]['burst']}")
+    check("edge: 归组方式写进说明", "缺时间戳" in note, note)
+
+    # ---- 4) write_csv：other<0（阶段双计）不崩溃且打 stderr 告警
+    row = {"machine": "P", "ip": None, "req": "neg1", "batch": "b", "ts": 1.0,
+           "burst": 1, "ttft": 10.0, "_input_len": 0,
+           "tokenize_render": 0, "dispatch": 0, "add_req": 0, "mm_hash": 0,
+           "queue_wait": 3.0, "wait_exec": 0, "load_kv": 0, "forward": 6.0,
+           "mtp": 0, "sample": 0, "save_kv": 0, "step_other": 0,
+           "out_delivery": 0, "residual": 0, "lb_dispatch": 1.0,
+           "hash": 0, "ext_lookup": 0, "alloc": 0, "overhead": 0,
+           "sched_total": 2.0, "update": 0, "emit": 0, "step_exec": 0,
+           "dequeue": 0, "dequeue_main": 0, "dequeue_draft": 0,
+           "dequeue_take_draft": 0, "dequeue_aux": 0, "return": 0,
+           "add_req_iq": 1.0, "add_req_proc": 2.0, "preempt": 0,
+           "fwd_tokens": 12, "fwd_steps": 1, "fwd_ms_per_kT": 0,
+           "conserv_err": 0, "lb_src": "engine", "cold_step": 0}
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tf:
+        csv_path = tf.name
+    err = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(err):
+            m.write_csv([row], csv_path)
+        check("edge: other<0 不崩溃且打告警", "other<0" in err.getvalue(),
+              err.getvalue()[:200])
+        import csv as _csvmod
+        with open(csv_path, encoding="utf-8") as fh:
+            rows_csv = list(_csvmod.DictReader(fh))
+        check("edge: other<0 钳 0 落盘", float(rows_csv[0]["other_ms"]) == 0.0,
+              f"other={rows_csv[0]['other_ms']}")
+    finally:
+        os.unlink(csv_path)
 
 
 def run_case(workdir, merge):
@@ -232,6 +360,7 @@ def main():
         run_case(workdir, merge=False)
         check_csv(workdir, merge=True)
         check_csv(workdir, merge=False)
+        check_edge_cases()
 
         print("-" * 60)
         if failures:

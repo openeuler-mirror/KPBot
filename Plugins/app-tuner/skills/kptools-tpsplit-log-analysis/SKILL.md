@@ -7,14 +7,14 @@ description: >
   client_ttft、回传 return、TP-max 回填、多 P 合并 --merge-p、burst 分段 --burst-gap、
   看 TTFT 各环节占比、TTFT 长尾 P90/P99、定位首 token 延迟在 tokenize/queue/forward/KV
   哪一环。即使用户只说"帮我把这轮压测的 TTFT 日志解析一下"或"看看 TTFT 拆解在哪一环"，
-  也应使用此技能。只做采集与解析出表，打点 patch 部署见 kptools-tpsplit-log-trace。
+  也应使用此技能。只做采集与解析出表，不含打点 patch 部署（打点须已部署并输出 v3 格式日志）。
 license: Proprietary
 compatibility: >
   本地 Windows/Linux（Python 3 + openpyxl，xlsx 输出必需；fetch_logs.sh 需远端 bash）；
   SSH 访问 P/D/proxy 宿主机（优先 ssh-mcp-server 的 upload/execute-command/download，
-  无 MCP 时回退本地 ssh/scp）；打点须已由 kptools-tpsplit-log-trace 部署（v3.2，
+  无 MCP 时回退本地 ssh/scp）；打点须已部署且输出 v3 格式（
   [TTFT][BREAKDOWN] / [TTFT_KVXFER] / [SHM_DEQUEUE] / [LB_DISPATCH] / [TTFT_DRAFT]）；
-  下游 kptools-tpsplit-report 消费 --csv-out 输出的 ttft_table.csv。
+  ttft_table.csv 契约见本 skill references/ttft_table_contract.md，供下游收益对比分析消费（消费方暂在仓外）。
 metadata:
   skill_type: tool_assisted
   category: diagnostics
@@ -25,7 +25,7 @@ metadata:
 
 # kptools-tpsplit-log-analysis：TTFT 日志采集 + 解析出表
 
-打点已部署时（部署见 kptools-tpsplit-log-trace skill），本 skill 只做：
+打点已部署时（打点部署不在本 skill 范围内，部署工具暂未随本仓库交付），本 skill 只做：
 **采集 4 份日志 → 本地解析 → Excel（8 Sheet）+ 文字结论**（全部毫秒）。
 
 **采集与解析分离**：日志在远端，产物统一为 4 份本地文件（P/D/proxy 日志 + 压测
@@ -34,12 +34,13 @@ result json），解析出表由 skill 自带的 `scripts/analyze_ttft.py` 完�
 
 ## 0. 脚本清单（全部已打包在 skill 内）
 
-| 脚本 | 用途 |
+| 脚本/文件 | 用途 |
 | --- | --- |
 | `scripts/analyze_ttft.py` | 核心解析器：4 类日志 → Excel 8 Sheet + 终端结论 |
 | `scripts/fetch_logs.sh` | 远端宿主机侧定位/校验/暂存日志（bash，在远端执行） |
 | `scripts/gen_synth_logs.py` | 合成 v3 打点日志（演示/构造测试数据） |
-| `scripts/test_regression.py` | 回归自检：合成日志全断言（回填/信封/守恒/LB），改动解析器后必跑 |
+| `scripts/test_regression.py` | 回归自检：合成日志全断言（回填/信封/守恒/LB/CSV 契约），改动解析器后必跑 |
+| `references/ttft_table_contract.md` | ttft_table.csv 机器可读契约（仓内权威定义） |
 
 依赖：Python 3 + openpyxl（`python -m pip install openpyxl`）。
 
@@ -85,12 +86,16 @@ proxy：`[LB_DISPATCH] req= wall_recv= client_send= client2proxy_ms= dispatch_ms
    `/data` 是共享挂载，容器内 `/data/.../p0-1112/log/prefill.log` 一类路径宿主机可见：
 
    ```bash
-   bash fetch_logs.sh --root /data/<user>          # 列出四类日志 + 打点行数校验
+   bash fetch_logs.sh --root /data/<user>          # 首个 --root 替换默认 /data（不扫整个共享目录）
+   bash fetch_logs.sh --root /a --root /b          # 多根追加；同一文件（realpath 相同）只计一次
    bash fetch_logs.sh --root /data/<user> --stage /tmp/ttft_fetch   # 暂存待下载
+   bash fetch_logs.sh --root /data/<user> --expect-req 100          # BREAKDOWN 行数低于门槛 → 非零退出
    ```
 
    Windows 写出的 .sh 带 CR：远端先 `tr -d '\r' < f > f2`（本 skill 脚本已是 LF，
-   从别处同步的才需要）。脚本不内置任何节点/路径——root 一律显式传入。
+   从别处同步的才需要）。脚本不内置任何节点/路径——root 一律显式传入；打点标记
+   统计用 `grep -cF` 固定字符串匹配；`--stage` 暂存文件名带完整来源路径（多 P
+   同名 prefill.log 不会互相覆盖），暂存冲突/复制失败非零退出。
 2. **下载到同一本地目录**：P/D/proxy 日志 + 压测 result json（P 日志多台时建议
    命名 `P<ip>_prefill.log` 区分）。
 3. **校验**：fetch_logs.sh 的输出里 grep 到 `[TTFT][BREAKDOWN]`、`[TTFT_DECODE]`、
@@ -137,15 +142,17 @@ python analyze_ttft.py "102:P102_prefill.log" "103:P103_prefill.log" -o TTFT_ful
 D节点Decode / P节点KV传输 / LB分发 / 回传对账。终端另出文字结论（Burst、环节、
 decode、LB、KV、对账、长尾 P90/P99、预热/冷启动警示）。
 
-**CSV 导出（下游对接）**：加 `--csv-out ttft_table.csv` 额外输出一份
-`kptools-tpsplit-report`（TP 拆分收益对比）skill 约定的表格：首行表头
+**CSV 导出（下游对接）**：加 `--csv-out ttft_table.csv` 额外输出一份 10 阶段表，
+供下游 TP 拆分收益对比分析消费（消费方暂在仓外）。首行表头
 `ts,request_id,input_len,ttft_ms,net_lb_ms,fe_inputq_ms,fe_addreq_ms,sched_qwait_ms,
 sched_total_ms,fwd_pure_ms,draft_ms,kv_xfer_ms,shm_dq_ms,other_ms`，每请求一行。
-v3 列 → 10 阶段映射：net_lb=lb_dispatch、fe_inputq=add_req_iq、fe_addreq=add_req_proc、
-sched_qwait=queue_wait、sched_total=sched_total、fwd_pure=forward、draft=mtp、
-kv_xfer=load_kv+save_kv、shm_dq=dequeue、other=ttft−Σ(引擎内 9 阶段)（兜底）。
-注意：v3 引擎侧 ttft **不含** net_lb，因此 Σ10 阶段 − ttft = net_lb（几 ms 量级，
-在下游守恒容差 max(2ms, 2%·ttft) 内）；input_len 需打点行携带，缺省输出 0。
+**完整机器可读契约（表头/守恒式/阶段映射/容差/缺列约定）见
+`references/ttft_table_contract.md`——该文件是仓内权威定义处**。
+时间边界：`ttft_ms = net_lb + 引擎侧 ttft`，与 Σ10 阶段同边界（比 BREAKDOWN
+行的 `ttft=` 多一个 net_lb，回溯日志行时注意差值）；正常行精确守恒且 `other`
+（兜底项）≥ 0；回填增量超出 step_other 信封的行（对应 v3 conserv_err>0）
+other 钳 0、溢出量以守恒差值暴露给下游质量检查并打 stderr 告警；
+input_len 需打点行携带，缺省输出 0。
 
 ## 5. 列口径（v3，当前生效）
 

@@ -4,7 +4,7 @@
     {
       "id": 0,
       "eval_name": "multip-merge-full-report",
-      "prompt": "刚跑完一轮 PD 分离压测，日志已经从远端拉到本地目录 C:\\Users\\ganting\\.config\\opencode\\skills\\kptools-tpsplit-log-analysis-workspace\\shared_inputs（P102/P103 两台 P 节点的 prefill 日志、D103 的 decode 日志、proxy 的 load_balance.log、压测端 manual_synth_dumpjsonl.json）。帮我把这轮的 TTFT 日志解析出表：两台 P 合并成一套完整请求，输出 Excel 报表，并在完成后总结 TTFT 主要耗在哪个环节、占比多少、有没有预热或冷启动问题。",
+      "prompt": "刚跑完一轮 PD 分离压测，日志已经从远端拉到本地目录 /tmp/tpsplit-eval\\shared_inputs（P102/P103 两台 P 节点的 prefill 日志、D103 的 decode 日志、proxy 的 load_balance.log、压测端 manual_synth_dumpjsonl.json）。帮我把这轮的 TTFT 日志解析出表：两台 P 合并成一套完整请求，输出 Excel 报表，并在完成后总结 TTFT 主要耗在哪个环节、占比多少、有没有预热或冷启动问题。",
       "expected_output": "用 skill 的 analyze_ttft.py 以 --merge-p 多 P 命令解析；产出 8 Sheet 的 xlsx（明细 60 行、含 IP 列、burst 2 段）；总结指出 forward 占比最高（约 7 成）、load_kv/save_kv/step_other 次之；提到 fwd_tokens=12 预热正常、存在 cold_step 行。",
       "files": [
         "shared_inputs/P102_prefill.log",
@@ -17,7 +17,7 @@
     {
       "id": 1,
       "eval_name": "singlep-recon-focus",
-      "prompt": "本地目录 C:\\Users\\ganting\\.config\\opencode\\skills\\kptools-tpsplit-log-analysis-workspace\\shared_inputs 里有这轮压测的日志。我只想先看单台 P（P102_prefill.log）的情况：解析出 TTFT 拆解 Excel，并重点核对压测端测到的 client_ttft 与 proxy 日志能不能对上账——client2proxy、first_token、return 各是多少，回传 return 是否接近 0（同机回环）。decode/load_balance/压测 json 也都在同一目录。",
+      "prompt": "本地目录 /tmp/tpsplit-eval\\shared_inputs 里有这轮压测的日志。我只想先看单台 P（P102_prefill.log）的情况：解析出 TTFT 拆解 Excel，并重点核对压测端测到的 client_ttft 与 proxy 日志能不能对上账——client2proxy、first_token、return 各是多少，回传 return 是否接近 0（同机回环）。decode/load_balance/压测 json 也都在同一目录。",
       "expected_output": "用 analyze_ttft.py 单 P 命令（P102 日志 + --decode/--lb/--detailed）；xlsx 的回传对账 Sheet 有 joined 行；报告 client2proxy≈1.2ms、return≈0.5ms（回环近似 0 的量级）、对账覆盖率；指出 client_ttft ≈ client2proxy + first_token + return 的恒等关系。",
       "files": [
         "shared_inputs/P102_prefill.log",
@@ -29,7 +29,7 @@
     {
       "id": 2,
       "eval_name": "dequeue-zero-diagnosis",
-      "prompt": "我用 TTFT 分析脚本跑了一遍 C:\\Users\\ganting\\.config\\opencode\\skills\\kptools-tpsplit-log-analysis-workspace\\shared_inputs_noshm 目录里的日志（P102/P103 prefill、D103 decode、load_balance、压测 json 都在），发现逐请求明细里 dequeue 和 dequeue_main/draft/take_draft/aux 全是 0。这是解析器的 bug 吗？还是环境/采集的问题？帮我定位原因并给出修复办法。",
+      "prompt": "我用 TTFT 分析脚本跑了一遍 /tmp/tpsplit-eval\\shared_inputs_noshm 目录里的日志（P102/P103 prefill、D103 decode、load_balance、压测 json 都在），发现逐请求明细里 dequeue 和 dequeue_main/draft/take_draft/aux 全是 0。这是解析器的 bug 吗？还是环境/采集的问题？帮我定位原因并给出修复办法。",
       "expected_output": "定位到 P 引擎日志里 grep 不到 [SHM_DEQUEUE_BATCH] 行（dequeue 列数据源缺失）；指出 VLLM_TTFT_SHM_LOG=1 未设置/未生效（Ray actor 环境变量陷阱：worker 的 env 来自 raylet，启动 shell export 不生效，patch 侧懒读 os.environ）；结论是采集侧问题不是解析器 bug；给出验证命令（grep [SHM_DEQUEUE_BATCH] prefill.log）与修复动作（重启带 env、VLLM_TTFT_SHM_BATCH=1、RAY_DEDUP_LOGS=0）。",
       "files": [
         "shared_inputs_noshm/P102_prefill.log",
