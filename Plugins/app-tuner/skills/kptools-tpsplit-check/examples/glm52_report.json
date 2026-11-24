@@ -1,0 +1,71 @@
+{
+  "tool": "analyze_feasibility.py v0.2.0",
+  "generated_at": "2026-11-24 14:55:40",
+  "model_dir": "/data/models/GLM-5.2-W4A8",
+  "param_source": "script",
+  "current": {
+    "tp": 32,
+    "dp": 5,
+    "pp": 1,
+    "ep_enabled": true,
+    "ep_group": 32,
+    "total_cards": 160,
+    "per_card_total_gib": 64.0,
+    "usable_gib": 54.0,
+    "usable_source": "日志实测 Desired usage(total)",
+    "log_weights_gib": 22.0,
+    "log_kv_gib": 27.7,
+    "log_desired_total_gib": 54.0,
+    "log_actual_total_gib": 54.0
+  },
+  "weights": {
+    "replicated_gib": 3.98,
+    "tp_gib": 9.6,
+    "ep_gib": 362.35,
+    "extra_gib": 6.4,
+    "source": "weights-json: glm52_weights.json",
+    "calculated_per_card_gib": 22.003437500000004,
+    "calibration_diff_gib": -0.003437500000003979
+  },
+  "kv_bytes_per_token": 89856.9441836858,
+  "mla": true,
+  "max_model_len": 131072,
+  "candidates": [
+    {
+      "tp": 32,
+      "dp_per_group": 1,
+      "cluster_dp": 5,
+      "per_card_weights_gib": 22.003437500000004,
+      "kv_pool_gib": 27.696562499999995,
+      "per_dp_tokens": 330958.923736462,
+      "cluster_kv_tokens": 1654794.61868231,
+      "verdict": "cur"
+    },
+    {
+      "tp": 16,
+      "dp_per_group": 2,
+      "cluster_dp": 10,
+      "per_card_weights_gib": 22.3034375,
+      "kv_pool_gib": 27.396562499999998,
+      "per_dp_tokens": 327374.0861913357,
+      "cluster_kv_tokens": 3273740.861913357,
+      "verdict": "ok"
+    },
+    {
+      "tp": 8,
+      "dp_per_group": 4,
+      "cluster_dp": 20,
+      "per_card_weights_gib": 22.903437500000003,
+      "kv_pool_gib": 26.796562499999997,
+      "per_dp_tokens": 320204.411101083,
+      "cluster_kv_tokens": 6404088.22202166,
+      "verdict": "ok"
+    }
+  ],
+  "recommended": {
+    "tp": 8,
+    "cluster_dp": 20,
+    "dp_per_group": 4,
+    "current_dp_measured": 5
+  }
+}
