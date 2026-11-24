@@ -6,12 +6,20 @@
     {
       "id": "TTFT-01",
       "prompt": "只预检 vLLM 主仓的 TTFT 插桩，不改源码",
-      "should_trigger": true
+      "should_trigger": true,
+      "note": "routes to kptools-vllm-ttft-instrumentation"
     },
     {
       "id": "TTFT-02",
       "prompt": "只预检 vLLM-Ascend 插桩，不碰 vLLM 主仓",
-      "should_trigger": false
+      "should_trigger": false,
+      "note": "routes to kptools-vllm-ascend-ttft-instrumentation"
+    },
+    {
+      "id": "TTFT-03",
+      "prompt": "用已有的 vLLM Prefill 原始日志生成首 token 延迟分解 HTML，不打点也不发请求",
+      "should_trigger": false,
+      "note": "routes to kptools-vllm-ttft"
     }
   ]
 }
