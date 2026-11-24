@@ -407,12 +407,32 @@ class VerdictTests(unittest.TestCase):
         text = tool.verify_text(report)
         for name in ("基线组", "段缓存开启组"):
             self.assertIn(f"{name}：未执行多线程并发检查", text)
-        self.assertNotIn("并发检查未发现", text)
+        self.assertNotIn("并发子检查未发现", text)
 
         on["concurrency"]["threads"] = 2
         text = tool.verify_text(self.summarize({"orig": [orig], "on": [on]}))
-        self.assertIn("段缓存开启组：2 线程并发检查未发现不一致或异常", text)
-        self.assertNotIn("8 线程并发检查未发现", text)
+        self.assertIn("段缓存开启组：2 线程并发子检查未发现不一致或异常", text)
+        self.assertNotIn("8 线程并发子检查未发现", text)
+
+    def test_report_keeps_concurrency_result_separate_from_failed_replay(self):
+        for name in ("orig", "on"):
+            self.write_ids(name, [[1], [2]])
+        orig = fake_run(["a", "b"], [1, 1], backend="tokenizers")
+        on = fake_run(["a", "b"], [1, 1], stats={"hits": 0, "misses": 2})
+        on["concurrency"] = {"threads": 2, "mismatch": [], "errors": []}
+        report = self.summarize({"orig": [orig], "on": [on]})
+        text = tool.verify_text(report)
+        self.assertIn("一致性与稳定性：未通过", text)
+        self.assertIn("段缓存开启组：2 线程并发子检查未发现不一致或异常", text)
+
+        for field in ("mismatch", "errors"):
+            with self.subTest(field=field):
+                evidence = dict(on["concurrency"])
+                del evidence[field]
+                report["arms"]["on"]["concurrency"] = evidence
+                text = tool.verify_text(report)
+                self.assertIn("段缓存开启组：并发检查结果不完整", text)
+                self.assertNotIn("并发子检查未发现", text)
 
 
 def verdict_info():

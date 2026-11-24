@@ -1264,10 +1264,14 @@ def verify_text(report) -> str:
             continue
         concurrency = arm.get("concurrency") or {}
         threads = concurrency.get("threads", 0)
+        mismatch = concurrency.get("mismatch")
+        errors = concurrency.get("errors")
         if threads < 2:
             lines.append(f"- {ARM_LABELS[name]}：未执行多线程并发检查")
-        elif not concurrency["mismatch"] and not concurrency["errors"]:
-            lines.append(f"- {ARM_LABELS[name]}：{threads} 线程并发检查未发现不一致或异常")
+        elif mismatch is None or errors is None:
+            lines.append(f"- {ARM_LABELS[name]}：并发检查结果不完整")
+        elif not mismatch and not errors:
+            lines.append(f"- {ARM_LABELS[name]}：{threads} 线程并发子检查未发现不一致或异常")
     lines.append("")
     lines.append("## 分词耗时与内存")
     lines.append("")
