@@ -7,9 +7,10 @@
 
 ## 运行时门控
 
-- 能力位（如 SVE 位）+ 指令集代次（如 SVE2 位）+ 向量长度（系统调用读取当前 VL）与编译宽度精确匹配才启用定宽层；任一不匹配一律回退窄层——VL 偏小会越界执行，偏大只用到低位且收益存疑，不接受"由任务声明放行"的例外。
+- 能力位（如 SVE 位）+ 指令集代次（如 SVE2 位）+ 向量长度（系统调用读取当前 VL）与编译宽度精确匹配才启用定宽层；任一方向的 VL 不匹配（偏小或偏大）都超出定宽产物的运行保证，一律走基线实现，不接受"由任务声明放行"的例外。
+- VL 按线程维护（`PR_SVE_GET_VL` 读取的是调用线程的当前值）：选层校验必须发生在实际执行内核的线程上，未匹配走基线实现。仅在初始化时以主线程 VL 通过门控、之后按进程级配置（如 `SIMDConfig::level`）选层，会让 VL 不同的工作线程进入定宽内核。
 - 分派入口与回退/窄层实现必须来自按基线 ISA 编译的翻译单元：整库或整目标带高层 flags 时，自动向量化会把 `ptrue` 等定宽指令混进同一翻译单元的普通循环（回退函数同样中招），非兼容主机上即 SIGILL；回退路径不得与定宽层共用翻译单元或 flags。
-- 门控谓词写成纯函数（入参为能力位与 VL），便于离机单测各组合；主机探测函数只是它的一个调用方。
+- 门控谓词写成纯函数（入参为能力位与 VL），便于离机单测各组合；主机探测与执行线程的分派时校验都只是它的调用方。
 
 ## 单层 vs 动态分发
 
@@ -24,4 +25,5 @@ NEON/SVE 选型检查点（短输入、连续算术、查表、位运算、融�
 ## 外部参考
 
 - [Arm ACLE：定宽 SVE 类型](https://arm-software.github.io/acle/main/acle.html#introduction-to-fixed-length-sve-types)
+- [Linux PR_SVE_GET_VL：线程级 SVE 向量长度](https://man7.org/linux/man-pages/man2/PR_SVE_GET_VL.2const.html)
 - [Faiss SIMD 动态分派迁移指南](https://github.com/facebookresearch/faiss/blob/main/faiss/docs/simd_dynamic_dispatch_migration.md)
