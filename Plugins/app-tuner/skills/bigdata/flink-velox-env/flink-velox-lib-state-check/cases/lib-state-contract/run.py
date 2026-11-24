@@ -3,7 +3,7 @@
 
 Drives scripts/lib_state_check.py against a fake machine laid out in a scratch
 directory — a sysroot with a Flink installation whose lib/ holds a chosen set of
-jars (native, the complete GFV set, a partial set, duplicates), a fake PATH with
+jars (native, the complete GlutenFlink set, a partial set, duplicates), a fake PATH with
 nothing on it or a flink symlink — with nothing from the real machine in play; the
 script's seam ENV_CHECK_SYSROOT carries the fake. Pins the verdict contract (exit
 codes, success, status, missing, next_step for every --expect), every probe rule
@@ -37,7 +37,7 @@ SCRATCH = RESULTS / "scratch"
 
 KEY = "flink_velox_lib_state_check_result"
 
-# the GFV set as the build script deploys it (planner/runtime/loader + velox4j)
+# the GlutenFlink set as the build script deploys it (planner/runtime/loader + velox4j)
 GFV_JARS = [
     "gluten-flink-loader-1.9.0-SNAPSHOT.jar", "gluten-flink-planner-1.9.0-SNAPSHOT.jar",
     "gluten-flink-runtime-1.9.0-SNAPSHOT.jar", "velox4j-0.1.0-SNAPSHOT.jar",
@@ -168,7 +168,7 @@ class LibStateCase(unittest.TestCase):
         self.assertEqual(s["velox4j_jars"], ["velox4j-0.1.0-SNAPSHOT.jar"])
         self.assertEqual(s["runtime_deps"]["missing"], [])
         self.assertEqual(self.item(r, "build")["detail"],
-                         "complete GFV set: planner runtime loader + velox4j + 14 runtime deps")
+                         "complete GlutenFlink set: planner runtime loader + velox4j + 14 runtime deps")
         self.assertEqual(r["next_step"], "ready: lib holds the gfv build")
 
     def test_partial_set_fails_and_names_the_missing_parts(self):
@@ -180,20 +180,20 @@ class LibStateCase(unittest.TestCase):
         self.assertEqual(s["build"], "partial")
         self.assertEqual(s["missing_parts"], list(RUNTIME_DEP_IDS[10:]))
         build = self.item(r, "build")
-        self.assertEqual(build["detail"], "an incomplete GFV set is in lib: missing jackson-core, "
+        self.assertEqual(build["detail"], "an incomplete GlutenFlink set is in lib: missing jackson-core, "
                          "jackson-databind, jackson-datatype-jdk8, jackson-datatype-jsr310 "
                          "(4 gluten/velox jar(s): gluten-flink-loader-1.9.0-SNAPSHOT.jar, "
                          "gluten-flink-planner-1.9.0-SNAPSHOT.jar, gluten-flink-runtime-1.9.0-SNAPSHOT.jar, "
                          "velox4j-0.1.0-SNAPSHOT.jar) — half a stack fails at class-loading")
-        self.assertEqual(build["fix"], "deploy the complete GFV build into lib, or remove every gluten/velox "
+        self.assertEqual(build["fix"], "deploy the complete GlutenFlink build into lib, or remove every gluten/velox "
                          "jar, then restart the cluster (a restart needs the user consent)")
-        self.assertEqual(r["next_step"], "deploy the complete GFV build into lib (missing jackson-core, "
+        self.assertEqual(r["next_step"], "deploy the complete GlutenFlink build into lib (missing jackson-core, "
                          "jackson-databind, jackson-datatype-jdk8, jackson-datatype-jsr310) or remove every "
                          "gluten/velox jar, then restart the cluster (a restart needs the user consent), then rerun")
         self.assertEqual(r["error_message"], "1 item(s) missing: build")
         _, out, _, _ = self.run_check()
         self.assertIn("lib-state   FAIL     1 item(s) missing", out)
-        self.assertIn("        fix: deploy the complete GFV build into lib", out)
+        self.assertIn("        fix: deploy the complete GlutenFlink build into lib", out)
 
     def test_partial_with_only_the_runtime_jar(self):
         self.m.flink_home()
@@ -217,7 +217,7 @@ class LibStateCase(unittest.TestCase):
         self.m.lib_jars("partial")
         _, _, _, r = self.run_check("--json", "--expect", "native")
         self.assertEqual(r["lib_state"]["build"], "partial")  # partial wins over the expectation
-        self.assertIn("deploy the complete GFV build", r["next_step"])
+        self.assertIn("deploy the complete GlutenFlink build", r["next_step"])
 
     def test_expect_gfv_rejects_native(self):
         self.m.flink_home()

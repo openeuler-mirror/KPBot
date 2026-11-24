@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""nexmark_check.py — read-only check of the nexmark benchmark pieces for the GFV stack.
+"""nexmark_check.py — read-only check of the nexmark benchmark pieces for the GlutenFlink stack.
 
 Two things make a nexmark run possible: the nexmark-flink jar in the Flink lib/
 (nexmark has no release artifact — it is built from github.com/nexmark/nexmark),

@@ -21,6 +21,10 @@ metadata:
 
 velox 及其第三方依赖的构建除了编译器，还要 ninja（velox4j 的 CMake 后端）、ccache（重编加速）、autoconf / automake / libtool（部分第三方库的 autotools 构建）、flex / bison（生成器）、python3（构建脚本）、patchelf（修 rpath）。缺哪件都在构建半途才炸，报错离"少装了一个包"很远。本 skill 只做一件事：**把这九件逐个在 PATH 上找一遍、取版本，缺的说清该装哪个包**。它是 `flink-velox-env` 检查家族里"构建辅助工具"这一具体项：只读、不改动机器、不装包。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
+## 术语
+
+这套栈的官方叫法是 GlutenFlink；项目名 GFVBot（本 skill 的包名映射解析自其安装器的 build-tools 探测清单）按原名保留，`GFV` 与 GlutenFlink 指同一生态。
+
 ## 使用场景
 
 ### 适用（应使用本 skill）

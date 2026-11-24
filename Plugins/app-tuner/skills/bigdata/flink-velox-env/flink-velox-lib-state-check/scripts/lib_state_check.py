@@ -3,11 +3,11 @@
 
 Classifies the lib/ of the Flink installation (FLINK_HOME, a flink on PATH,
 /opt/flink, /usr/local/flink) as one of three builds by its jars: native (no
-gluten/velox jar), gfv (the complete GFV set: planner + runtime + loader, velox4j
+gluten/velox jar), gfv (the complete GlutenFlink set: planner + runtime + loader, velox4j
 and the runtime dependencies the build deploys), or partial (some of it — half a
 stack fails at class-loading). Several versions of one artifact are reported.
 --expect says which build the caller wants in lib (any by default; native for a
-native-side run; gfv for the GFV build), and anything else is a failure with the
+native-side run; gfv for the GlutenFlink build), and anything else is a failure with the
 action that gets there. The script classifies only: it moves no jar, starts or
 stops nothing, writes nowhere except the optional --out file.
 
@@ -41,11 +41,11 @@ SYSROOT = os.environ.get('ENV_CHECK_SYSROOT', '')
 
 STATUS_ORDER = ('ok', 'info', 'skipped', 'warn', 'fail')
 
-# A jar named gluten* or velox* means the GFV build (the same criterion as the
+# A jar named gluten* or velox* means the GlutenFlink build (the same criterion as the
 # lib gate of flink-velox-e2e-verify).
 GFV_JAR_RE = re.compile(r'gluten|velox', re.I)
 GLUTEN_ARTIFACTS = ('gluten-flink-planner', 'gluten-flink-runtime', 'gluten-flink-loader')
-# What the GFV build deploys into lib/ besides its own jars (artifactId only:
+# What the GlutenFlink build deploys into lib/ besides its own jars (artifactId only:
 # versions move with the stack, the names do not).
 RUNTIME_DEPS = ('guava', 'failureaccess', 'arrow-c-data', 'arrow-format', 'arrow-memory-core',
                 'arrow-memory-unsafe', 'arrow-vector', 'commons-io', 'flatbuffers-java',
@@ -150,7 +150,7 @@ def scan(expect):
     elif build == 'gfv':
         items.append(make_item(
             'build', 'ok' if expect in ('any', 'gfv') else 'fail',
-            'complete GFV set: ' + ' '.join(a[len('gluten-flink-'):] for a in GLUTEN_ARTIFACTS)
+            'complete GlutenFlink set: ' + ' '.join(a[len('gluten-flink-'):] for a in GLUTEN_ARTIFACTS)
             + f' + velox4j + {len(RUNTIME_DEPS)} runtime deps',
             None if expect in ('any', 'gfv') else
             'move every gluten/velox jar out of lib and restart the cluster (a restart needs the user consent)'))
@@ -158,9 +158,9 @@ def scan(expect):
         shown = ', '.join(gfv_jars[:4]) + (' ...' if len(gfv_jars) > 4 else '')
         items.append(make_item(
             'build', 'fail',
-            f'an incomplete GFV set is in lib: missing {", ".join(payload["missing_parts"])} '
+            f'an incomplete GlutenFlink set is in lib: missing {", ".join(payload["missing_parts"])} '
             f'({len(gfv_jars)} gluten/velox jar(s): {shown}) — half a stack fails at class-loading',
-            'deploy the complete GFV build into lib, or remove every gluten/velox jar, then restart '
+            'deploy the complete GlutenFlink build into lib, or remove every gluten/velox jar, then restart '
             'the cluster (a restart needs the user consent)'))
     for artifact, jars in sorted(payload['duplicates'].items()):
         items.append(make_item(
@@ -176,7 +176,7 @@ def next_step(expect, payload, items):
         return HINT_FLINK + ', then rerun'
     build = payload['build']
     if build == 'partial':
-        return ('deploy the complete GFV build into lib (missing ' + ', '.join(payload['missing_parts'])
+        return ('deploy the complete GlutenFlink build into lib (missing ' + ', '.join(payload['missing_parts'])
                 + ') or remove every gluten/velox jar, then restart the cluster (a restart needs the '
                 'user consent), then rerun')
     if expect == 'native' and build != 'native':
@@ -281,10 +281,10 @@ def render(result):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Read-only check of what sits in the Flink lib/ directory '
-                                                 '(native / GFV / partial build) for the Flink + GlutenFlink stack.')
+                                                 '(native / GlutenFlink / partial build) for the Flink + GlutenFlink stack.')
     parser.add_argument('--expect', choices=('any', 'native', 'gfv'), default='any',
                         help='the build lib should hold: any (default), native (no gluten/velox jar), '
-                             'gfv (the complete GFV set)')
+                             'gfv (the complete GlutenFlink set)')
     parser.add_argument('--out', help='also write the JSON result to this file (inside the project '
                                       'directory; an existing file is kept unless --overwrite)')
     parser.add_argument('--overwrite', action='store_true', help='let --out replace an existing file')

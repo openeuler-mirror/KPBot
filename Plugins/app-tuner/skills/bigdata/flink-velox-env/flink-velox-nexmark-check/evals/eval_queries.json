@@ -31,7 +31,7 @@
       "id": "q-lib-state",
       "prompt": "lib 里 gluten jar 齐不齐",
       "should_trigger": false,
-      "note": "GFV 构建分类 → flink-velox-lib-state-check"
+      "note": "GlutenFlink 构建分类 → flink-velox-lib-state-check"
     },
     {
       "id": "q-build",

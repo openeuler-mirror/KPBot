@@ -11,7 +11,7 @@
     },
     {
       "id": "q-loaded-build",
-      "prompt": "集群现在加载的是 native 还是 GFV，TaskManager 都在吗",
+      "prompt": "集群现在加载的是 native 还是 GlutenFlink，TaskManager 都在吗",
       "should_trigger": true,
       "note": "场景入口类触发词：集群加载的是哪套 jar、在不在跑"
     },
@@ -23,7 +23,7 @@
     },
     {
       "id": "q-lib-state",
-      "prompt": "lib 里是 native 还是 GFV 构建，gluten jar 齐不齐",
+      "prompt": "lib 里是 native 还是 GlutenFlink 构建，gluten jar 齐不齐",
       "should_trigger": false,
       "note": "lib 内容分类 → flink-velox-lib-state-check"
     },
@@ -35,7 +35,7 @@
     },
     {
       "id": "q-overall",
-      "prompt": "这台机器能不能编译并运行 GFV 栈",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
       "should_trigger": false,
       "note": "总裁决 → 统筹 flink-velox-env-check"
     },
