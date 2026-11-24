@@ -9,7 +9,7 @@
     { "id": "EQ-04", "prompt": "确认两个容器的 torch_npu 和 vllm 版本有没有漂移", "should_trigger": true },
     { "id": "EQ-05", "prompt": "P/D 两侧的 HCCL 环境变量对比一下", "should_trigger": true },
     { "id": "EQ-06", "prompt": "升级前后环境变了哪些东西，我有升级前的采集包", "should_trigger": true },
-    { "id": "EQ-07", "prompt": "把这个容器的环境快照存下来备查", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "把这个容器的环境快照存下来备查", "should_trigger": true, "note": "普通单容器留档；只有指定按 P/D 角色留档时才读取 collect-environment" },
     { "id": "EQ-08", "prompt": "两个容器的 cpuset 和 cgroup 配额是不是一样", "should_trigger": true },
     { "id": "EQ-09", "prompt": "看看 NPU 现在的利用率和温度", "should_trigger": false, "note": "routes to kptools-ascend-smi" },
     { "id": "EQ-10", "prompt": "采集进程的线程分布和上下文切换", "should_trigger": false, "note": "routes to kptools-proc-collector" },
