@@ -1,0 +1,5 @@
+{
+  "entrypoint": "tests/mock_proxy.py",
+  "args": ["--backend"],
+  "capture_module": "scripts/capture_runtime.py"
+}

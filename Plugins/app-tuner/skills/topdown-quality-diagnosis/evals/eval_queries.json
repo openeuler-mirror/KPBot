@@ -1,0 +1,61 @@
+{
+  "skill_name": "topdown-quality-diagnosis",
+  "eval_type": "trigger_and_behavior",
+  "protocol": "Review evidence and decisions, not exact wording. Synthetic fixtures are not hardware certification.",
+  "queries": [
+    {
+      "id": "T01",
+      "prompt": "帮我判断这份 topdown 数据可信不可信，并给重采方案",
+      "should_trigger": true,
+      "expected": "核对三维范围、状态与原始证据"
+    },
+    {
+      "id": "T02",
+      "prompt": "Bad Speculation 13.03%，是不是必须优化分支？",
+      "should_trigger": true,
+      "expected": "先核实口径和对照，不直接判高值错误或预测收益"
+    },
+    {
+      "id": "T03",
+      "prompt": "请求采5秒，只输出246ms，worker exit -11，但工具成功",
+      "should_trigger": true,
+      "expected": "保留故障证据，禁止正式A/B，不建议只加长窗口"
+    },
+    {
+      "id": "T04",
+      "prompt": "只帮我生成普通 Python 火焰图",
+      "should_trigger": false,
+      "expected": "路由普通采样能力"
+    },
+    {
+      "id": "T05",
+      "prompt": "帮我重写这个分支提高吞吐",
+      "should_trigger": false,
+      "expected": "路由代码优化"
+    },
+    {
+      "id": "B01",
+      "prompt": "把topdown 13.03%减去另一份热点报告Python占比1.49%",
+      "should_trigger": true,
+      "expected": "解释分母与运行差异，拒绝该算术归因"
+    },
+    {
+      "id": "B02",
+      "prompt": "服务一直不退出，能否判断这5秒采集有效？",
+      "should_trigger": true,
+      "expected": "窗口健康、进度和存活验收，不等待常驻服务退出"
+    },
+    {
+      "id": "B03",
+      "prompt": "只有整任务100万帧，能算5秒窗口每帧cycles吗？",
+      "should_trigger": true,
+      "expected": "不混用分母，需要同窗实际完成量"
+    },
+    {
+      "id": "B04",
+      "prompt": "工具没有time_running，帮我填个100%吧",
+      "should_trigger": true,
+      "expected": "保持unknown，不编造测量质量"
+    }
+  ]
+}

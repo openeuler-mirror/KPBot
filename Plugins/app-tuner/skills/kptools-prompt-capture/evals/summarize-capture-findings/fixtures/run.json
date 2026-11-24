@@ -1,0 +1,10 @@
+{
+  "target": "proxy-fixture",
+  "capture_start_unix": 1700000000,
+  "capture_end_unix": 1700000060,
+  "capture_closed": true,
+  "restore": "not_authorized",
+  "runtime_version": "modified",
+  "data_dir": "removed-data",
+  "log_correlation": "not_run"
+}

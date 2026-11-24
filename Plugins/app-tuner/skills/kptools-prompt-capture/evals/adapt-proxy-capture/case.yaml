@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: adapt-proxy-capture
+expected_outcome: |
+  在新目录交付改造后的 proxy 副本、隔离验证结果和备份记录；原源码保持不变。用合成请求对比改造前、采集关闭及采集开启三组的状态码、响应头与响应体，说明取消收尾是否验证。

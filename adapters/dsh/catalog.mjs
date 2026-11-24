@@ -100,6 +100,23 @@ async function pluginDirectories(pluginsRoot) {
   return result;
 }
 
+async function* skillDirectories(directory, excludes, depth = 1) {
+  for (const child of (await fs.readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    const resourceDir = path.join(directory, child.name);
+    if (child.isSymbolicLink()) throw new Error(`Symlink not allowed: ${resourceDir}`);
+    if (!child.isDirectory()) continue;
+    const skillDir = validateDirectoryName(child.name);
+    if (excludes.includes(skillDir)) continue;
+    if (await lstatOptional(path.join(resourceDir, 'SKILL.md'))) {
+      yield { skillDir, resourceDir };
+      continue;
+    }
+    const marker = await lstatOptional(path.join(resourceDir, 'DOMAIN.md'));
+    if (!marker?.isFile()) throw new Error(`Missing SKILL.md: ${resourceDir}`);
+    if (depth < 4) yield* skillDirectories(resourceDir, excludes, depth + 1);
+  }
+}
+
 /** Discover explicitly opted-in packages at any depth below Plugins/. */
 export async function discoverSkills(repositoryRoot) {
   const root = await fs.realpath(repositoryRoot);
@@ -125,14 +142,8 @@ export async function discoverSkills(repositoryRoot) {
     await checkedPath(root, skillsRoot);
     const overlayRoot = path.join(pluginRoot, 'dsh');
     if (await lstatOptional(overlayRoot)) await checkedPath(root, overlayRoot);
-    for (const child of (await fs.readdir(skillsRoot, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (child.isSymbolicLink()) throw new Error(`Symlink not allowed: ${path.join(skillsRoot, child.name)}`);
-      if (!child.isDirectory()) continue;
-      const skillDir = validateDirectoryName(child.name);
-      if (excludes.includes(skillDir)) continue;
-      const resourceDir = await checkedPath(root, path.join(skillsRoot, skillDir));
+    for await (const { skillDir, resourceDir } of skillDirectories(skillsRoot, excludes)) {
       const base = path.join(resourceDir, 'SKILL.md');
-      if (!(await lstatOptional(base))) throw new Error(`Missing SKILL.md: ${resourceDir}`);
       const overlayDirectory = path.join(overlayRoot, skillDir);
       if (await lstatOptional(overlayDirectory)) {
         await checkedPath(root, overlayDirectory);

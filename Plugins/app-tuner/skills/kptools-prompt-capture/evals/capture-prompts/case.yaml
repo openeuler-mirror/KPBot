@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: capture-prompts
+expected_outcome: |
+  对已接入的 mock proxy 使用有时限的元数据采集；依据 worker 有效状态而非仅配置判断。到期关闭，报告分段、写入或丢弃情况，不改源码。

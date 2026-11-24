@@ -1,0 +1,13 @@
+{
+  "skill_name": "uadk-accelerator-optimization",
+  "queries": [
+    { "id": "UQ-01", "prompt": "热点函数里 AES_encrypt 占 8%，能用硬件加速器卸载吗", "should_trigger": true, "note": "cipher 热点" },
+    { "id": "UQ-02", "prompt": "压缩 deflate/inflate 是热点，鲲鹏加速器能帮忙吗", "should_trigger": true, "note": "compression 热点" },
+    { "id": "UQ-03", "prompt": "RSA 私钥解密是性能瓶颈，想试下 HPRE 卸载", "should_trigger": true, "note": "asymmetric 热点" },
+    { "id": "UQ-04", "prompt": "SM3 摘要计算占了 3% CPU，可以硬件加速吗", "should_trigger": true, "note": "digest 热点" },
+    { "id": "NQ-01", "prompt": "malloc/free 热点 20%，换个分配器吧", "should_trigger": false, "note": "routes to performance-library-selection" },
+    { "id": "NQ-02", "prompt": "memcpy 占了 15%，字符串库有优化空间吗", "should_trigger": false, "note": "routes to performance-library-selection" },
+    { "id": "NQ-03", "prompt": "网卡软中断打满了一个核，怎么绑核", "should_trigger": false, "note": "routes to network-optimization / cpu-affinity-optimization" },
+    { "id": "NQ-04", "prompt": "GPU 利用率上不去，看看算子", "should_trigger": false, "note": "routes to accelerator-optimization" }
+  ]
+}

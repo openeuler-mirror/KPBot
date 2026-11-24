@@ -1,0 +1,53 @@
+{
+  "skill_name": "sql-q51-daily-preaggregation",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "date-alias-regroup",
+      "prompt": "同一商品的 sold_date_sk=10/11 都映射到同一天，事实侧分别预聚合成 10 和 8。连日期表后能直接送累计窗口吗？",
+      "expected_output": "仍须按 item_sk,d_date 再合并成一行 18；两行直接送 ROWS 窗口会改变结果。核对日期键映射、过滤和状态类型。",
+      "files": [],
+      "assertions": [
+        "保留日历日期 final 聚合",
+        "不让累计窗口替代日聚合",
+        "要求相同类型与连接语义"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "null-and-overflow-contract",
+      "prompt": "全 NULL 日组想改成零，decimal SUM 的 partial 又改成窄状态。整数测试通过能否直接接受？",
+      "expected_output": "不能。保留全 NULL 的 NULL 与日记录，读取真实输入/中间/输出精度和溢出规则；改变括号可改变错误，需目标引擎验收或回退。",
+      "files": [],
+      "assertions": [
+        "不把 NULL 改零",
+        "核对中间状态与异常",
+        "不把 SQLite 结果当 decimal 证明"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "scope-and-guard-fallback",
+      "prompt": "任务要求保持 SQL，日期维表仅抽样未发现重复。我准备先把事实销售按日期代理键聚合，再移动连接。",
+      "expected_output": "先在已授权的实现范围评估现有连接后 partial。手工 SQL 改写不在范围；抽样不能证明维键约束，未满足守卫时沿用原边界。",
+      "files": [],
+      "assertions": [
+        "遵守 SQL 修改范围",
+        "不以抽样证明唯一性",
+        "给出原路径回退"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "count-local-states",
+      "prompt": "事实行 1 亿、全局日组 10 万、100 个 task。能说 Shuffle 记录从 1 亿降到 10 万并把倍数当查询加速吗？",
+      "expected_output": "不能用全局 distinct 代替每 task 实际 partial 状态记录。分别采两分支真实状态数、状态宽度、交换字节和 spill，再配对测完整查询。",
+      "files": [],
+      "assertions": [
+        "区分全局组数与 partial 记录",
+        "按实际字节取证",
+        "不从压缩率推断整体收益"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "skill_name": "nginx-bottleneck-analysis",
+  "version": 1,
+  "notes": "Bottleneck analysis: SSL handshake triage priority. Split from nginx-optimization evals (id 2).",
+  "evals": [
+    {
+      "id": 2,
+      "prompt": "nginx 做 HTTPS 网关，SSL 握手 QPS 很低，CPU 打满在握手上。请按优先级给出排查与优化路径：先查什么，再上什么加速手段；说明每一步的判定依据。不要执行任何破坏性操作。",
+      "expected_output": "先查证书类型（RSA→换 ECDSA，实测完整握手吞吐差约 5 倍量级）；再查协议版本（TLS1.3 握手 1-RTT）；再查 session 是否复用（短连接 session_cache off、长连接 shared:SSL:1m）；配置层确认 reuseport/multi_accept/绑核；最后才上 L3 加速（KAL OpenSSL 编译链接与 LD_LIBRARY_PATH、KAE/UADK 硬件引擎需鲲鹏加速器、tcmalloc）；每步单独压测验证。",
+      "files": [],
+      "expectations": [
+        "第一优先级是证书类型：RSA 换 ECDSA，并能给出量级依据（完整握手吞吐显著更高）",
+        "提到 TLS 协议版本升级到 1.3（握手 1-RTT 收益）",
+        "区分短/长连接的 session 复用策略：短连接 ssl_session_cache off，长连接 shared:SSL:1m + tickets 策略",
+        "L3 加速按可用性排序：KAL OpenSSL → KAE/UADK（需硬件，无硬件时跳过）→ tcmalloc",
+        "KAL OpenSSL 给出编译期链接与运行期 LD_LIBRARY_PATH 两步，且有 ldd 校验方法",
+        "每一步优化都要求压测验证后才保留（逐层归因，不一次全改）",
+        "没有把 tcmalloc 说成必然有效（或能说明其对 nginx 收益有限/场景相关）",
+        "没有建议未经确认的破坏性操作"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "压测时 mpstat 显示核 3 的 %soft=45%，其余核 %soft≈3%；/proc/interrupts 增量显示网卡单队列中断占该网卡总中断约 80%。判定瓶颈类别并给出路由（含量化依据）。不要执行任何变更。",
+      "expected_output": "判定为第 4 类「中断不均」（单核 %soft 45% ≥ 20% 阈值且 >3× 其余核；单队列中断占比 80% ≥ 50% 阈值），路由到 nginx-env-tuning（IRQ 逐队列绑核 + toeplitz 多队列）。",
+      "files": [],
+      "expectations": [
+        "明确判定为中断不均（判定树第 4 类）",
+        "引用量化阈值（%soft ≥ 20% 或单队列 ≥ 50%）作为依据",
+        "路由到 nginx-env-tuning（IRQ 绑核/多队列）",
+        "没有误判为客户端瓶颈或 TLS 握手"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "https 网关压测，perf report 前几名：ngx_ssl_handshake 18%、RSA_private_encrypt 9%、EVP_DecryptUpdate 8%（合计 35%）。判定瓶颈类别、给出量化依据与分级路由。",
+      "expected_output": "判定为第 1 类「TLS 握手/记录层」：TLS 相关符号聚合 35% ≥ 20% 阈值。路由顺序：先配置级（nginx-conf-tuning：ECDSA 证书、TLS1.3、session 复用、reuseport），仍不达标再加速级（nginx-kunpeng-tuning：KAE/tcmalloc）。",
+      "files": [],
+      "expectations": [
+        "判定为 TLS 握手/记录层（判定树第 1 类）",
+        "符号聚合 35% 对比 ≥ 20% 阈值",
+        "先路由配置级（证书/协议/session）再加速级的顺序",
+        "没有直接跳到硬件加速而跳过配置级"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "压测 QPS 上不去：服务端各核 %idle 约 60%，但压测客户端单核 %idle 只有 3%，nstat 显示 TCP 重传率 2.5%。瓶颈在哪？下一步做什么？",
+      "expected_output": "判定为第 7 类「客户端/链路瓶颈」：客户端核 %idle 3% < 10% 阈值（客户端先瓶颈）、重传率 2.5% > 1% 阈值（链路质量问题）。回 nginx-baseline-setup 修客户端布局（多客户端 + taskset 分核）并排查链路，服务端调优数据当前不可采信。",
+      "files": [],
+      "expectations": [
+        "判定为客户端/链路瓶颈（判定树第 7 类）而非服务端瓶颈",
+        "引用客户端 %idle < 10% 与重传率 > 1% 阈值",
+        "回 nginx-baseline-setup 修客户端布局（多客户端/绑核）",
+        "指出当前服务端数据不可采信（客户端先瓶颈）"
+      ]
+    }
+  ]
+}
