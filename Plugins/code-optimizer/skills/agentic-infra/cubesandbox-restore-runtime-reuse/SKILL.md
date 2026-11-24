@@ -5,6 +5,8 @@ description: 优化 CubeSandbox VMM 中重复构造 Tokio 多线程 runtime 的�
 
 # CubeSandbox restore runtime 复用
 
+本补丁与 `scheme1-rpc.patch` 对 `device_manager.rs` 的修改互斥。方案一的 `OnceLock` 沿用首次恢复的 worker 数。后续恢复需要按配置换池、并在构建失败后返回错误时，选用本补丁。组合实施方式见[实施与复现](references/runbook.md)。
+
 为同一 VMM 进程中的重复设备恢复保留 Tokio runtime，减少重复创建 worker 和 reactor 的成本。每次恢复独立持有自己的设备与快照数据，设备分组的执行顺序保持不变。
 
 1. 按进程启动身份统计恢复调用次数、设备组规模、原 worker 数、runtime 构造耗时和恢复尾延迟。每个进程只恢复一次时，首轮构造成本仍在，复用没有命中。

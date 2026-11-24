@@ -8,6 +8,15 @@
 
 ## 实现策略
 
+先确认目标树中 `restore_device_node` 的实现。若已采用 `scheme1-rpc.patch` 的 `OnceLock`，进程内后续恢复会沿用首次配置，首次建池使用 `build().unwrap()`。worker 数固定且能保证建池资源时可选该实现。需要在同一进程切换 worker 数或将建池失败传回调用方时，选择下述独立补丁。
+
+两个补丁都修改 `hypervisor/vmm/src/device_manager.rs` 的同一处。若同时需要方案一的 CubeShim 改动，从干净的 v0.7.1 工作树开始，将 `SCHEME1_PATCH` 设为方案一补丁的绝对路径。在源码根目录先执行以下命令，再按下文应用独立补丁并构建。已应用完整方案一时，在单独的干净工作树按此顺序评估。
+
+```bash
+git apply --check --exclude='hypervisor/vmm/src/device_manager.rs' "$SCHEME1_PATCH"
+git apply --exclude='hypervisor/vmm/src/device_manager.rs' "$SCHEME1_PATCH"
+```
+
 参考补丁基于 CubeSandbox `v0.7.1`（`31d911e430fdf8a8879bd062b8e78066c1a8e89d`）。进程级 `RwLock` 槽位一次保存一个设备恢复 runtime。匹配 worker 数的恢复在读锁内共享池。配置变化需要写锁，等待正在使用旧池的调用结束，先销毁旧池，再构建新池。不同配置的恢复因此可能等待，测量混合负载时单独记录切换等待。线程创建出错返回 `MigratableError::Restore`，槽位保持空闲，下一次恢复可按需要重试。该预算只覆盖设备恢复池，验收时还需计入进程和同一 cgroup 的其他线程。
 
 共享 runtime 在某次调用失败后仍存活，因此恢复任务要由调用者负责收尾。补丁先收集并校验本设备组所需的快照，再提交组内任务。遇到恢复错误或 join 错误时，取消尚可取消的任务并等待余下任务结束，再返回错误。设备恢复函数可以同步执行，已经运行的同步工作可能需要自然结束，`abort` 无法中断它。一个组成功完成以后才进入下一个组。join 错误作为恢复错误向上传递。
