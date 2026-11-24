@@ -23,12 +23,12 @@ def inspect():
         "Pillow": PIL.__version__,
     }
     expected = {
-        "ray": "2.52.0",
-        "torch": "2.6.0",
-        "torchvision": "0.21.0",
+        "ray": "2.56.0",
+        "torch": "2.13.0",
+        "torchvision": "0.28.0",
         "numpy": "2.1.3",
-        "pyarrow": "19.0.1",
-        "Pillow": "11.3.0",
+        "pyarrow": "23.0.1",
+        "Pillow": "13.0.0",
     }
     for name, version in versions.items():
         if version.split("+")[0] != expected[name]:

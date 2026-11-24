@@ -556,7 +556,7 @@ def main():
         return 2
     except OSError as exc:
         print(f"cannot create output directory {out}: {exc}", file=sys.stderr)
-        return 2
+        return 1
 
     result = {"success": False, "verified_rows": 0}
     try:

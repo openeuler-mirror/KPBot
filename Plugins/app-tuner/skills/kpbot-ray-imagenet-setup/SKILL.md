@@ -13,7 +13,7 @@ Linux、Docker、可访问官方 PyPI 和 PyTorch CPU wheel 索引的网络；�
 
 构建和运行需要当前用户可访问 Docker daemon（通常属于 `docker` 组或使用受授权的 root）。容器只读挂载用户数据、写入本次结果目录；安装器不写宿主机 Python、systemd 或全局配置。没有 Docker 权限时返回 `blocked`，不要改用宿主机全局安装。
 
-以下命令在 skill 根目录执行。镜像名和容器名按本次实验命名，不覆盖他人镜像。Dockerfile 基础镜像固定到公开多架构 digest；依赖锁文件为每个安装的 wheel 提供 sha256，构建时使用 `--require-hashes` 且只从官方源下载：PyPI 运行时依赖走 `https://pypi.org/simple`，CPU torch/torchvision 单独走 `https://download.pytorch.org/whl/cpu`。锁文件与来源记录见 [依赖锁定来源](references/lock-provenance.json)。此流程已在 Linux x86_64、Python 3.11.14 环境完成验收；锁文件按该架构冻结，其他架构需按官方索引重新生成并校验锁后再构建。
+以下命令在 skill 根目录执行。镜像名和容器名按本次实验命名，不覆盖他人镜像。Dockerfile 基础镜像固定到公开多架构 digest；依赖锁文件为每个安装的 wheel 提供 sha256，构建时使用 `--require-hashes` 且只从官方源下载：PyPI 运行时依赖走 `https://pypi.org/simple`，CPU torch/torchvision 单独走 `https://download-r2.pytorch.org/whl/cpu`。锁文件与来源记录见 [依赖锁定来源](references/lock-provenance.json)。此流程面向 Linux x86_64、Python 3.11.14 环境；锁文件按该架构冻结，其他架构需按官方索引重新生成并校验锁后再构建。
 
 ```bash
 docker build -t kpbot-ray-imagenet-setup:test .
@@ -29,7 +29,7 @@ mkdir -p wheelhouse
 python3 -m pip download --only-binary=:all: --require-hashes \
   --index-url https://pypi.org/simple -r requirements-lock.txt -d wheelhouse
 python3 -m pip download --only-binary=:all: --require-hashes --no-deps \
-  --index-url https://download.pytorch.org/whl/cpu -r requirements-cpu-lock.txt -d wheelhouse
+  --index-url https://download-r2.pytorch.org/whl/cpu -r requirements-cpu-lock.txt -d wheelhouse
 python3 -m http.server 8765 --bind 127.0.0.1 --directory wheelhouse &
 CACHE_PID=$!
 trap 'kill "$CACHE_PID"' EXIT

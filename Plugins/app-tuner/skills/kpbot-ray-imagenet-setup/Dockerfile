@@ -6,7 +6,7 @@ ARG PIP_FIND_LINKS=
 COPY requirements.txt requirements-lock.txt requirements-cpu-lock.txt ./
 RUN export PIP_NO_INDEX="${PIP_NO_INDEX}" PIP_FIND_LINKS="${PIP_FIND_LINKS}" \
     && python -m pip install --no-cache-dir --require-hashes --only-binary=:all: --no-deps \
-        --report /torch-install.json --index-url https://download.pytorch.org/whl/cpu \
+        --report /torch-install.json --index-url https://download-r2.pytorch.org/whl/cpu \
         -r requirements-cpu-lock.txt \
     && python -m pip install --no-cache-dir --require-hashes --only-binary=:all: \
         --report /python-install.json --index-url https://pypi.org/simple \

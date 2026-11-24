@@ -3,9 +3,9 @@
   "selection": "x86_64 cp311/abi3 manylinux wheels plus py3-none-any wheels; sdist excluded",
   "official_sources": [
     "https://pypi.org/simple",
-    "https://download.pytorch.org/whl/cpu"
+    "https://download-r2.pytorch.org/whl/cpu"
   ],
-  "note": "Package hashes come from the official PyPI JSON API. CPU torch/torchvision hashes were verified against official https://download-r2.pytorch.org/whl/cpu/<name>/ index fragments and match the earlier pip install receipt. No mirror or installed-package report is trusted.",
+  "note": "Package hashes come from the official PyPI JSON API. CPU torch/torchvision hashes were verified against official https://download-r2.pytorch.org/whl/cpu/<name>/ index fragments and match the pip dry-run resolution report. No mirror or installed-package report is trusted.",
   "packages": [
     {
       "name": "attrs",
@@ -33,21 +33,21 @@
     },
     {
       "name": "charset-normalizer",
-      "version": "3.5.2",
-      "pypi_json": "https://pypi.org/pypi/charset-normalizer/3.5.2/json",
-      "pypi_json_sha256": "2a3a2a543f2a5c5ff29d141f824be931dc89daa2262dd41015c4ed80a51ad9c5",
+      "version": "3.5.3",
+      "pypi_json": "https://pypi.org/pypi/charset-normalizer/3.5.3/json",
+      "pypi_json_sha256": "d21167f429cd9fe4d65ee4cec6da2c12c46d827d6856d57e55957be0ee1a9fa8",
       "wheels": [
         {
-          "filename": "charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
-          "sha256": "211d5a3eb6af8f513b8d4ca19a8c1b7accab1b5f0d3175f9826b03c1a920dc1f"
+          "filename": "charset_normalizer-3.5.3-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+          "sha256": "2a6f937e0b70133d1f826d0a253331b6fe1a4c874808cc12e16f2fb8177042f4"
         },
         {
-          "filename": "charset_normalizer-3.5.2-cp37-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
-          "sha256": "1c50fe28bbc2ced33386f298650d91218076c05420e6cbd790b913adc41659e7"
+          "filename": "charset_normalizer-3.5.3-cp37-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+          "sha256": "26c6ad87bb79628954b52f8f7b9e18ab5cd9667546712ded9689fb7677e630d6"
         },
         {
-          "filename": "charset_normalizer-3.5.2-py3-none-any.whl",
-          "sha256": "b6b751274acb69d77b3323d6b7dbaa3c7fdfc1eb829b7eb61d262f32e1af9685"
+          "filename": "charset_normalizer-3.5.3-py3-none-any.whl",
+          "sha256": "96e268b0cbda016ac519513294fcd17032264085b600abaac58b93049477e132"
         }
       ]
     },
@@ -65,13 +65,13 @@
     },
     {
       "name": "filelock",
-      "version": "4.3.0",
-      "pypi_json": "https://pypi.org/pypi/filelock/4.3.0/json",
-      "pypi_json_sha256": "dbb4ca3c0b2f9beb379c19c22b48520897674db74b4e5744d6d4366d8629b200",
+      "version": "4.3.1",
+      "pypi_json": "https://pypi.org/pypi/filelock/4.3.1/json",
+      "pypi_json_sha256": "3234712a5982af4626a1d7b360c57a0e786a7864b68e4608dd629d92c2bec072",
       "wheels": [
         {
-          "filename": "filelock-4.3.0-py3-none-any.whl",
-          "sha256": "f933f39f7e01249a4a49b9abab30edc6d4b874624c3de5dd0b0d137aa8adb979"
+          "filename": "filelock-4.3.1-py3-none-any.whl",
+          "sha256": "79e43df8e9fe509cd83a3899a7c186c8077cbbe4d200a1ed3705c2f3bb6bc487"
         }
       ]
     },
@@ -102,7 +102,7 @@
     {
       "name": "Jinja2",
       "version": "3.1.6",
-      "pypi_json": "https://pypi.org/pypi/Jinja2/3.1.6/json",
+      "pypi_json": "https://pypi.org/pypi/jinja2/3.1.6/json",
       "pypi_json_sha256": "1bc757d7065f3e67d3a49e72ebc731d0774055575732592eede9820c136329cc",
       "wheels": [
         {
@@ -138,7 +138,7 @@
     {
       "name": "MarkupSafe",
       "version": "3.0.4",
-      "pypi_json": "https://pypi.org/pypi/MarkupSafe/3.0.4/json",
+      "pypi_json": "https://pypi.org/pypi/markupsafe/3.0.4/json",
       "pypi_json_sha256": "85cd5bce3f85e67ab0b921be9c9ba144a7cc01a2d02b85ad65b1f8dabeac4c57",
       "wheels": [
         {
@@ -197,13 +197,13 @@
     },
     {
       "name": "packaging",
-      "version": "26.3",
-      "pypi_json": "https://pypi.org/pypi/packaging/26.3/json",
-      "pypi_json_sha256": "4f190d2f0b312b3086058cee64ab4333bf3ce67fb78b4c2bdb43899049b29f4d",
+      "version": "26.4",
+      "pypi_json": "https://pypi.org/pypi/packaging/26.4/json",
+      "pypi_json_sha256": "43555127cd40135ada16366b068cce77e01f3837e4c26113ca553b3847fad4a1",
       "wheels": [
         {
-          "filename": "packaging-26.3-py3-none-any.whl",
-          "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+          "filename": "packaging-26.4-py3-none-any.whl",
+          "sha256": "81383611a09c1bc0b08b76e0fd5829d7c6824c65b27a6aee339da133f4233ea2"
         }
       ]
     },
@@ -221,17 +221,13 @@
     },
     {
       "name": "pillow",
-      "version": "11.3.0",
-      "pypi_json": "https://pypi.org/pypi/pillow/11.3.0/json",
-      "pypi_json_sha256": "b3352119f61a526420e793b1f6af33826c7e212c3fcaff1c30ec7059c94ca4f3",
+      "version": "13.0.0",
+      "pypi_json": "https://pypi.org/pypi/pillow/13.0.0/json",
+      "pypi_json_sha256": "183d4151cbc909acf39d4d5d48469d6bc66d5516e7f506854241839d0611b69e",
       "wheels": [
         {
-          "filename": "pillow-11.3.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
-          "sha256": "91da1d88226663594e3f6b4b8c3c8d85bd504117d043740a8e0ec449087cc494"
-        },
-        {
-          "filename": "pillow-11.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
-          "sha256": "106064daa23a745510dabce1d84f29137a37224831d88eb4ce94bb187b1d7e5f"
+          "filename": "pillow-13.0.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "a625df9a2a5597fa5e5266e01aefc82604bb85d291e3547981e863560d75da6c"
         }
       ]
     },
@@ -253,17 +249,13 @@
     },
     {
       "name": "pyarrow",
-      "version": "19.0.1",
-      "pypi_json": "https://pypi.org/pypi/pyarrow/19.0.1/json",
-      "pypi_json_sha256": "6fb0e33ca8b495901e1799a056520d8eaca64b7bc5ff2ffe4756055900d862b6",
+      "version": "23.0.1",
+      "pypi_json": "https://pypi.org/pypi/pyarrow/23.0.1/json",
+      "pypi_json_sha256": "44b7c95ed56a2212038c5eba549c50175c1b674669b564f4919325159c947ffb",
       "wheels": [
         {
-          "filename": "pyarrow-19.0.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-          "sha256": "f24faab6ed18f216a37870d8c5623f9c044566d75ec586ef884e13a02a9d62c5"
-        },
-        {
-          "filename": "pyarrow-19.0.1-cp311-cp311-manylinux_2_28_x86_64.whl",
-          "sha256": "49a3aecb62c1be1d822f8bf629226d4a96418228a42f5b40835c1f10d42e4db6"
+          "filename": "pyarrow-23.0.1-cp311-cp311-manylinux_2_28_x86_64.whl",
+          "sha256": "26d50dee49d741ac0e82185033488d28d35be4d763ae6f321f97d1140eb7a0e9"
         }
       ]
     },
@@ -282,7 +274,7 @@
     {
       "name": "PyYAML",
       "version": "6.0.4",
-      "pypi_json": "https://pypi.org/pypi/PyYAML/6.0.4/json",
+      "pypi_json": "https://pypi.org/pypi/pyyaml/6.0.4/json",
       "pypi_json_sha256": "45e5d23e958fbc6502a0e96777921072545f2f2fb9978d27ef1a1ce9c180f765",
       "wheels": [
         {
@@ -293,13 +285,13 @@
     },
     {
       "name": "ray",
-      "version": "2.52.0",
-      "pypi_json": "https://pypi.org/pypi/ray/2.52.0/json",
-      "pypi_json_sha256": "3c3488ed4b8cded5880e86e7c033a58d9eb15bd8ebdaea053e16d07e7ad1fb01",
+      "version": "2.56.0",
+      "pypi_json": "https://pypi.org/pypi/ray/2.56.0/json",
+      "pypi_json_sha256": "3f9d2872dedbd26356639f6ddd8b5cbb4f76be8e56b6a12b026e43ef5f041eb2",
       "wheels": [
         {
-          "filename": "ray-2.52.0-cp311-cp311-manylinux2014_x86_64.whl",
-          "sha256": "59a22d8ea21bad4e703ac5a3a1947c2fc09a43b4e9043666d9f8d396ceebb974"
+          "filename": "ray-2.56.0-cp311-cp311-manylinux2014_x86_64.whl",
+          "sha256": "c5bf1a4384c0e2aa4420c95474b734d064cac354b0f00760be02d886afe96ca4"
         }
       ]
     },
@@ -340,21 +332,33 @@
       ]
     },
     {
-      "name": "sympy",
-      "version": "1.13.1",
-      "pypi_json": "https://pypi.org/pypi/sympy/1.13.1/json",
-      "pypi_json_sha256": "94c096fc66dddf07e580f9abb5447cd7501733b6d2bfd93d4918f2fd3c2d4588",
+      "name": "setuptools",
+      "version": "84.2.1",
+      "pypi_json": "https://pypi.org/pypi/setuptools/84.2.1/json",
+      "pypi_json_sha256": "d75de8ba0d3304a3d74484fb9f340edb87ef02712da4fa02a2ed92e71b0572dd",
       "wheels": [
         {
-          "filename": "sympy-1.13.1-py3-none-any.whl",
-          "sha256": "db36cdc64bf61b9b24578b6f7bab1ecdd2452cf008f34faa33776680c26d66f8"
+          "filename": "setuptools-84.2.1-py3-none-any.whl",
+          "sha256": "ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2"
+        }
+      ]
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0",
+      "pypi_json": "https://pypi.org/pypi/sympy/1.14.0/json",
+      "pypi_json_sha256": "be92fe0c65756a269abf1633405957d5339d2e7f1a397d6188354e363f65287d",
+      "wheels": [
+        {
+          "filename": "sympy-1.14.0-py3-none-any.whl",
+          "sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5"
         }
       ]
     },
     {
       "name": "typing_extensions",
       "version": "4.16.0",
-      "pypi_json": "https://pypi.org/pypi/typing_extensions/4.16.0/json",
+      "pypi_json": "https://pypi.org/pypi/typing-extensions/4.16.0/json",
       "pypi_json_sha256": "2140da00d62dde967f52d0be0ae28444f1d6a3fe603f52c83c23988c32122d5a",
       "wheels": [
         {
@@ -391,18 +395,18 @@
   "cpu_wheels": [
     {
       "name": "torch",
-      "version": "2.6.0+cpu",
-      "wheel_url": "https://download-r2.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp311-cp311-linux_x86_64.whl#sha256=5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc",
-      "sha256": "5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc",
-      "provenance": "sha256 fragment fetched from the official PyTorch CPU simple index; identical to the pip install receipt",
+      "version": "2.13.0+cpu",
+      "wheel_url": "https://download-r2.pytorch.org/whl/cpu/torch-2.13.0%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl#sha256=6746dbcbeb526eb61330b76b41ff1b4eb848951103a892eeb080dfa2b264667b",
+      "sha256": "6746dbcbeb526eb61330b76b41ff1b4eb848951103a892eeb080dfa2b264667b",
+      "provenance": "sha256 fragment fetched from the official PyTorch CPU simple index; matched the pip dry-run resolution report",
       "index_url": "https://download-r2.pytorch.org/whl/cpu/torch/"
     },
     {
       "name": "torchvision",
-      "version": "0.21.0+cpu",
-      "wheel_url": "https://download-r2.pytorch.org/whl/cpu/torchvision-0.21.0%2Bcpu-cp311-cp311-linux_x86_64.whl#sha256=d67081026aad9642c46d3b14035f8ae69117468c09a07d628f3eafc7ae74841f",
-      "sha256": "d67081026aad9642c46d3b14035f8ae69117468c09a07d628f3eafc7ae74841f",
-      "provenance": "sha256 fragment fetched from the official PyTorch CPU simple index; identical to the pip install receipt",
+      "version": "0.28.0+cpu",
+      "wheel_url": "https://download-r2.pytorch.org/whl/cpu/torchvision-0.28.0%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl#sha256=1dad604dfc0177ecebe0891bd9701fe2c62ec3f7819a247be541b3fb6effee99",
+      "sha256": "1dad604dfc0177ecebe0891bd9701fe2c62ec3f7819a247be541b3fb6effee99",
+      "provenance": "sha256 fragment fetched from the official PyTorch CPU simple index; matched the pip dry-run resolution report",
       "index_url": "https://download-r2.pytorch.org/whl/cpu/torchvision/"
     }
   ]
