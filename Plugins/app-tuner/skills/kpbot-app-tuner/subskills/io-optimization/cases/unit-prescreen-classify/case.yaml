@@ -1,0 +1,55 @@
+# 用例：tier A —— io-optimization 预筛判定与采集脚本纯逻辑单测
+#
+# 拉取与测试方法（人类可读）：
+#   # 构建（构建上下文 = Plugins/app-tuner/，本机容器无法解析 openeuler 源时需 --network host）
+#   docker build --network host \
+#     -f skills/kpbot-app-tuner/subskills/io-optimization/cases/unit-prescreen-classify/Dockerfile \
+#     -t kpbot/app-tuner-unit-prescreen:1.0-openeuler24.03 .
+#   # 运行（tier A 无 agent 参与，不做 A/B）
+#   docker run --rm kpbot/app-tuner-unit-prescreen:1.0-openeuler24.03
+#   # 也可宿主机直跑（Linux + python3 + gawk）：
+#   cd skills/kpbot-app-tuner/subskills/io-optimization/cases/unit-prescreen-classify && ./entrypoint.sh
+#
+# 说明：tier A。PATH 注入 mock 指标工具（mpstat/vmstat/iostat/pidstat/ss/
+# free/findmnt/numastat/perf），跑真实 detect_bottleneck.sh 与两个采集脚本，
+# 断言 JSON 分类与字段。看守点：
+#   1. 六类瓶颈分类逐场景正确（SKILL.md 与脚本阈值漂移在此失败）
+#   2. mpstat 新旧两种表头（%guest/%gnice 列序变化）都能读到真实 %idle
+#      —— 2026-11 修复的固定列号错位回归
+#   3. 采集脚本输出合法 JSON（bash 拼接曾产生尾逗号/字面 \n）
+#   4. mounts 只含块设备挂载（容器宿主机数千 nsfs 伪挂载不得泄漏）
+#   5. PSI 字段按 '=' 定位解析（PSI_DIR 注入合成压力文件：固定 substr
+#      偏移曾把 avg10=12.34 读成 2.34、42.00 读成 2，系统性低估压力；
+#      数值非法时降级为 null + notes，不输出错误数值）
+
+name: unit-prescreen-classify
+skill: io-optimization
+tier: A                    # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/app-tuner-unit-prescreen:1.0-openeuler24.03
+model: none                # tier A 无模型参与
+auth: none
+
+ab: []                     # tier A 不做 A/B 对照
+
+build:
+  context: ../../../../../../          # 指向 Plugins/app-tuner/
+  dockerfile: skills/kpbot-app-tuner/subskills/io-optimization/cases/unit-prescreen-classify/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires: []           # 纯标准库 + mock，无前置
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: tests_failed
+    expect: 0

@@ -1,0 +1,24 @@
+# 验证 tier-A 用例：generic-timer-optimization 技能的完整性契约
+#
+# 验证内容：
+#   skill          SKILL.md frontmatter（name 与目录一致、叶子 skill 声明）
+#   contract       输出契约 JSON 可解析、必填字段齐全、techniques_used 枚举一致
+#   numeric        数值不变量复算（溢出边界 2^64/1e9 ticks、100MHz 安全跨度
+#                  184s、计数器回绕年限、分步换算第二项上界、tick 域 limit 上界）
+#   templates      模板不变量（aarch64 门控 + #else 回退、asm volatile mrs 读取、
+#                  禁止硬编码频率、无符号减法防回绕、分步换算防溢出、锚点保域）
+#   regression     评审修复负向看护（废弃的 apply-optimization 分派表述不得回潮）
+#   sensitive      敏感内容看护（私网 IP / 凭据 / 个人家目录路径）
+#
+# 运行（在技能根目录下）：
+#   python3 cases/skill-integrity/checks.py
+#   # 或完整入口：bash cases/skill-integrity/run.sh
+#   # 产出 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier-A，仅依赖 python3 标准库；不需要目标硬件。
+
+name: skill-integrity
+skill: generic-timer-optimization
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]

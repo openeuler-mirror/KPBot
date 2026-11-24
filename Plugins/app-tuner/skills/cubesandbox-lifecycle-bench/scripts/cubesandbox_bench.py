@@ -1461,6 +1461,7 @@ def build_parser() -> argparse.ArgumentParser:
     check = subparsers.add_parser("check", help="只读预检，不修改系统")
     add_common(check)
     check.add_argument("--json", action="store_true", help="输出 JSON 而非逐行文本")
+    check.add_argument("--output", type=Path, help="同时将预检 JSON 写入指定 preflight.json")
 
     prepare = subparsers.add_parser("prepare", help="确认后修正 NUMA/TAP、重启并等待就绪")
     add_common(prepare)
@@ -1493,6 +1494,11 @@ def normalize_args(args) -> dict:
     args.toolbox = args.toolbox.expanduser().resolve()
     if hasattr(args, "output_root"):
         args.output_root = args.output_root.expanduser().resolve()
+    if getattr(args, "output", None) is not None:
+        output = args.output.expanduser()
+        # The parent is the trusted output directory. Do not resolve the final
+        # component: a pre-existing report symlink must reach write_json intact.
+        args.output = output.parent.resolve() / output.name
     return {"plan": plan, "sections": sections}
 
 
@@ -1538,8 +1544,11 @@ def main(argv=None) -> int:
     checks = run_preflight(args, env, template_id, sections)
     if resolution_error:
         checks.fail("template.resolve", resolution_error)
+    payload = checks.payload()
+    if args.output:
+        write_json(args.output, payload, reject_symlink=True)
     if args.json:
-        print(json.dumps(checks.payload(), ensure_ascii=False, indent=2))
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(checks.render())
     return 0 if checks.ok else 1

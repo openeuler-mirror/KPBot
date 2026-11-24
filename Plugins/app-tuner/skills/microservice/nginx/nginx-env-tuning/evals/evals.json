@@ -1,0 +1,44 @@
+{
+  "skill_name": "nginx-env-tuning",
+  "version": 1,
+  "notes": "Env-level layout decisions and system-change safety discipline. New evals written for the split skill.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "4 核鲲鹏 VM 跑 nginx 做 HTTPS 网关，客户端复用连接（keepalive）。请给出 worker 数与网卡队列/中断布局方案及理由。不要执行任何变更。",
+      "expected_output": "判定为 https_long（长连接）：worker 数 = 核数 - 1 = 3（核 0-2），留 1 核（核 3）专跑 master + 网卡中断；1 队列绑核 3；worker 与中断绑同 NUMA 节点侧。",
+      "files": [],
+      "expectations": [
+        "worker 数给 3（= 核数 - 1），并说明留 1 核给 master + 中断的理由",
+        "网卡队列给 1 队列且绑定核 3",
+        "提到 NUMA 同侧布局（worker 与中断不跨 NUMA）",
+        "没有给出短连接场景的布局（4 worker 于核 0-3）"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "压测机上网卡多队列中断绑核：把所有队列的中断都写同一个掩码到 /proc/irq/*/smp_affinity 可以吗？生产环境可以直接 systemctl stop irqbalance firewalld 吗？",
+      "expected_output": "都不可以。同一掩码会让所有中断聚到单核（应按队列索引逐队列分配不同掩码，队列多于核时取模轮转）；irqbalance/firewalld 是系统级变更——一次性压测机才可执行且先存档状态、压测结束按存档恢复；生产与共享/多租户节点须先向用户确认。",
+      "files": [],
+      "expectations": [
+        "指出同掩码会让中断聚到单核，给出逐队列分配不同掩码的正确做法",
+        "队列数多于核列表时按取模轮回复用",
+        "系统级变更区分一次性压测机与生产/共享节点（后者须先确认）",
+        "给出存档与恢复命令（systemctl is-active 存档、结束 start 恢复）",
+        "给出绑核回退方式（echo ff > smp_affinity 恢复全核可调度）"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "nginx 压测时 worker 报 too many open files，我已经 ulimit -n 102400 了为什么还报错？怎么彻底解决？",
+      "expected_output": "ulimit 必须在启动 nginx 的同一会话设置才生效（对已运行进程无效）；systemd 部署须在单元加 LimitNOFILE=102400；同时 nginx.conf 设置 worker_rlimit_nofile 102400。",
+      "files": [],
+      "expectations": [
+        "指出 ulimit 只对同一会话后续启动的进程生效",
+        "给出 systemd LimitNOFILE 方案",
+        "给出 worker_rlimit_nofile 配置",
+        "说明需要重启 nginx 生效"
+      ]
+    }
+  ]
+}

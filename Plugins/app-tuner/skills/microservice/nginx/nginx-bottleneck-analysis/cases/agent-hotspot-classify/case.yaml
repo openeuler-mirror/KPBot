@@ -1,0 +1,45 @@
+# 用例：tier agent —— nginx-bottleneck-analysis 瓶颈判定与分级路由
+#
+# 拉取与测试方法（人类可读）：
+#   docker build --network host \
+#     -f skills/microservice/nginx/nginx-bottleneck-analysis/cases/agent-hotspot-classify/Dockerfile \
+#     -t kpbot/app-tuner-agent-nginx-hotspot-classify:1.0-openeuler24.03 .
+#   bash skills/microservice/nginx/nginx-bottleneck-analysis/cases/agent-hotspot-classify/run_ab.sh --save results-ab
+#
+# 说明：tier agent。两个 mock 证据场景（A：中断不均；B：TLS 握手），验证 agent 能否
+# 按 skill 判定树给出正确类别、量化依据与分级路由（配置级先行→环境级/加速级）。
+# mock 证据确定性、只读，不触碰真实系统。
+
+name: agent-hotspot-classify
+skill: nginx-bottleneck-analysis
+tier: agent
+
+image: kpbot/app-tuner-agent-nginx-hotspot-classify:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  metric: assertion_pass_rate
+  uplift: pass_rate_with / pass_rate_without
+
+build:
+  context: ../../../../../..
+  dockerfile: skills/microservice/nginx/nginx-bottleneck-analysis/cases/agent-hotspot-classify/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时挂载）
+  - opencode auth.json（运行时挂载）
+  - 容器可访问模型 API（必要时 --network host）
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
