@@ -13,7 +13,7 @@
     { "id": "NQ-02", "prompt": "分析这个 Python 进程的 GIL 竞争", "should_trigger": false, "note": "routes to kptools-py-spy" },
     { "id": "NQ-03", "prompt": "采集系统整体 CPU 和内存利用趋势", "should_trigger": false, "note": "routes to kptools-nmon" },
     { "id": "NQ-04", "prompt": "看看 NPU 算子执行耗时分布", "should_trigger": false, "note": "routes to kptools-ascend-profiling" },
-    { "id": "NQ-05", "prompt": "帮我部署一个负载均衡器把请求均匀分发", "should_trigger": false, "note": "部署动作，本 skill 只做采集与分析，不部署组件" },
+    { "id": "NQ-05", "prompt": "帮我部署一个负载均衡器把请求均匀分发", "should_trigger": false, "note": "routes to kptools-dplb-optimization（部署与配置；本 skill 只做采集与分析）" },
     { "id": "NQ-06", "prompt": "采集 Python proxy 转发的请求内容，看看请求分布和会话情况", "should_trigger": false, "note": "routes to kptools-prompt-capture（请求内容采集，非负载指标）" }
   ]
 }
