@@ -35,7 +35,7 @@ class HandoffContract(unittest.TestCase):
         self.receipt = self.root / 'receipt.json'
 
     def cli(self, script, *args, status=0):
-        result = subprocess.run([sys.executable, str(script), *map(str, args)],
+        result = subprocess.run([sys.executable, '-B', str(script), *map(str, args)],
                                 capture_output=True, encoding='utf-8', errors='replace')
         self.assertEqual(result.returncode, status, result.stdout + result.stderr)
         return result
@@ -83,4 +83,14 @@ class HandoffContract(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    result = unittest.main(verbosity=2, exit=False).result
+    output = Path(__file__).resolve().parent / 'results' / 'result.json'
+    output.parent.mkdir(exist_ok=True)
+    output.write_text(json.dumps({
+        'success': result.wasSuccessful() and result.testsRun > 0 and not result.skipped,
+        'tests_run': result.testsRun,
+        'skipped': len(result.skipped),
+        'failures': len(result.failures),
+        'errors': len(result.errors),
+    }, indent=2) + '\n', encoding='utf-8')
+    sys.exit(0 if result.wasSuccessful() else 1)
