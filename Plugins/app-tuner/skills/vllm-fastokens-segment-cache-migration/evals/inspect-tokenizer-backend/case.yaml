@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: inspect-tokenizer-backend
+expected_outcome: |
+  使用 probe 检查指定的 vLLM Python 环境和 PID，并输出 probe.json。
+  分开说明包版本、进程实际加载的后端及段缓存配置；若只能从 shell 加载分词器，注明证据不来自运行中的服务。
+  不准备候选版本，不生成快照或执行回放。

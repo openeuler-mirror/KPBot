@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: inspect-fastokens-after-cutover
+expected_outcome: |
+  以回放通过的 fastokens 版本为目标，逐个列出 PID 的核对结果：101 一致、102 不一致、103 无法核实。
+  段缓存开关、预算与库名相同不能替代实际部署的版本证据，不重启服务或重跑回放。

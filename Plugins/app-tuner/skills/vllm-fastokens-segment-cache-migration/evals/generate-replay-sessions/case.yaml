@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: generate-replay-sessions
+expected_outcome: |
+  replay.jsonl 含 12 条请求，分属 3 个会话，每个会话 4 轮，后续轮次保留前面请求的消息前缀。
+  使用种子 17、工具输出长度 500 字符，重复生成时文件字节一致。无需访问服务或模型。

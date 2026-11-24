@@ -3,7 +3,7 @@ name: kptools-ascend-pd-env
 description: >
   采集并对比 vLLM-Ascend P/D 容器环境：系统内核、cgroup 配额、CPU/NUMA 拓扑、
   CANN 与驱动版本、npu-smi 快照、进程命令行与环境变量、Python 包清单。一个容器
-  出单环境报告，多个容器或搭配已有采集包则自动对比并标差异。当用户需要排查
+  出单环境报告；多个环境默认对比，按 P/D 角色只留档时不对比。当用户需要排查
   P/D 两侧环境不一致、CANN/驱动/torch_npu/vLLM 版本漂移、HCCL 或 ASCEND 变量
   不同、cpuset/cgroup 配额不同、升级前后或跨机跨时间比环境快照、容器环境存档
   时触发；实时监测、进程级与算子级分析、网络诊断不在范围内。
@@ -17,6 +17,9 @@ metadata:
 ---
 
 # kptools-ascend-pd-env — vLLM-Ascend P/D 环境采集与对比
+
+只为指定容器按 P/D 角色留档时，先读 [P/D 环境采集](subskills/collect-environment/SKILL.md)。
+同机或跨机都按容器单独采，角色不明确就先确认，不执行下文的默认对比流程。
 
 P/D 分离部署里，P 侧和 D 侧跑在不同容器甚至不同机器上，环境一旦漂移（CANN 版本、
 torch_npu 版本、HCCL 环境变量、cpuset、启动参数），表现出来的往往是吞吐掉点或
