@@ -1,0 +1,51 @@
+name: split-pruning-contract
+skill: sql-q72-parquet-split-pruning
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: split_prune_route_positive
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: true_and_false_positive_still_submit
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: null_and_errors_do_not_prune
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unsupported_split_falls_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: binding_lifecycle_checked
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: retained_split_identity_and_metadata
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: signed_partition_range
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: recoverable_evaluation_errors_fall_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: fatal_resource_error_propagates
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: all_pruned_returns_empty_submission
+    expect: true

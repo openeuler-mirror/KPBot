@@ -1,0 +1,38 @@
+{
+  "skill_name": "sql-shuffle-string-reconstruction",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "no-tail-padding",
+      "prompt": "12 字节串位于缓冲区最后 12 字节，想直接 NEON 读 16 字节。",
+      "expected_output": "实际剩余不足 16，沿用标量构造；长度合法不保证宽读合法。",
+      "files": [],
+      "assertions": [
+        "按实际可读宽度判断",
+        "保留尾部回退"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "runtime-isa",
+      "prompt": "构建用了 NEON，可以取消运行时能力与布局判断吗？",
+      "expected_output": "按目标部署能力核对构建/运行时 ISA、布局和字节序；不满足时回退。",
+      "files": [],
+      "assertions": [
+        "区分构建与运行能力",
+        "核对布局"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "buffer-reused",
+      "prompt": "StringView 指向解压缓冲，reader 下一批立即复用该缓冲。",
+      "expected_output": "输出应 retain 合法缓冲或复制，再验证输入复用后长串值。",
+      "files": [],
+      "assertions": [
+        "识别引用寿命",
+        "提供可执行验证"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+name: materialization-contract
+skill: sql-join-string-materialization
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: materialization_route_positive
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: values_nulls_and_order
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: source_reuse_preserves_values
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: source_release_preserves_values
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: long_views_owned_by_output
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: duplicate_long_values_preserved
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: inline_boundary_and_byte_length
+    expect: true

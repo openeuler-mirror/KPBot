@@ -1,0 +1,38 @@
+{
+  "skill_name": "sql-shuffle-fixed-width-copy",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "shorter-than-width",
+      "prompt": "想把 20 字节头尾各 16 字节的公式用到无填充的 13 字节串。",
+      "expected_output": "13 字节尾端回退 16 会越界，回退或另行证明短分支。",
+      "files": [],
+      "assertions": [
+        "识别负偏移",
+        "保留安全回退"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "alias-is-not-tail-overlap",
+      "prompt": "两次目标写重叠安全，所以源目标部分重叠也可以直接做吧？",
+      "expected_output": "区分目标内部重叠与源目标别名；后者可能破坏未读源，沿原 memmove 语义或回退。",
+      "files": [],
+      "assertions": [
+        "区分别名与目标内部重叠",
+        "验证双向别名"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "exact-capacity",
+      "prompt": "目标容量正好等于 offset+length，需要额外 16 字节 padding 吗？",
+      "expected_output": "该头尾公式对合法 16–32 字节无需额外目标空间，所有实际读写仍须在边界内；验证非零偏移及区域外不变。",
+      "files": [],
+      "assertions": [
+        "保留等容量合法路径",
+        "逐字节验证边界"
+      ]
+    }
+  ]
+}

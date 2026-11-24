@@ -1,0 +1,38 @@
+{
+  "skill_name": "sql-join-string-materialization",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "source-released",
+      "prompt": "复制长串 StringView 指针后立刻释放输入，输出尚未消费。这样能节省复制吗？",
+      "expected_output": "先建立输出持有输入缓冲的证据，否则复制到输出拥有空间；输入释放后重读全部输出。",
+      "files": [],
+      "assertions": [
+        "识别悬空引用",
+        "提供拥有方或独立复制策略"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "inline-is-bytes",
+      "prompt": "UTF-8 字符串只有 8 个字符，可以按 12 字节内联路径处理吗？",
+      "expected_output": "依据编码后的字节长度和目标 StringView 阈值分派；验证 NULL、空串及阈值两侧。",
+      "files": [],
+      "assertions": [
+        "以字节计长度",
+        "阈值来自目标版本"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "duplicate-output",
+      "prompt": "同一长串在 join 输出中出现三次，能去重后只保留一行吗？",
+      "expected_output": "可以在拥有方安全时共享存储，但不能减少连接输出行或改变顺序、重数。",
+      "files": [],
+      "assertions": [
+        "区分存储复用与输出去重",
+        "验证映射和生命周期"
+      ]
+    }
+  ]
+}

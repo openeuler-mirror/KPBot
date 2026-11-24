@@ -1,0 +1,43 @@
+name: reconstruction-contract
+skill: sql-shuffle-string-reconstruction
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: reconstruction_route_positive
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: short_tail_falls_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unsupported_environment_falls_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: permitted_unaligned_route
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: invalid_ranges_rejected
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: length_offset_padding_matrix
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: long_view_retains_owner
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: empty_value_uses_generic
+    expect: true
