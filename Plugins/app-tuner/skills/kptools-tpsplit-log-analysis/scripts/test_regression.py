@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANALYZE = os.path.join(HERE, "analyze_ttft.py")
@@ -205,6 +206,35 @@ def check_edge_cases():
           f"burst={rows[2]['burst']}")
     check("edge: 归组方式写进说明", "缺时间戳" in note, note)
 
+    # ---- 5) ts 毫秒 epoch 自适应（归一到秒，防 --burst-gap 语义错 1000 倍）
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False,
+                                     encoding="utf-8") as tf:
+        tf.write("[TTFT][BREAKDOWN] req=ms1 ts=1732000000123.0 ttft=10.0 "
+                 "forward=5.0 fwd_tokens=12 fwd_steps=1\n")
+        ms_log = tf.name
+    try:
+        rows_ms = m.load_breakdown(ms_log, "P")
+        check("edge: 毫秒 ts 归一到秒", abs(rows_ms[0]["ts"] - 1732000000.123) < 1e-6,
+              f"ts={rows_ms[0]['ts']}")
+    finally:
+        os.unlink(ms_log)
+
+    # ---- 6) 压测 jsonl 坏行显式报错（带文件与行号，不静默吞）
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False,
+                                     encoding="utf-8") as tf:
+        tf.write('{"req": "ok1", "client_send_ts": 1, "client_ttft": 2}\n')
+        tf.write('{"req": broken json\n')
+        bad_json = tf.name
+    try:
+        try:
+            m.load_bench(bad_json, "BENCH")
+            check("edge: 坏 jsonl 显式报错", False, "未抛 SystemExit")
+        except SystemExit as e:
+            msg = str(e)
+            check("edge: 坏 jsonl 显式报错", "第 2 行解析失败" in msg, msg[:120])
+    finally:
+        os.unlink(bad_json)
+
     # ---- 4) write_csv：other<0（阶段双计）不崩溃且打 stderr 告警
     row = {"machine": "P", "ip": None, "req": "neg1", "batch": "b", "ts": 1.0,
            "burst": 1, "ttft": 10.0, "_input_len": 0,
@@ -218,8 +248,7 @@ def check_edge_cases():
            "dequeue_take_draft": 0, "dequeue_aux": 0, "return": 0,
            "add_req_iq": 1.0, "add_req_proc": 2.0, "preempt": 0,
            "fwd_tokens": 12, "fwd_steps": 1, "fwd_ms_per_kT": 0,
-           "conserv_err": 0, "lb_src": "engine", "cold_step": 0}
-    import tempfile
+            "conserv_err": 0, "lb_src": "engine", "cold_step": 0}
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tf:
         csv_path = tf.name
     err = io.StringIO()

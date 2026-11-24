@@ -158,7 +158,12 @@ def load_breakdown(path, machine):
             row["cold_step"] = 0
             for tkey in ("ts", "t", "arrival", "mono"):
                 if kv.get(tkey) is not None:
-                    row["ts"] = fnum(kv.get(tkey))
+                    ts = fnum(kv.get(tkey))
+                    # 毫秒 epoch 自适应（>1e11 不可能是秒）：统一归一到秒，
+                    # 否则 --burst-gap（秒）与 CSV ts 格式语义错 1000 倍
+                    if ts > 1e11:
+                        ts /= 1000.0
+                    row["ts"] = ts
                     break
             rows.append(row)
     return rows
@@ -273,6 +278,7 @@ def load_bench(path, machine):
     """压测端 --save-detailed 结果（jsonl 或 JSON 数组）。
 
     每请求需要 client_send_ts 与首 token 墙钟（first_token_ts / client_ttft）。
+    解析失败显式报错（含文件与行号），不静默吞掉坏行。
     """
     records = []
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
@@ -281,12 +287,20 @@ def load_bench(path, machine):
         return records
     items = []
     if text.startswith("["):
-        items = json.loads(text)
+        try:
+            items = json.loads(text)
+        except json.JSONDecodeError as e:
+            sys.exit(f"[错误] 压测结果 JSON 数组解析失败：{path}（{e}）")
     else:
-        for line in text.splitlines():
+        for i, line in enumerate(text.splitlines(), start=1):
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            try:
                 items.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                sys.exit(f"[错误] 压测结果 jsonl 第 {i} 行解析失败：{path}"
+                         f"（{e}；行内容前 80 字符：{line[:80]}）")
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -843,8 +857,10 @@ def reconcile(lb_rows, bench_rows):
                       and id(sends[j][1]) not in used]
             match, why = pick(b, window)
         else:
-            # 无时间戳可比时按请求 ID 兜底
-            match, why = pick(b, list(by_req.get(str(b["req"]), [])))
+            # 无时间戳可比时按请求 ID 兜底（同样排除已用记录，防串算）
+            match, why = pick(
+                b, [l for l in by_req.get(str(b["req"]), [])
+                    if id(l) not in used])
         if match is None:
             row["joined"] = "" if why == "unmatched" else why
             recon.append(row)
@@ -996,6 +1012,10 @@ def main(argv=None):
         # 对齐机器标签：kvxfer 的 label 需与 P 日志 label 一致才能按机器 join
         if label not in p_machines and len(p_machines) == 1:
             label = p_machines[0]
+        elif label not in p_machines:
+            # 标签对不上又无法唯一对齐时显式告警，避免回填静默失效
+            print(f"[warn] --kvxfer 标签 {label!r} 与 P 日志机器 {p_machines} 不匹配，"
+                  f"该来源的回填行不会命中任何请求：{path}", file=sys.stderr)
         a = load_aux(path, label)
         for k in aux:
             aux[k].extend(a[k])
