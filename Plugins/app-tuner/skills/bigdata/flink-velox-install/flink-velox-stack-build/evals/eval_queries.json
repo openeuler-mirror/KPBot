@@ -7,11 +7,11 @@
       "id": "q-build-deploy",
       "prompt": "编译 velox4j 和 gluten-flink，把 jar 部署进 Flink lib",
       "should_trigger": true,
-      "note": "场景入口类触发词：编译 velox4j、编译 gluten-flink、部署 GFV 构建"
+      "note": "场景入口类触发词：编译 velox4j、编译 gluten-flink、部署 GlutenFlink 构建"
     },
     {
       "id": "q-stack-build",
-      "prompt": "把 GFV 构建编出来放进 lib，旧 jar 先备份",
+      "prompt": "把 GlutenFlink 构建编出来放进 lib，旧 jar 先备份",
       "should_trigger": true,
       "note": "动作类触发词：编译部署、stack build、备份旧 jar"
     },
@@ -37,7 +37,7 @@
       "id": "q-restart",
       "prompt": "重启 Flink 集群",
       "should_trigger": false,
-      "note": "重启 → flink-velox-cluster-switch（规划中）；本 skill 只部署"
+      "note": "重启 → flink-velox-cluster-switch（见 !325）；本 skill 只部署"
     }
   ]
 }
