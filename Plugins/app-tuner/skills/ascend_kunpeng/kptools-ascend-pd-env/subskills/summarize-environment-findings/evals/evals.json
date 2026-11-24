@@ -24,6 +24,12 @@
       "prompt": "只收到一份 P 分析；D 有没有执行我不清楚，不用重跑。请汇总。",
       "expected_output": "引用 P 分析，D 和其他未提供产物且没有执行记录的项写未提供结果／执行状态未知，不推断未执行。",
       "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "用 evals/fixtures/p-history.json 生成这一轮的汇总，保存为 evals/fixtures/环境汇总报告.md。这个路径已有上一轮报告。",
+      "expected_output": "上一轮报告保持不变。因为用户指定的输出路径已存在，说明冲突并请用户指定新路径。",
+      "files": ["evals/fixtures/p-history.json", "evals/fixtures/环境汇总报告.md"]
     }
   ]
 }
