@@ -106,7 +106,6 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 
 | 技能 | 描述 |
 |------|------|
-| [`kptools-vllm-ttft-workflow`](skills/kptools-vllm-ttft-workflow/SKILL.md) | 按已有产物选择 TTFT 阶段，协调双侧计划、人工授权和采集交接 |
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
 | [`kptools-arthas`](skills/kptools-arthas/SKILL.md) | Java 进程性能分析(Arthas 批处理只读采集：trace/watch/monitor/tt 方法级耗时分解与入参观察、thread 高 CPU/阻塞/锁竞争分析、memory/GC 状态、JVM 运行时性能参数、ognl 查询)，含性能分析剧本、采集纪律与 agent 级 with/without A/B 用例 |
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
@@ -193,6 +192,7 @@ app-tuner/
 - [架构设计(4+1)](docs/architecture-4plus1.md) — 主 skill 编排、子 skill 关系、运行闭环
 - [使用指南](docs/usage-guide.md) — 不同平台如何加载和使用
 - [报告模板](docs/report-template.md) — 首版优化报告模板
+| [`kptools-vllm-ttft-workflow`](skills/kptools-vllm-ttft-workflow/SKILL.md) | 按已有产物选择 TTFT 阶段，协调双侧计划、人工授权和采集交接 |
 
 ## 脚本说明
 
