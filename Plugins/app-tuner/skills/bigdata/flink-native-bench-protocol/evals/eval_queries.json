@@ -1,0 +1,61 @@
+{
+  "skill_name": "flink-native-bench-protocol",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-same-day",
+      "prompt": "昨天跑的和今天跑的两端数据能比吗",
+      "should_trigger": true,
+      "note": "纪律类触发词：跨日、能比吗"
+    },
+    {
+      "id": "q-heap-misalign",
+      "prompt": "一端 OOM 换 64GB 堆重跑后能不能直接出双端倍数",
+      "should_trigger": true,
+      "note": "口径类触发词：OOM 重跑、双端倍数"
+    },
+    {
+      "id": "q-rss-pollution",
+      "prompt": "复用 TaskManager 时 RSS 峰值被上一轮污染怎么办",
+      "should_trigger": true,
+      "note": "指标类触发词：RSS 峰值、污染"
+    },
+    {
+      "id": "q-behavior-freeze",
+      "prompt": "性能优化前后输出一致性怎么核验",
+      "should_trigger": true,
+      "note": "行为冻结类触发词：输出一致、前后核验"
+    },
+    {
+      "id": "q-baseline",
+      "prompt": "给 native 栈和原生 Flink 建一套可信的性能对比基线",
+      "should_trigger": true,
+      "note": "场景入口类触发词：双端、性能对比、基线"
+    },
+    {
+      "id": "q-tuning",
+      "prompt": "Top-N 内存爆炸怎么修",
+      "should_trigger": false,
+      "note": "改码优化 → flink-native-stateful-operator-tuning"
+    },
+    {
+      "id": "q-env-check",
+      "prompt": "GlutenFlink 构建工具齐不齐",
+      "should_trigger": false,
+      "note": "环境检查 → flink-velox-env 子域"
+    },
+    {
+      "id": "q-config",
+      "prompt": "TaskManager 内存公式怎么算",
+      "should_trigger": false,
+      "note": "配置建议 → bigdata-playbook"
+    },
+    {
+      "id": "q-tpcds",
+      "prompt": "TPC-DS 批处理基准",
+      "should_trigger": false,
+      "note": "离线批口径不在本协议范围"
+    }
+  ]
+}
