@@ -1,0 +1,51 @@
+{
+  "time": "2026-10-15 10:00:00 +0000",
+  "model": "test-tokenizer",
+  "sessions_file": "replay.jsonl",
+  "requests": 12,
+  "sessions": 3,
+  "rounds": 3,
+  "threads": 3,
+  "cache_mib": 64,
+  "overlay": "candidate",
+  "cpu_count": 8,
+  "load1_before": 0.4,
+  "load1_after": 0.5,
+  "arms": {
+    "orig": {
+      "ok": true,
+      "backend": "tokenizers.Tokenizer",
+      "fastokens_version": null,
+      "encode_total_ms": 120.0,
+      "p50_ms": 9.0,
+      "p99_ms": 15.0,
+      "rss_after_load_mib": 80.0,
+      "rss_after_replay_mib": 88.0,
+      "peak_rss_mib": 90.0,
+      "concurrency": {"threads": 3, "requests": 12, "mismatch": [], "errors": []},
+      "stats": null,
+      "env": {},
+      "speed_vs_orig": 1.0
+    },
+    "on": {
+      "ok": true,
+      "backend": "fastokens.Tokenizer",
+      "fastokens_version": "0.3.5",
+      "encode_total_ms": 80.0,
+      "p50_ms": 6.0,
+      "p99_ms": 10.0,
+      "rss_after_load_mib": 82.0,
+      "rss_after_replay_mib": 102.0,
+      "peak_rss_mib": 105.0,
+      "concurrency": {"threads": 3, "requests": 12, "mismatch": [], "errors": []},
+      "stats": {"hits": 18, "misses": 6, "hit_bytes": 1800, "miss_bytes": 600},
+      "env": {"VLLM_USE_FASTOKENS": "1", "FASTOKENS_SEGMENT_CACHE": "64"},
+      "speed_vs_orig": 1.5
+    }
+  },
+  "parity": {"on": []},
+  "problems": [],
+  "token_consistency": "passed",
+  "concurrency_acceptance": "passed",
+  "correctness_pass": true
+}
