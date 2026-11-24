@@ -3,8 +3,9 @@
 """End-to-end regression checks for the eplb-optimization scripts.
 
 Run: python3 evals/run_checks.py
-Covers dry-run (no write, no backup), mode switching, idempotency, off-restore,
-P/D node guards, EP prerequisite guard and dataset generation.
+Covers dry-run, mode switching, idempotency, off semantics, P/D and EP guards,
+parameter validation, same-line refusal, symlink handling, EP-last-arg command
+structure, ratio/memory analysis and dataset generation.
 """
 import json
 import os
@@ -35,6 +36,20 @@ def read(p):
     return open(p, encoding="utf-8").read()
 
 
+def write(p, text):
+    open(p, "w", encoding="utf-8").write(text)
+
+
+KV = '''    --kv-transfer-config '{
+        "kv_connector":"MooncakeConnector",
+        "kv_role":"kv_producer"
+    }' \\\n'''
+
+
+def base_template(body):
+    return "#!/bin/bash\nexport DIST_TIMEOUT=1200\n" + body
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="eplb-checks-")
     try:
@@ -45,7 +60,7 @@ def main():
             p = os.path.join(tmp, "dry_%s.sh" % mode)
             shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), p)
             before = read(p)
-            r = run([APPLY, "--template", p, "--mode", mode, "--dry-run"])
+            r = run([APPLY, "--template", p, "--mode", mode, "--ep-size", "16", "--dry-run"])
             backups = [f for f in os.listdir(tmp) if ".bak-" in f and f.startswith("dry_%s.sh" % mode)]
             check("dry-run %s: rc=0" % mode, r.returncode == 0, r.stdout.strip().splitlines()[-1] if r.stdout else "")
             check("dry-run %s: 文件未被写入" % mode, read(p) == before)
@@ -73,7 +88,7 @@ def main():
         check("force: bash -n 通过", subprocess.run(["bash", "-n", p]).returncode == 0)
 
         # --- 3. force -> dynamic ---
-        r3 = run([APPLY, "--template", p, "--mode", "dynamic"])
+        r3 = run([APPLY, "--template", p, "--mode", "dynamic", "--ep-size", "16"])
         txt = read(p)
         check("force->dynamic: apply rc=0", r3.returncode == 0)
         check("force->dynamic: V2=1 且无 unset 残留",
@@ -96,39 +111,134 @@ def main():
 
         # --- 5. guards ---
         d = os.path.join(tmp, "d_node.sh")
-        open(d, "w").write("#!/bin/bash\nvllm serve /models/x \\\n"
-                           "    --kv-transfer-config '{\"kv_role\":\"kv_consumer\"}' \\\n"
-                           "    --port 8000\n")
+        write(d, base_template("vllm serve /models/x \\\n"
+                               "    --kv-transfer-config '{\"kv_role\":\"kv_consumer\"}' \\\n"
+                               "    --port 8000\n"))
         rd = run([APPLY, "--template", d, "--mode", "dynamic"])
         check("guard: 拒绝 D 节点模板 (rc=2)", rd.returncode == 2, rd.stdout.strip().splitlines()[0] if rd.stdout else "")
 
+        norole = os.path.join(tmp, "no_role.sh")
+        write(norole, base_template("vllm serve /models/x \\\n    --port 8000\n"))
+        rnr = run([APPLY, "--template", norole, "--mode", "dynamic"])
+        check("guard: 无 kv_role 的模板被拒绝", rnr.returncode == 2 and "kv-transfer-config" in rnr.stdout,
+              rnr.stdout.strip().splitlines()[0] if rnr.stdout else "")
+
         no_ep = os.path.join(tmp, "no_ep.sh")
-        open(no_ep, "w").write("#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=1\n"
-                               "vllm serve /models/x \\\n    --port 8000\n")
+        write(no_ep, base_template("vllm serve /models/x \\\n" + KV + "    --port 8000\n"))
         rn = run([APPLY, "--template", no_ep, "--mode", "dynamic"])
         check("guard: 无 --enable-expert-parallel 时拒绝 dynamic",
               rn.returncode == 1 and "expert-parallel" in rn.stdout)
 
         no_ac = os.path.join(tmp, "no_ac.sh")
-        open(no_ac, "w").write("#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=1\n"
-                               "vllm serve /models/x \\\n    --enable-expert-parallel \\\n    --port 8000\n")
+        write(no_ac, base_template("vllm serve /models/x \\\n" + KV +
+                                   "    --enable-expert-parallel \\\n    --port 8000\n"))
         ra = run([APPLY, "--template", no_ac, "--mode", "force"])
         check("guard: 缺 additional-config 时拒绝 force",
               ra.returncode == 1 and "additional-config" in ra.stdout)
+        # dynamic/off must work without --additional-config
+        shutil.copy2(no_ac, os.path.join(tmp, "no_ac_dyn.sh"))
+        rdn = run([APPLY, "--template", os.path.join(tmp, "no_ac_dyn.sh"), "--mode", "dynamic", "--ep-size", "16"])
+        check("no additional-config: dynamic 成功",
+              rdn.returncode == 0 and "--enable-eplb" in read(os.path.join(tmp, "no_ac_dyn.sh")))
+        shutil.copy2(no_ac, os.path.join(tmp, "no_ac_off.sh"))
+        roff = run([APPLY, "--template", os.path.join(tmp, "no_ac_off.sh"), "--mode", "off"])
+        check("no additional-config: off 成功且幂等", roff.returncode == 0)
 
-        # --- 5b. safe write: path-safe backup tag, no temp leftovers ---
+        # --- 5a2. stale-index regression: export lines must stay outside serve ---
+        stale = os.path.join(tmp, "stale.sh")
+        write(stale, base_template('export DYNAMIC_EPLB="true"\n'
+                                   "vllm serve /models/x \\\n" + KV +
+                                   "    --enable-expert-parallel \\\n    --port 8000\n"))
+        rst = run([APPLY, "--template", stale, "--mode", "dynamic", "--ep-size", "16"])
+        slines = read(stale).splitlines()
+        serve_line = next(i for i, l in enumerate(slines) if l.strip().startswith("vllm serve"))
+        export_lines = [i for i, l in enumerate(slines) if l.strip().startswith("export VLLM_USE_V2_MODEL_RUNNER")
+                        or l.strip().startswith("export DYNAMIC_EPLB")]
+        check("stale-index: export 都是独立行且在 serve 之前",
+              rst.returncode == 0 and export_lines and all(i < serve_line for i in export_lines),
+              str(export_lines) + " serve=" + str(serve_line))
+
+        # --- 5b. same-line EPLB args are refused, file untouched ---
+        same = os.path.join(tmp, "same_line.sh")
+        write(same, base_template("vllm serve /models/x \\\n" + KV +
+                                  "    --enable-expert-parallel \\\n    --enable-eplb --port 8100\n"))
+        before = read(same)
+        rs = run([APPLY, "--template", same, "--mode", "off"])
+        check("same-line EPLB 参数被拒绝且不改文件",
+              rs.returncode != 0 and read(same) == before and "独占一行" in rs.stdout)
+
+        # --- 5c. EP is the last serve argument ---
+        ep_last = os.path.join(tmp, "ep_last.sh")
+        write(ep_last, base_template("vllm serve /models/x \\\n" + KV +
+                                     "    --enable-expert-parallel\nbash /opt/start_proxy.sh\n"))
+        re_ = run([APPLY, "--template", ep_last, "--mode", "dynamic", "--ep-size", "16"])
+        lines = read(ep_last).splitlines()
+        idx = next(i for i, l in enumerate(lines) if "--eplb-config.step_interval" in l)
+        check("EP 为末参数: 末条 flag 不带悬挂续行符",
+              re_.returncode == 0 and not lines[idx].rstrip().endswith("\\"), lines[idx])
+        check("EP 为末参数: 后续脚本行未被拼进 serve",
+              lines[idx + 1] == "bash /opt/start_proxy.sh", lines[idx + 1] if idx + 1 < len(lines) else "EOF")
+        check("EP 为末参数: bash -n 通过", subprocess.run(["bash", "-n", ep_last]).returncode == 0)
+
+        # --- 5d. symlink: edit the real file, keep the link ---
+        real = os.path.join(tmp, "real.sh")
+        link = os.path.join(tmp, "link.sh")
+        shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), real)
+        os.symlink(real, link)
+        rl = run([APPLY, "--template", link, "--mode", "dynamic", "--ep-size", "16"])
+        check("symlink: 链接仍是链接", os.path.islink(link))
+        check("symlink: 真实文件被改写", rl.returncode == 0 and 'export DYNAMIC_EPLB="true"' in read(real))
+        check("symlink: 备份落在真实文件旁",
+              any(f.startswith("real.sh.bak-eplb-dynamic") for f in os.listdir(tmp)))
+
+        # --- 5e. off must not inject/flip V2 on templates without EPLB ---
+        v1 = os.path.join(tmp, "v1_base.sh")
+        write(v1, "#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=0\nvllm serve /models/x \\\n" + KV + "    --port 8000\n")
+        before = read(v1)
+        rv = run([APPLY, "--template", v1, "--mode", "off"])
+        check("off: V1 基线不被翻转", rv.returncode == 0 and read(v1) == before)
+
+        nov2 = os.path.join(tmp, "no_v2.sh")
+        write(nov2, "#!/bin/bash\nvllm serve /models/x \\\n" + KV + "    --port 8000\n")
+        before = read(nov2)
+        rn2 = run([APPLY, "--template", nov2, "--mode", "off"])
+        check("off: 缺 V2 行时不注入", rn2.returncode == 0 and read(nov2) == before)
+
+        # --- 5f. parameter validation ---
+        val = os.path.join(tmp, "val.sh")
+        shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), val)
+        before = read(val)
+        rw = run([APPLY, "--template", val, "--mode", "dynamic", "--window-size", "0"])
+        check("param: window-size=0 拒绝 (rc=2)", rw.returncode == 2 and read(val) == before)
+        ri = run([APPLY, "--template", val, "--mode", "dynamic", "--step-interval", "-5"])
+        check("param: step-interval<0 拒绝 (rc=2)", ri.returncode == 2 and read(val) == before)
+        rz = run([APPLY, "--template", val, "--mode", "dynamic", "--redundant-experts", "0"])
+        check("param: redundant=0 拒绝 (rc=2)", rz.returncode == 2 and read(val) == before)
+        rr = run([APPLY, "--template", val, "--mode", "dynamic", "--ep-size", "16",
+                  "--redundant-experts", "7"])
+        check("param: 非整除被取整并提示",
+              rr.returncode == 0 and "--eplb-config.num_redundant_experts 16" in read(val)
+              and "取整" in rr.stdout)
+
+        # --- 5g. check_state: loose markers must not be reported as dynamic ---
+        bad = os.path.join(tmp, "bad_dyn.sh")
+        write(bad, base_template('export VLLM_USE_V2_MODEL_RUNNER=1\nexport DYNAMIC_EPLB="false"\n'
+                                 "vllm serve /models/x \\\n" + KV +
+                                 "    --enable-expert-parallel \\\n    --enable-eplb\n"))
+        cb = run([APPLY, "--template", bad, "--mode", "check"])
+        check("check: DYNAMIC_EPLB=false 不算 dynamic", cb.returncode == 1 and "不明确" in cb.stdout)
+
+        # --- 5h. safe write: path-safe backup tag, unique temp ---
         p2 = os.path.join(tmp, "safe.sh")
         shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), p2)
-        rs = run([APPLY, "--template", p2, "--mode", "dynamic", "--backup-tag", "../evil"])
+        rs = run([APPLY, "--template", p2, "--mode", "dynamic", "--ep-size", "16", "--backup-tag", "../evil"])
         baks = [f for f in os.listdir(tmp) if f.startswith("safe.sh.bak-")]
         check("backup tag 被清洗，不能逃逸目录",
-              rs.returncode == 0 and len(baks) == 1 and "/" not in baks[0],
-              str(baks))
-        check("写入后没有 .tmp-write 残留",
-              not [f for f in os.listdir(tmp) if ".tmp-write" in f],
-              str([f for f in os.listdir(tmp) if ".tmp-write" in f]))
+              rs.returncode == 0 and len(baks) == 1 and "/" not in baks[0], str(baks))
+        check("写入后没有固定名 .tmp-write 残留",
+              not [f for f in os.listdir(tmp) if ".tmp-write" in f])
 
-        # --- 5c. redundant-expert ratio analysis ---
+        # --- 5i. redundant-expert ratio analysis ---
         r = run([REDUNDANCY, "--logical-experts", "384", "--ep-size", "16",
                  "--redundant-experts", "16", "--bytes-per-expert-gib", "2.4", "--free-gib", "6"])
         d = json.loads(r.stdout) if r.returncode == 0 else {}
@@ -155,6 +265,12 @@ def main():
         check("按层成本换算单副本 = 2.4 GiB",
               abs(d.get("memory", {}).get("bytes_per_extra_expert_per_rank_gib", 0) - 2.4) < 1e-6,
               str(d.get("memory")))
+        r = run([REDUNDANCY, "--logical-experts", "100", "--ep-size", "8", "--redundant-experts", "8"])
+        check("逻辑专家不能被 EP 整除时返回错误",
+              r.returncode == 1 and "不能被 ep_size" in json.loads(r.stdout).get("error", ""),
+              r.stdout.strip()[:80])
+        r = run([REDUNDANCY, "--logical-experts", "100", "--ep-size", "1", "--redundant-experts", "14", "--strict"])
+        check("--strict 对 high 档也返回 2", r.returncode == 2)
         r = run([REDUNDANCY, "--logical-experts", "384", "--ep-size", "16", "--redundant-experts", "64",
                  "--bytes-per-expert-gib", "2.4", "--free-gib", "1", "--strict"])
         check("--strict 超预算时 rc=2", r.returncode == 2)
@@ -179,6 +295,15 @@ def main():
                 ok_json = False
         check("dataset: 生成 5 行", rg.returncode == 0 and len(lines) == 5, "%d 行" % len(lines))
         check("dataset: 每行为合法 chat payload", ok_json)
+
+        out2 = os.path.join(tmp, "should_not_exist.jsonl")
+        r0 = run([GEN, "--out", out2, "--num-requests", "0", "--target-tokens", "2000"])
+        check("dataset: num-requests=0 报错且不创建文件",
+              r0.returncode != 0 and not os.path.exists(out2))
+        out3 = os.path.join(tmp, "should_not_exist2.jsonl")
+        r3 = run([GEN, "--out", out3, "--num-requests", "5", "--target-tokens", "0"])
+        check("dataset: target-tokens=0 报错且不创建文件",
+              r3.returncode != 0 and not os.path.exists(out3))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -6,7 +6,7 @@
 #                  evals/evals.json、evals/eval_queries.json
 #   内容卫生        无设备厂商/型号词、无工号、无个人绝对路径、LF 行尾
 #   脚本契约        evals/run_checks.py 全绿（模式切换/幂等/dry-run 不落盘/守卫/数据集）
-#   注册完整性      仓库内运行时校验 README 与 CHANGELOG 条目（独立拷贝时跳过）
+#   注册完整性      仓库内运行时校验 CHANGELOG 条目（独立拷贝时跳过）
 #
 # 运行：
 #   bash Plugins/app-tuner/skills/vllm-eplb-optimization/cases/skill-contract/run.sh

@@ -2,9 +2,9 @@
 # P (prefill) node launch template -- DeepSeek-V4.1-Flash, vLLM 0.32
 set -e
 
-export HCCL_CONNECT_TIMEOUT=1200
+export DIST_TIMEOUT=1200
 export VLLM_USE_V2_MODEL_RUNNER=1
-export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 export MOONCAKE_CONFIG_PATH=/data/mooncake/mooncake.json
 

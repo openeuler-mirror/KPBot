@@ -34,7 +34,8 @@ EPLB 只在"专家负载确实倾斜、且这个倾斜就是瓶颈"时才有收�
 
 | 分析结论 | 本技能动作 |
 |---|---|
-| `imbalanced` | 用 `handoff.redundant_experts / window_size / step_interval` 作为参数，执行 `--mode dynamic` |
+| `imbalanced` + `action=optimize_dynamic/optimize_with_cap` 且 `handoff.redundant_experts` 非空 | 用 `handoff` 的 `redundant_experts / window_size / step_interval` 执行 `--mode dynamic` |
+| `imbalanced` + `action=free_memory_first`，或 `redundant_experts=null` | 先释放/测量显存，不要开 dynamic |
 | `borderline` | 执行 `--mode force` 做上限探针，测完 `--mode off` 还原 |
 | `balanced` / `inconclusive` | 不动模板，回到分析继续收证据 |
 
@@ -50,13 +51,18 @@ EPLB 只在"专家负载确实倾斜、且这个倾斜就是瓶颈"时才有收�
 
 | 状态 | V2 runner | 环境变量 | serve 参数 | 定位 |
 |---|---|---|---|---|
-| `off` | `=1` | 无 `DYNAMIC_EPLB` | 无 eplb 参数 | 基线，用来做对照 |
+| `off` | `=1`（仅当模板原本开了 EPLB，否则不改 V2） | 无 `DYNAMIC_EPLB` | 无 eplb 参数 | 基线，用来做对照 |
 | `dynamic` | `=1` | `export DYNAMIC_EPLB="true"` | `--enable-eplb` + 3 个 `--eplb-config.*` | **优化手段，唯一可上线形态** |
 | `force` | `=0` | `unset DYNAMIC_EPLB` | 在 `--additional-config` JSON 里加 `"enable_force_eplb":true` | 均衡性能的**参照上限**，不可上线 |
 
 `force` 不解决不均衡，它是把"不均衡"从测量里拿掉，回答"如果专家完全均衡还能快多少"。所以它只用于
-给 `dynamic` 的剩余空间定标：`dynamic − off` 是收益，`dynamic − force` 是还没吃到的空间。永远不要把
-force 当作交付配置。
+给 `dynamic` 的剩余空间定标：TTFT 低者优，**收益 = `off − dynamic`**，距上限的剩余空间 =
+`dynamic − force`（均为正值表示改善）。永远不要把 force 当作交付配置。
+
+> 目标环境：本技能面向本站点内部的 vLLM 发行分支部署。`DYNAMIC_EPLB` 与 `enable_force_eplb`
+> 是该分支的开关，上游 vLLM 不含这两个名字（上游 EPLB 的开关只有 `--enable-eplb` / `--eplb-config.*`，
+> 且对设备后端有限制）。在上游 vLLM 上照搬 dynamic/force 会静默无效——force 探针测到的仍是原配置。
+> 换环境前先确认分支，否则第三节的"上限"结论不成立。
 
 ## 硬性约束
 
@@ -66,7 +72,8 @@ force 当作交付配置。
 单看一个 balancedness 数字就上，是最常见的负收益来源。
 
 1. **只改 P（prefill）节点**的 `run_dp_template.sh`。D 节点、代理、mooncake 脚本一律不动。
-   D 节点模板含 `kv_consumer`，`apply_eplb.py` 会直接拒绝。
+   脚本用正向判据：`--kv-transfer-config` 的 JSON 里必须是 `"kv_role":"kv_producer"`；`kv_consumer`
+   或没有角色标记的模板一律拒绝，不靠"没有 kv_consumer 就当 P"来猜。
 2. `dynamic` 依赖 V2 model runner（`VLLM_USE_V2_MODEL_RUNNER=1`），`force` 依赖 V1（`=0`）。
    两者互斥，只改一半等于配置矛盾。
 3. 已有 `--additional-config` 时必须**合并进那个 JSON**。出现第二个同名 flag 会让前一个静默失效、
@@ -96,13 +103,14 @@ python3 <skill>/scripts/apply_eplb.py --template <...> --mode force --dry-run   
 python3 <skill>/scripts/apply_eplb.py --template <...> --mode dynamic
 python3 <skill>/scripts/apply_eplb.py --template <...> --mode off
 
-# dynamic 调参（默认 16 / 1000 / 1000）
+# dynamic 调参（默认 16 / 1000 / 1000；--ep-size 用于校验冗余副本的整除性）
 python3 <skill>/scripts/apply_eplb.py --template <...> --mode dynamic \
-    --redundant-experts 8 --window-size 500 --step-interval 500
+    --ep-size 16 --redundant-experts 16 --window-size 1000 --step-interval 1000
 ```
 
 | 参数 | 默认 | 含义 |
 |---|---|---|
+| `--ep-size` | 未提供 | EP rank 数；提供后校验/向上取整 `--redundant-experts`，避免写入非整数倍 |
 | `--redundant-experts` | 16 | 冗余专家副本数。越多越能削峰，但显存与重排搬运量同步上升（比例与显存换算见下） |
 | `--window-size` | 1000 | 负载统计滑动窗口（步），决定判断"谁热"看多长的历史 |
 | `--step-interval` | 1000 | 重平衡周期（步）。压测短于这个周期就永远不触发，收益会是 0 |
@@ -124,8 +132,9 @@ physical_per_rank= (num_logical_experts + num_redundant_experts) / ep_size
 `num_redundant_experts` 必须是 `ep_size` 的整数倍——vLLM 自动取值时也是向上取整到 `ep_size` 的倍数，
 手填一个非倍数会得到与你预期不同的实际值。
 
-单副本成本按官方公式 `NUM_MOE_LAYERS × BYTES_PER_EXPERT ÷ NUM_EP_RANKS` 估算；DeepSeekV3 的参考值是
-**每 EP rank 每多一个冗余专家约 2.4 GiB**。
+单副本成本按 `NUM_MOE_LAYERS × BYTES_PER_EXPERT` 估算——这是"每个 rank 多一个专家槽位"的成本，
+等价于全局增加 `ep_size` 个冗余专家；DeepSeekV3 的参考值约 **2.4 GiB**。因此每 rank 增量 =
+`(redundant / ep_size) × 2.4 GiB`，不要再用官方公式的 `÷ EP` 版本，否则会少算 `ep_size` 倍。
 
 经验带（不是硬规则，最终以 force 上限 + 实测收益为准）：
 
@@ -150,15 +159,18 @@ physical_per_rank= (num_logical_experts + num_redundant_experts) / ep_size
    ```
 3. 放不下时按脚本给出的 `max_affordable_redundant_experts` 收敛，或先降 KV 压力；不要硬顶。
 
-`--strict` 在"显存不够"或"比例落到无效带（<1% / >15%）"时返回 2，适合放到部署前检查里。单副本成本
+`--strict` 在"显存不够"或"比例不在 recommended 带（2%~12%）"时返回 2，适合放到部署前检查里。单副本成本
 不确定时，先用小值启动一次，对比两次启动日志里的 `Available KV cache memory` 反推。
 
 两个常见错误：为了"更均衡"盲目翻倍副本（KV cache 变少，长上下文先崩）；把比例算成"相对物理专家数"
 而不是相对 logical 专家数。
 
-脚本保证：拒绝 D 节点模板和没有 `vllm serve` 的脚本；没有 `--enable-expert-parallel` 时拒绝开
-dynamic（EP 是 EPLB 的前提）；备份为 `run_dp_template.sh.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>`；
-重复执行同一模式不再改动；写后 `bash -n` 失败自动用备份回滚；最后按目标状态逐项校验并打印 diff。
+脚本保证：只接受 `kv_role=kv_producer` 的 P 节点模板；拒绝没有 `vllm serve` 的脚本；没有
+`--enable-expert-parallel` 时拒绝开 dynamic（EP 是 EPLB 的前提）；EPLB 参数与其它参数写在同一行时
+拒绝改写（避免误删 `--port` 之类相邻参数）；对三个参数做域校验（`window/step >= 1`、`redundant > 0`，
+给了 `--ep-size` 时校验整除）；符号链接先解析到真实文件；备份为
+`run_dp_template.sh.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>`；写入用唯一临时文件 + 原子替换；重复执行同一
+模式不再改动；写后 `bash -n` 失败自动回滚，`bash` 不可用时明确标注"未验证"；最后按目标状态逐项校验。
 
 改完只需把重启命令交给用户，示意（按现场替换 IP/目录）：
 
@@ -204,7 +216,8 @@ python3 <skill>/scripts/gen_imbalanced_dataset.py --out imbalanced_100x100k.json
 
 **第三步：判读**
 
-- `dynamic − off` = 收益；`dynamic − force` = 距均衡上限的剩余空间。
+- 收益 = `off − dynamic`（TTFT 下降为正）；距上限的剩余空间 = `dynamic − force`。
+  相对收益 = `(off − dynamic) / off`；不要写成 `dynamic − off`，否则方向相反。
 - 若 dynamic 在人为不均衡的数据上仍无收益，先查 `window_size` / `step_interval` 是否大到压测期内
   根本没触发重平衡，而不是先怀疑 EPLB 本身。
 - 在接近均衡的流量上 dynamic 变慢是**预期行为**，不能据此判定部署失败，也不能据此上线。
@@ -226,10 +239,13 @@ python3 <skill>/scripts/gen_imbalanced_dataset.py --out imbalanced_100x100k.json
 | force 下 `--additional-config` 数量不是 1 | 模板里本来就有重复 flag，先合并 |
 | dynamic 无收益 | 数据集是不是不均衡的？`window_size/step_interval` 是不是大到没触发？第 1 轮剔掉了吗？ |
 | 只想看当前状态 | `--mode check`，只读不改 |
-| 想回退 | `--mode off`；更彻底就用备份文件覆盖回去 |
+| 想回退 | `--mode off`（只移除 EPLB 配置；模板从未开过 EPLB 时不会改动 V2 runner）；更彻底就用备份覆盖 |
+| 报"EPLB 参数没有独占一行" | 模板把 `--enable-eplb` 与 `--port` 等写在同一行；先拆成独立行，避免误删 |
+| dynamic 写入的参数与预期不符 | 没给 `--ep-size` 时不做整除校验；补上后脚本会取整并提示 |
+| force 探针"没有效果" | 确认运行的是本站点分支：上游 vLLM 不认识 `enable_force_eplb`，探针会静默失效 |
+| `--mode check` 报"不明确/混合" | 标记互相矛盾（如 `DYNAMIC_EPLB` 不是 `"true"`、缺 eplb 参数）；用 off/dynamic 之一修正 |
 
 ## 参考资料
 
-- `references/eplb-algorithm.md`：EPLB 机制与放置/重排算法的逐段剖析（以 DeepInfer 实现为例），
-  用于解释"为什么冗余副本能削峰""为什么放置目标看逐 step 峰值""窗口与周期该怎么取"。
-  调参取舍拿不准、用户追问原理时再读。
+- `references/eplb-algorithm.md`：机制层说明（副本分配、跨 rank 放置目标、权重搬运、窗口与周期、
+  参数映射），不涉及任何具体实现的源码或内部路径。调参取舍拿不准、用户追问原理时再读。

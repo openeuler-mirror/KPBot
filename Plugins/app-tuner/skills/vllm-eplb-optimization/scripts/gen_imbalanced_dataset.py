@@ -68,6 +68,14 @@ def main():
     ap.add_argument('--seed', type=int, default=1024)
     args = ap.parse_args()
 
+    # Validate before opening the output: a typo must not truncate an existing dataset.
+    if args.num_requests < 1:
+        ap.error('--num-requests 必须 >= 1（当前 %d）' % args.num_requests)
+    if args.target_tokens < 1:
+        ap.error('--target-tokens 必须 >= 1（当前 %d）' % args.target_tokens)
+    if args.chars_per_token <= 0:
+        ap.error('--chars-per-token 必须 > 0（当前 %s）' % args.chars_per_token)
+
     rng = random.Random(args.seed)
     with open(args.out, 'w', encoding='utf-8') as f:
         for i in range(args.num_requests):

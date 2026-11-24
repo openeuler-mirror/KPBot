@@ -2,20 +2,24 @@
 # -*- coding: utf-8 -*-
 """apply_eplb.py -- Configure (or check) EPLB in a vLLM prefill (P) node launch template.
 
-Tested with vLLM 0.32 / DeepSeek-V4.1 P/D disaggregated deployments.
+Target environment: the site-internal vLLM fork described in SKILL.md.
+Two switches (`DYNAMIC_EPLB`, `enable_force_eplb`) are deployment-specific and
+do not exist in upstream vLLM; on stock vLLM the dynamic/force knobs are inert.
 
 Usage:
-    python3 apply_eplb.py --template /path/to/run_dp_template.sh --mode dynamic
+    python3 apply_eplb.py --template /path/to/run_dp_template.sh --mode dynamic \
+        --ep-size 16
     python3 apply_eplb.py --template /path/to/run_dp_template.sh --mode force
     python3 apply_eplb.py --template /path/to/run_dp_template.sh --mode off
     python3 apply_eplb.py --template /path/to/run_dp_template.sh --mode check
     python3 apply_eplb.py --template ... --mode dynamic \
-        --redundant-experts 8 --window-size 500 --step-interval 500
+        --ep-size 16 --redundant-experts 16 --window-size 1000 --step-interval 1000
     python3 apply_eplb.py --template ... --mode force --dry-run
 
 Modes (mutually exclusive target states):
-    off      baseline: V2 model runner, no DYNAMIC_EPLB, no EPLB flags,
-             no enable_force_eplb
+    off      baseline: no DYNAMIC_EPLB, no EPLB flags, no enable_force_eplb.
+             Only rewrites VLLM_USE_V2_MODEL_RUNNER when the file actually
+             carried EPLB markers; a plain/V1 template is left untouched.
     dynamic  V2 model runner + export DYNAMIC_EPLB="true" + --enable-eplb
              + --eplb-config.* flags   (优化手段)
     force    V1 model runner (VLLM_USE_V2_MODEL_RUNNER=0) + unset DYNAMIC_EPLB
@@ -24,12 +28,18 @@ Modes (mutually exclusive target states):
     check    read-only: report which EPLB state the template is currently in
 
 Safety behavior:
-  * Refuses to touch a decode (D) node template (detected via kv_consumer).
+  * Only edits a template whose --kv-transfer-config JSON declares
+    "kv_role":"kv_producer" (the positive P-node criterion). Decode templates
+    and templates without a role are refused, not guessed.
   * Refuses templates without a `vllm serve` command.
+  * Refuses EPLB flags that share a line with other serve arguments, because
+    removing them would silently delete neighbouring flags.
+  * Symlinked templates are resolved first, so the real file is edited.
   * Makes a timestamped backup (.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>) before writing.
   * Merges into the existing --additional-config JSON instead of adding a
     second flag; all pre-existing keys are preserved.
   * Idempotent: re-running with the same mode produces no further changes.
+  * Writes through a unique temp file + os.replace (no fixed temp name).
   * Runs `bash -n` on the result and verifies the target state before exiting 0.
 """
 
@@ -42,41 +52,47 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 RE_V2 = re.compile(r'^(\s*)export\s+VLLM_USE_V2_MODEL_RUNNER\s*=.*$')
 RE_DYN_EXPORT = re.compile(r'^\s*export\s+DYNAMIC_EPLB\s*=')
 RE_DYN_UNSET = re.compile(r'^\s*unset\s+DYNAMIC_EPLB\b')
-RE_EPLB_FLAG = re.compile(r'^\s*(--enable-eplb\b|--eplb-config\.)')
+RE_EPLB_FLAG = re.compile(r'^(\s*)(--enable-eplb\b|--eplb-config\.)')
 RE_EP_LINE = re.compile(r'^(\s*)--enable-expert-parallel\b.*$')
 RE_SERVE_LINE = re.compile(r'^\s*vllm\s+serve\b')
 RE_AC_SINGLE = re.compile(r"^(\s*)--additional-config\s+'(\{.*\})'\s*(\\?)\s*$")
 RE_AC_OPEN = re.compile(r"^(\s*)--additional-config\s+'\{(.*)$")
 RE_AC_CLOSE = re.compile(r"^\s*\}'(.*)$")
 
+
 def die(msg, code=1):
     print(msg)
     sys.exit(code)
 
-def find_additional_config(lines):
-    """Locate the --additional-config '{ ... }' block.
+
+def find_json_block(lines, flag):
+    """Locate a `--flag '{...}'` JSON block.
 
     Returns (start, end, json_text, base_indent, suffix, single_line) or None.
     suffix is what followed the closing }' on the closing line (usually ' \\').
     """
+    single_re = re.compile(r"^(\s*)" + re.escape(flag) + r"\s+'(\{.*\})'\s*(\\?)\s*$")
+    open_re = re.compile(r"^(\s*)" + re.escape(flag) + r"\s+'\{(.*)$")
+    close_re = re.compile(r"^\s*\}'(.*)$")
     for i, line in enumerate(lines):
-        if '--additional-config' not in line:
+        if flag not in line:
             continue
-        m_single = RE_AC_SINGLE.match(line)
+        m_single = single_re.match(line)
         if m_single:
             base, jtext, cont = m_single.group(1), m_single.group(2), m_single.group(3)
             suffix = (' \\' if cont else '')
             return i, i, jtext, base, suffix, True
-        m_open = RE_AC_OPEN.match(line)
+        m_open = open_re.match(line)
         if m_open:
             base = m_open.group(1)
             body = [m_open.group(2)]  # content after '{ on the opening line
             for j in range(i + 1, len(lines)):
-                m_close = RE_AC_CLOSE.match(lines[j])
+                m_close = close_re.match(lines[j])
                 if m_close:
                     suffix = m_close.group(1)
                     jtext = '{' + '\n'.join(body) + '}'
@@ -86,91 +102,150 @@ def find_additional_config(lines):
         return None  # unexpected format
     return None
 
+
+def node_role(src):
+    """Return (role, error). role is 'kv_producer' / 'kv_consumer' / None."""
+    block = find_json_block(src.splitlines(), '--kv-transfer-config')
+    if block is None:
+        return None, 'no --kv-transfer-config block found'
+    try:
+        obj = json.loads(block[2])
+    except ValueError as e:
+        return None, 'cannot parse --kv-transfer-config JSON: %s' % e
+    return obj.get('kv_role'), None
+
+
+def find_serve(lines):
+    for i, line in enumerate(lines):
+        if RE_SERVE_LINE.match(line):
+            return i
+    return None
+
+
+def strip_eplb_args(lines):
+    """Remove standalone EPLB serve args; refuse args sharing a line with others."""
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            out.append(line)
+            continue
+        if '--enable-eplb' not in line and '--eplb-config.' not in line:
+            out.append(line)
+            continue
+        body = stripped[:-1].rstrip() if stripped.endswith('\\') else stripped
+        sole_flag = (re.fullmatch(r'--enable-eplb', body) or
+                     re.fullmatch(r'--eplb-config\.[A-Za-z0-9_]+(\s+\S+)?', body))
+        if sole_flag:
+            continue
+        raise ValueError(
+            'EPLB 参数没有独占一行（%r）。为避免误删同一行的其它参数（例如 --port），'
+            '请先把 EPLB 参数拆成独立行再运行。' % stripped)
+    return out
+
+
+def _serve_indent(lines, serve_idx):
+    return re.match(r'^(\s*)', lines[serve_idx]).group(1)
+
+
+def _first_index(lines, regex):
+    for i, line in enumerate(lines):
+        if re.match(regex, line):
+            return i
+    return None
+
+
 def transform(src, mode, redundant, window, interval):
     """Return the new file content for the target mode, or raise ValueError."""
     lines = src.splitlines()
-    v2_value = '0' if mode == 'force' else '1'
-    out = []
-    v2_seen = False
-    serve_idx = None
-
-    # Locate anchor line indexes first (needed if V2 line is missing).
-    for idx, line in enumerate(lines):
-        if RE_SERVE_LINE.match(line):
-            serve_idx = idx
-            break
-    if serve_idx is None:
+    if find_serve(lines) is None:
         raise ValueError("no `vllm serve` command found -- is this a vLLM launch template?")
 
-    ep_found = any(RE_EP_LINE.match(l) for l in lines)
+    has_markers = bool(re.search(r'DYNAMIC_EPLB|--enable-eplb|--eplb-config\.|enable_force_eplb', src))
 
-    def eplb_flag_lines(indent):
-        return [
-            '%s--enable-eplb \\' % indent,
-            '%s--eplb-config.num_redundant_experts %d \\' % (indent, redundant),
-            '%s--eplb-config.window_size %d \\' % (indent, window),
-            '%s--eplb-config.step_interval %d \\' % (indent, interval),
-        ]
-
+    # Drop existing DYNAMIC_EPLB lines and standalone EPLB args first.
+    out = []
     for line in lines:
-        if RE_DYN_EXPORT.match(line) or RE_DYN_UNSET.match(line):
-            continue
-        if RE_EPLB_FLAG.match(line):
-            continue
-        m_v2 = RE_V2.match(line)
-        if m_v2:
-            indent = m_v2.group(1)
-            out.append('%sexport VLLM_USE_V2_MODEL_RUNNER=%s' % (indent, v2_value))
-            v2_seen = True
-            if mode == 'dynamic':
-                out.append('%sexport DYNAMIC_EPLB="true"' % indent)
-            elif mode == 'force':
-                out.append('%sunset DYNAMIC_EPLB' % indent)
-            continue
-        m_ep = RE_EP_LINE.match(line)
-        if m_ep and mode == 'dynamic':
-            indent = m_ep.group(1)
-            if not line.rstrip().endswith('\\'):
-                out.append(line + ' \\')
-            else:
-                out.append(line)
-            out.extend(eplb_flag_lines(indent))
+        if RE_DYN_EXPORT.match(line) or re.match(r'^\s*unset\s+DYNAMIC_EPLB\s*$', line):
             continue
         out.append(line)
+    out = strip_eplb_args(out)
 
-    if mode == 'dynamic' and not ep_found:
-        raise ValueError("no --enable-expert-parallel flag found; cannot anchor "
-                         "--enable-eplb flags (expert parallel is a prerequisite for EPLB)")
+    serve_idx = find_serve(out)
+    indent = _serve_indent(out, serve_idx)
 
-    # Insert V2 runner export before `vllm serve` if the template lacked it.
-    if not v2_seen:
-        indent = re.match(r'^(\s*)', lines[serve_idx]).group(1)
-        new_lines = ['%sexport VLLM_USE_V2_MODEL_RUNNER=%s' % (indent, v2_value)]
-        if mode == 'dynamic':
-            new_lines.append('%sexport DYNAMIC_EPLB="true"' % indent)
-        elif mode == 'force':
-            new_lines.append('%sunset DYNAMIC_EPLB' % indent)
-        out = out[:serve_idx] + new_lines + out[serve_idx:]
+    def set_v2(value):
+        nonlocal out, serve_idx
+        idx = _first_index(out, RE_V2)
+        line = '%sexport VLLM_USE_V2_MODEL_RUNNER=%s' % (
+            re.match(r'^(\s*)', out[idx]).group(1) if idx is not None else indent, value)
+        if idx is not None:
+            out[idx] = line
+        else:
+            serve_idx = find_serve(out)
+            out.insert(serve_idx, line)
+            idx = serve_idx
+        return idx
 
-    # Merge enable_force_eplb into the --additional-config JSON block.
-    ac = find_additional_config(out)
+    # --- runner / DYNAMIC_EPLB ---
+    if mode == 'dynamic':
+        v2_idx = set_v2('1')
+        out.insert(v2_idx + 1, '%sexport DYNAMIC_EPLB="true"' % indent)
+    elif mode == 'force':
+        v2_idx = set_v2('0')
+        out.insert(v2_idx + 1, '%sunset DYNAMIC_EPLB' % indent)
+    else:  # off: only touch V2 when the file actually carried EPLB markers
+        if has_markers:
+            set_v2('1')
+
+    # --- EPLB serve flags (dynamic only) ---
+    if mode == 'dynamic':
+        serve_idx = find_serve(out)
+        ep_idx = _first_index(out, RE_EP_LINE)
+        if ep_idx is None:
+            raise ValueError("no --enable-expert-parallel flag found; cannot anchor "
+                             "--enable-eplb flags (expert parallel is a prerequisite for EPLB)")
+        if ep_idx < serve_idx:
+            raise ValueError("--enable-expert-parallel appears before `vllm serve`; "
+                             "refusing to guess the serve argument block")
+        ep_indent = re.match(r'^(\s*)', out[ep_idx]).group(1)
+        had_cont = out[ep_idx].rstrip().endswith('\\')
+        flags = ['--enable-eplb',
+                 '--eplb-config.num_redundant_experts %d' % redundant,
+                 '--eplb-config.window_size %d' % window,
+                 '--eplb-config.step_interval %d' % interval]
+        if had_cont:
+            inserted = ['%s%s \\' % (ep_indent, f) for f in flags]
+        else:
+            # the anchor line ends the command: keep it open, close on the last flag
+            out[ep_idx] = out[ep_idx].rstrip() + ' \\'
+            inserted = ['%s%s \\' % (ep_indent, f) for f in flags[:-1]]
+            inserted.append('%s%s' % (ep_indent, flags[-1]))
+        out[ep_idx + 1:ep_idx + 1] = inserted
+
+    # --- --additional-config ---
+    ac = find_json_block(out, '--additional-config')
     if ac is not None:
         start, end, jtext, base, suffix, single = ac
         try:
             obj = json.loads(jtext)
         except ValueError as e:
             raise ValueError("cannot parse existing --additional-config JSON: %s" % e)
+        changed = False
         if mode == 'force':
-            obj['enable_force_eplb'] = True
-        else:
-            obj.pop('enable_force_eplb', None)
+            if obj.get('enable_force_eplb') is not True:
+                obj['enable_force_eplb'] = True
+                changed = True
+        elif 'enable_force_eplb' in obj:
+            obj.pop('enable_force_eplb')
+            changed = True
+        if not changed:
+            return '\n'.join(out) + '\n'
         if single:
             dumped = json.dumps(obj, separators=(',', ':'))
             out[start] = "%s--additional-config '%s'%s" % (base, dumped, suffix)
         else:
             dumped = json.dumps(obj, indent=4, separators=(',', ':'))
-            # drop the outer braces: the flag line supplies '{ and the closing
-            # line supplies }'
             inner = dumped.splitlines()[1:-1]
             body = [(base + ln) if ln else ln for ln in inner]
             out[start:end + 1] = ["%s--additional-config '{" % base] + body + \
@@ -182,13 +257,27 @@ def transform(src, mode, redundant, window, interval):
 
     return '\n'.join(out) + '\n'
 
+
 def verify(text, mode, redundant, window, interval):
     """Check the target state; return (problems, n_checks). Empty problems == OK."""
     problems = []
+    lines = text.splitlines()
+    serve_idx = find_serve(lines)
+    n_ac = len(re.findall(r'--additional-config', text))
+
+    def index_of(pattern):
+        return _first_index(lines, pattern)
+
+    def before_serve(pattern):
+        idx = index_of(pattern)
+        return serve_idx is not None and idx is not None and idx < serve_idx
+
+    def inside_serve(pattern):
+        idx = index_of(pattern)
+        return serve_idx is not None and idx is not None and idx > serve_idx
+
     checks = {
         'off': [
-            ('export VLLM_USE_V2_MODEL_RUNNER=1' in text,
-             'VLLM_USE_V2_MODEL_RUNNER must be 1'),
             (not re.search(r'^\s*export\s+DYNAMIC_EPLB\s*=', text, re.M),
              'no export DYNAMIC_EPLB line'),
             (not re.search(r'^\s*unset\s+DYNAMIC_EPLB\b', text, re.M),
@@ -200,23 +289,25 @@ def verify(text, mode, redundant, window, interval):
             ('enable_force_eplb' not in text, 'no enable_force_eplb key'),
         ],
         'dynamic': [
-            ('export VLLM_USE_V2_MODEL_RUNNER=1' in text,
-             'VLLM_USE_V2_MODEL_RUNNER must be 1'),
-            ('export DYNAMIC_EPLB="true"' in text, 'export DYNAMIC_EPLB="true" present'),
-            ('--enable-eplb \\' in text, '--enable-eplb flag present'),
-            ('--eplb-config.num_redundant_experts %d \\' % redundant in text,
+            (before_serve(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=1\s*$'),
+             'export VLLM_USE_V2_MODEL_RUNNER=1 must be a standalone line before vllm serve'),
+            (before_serve(r'^\s*export\s+DYNAMIC_EPLB="true"\s*$'),
+             'export DYNAMIC_EPLB="true" must be a standalone line before vllm serve'),
+            (inside_serve(r'^\s*--enable-eplb(\s|\\|$)'),
+             '--enable-eplb flag present inside the serve command'),
+            (inside_serve(r'^\s*--eplb-config\.num_redundant_experts\s+%d(\s|\\|$)' % redundant),
              '--eplb-config.num_redundant_experts %d present' % redundant),
-            ('--eplb-config.window_size %d \\' % window in text,
+            (inside_serve(r'^\s*--eplb-config\.window_size\s+%d(\s|\\|$)' % window),
              '--eplb-config.window_size %d present' % window),
-            ('--eplb-config.step_interval %d \\' % interval in text,
+            (inside_serve(r'^\s*--eplb-config\.step_interval\s+%d(\s|\\|$)' % interval),
              '--eplb-config.step_interval %d present' % interval),
             ('enable_force_eplb' not in text, 'no enable_force_eplb key'),
         ],
         'force': [
-            ('export VLLM_USE_V2_MODEL_RUNNER=0' in text,
-             'VLLM_USE_V2_MODEL_RUNNER must be 0'),
-            (re.search(r'^\s*unset\s+DYNAMIC_EPLB\b', text, re.M),
-             'unset DYNAMIC_EPLB present'),
+            (before_serve(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=0\s*$'),
+             'export VLLM_USE_V2_MODEL_RUNNER=0 must be a standalone line before vllm serve'),
+            (before_serve(r'^\s*unset\s+DYNAMIC_EPLB\s*$'),
+             'unset DYNAMIC_EPLB must be a standalone line before vllm serve'),
             (not re.search(r'^\s*export\s+DYNAMIC_EPLB\s*=', text, re.M),
              'no export DYNAMIC_EPLB line'),
             (not re.search(r'^\s*--enable-eplb\b', text, re.M),
@@ -227,50 +318,72 @@ def verify(text, mode, redundant, window, interval):
              '"enable_force_eplb":true merged into --additional-config'),
         ],
     }
-    n_ac = len(re.findall(r'--additional-config', text))
     n_checks = 0
     for ok, msg in checks[mode]:
         n_checks += 1
         if not ok:
             problems.append(msg)
     n_checks += 1
-    if n_ac != 1:
-        problems.append('expected exactly one --additional-config flag, found %d' % n_ac)
+    if mode == 'force' and n_ac != 1:
+        problems.append('force requires exactly one --additional-config flag, found %d' % n_ac)
+    elif n_ac > 1:
+        problems.append('more than one --additional-config flag (found %d)' % n_ac)
     return problems, n_checks
 
+
 MODE_DESC = {
-    'off': '关闭 EPLB（基线：V2 runner，无 DYNAMIC_EPLB，无 eplb 参数）',
+    'off': '关闭 EPLB（基线：无 DYNAMIC_EPLB、无 eplb 参数、无 enable_force_eplb）',
     'dynamic': '动态 EPLB（V2 runner + DYNAMIC_EPLB="true" + --enable-eplb + eplb-config 参数）',
     'force': '强制 EPLB（V2=0 + unset DYNAMIC_EPLB + additional-config 里 enable_force_eplb:true）',
 }
 
+EPLB_CONFIG_KEYS = ('num_redundant_experts', 'window_size', 'step_interval')
+
+
 def check_state(src, path):
     """Read-only EPLB state report for a launch template."""
     print('模板: %s' % path)
-    if 'kv_consumer' in src and 'kv_producer' not in src:
+    role, err = node_role(src)
+    if role == 'kv_consumer':
         print('节点角色: D（decode）节点模板 —— EPLB 只配置在 P（prefill）节点，本文件无需 EPLB 配置')
         return 0
-    markers = {
-        'V2 runner=1': re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=1\s*$', src, re.M) is not None,
-        'V2 runner=0': re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=0\s*$', src, re.M) is not None,
-        'export DYNAMIC_EPLB': re.search(r'^\s*export\s+DYNAMIC_EPLB\s*=', src, re.M) is not None,
-        'unset DYNAMIC_EPLB': re.search(r'^\s*unset\s+DYNAMIC_EPLB\b', src, re.M) is not None,
-        '--enable-eplb': re.search(r'^\s*--enable-eplb\b', src, re.M) is not None,
-        '--eplb-config.*': re.search(r'^\s*--eplb-config\.', src, re.M) is not None,
-        '"enable_force_eplb":true': '"enable_force_eplb":true' in src,
-    }
+    if role != 'kv_producer':
+        print('节点角色: 无法确认 P（prefill）节点（%s）' % (err or 'kv_role=%r' % role))
+        print('状态: 不明确 —— 不会改写该模板；请确认 --kv-transfer-config 的 "kv_role":"kv_producer"')
+        return 1
+
+    dyn_export = re.search(r'^\s*export\s+DYNAMIC_EPLB="true"\s*$', src, re.M) is not None
+    dyn_any = re.search(r'^\s*export\s+DYNAMIC_EPLB\s*=', src, re.M) is not None
+    unset = re.search(r'^\s*unset\s+DYNAMIC_EPLB\b', src, re.M) is not None
+    v2_1 = re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=1\s*$', src, re.M) is not None
+    v2_0 = re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=0\s*$', src, re.M) is not None
+    enable = re.search(r'^\s*--enable-eplb\b', src, re.M) is not None
+    cfg = {k: re.search(r'^\s*--eplb-config\.%s\s+\S+' % k, src, re.M) is not None
+           for k in EPLB_CONFIG_KEYS}
+    force_key = '"enable_force_eplb":true' in src
     n_ac = len(re.findall(r'--additional-config', src))
+
+    markers = {
+        'V2 runner=1': v2_1, 'V2 runner=0': v2_0,
+        'export DYNAMIC_EPLB="true"': dyn_export,
+        'export DYNAMIC_EPLB（任意值）': dyn_any,
+        'unset DYNAMIC_EPLB': unset,
+        '--enable-eplb': enable,
+        '--eplb-config.num_redundant_experts': cfg['num_redundant_experts'],
+        '--eplb-config.window_size': cfg['window_size'],
+        '--eplb-config.step_interval': cfg['step_interval'],
+        '"enable_force_eplb":true': force_key,
+    }
     for k, v in markers.items():
-        print('  %-28s %s' % (k, '有' if v else '无'))
-    print('  --additional-config 数量      %d%s' % (n_ac, '' if n_ac == 1 else '  <-- 异常，应为 1'))
-    dyn = markers['V2 runner=1'] and markers['export DYNAMIC_EPLB'] and markers['--enable-eplb'] \
-        and markers['--eplb-config.*'] and not markers['"enable_force_eplb":true']
-    force = markers['V2 runner=0'] and markers['unset DYNAMIC_EPLB'] and \
-        markers['"enable_force_eplb":true'] and not markers['export DYNAMIC_EPLB'] \
-        and not markers['--enable-eplb']
-    off = markers['V2 runner=1'] and not markers['export DYNAMIC_EPLB'] \
-        and not markers['--enable-eplb'] and not markers['--eplb-config.*'] \
-        and not markers['"enable_force_eplb":true']
+        print('  %-38s %s' % (k, '有' if v else '无'))
+    print('  --additional-config 数量              %d%s' % (n_ac, '' if n_ac <= 1 else '  <-- 异常，应为 0 或 1'))
+
+    dyn = (v2_1 and dyn_export and enable and all(cfg.values())
+           and not force_key and not unset and n_ac <= 1)
+    force = (v2_0 and unset and force_key and not dyn_any and not enable and n_ac == 1)
+    off = (not dyn_any and not unset and not enable
+           and not any(cfg.values()) and not force_key and n_ac <= 1)
+
     if dyn:
         print('状态: dynamic EPLB（优化模式）')
         return 0
@@ -280,13 +393,42 @@ def check_state(src, path):
     if off:
         print('状态: 关闭 EPLB（基线）')
         return 0
-    print('状态: 不明确/混合 —— 存在互相矛盾的 EPLB 标记，建议用 --mode off|dynamic|force 之一修正')
+    print('状态: 不明确/混合 —— 存在互相矛盾或缺失的 EPLB 标记，建议用 --mode off|dynamic|force 之一修正')
     return 1
+
+
+def validate_params(mode, redundant, window, interval, ep_size):
+    """Return (redundant_after_rounding, notes). Raises SystemExit(2) on invalid input."""
+    if mode != 'dynamic':
+        return redundant, []
+    notes = []
+    if window < 1:
+        die('ERROR: --window-size 必须 >= 1（当前 %d）' % window, 2)
+    if interval < 1:
+        die('ERROR: --step-interval 必须 >= 1（当前 %d）' % interval, 2)
+    if redundant < 0:
+        die('ERROR: --redundant-experts 必须 >= 0（当前 %d）' % redundant, 2)
+    if redundant == 0:
+        die('ERROR: --redundant-experts 0 只有重排价值，不构成冗余副本；'
+            '如需纯重排请显式评估后再手工配置。', 2)
+    if ep_size is None:
+        notes.append('未提供 --ep-size，未校验 num_redundant_experts 的整除性')
+        return redundant, notes
+    if ep_size < 1:
+        die('ERROR: --ep-size 必须 >= 1', 2)
+    rounded = ((redundant + ep_size - 1) // ep_size) * ep_size
+    if rounded != redundant:
+        notes.append('num_redundant_experts 必须是 ep_size 的整数倍：%d 已向上取整为 %d'
+                     % (redundant, rounded))
+    return rounded, notes
+
 
 def main():
     ap = argparse.ArgumentParser(description='Configure EPLB in a vLLM prefill-node launch template')
     ap.add_argument('--template', required=True, help='path to run_dp_template.sh (P node)')
     ap.add_argument('--mode', required=True, choices=['off', 'dynamic', 'force', 'check'])
+    ap.add_argument('--ep-size', type=int, default=None,
+                    help='expert-parallel size, used to validate/round --redundant-experts')
     ap.add_argument('--redundant-experts', type=int, default=16,
                     help='eplb-config.num_redundant_experts (default 16)')
     ap.add_argument('--window-size', type=int, default=1000,
@@ -302,29 +444,39 @@ def main():
     if not os.path.isfile(path):
         die('ERROR: template not found: %s' % path)
     if os.path.islink(path):
-        print('NOTE: %s is a symlink, editing its target %s' % (path, os.path.realpath(path)))
+        real = os.path.realpath(path)
+        print('NOTE: %s 是符号链接，实际改写目标 %s' % (path, real))
+        path = real
     with open(path) as f:
         src = f.read()
 
     if args.mode == 'check':
         sys.exit(check_state(src, path))
 
-    # Safety: EPLB is only configured on the prefill (P) node template.
-    if 'kv_consumer' in src and 'kv_producer' not in src:
-        die("ERROR: %s looks like a decode (D) node template (contains kv_consumer).\n"
-            "EPLB is only configured on the prefill (P) node's run_dp_template.sh.\n"
-            "Refusing to edit." % path, 2)
+    # Positive P-node criterion: only a kv_producer template is safe to edit.
+    role, err = node_role(src)
+    if role != 'kv_producer':
+        if role == 'kv_consumer':
+            die("ERROR: %s is a decode (D) node template (kv_role=kv_consumer).\n"
+                "EPLB is only configured on the prefill (P) node's run_dp_template.sh.\n"
+                "Refusing to edit." % path, 2)
+        die("ERROR: cannot confirm %s is a prefill (P) node template: %s\n"
+            "Expected --kv-transfer-config with \"kv_role\":\"kv_producer\".\n"
+            "Refusing to edit." % (path, err), 2)
+
+    redundant, notes = validate_params(args.mode, args.redundant_experts,
+                                       args.window_size, args.step_interval, args.ep_size)
 
     try:
-        new = transform(src, args.mode, args.redundant_experts,
-                        args.window_size, args.step_interval)
+        new = transform(src, args.mode, redundant, args.window_size, args.step_interval)
     except ValueError as e:
         die('ERROR: %s' % e)
 
-    problems, n_checks = verify(new, args.mode, args.redundant_experts,
-                                args.window_size, args.step_interval)
+    problems, n_checks = verify(new, args.mode, redundant, args.window_size, args.step_interval)
 
     print('目标模式: %s' % MODE_DESC[args.mode])
+    for note in notes:
+        print('NOTE: %s' % note)
     print('')
     diff = list(difflib.unified_diff(src.splitlines(), new.splitlines(),
                                      fromfile=path + ' (before)',
@@ -348,15 +500,15 @@ def main():
 
     ts = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     tag = args.backup_tag or ('eplb-%s' % args.mode)
-    # keep the tag path-safe: it becomes part of a filename next to the template
     tag = re.sub(r'[^A-Za-z0-9._-]', '_', tag)
     bak = '%s.bak-%s-%s' % (path, tag, ts)
     shutil.copy2(path, bak)
 
-    # atomic replace: an interrupted write must never leave a half-written launcher
-    tmp_path = '%s.tmp-write' % path
+    # Atomic replace through a unique temp file (never a fixed name).
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)),
+                                    prefix=os.path.basename(path) + '.', suffix='.tmp')
     try:
-        with open(tmp_path, 'w') as f:
+        with os.fdopen(fd, 'w') as f:
             f.write(new)
         shutil.copymode(path, tmp_path)
         os.replace(tmp_path, path)
@@ -364,10 +516,11 @@ def main():
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-    # bash syntax check on the result
+    syntax_ok = None
     try:
         r = subprocess.run(['bash', '-n', path], capture_output=True, text=True)
-        if r.returncode != 0:
+        syntax_ok = (r.returncode == 0)
+        if not syntax_ok:
             print('WARNING: bash -n reported a syntax error (restoring backup):')
             print(r.stderr)
             shutil.copy2(bak, path)
@@ -377,13 +530,17 @@ def main():
 
     print('OK: 已写入 %s' % path)
     print('OK: 备份保存至 %s' % bak)
-    print('OK: bash -n 语法检查通过；目标状态校验通过（%d 项）' % n_checks)
+    if syntax_ok:
+        print('OK: bash -n 语法检查通过；目标状态校验通过（%d 项）' % n_checks)
+    else:
+        print('OK: 目标状态校验通过（%d 项）；bash -n 未验证（bash 不可用）' % n_checks)
     print('')
     print('下一步（由用户在对应节点手动执行，不要代跑）:')
     print('  P节点: docker exec -it <container> bash; cd <P脚本目录>; bash start_mooncake.sh; bash start_p0.sh')
     print('  D节点: docker exec -it <container> bash; cd <D脚本目录>; bash start_d0.sh')
     print('  代理:  cd <P脚本目录>; bash start_proxy.sh')
     print('  压测注意: EPLB 开启后第 1 轮压测是预热离群值，需剔除（建议跑 4 轮取后 3 轮均值）')
+
 
 if __name__ == '__main__':
     main()

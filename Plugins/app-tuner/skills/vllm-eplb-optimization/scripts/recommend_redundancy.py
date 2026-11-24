@@ -20,10 +20,16 @@ Usage:
         --redundant-experts 64 --free-gib 1
 
 Notes:
-  --bytes-per-expert-gib is the incremental cost of ONE redundant expert on
-  ONE EP rank (DeepSeekV3 reference: ~2.4 GiB). For a per-layer figure use
-  --bytes-per-expert-per-layer-gib together with --num-moe-layers; the script
-  then applies  extra_per_rank = (R / E) * layers * bytes_per_layer.
+  --bytes-per-expert-gib is the incremental cost of adding one expert slot on
+  EVERY EP rank, i.e. of E redundant experts (DeepSeekV3 reference: ~2.4 GiB,
+  from NUM_MOE_LAYERS x BYTES_PER_EXPERT). Per-rank cost is therefore
+  (R / E) * bytes_per_expert_gib. For a per-layer figure use
+  --bytes-per-expert-per-layer-gib with --num-moe-layers; the script then uses
+  layers * bytes_per_layer as the per-slot cost.
+
+  num_logical_experts must be divisible by ep_size (otherwise the experts
+  cannot be spread evenly), and num_redundant_experts is rounded up to an
+  ep_size multiple.
 """
 
 import argparse
@@ -49,10 +55,21 @@ def analyse(args):
     else:
         r = 0
 
+    if n % e != 0:
+        return {
+            "error": "logical experts (%d) 不能被 ep_size (%d) 整除，无法均分到各 rank；"
+                     "请先确认 EP 配置或逻辑专家数" % (n, e),
+            "logical_experts": n,
+            "ep_size": e,
+        }
+
     raw = r
     r = round_up(r, e)
     if r != raw:
         warnings.append("num_redundant_experts 必须是 ep_size 的整数倍：%d 已向上取整为 %d" % (raw, r))
+    if (n + r) % e != 0:
+        warnings.append("物理专家总数 %d 不能被 ep_size %d 整除，配置不可部署"
+                        % (n + r, e))
 
     ratio = (r / n) if n else 0.0
     per_rank_extra = r // e if e else 0
@@ -147,13 +164,15 @@ def main():
     result = analyse(args)
     text = json.dumps(result, ensure_ascii=False, indent=2)
     print(text)
+    if result.get("error"):
+        return 1
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")
 
     if args.strict:
         fits = (result["memory"] or {}).get("fits", True)
-        if not fits or result["band"] in ("low", "very_high"):
+        if not fits or result.get("band") != "recommended":
             return 2
     return 0
 

@@ -25,10 +25,15 @@ SCAN_DIRS = ("references", "scripts", "evals/fixtures")
 SCAN_FILES = ("SKILL.md", "evals/evals.json", "evals/eval_queries.json")
 
 # Build forbidden tokens from parts so this file does not trip its own scan.
+# Matched case-insensitively after text.lower(); built from parts so this file
+# does not trip its own scan. Internal-repo identifiers are included because
+# the previous revision leaked an internal implementation reference.
 VENDOR_WORDS = ["".join(p) for p in (
-    ("鲲", "鹏"), ("昇", "腾"), ("kun", "peng"), ("Kun", "peng"),
-    ("As", "cend"), ("as", "cend"), ("N", "PU"), ("910", "B"),
-    ("At", "las"), ("H", "BM"),
+    ("鲲", "鹏"), ("昇", "腾"), ("kun", "peng"),
+    ("as", "cend"), ("n", "pu"), ("910", "b"),
+    ("at", "las"), ("h", "bm"),
+    ("hc", "cl"), ("ascend", "_rt"), ("npu", "_"),
+    ("deep", "seek-ai"), ("deep", "infer"),
 )]
 EMPLOYEE_ID = re.compile(r"\b[lw]\d{8}\b")
 PERSONAL_PATH = re.compile(r"/home/[A-Za-z0-9_.-]+|/data/l\d{8}")
@@ -85,7 +90,7 @@ class TestFrontmatter(unittest.TestCase):
 
 class TestResources(unittest.TestCase):
     def test_scripts_present(self):
-        for name in ("apply_eplb.py", "gen_imbalanced_dataset.py", "set_eplb_mode.py"):
+        for name in ("apply_eplb.py", "gen_imbalanced_dataset.py", "recommend_redundancy.py"):
             self.assertTrue((SKILL_DIR / "scripts" / name).is_file(), name)
 
     def test_reference_present(self):
@@ -117,8 +122,10 @@ class TestHygiene(unittest.TestCase):
         hits = []
         for path in scanned_files():
             text = read(path)
+            low = text.lower()
             for word in VENDOR_WORDS:
-                if word in text:
+                pat = r"(?<![a-z0-9])" + re.escape(word.lower()) + r"(?![a-z0-9])"
+                if re.search(pat, low):
                     hits.append("%s: %s" % (path.relative_to(SKILL_DIR), word))
         self.assertEqual(hits, [], "发现厂商/型号词: %s" % hits)
 
