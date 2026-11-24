@@ -25,7 +25,7 @@ python3 cases/client-check/test_client_check.py
 python3 cases/benchmark-rounds/test_benchmark_rounds.py
 ```
 
-单二进制安装使用 `--client experiment/clickhouse --single-binary`；experiment/clickhouse 按实际相对位置填写。`check_service.py --help` 列出连接、客户端和超时参数。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。基准轮次用 `bash scripts/run_benchmark_rounds.sh` 写入新建目录，分别保留预热与各测量轮次日志，目录已存在时拒绝覆盖；显式使用 `bash` 调用，权限为 0644 的复制/安装布局也可用。
+单二进制安装使用 `--client experiment/clickhouse --single-binary`；experiment/clickhouse 按实际相对位置填写。`check_service.py --help` 列出连接、客户端和超时参数。离线测试验证客户端调用、结果校验与失败处理；真实服务验证使用第一条命令并保留输出，二者分别报告。通过最小验证后再按指南扩大负载。基准轮次用 `bash scripts/run_benchmark_rounds.sh` 写入新建目录，分别保留预热与各测量轮次日志，目录已存在时拒绝覆盖；显式使用 `bash` 调用，权限为 0644 的复制/安装布局也可用。单条查询使用客户端 `--query`，多条查询使用脚本 `--query-file FILE`，二者互斥且不支持继承标准输入；脚本在每轮重新打开查询文件，并要求正数 `--iterations` 或 `--timelimit`。输入、文件或有限终止条件不合法时在启动客户端前以退出码 2 失败，不创建结果目录。
 
 最小脚本的 `passed` 只表示目标连接及三条只读 SQL 通过，不验证集群所有节点、副本存活或复制延迟。集群测试前须按目标拓扑另行检查 `system.clusters` 与各节点的 `system.replicas`；不能从此脚本的结果推断集群健康。
 

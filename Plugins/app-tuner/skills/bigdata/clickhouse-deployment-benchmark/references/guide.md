@@ -23,7 +23,7 @@ clickhouse-client --host localhost --port 9000 --query 'SELECT sum(number) FROM 
 
 ## 可直接执行的有限查询基准
 
-使用 [官方 clickhouse-benchmark](https://clickhouse.com/docs/operations/utilities/clickhouse-benchmark)。以下是合成计算基准，不代表磁盘扫描或业务 SQL。`bash scripts/run_benchmark_rounds.sh` 为每次实验新建目录：目录已存在时以退出码 3 停止且不触碰旧文件；预热写入 `warmup.log`，每个测量轮次写入独立的 `round-<n>.log`，任一轮失败即停止。始终用 `bash` 显式调用，因此复制或安装后权限为 0644 也可用：
+使用 [官方 clickhouse-benchmark](https://clickhouse.com/docs/operations/utilities/clickhouse-benchmark)。以下是合成计算基准，不代表磁盘扫描或业务 SQL。`bash scripts/run_benchmark_rounds.sh` 为每次实验新建目录：目录已存在时以退出码 3 停止且不触碰旧文件；预热写入 `warmup.log`，每个测量轮次写入独立的 `round-<n>.log`，任一轮失败即停止。启动客户端前校验查询输入、文件可读性和有限终止条件，参数错误以退出码 2 停止且不创建结果目录。始终用 `bash` 显式调用，因此复制或安装后权限为 0644 也可用：
 
 ```bash
 bash scripts/run_benchmark_rounds.sh --output "results/run-$(date -u +%Y%m%dT%H%M%SZ)" --rounds 3 -- \
@@ -31,7 +31,15 @@ bash scripts/run_benchmark_rounds.sh --output "results/run-$(date -u +%Y%m%dT%H%
   --query 'SELECT sum(number) FROM numbers(1000000)'
 ```
 
-单二进制安装使用 `--client ./clickhouse --subcommand benchmark`。脚本只接受新目录；需要保留的上一轮输出不会被同名重定向截断。统计各轮日志中的 QPS/延迟并保留全部轮次值；固定并发、查询、版本与线程设置。改测真实 SQL 时将已验证查询传给 `--query`，多条查询按官方工具的输入格式保存成文件并通过标准输入传入。始终设置有限 iterations。
+单二进制安装使用 `--client ./clickhouse --subcommand benchmark`。脚本只接受新目录；需要保留的上一轮输出不会被同名重定向截断。统计各轮日志中的 QPS/延迟并保留全部轮次值；固定并发、查询、版本与线程设置。改测真实 SQL 时将已验证查询传给客户端的 `--query`。`--iterations` 或 `--timelimit` 必须至少一个为正数；`--rounds` 只控制测量进程数，不能代替客户端的有限终止条件。
+
+多条查询按官方工具的输入格式保存成可读普通文件，通过脚本的 `--query-file` 传入，不要重定向标准输入。脚本会为预热和每个测量进程分别重新打开文件；`--query-file` 与客户端 `--query` 互斥，缺少显式查询输入也会在启动客户端前失败。例如 queries.tsv 每行一条制表符转义查询时：
+
+```bash
+bash scripts/run_benchmark_rounds.sh --output "results/multi-$(date -u +%Y%m%dT%H%M%SZ)" \
+  --rounds 3 --query-file queries.tsv -- \
+  --host localhost --port 9000 --concurrency 1 --timelimit 10
+```
 
 ## TPC-H
 

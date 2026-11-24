@@ -30,6 +30,14 @@ fi
 echo "QPS 1.0"
 """
 
+QUERY_FILE_CLIENT = """#!/usr/bin/env bash
+set -eu
+printf '%s\\n' "$*" >> "$CALL_LOG"
+count=$(wc -l < "$CALL_LOG")
+cat > "$QUERY_COPIES/query-$count.sql"
+echo "QPS 1.0"
+"""
+
 
 class BenchmarkRoundTests(unittest.TestCase):
     def setUp(self):
@@ -37,7 +45,11 @@ class BenchmarkRoundTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.calls = self.root / "calls.log"
-        self.env = dict(os.environ, CALL_LOG=str(self.calls))
+        self.env = dict(
+            os.environ,
+            CALL_LOG=str(self.calls),
+            QUERY_COPIES=str(self.root),
+        )
 
     def client(self, body=SUCCESS_CLIENT):
         path = self.root / "fake-clickhouse-benchmark"
@@ -56,7 +68,7 @@ class BenchmarkRoundTests(unittest.TestCase):
         )
 
     def bench_args(self):
-        return ("--", "--query", "SELECT 1")
+        return ("--", "--query", "SELECT 1", "--iterations", "1")
 
     def test_success_writes_separate_warmup_and_round_files(self):
         output = self.root / "results" / "run-1"
@@ -77,6 +89,157 @@ class BenchmarkRoundTests(unittest.TestCase):
         calls = self.calls.read_text().splitlines()
         self.assertEqual(len(calls), 3)
         self.assertTrue(all("--query SELECT 1" in line for line in calls))
+
+    def test_query_file_is_reopened_for_warmup_and_every_round(self):
+        output = self.root / "run-1"
+        query_file = self.root / "queries with spaces.sql"
+        queries = "SELECT 1;\nSELECT 2;\n"
+        query_file.write_text(queries, encoding="utf-8")
+        completed = self.run_script(
+            "--output",
+            output,
+            "--rounds",
+            "2",
+            "--query-file",
+            query_file.name,
+            "--client",
+            self.client(QUERY_FILE_CLIENT),
+            "--",
+            "--queries-format",
+            "script",
+            "--iterations",
+            "1",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(len(self.calls.read_text().splitlines()), 3)
+        for invocation in range(1, 4):
+            copied = self.root / f"query-{invocation}.sql"
+            self.assertEqual(copied.read_text(encoding="utf-8"), queries)
+
+    def test_query_file_input_errors_happen_before_client_or_output(self):
+        query_file = self.root / "queries.sql"
+        query_file.write_text("SELECT 1\n", encoding="utf-8")
+        client = self.client()
+        cases = {
+            "conflicting query": (
+                "--query-file",
+                query_file,
+                "--",
+                "--query",
+                "SELECT 1",
+                "--iterations",
+                "1",
+            ),
+            "missing file": (
+                "--query-file",
+                self.root / "missing.sql",
+                "--",
+                "--iterations",
+                "1",
+            ),
+            "directory instead of file": (
+                "--query-file",
+                self.root,
+                "--",
+                "--iterations",
+                "1",
+            ),
+            "implicit standard input": ("--", "--iterations", "1"),
+        }
+        unreadable = self.root / "unreadable.sql"
+        unreadable.write_text("SELECT 1\n", encoding="utf-8")
+        unreadable.chmod(0)
+        self.addCleanup(unreadable.chmod, 0o600)
+        if not os.access(unreadable, os.R_OK):
+            cases["unreadable file"] = (
+                "--query-file",
+                unreadable,
+                "--",
+                "--iterations",
+                "1",
+            )
+        for name, trailing_args in cases.items():
+            with self.subTest(name=name):
+                output = self.root / "run-1"
+                completed = self.run_script(
+                    "--output",
+                    output,
+                    "--client",
+                    client,
+                    *trailing_args,
+                )
+                self.assertEqual(completed.returncode, 2)
+                self.assertFalse(output.exists())
+                self.assertFalse(self.calls.exists())
+
+    def test_missing_or_invalid_finite_limit_fails_before_client(self):
+        client = self.client()
+        invalid_limits = (
+            (),
+            ("--iterations", "0"),
+            ("--iterations", "-1"),
+            ("--iterations", "invalid"),
+            ("--iterations",),
+            ("--iterations=0"),
+            ("--timelimit", "0"),
+            ("--timelimit", "-1"),
+            ("--timelimit", "invalid"),
+            ("--timelimit", "nan"),
+            ("--timelimit", "inf"),
+            ("--timelimit", "1e309"),
+            ("--timelimit", "1e-4000"),
+            ("--timelimit",),
+            ("--timelimit=0"),
+            ("--iterations", "1", "--iterations", "0"),
+            ("--timelimit", "1", "--timelimit", "0"),
+        )
+        for limit_args in invalid_limits:
+            with self.subTest(limit_args=limit_args):
+                output = self.root / "run-1"
+                completed = self.run_script(
+                    "--output",
+                    output,
+                    "--rounds",
+                    "1",
+                    "--client",
+                    client,
+                    "--",
+                    "--query",
+                    "SELECT 1",
+                    *limit_args,
+                )
+                self.assertEqual(completed.returncode, 2)
+                self.assertFalse(output.exists())
+                self.assertFalse(self.calls.exists())
+
+    def test_positive_iterations_or_timelimit_is_accepted(self):
+        valid_limits = (
+            ("--iterations=1",),
+            ("-i", "1"),
+            ("-i1",),
+            ("--timelimit", "0.1"),
+            ("--timelimit=1e-3",),
+            ("-t", "0.1"),
+            ("-t0.1",),
+            ("--iterations", "0", "--iterations", "1"),
+            ("--timelimit", "0", "--timelimit", "1"),
+        )
+        for index, limit_args in enumerate(valid_limits):
+            with self.subTest(limit_args=limit_args):
+                output = self.root / f"run-{index}"
+                completed = self.run_script(
+                    "--output",
+                    output,
+                    "--rounds",
+                    "1",
+                    "--client",
+                    self.client(),
+                    "--",
+                    "--query",
+                    "SELECT 1",
+                    *limit_args,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_existing_output_directory_preserves_prior_files(self):
         output = self.root / "run-1"
