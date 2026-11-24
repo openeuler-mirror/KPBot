@@ -161,6 +161,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | [`redis-optimize`](skills/redis-optimize/SKILL.md) | Redis 场景专属调优(实例发现、网卡 NUMA 定位、进程绑核、多队列中断绑核、ntuple 按端口分流、redis.conf/OS 参数与 redis-benchmark 验证纪律)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 | [`kptools-dpdk-tuning`](skills/kptools-dpdk-tuning/SKILL.md) | DPDK 应用性能调优(诊断+顾问双模式) — 现象驱动的分层排查与硬件+场景驱动的分层配置建议，覆盖 BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延，不修改业务源码；需要改码的优化移交 code-optimizer 的 `dpdk-optimization` |
 
+### 环境部署 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`redis-deploy`](skills/redis-deploy/SKILL.md) | Redis 环境部署(源码构建、默认 7.0.15、sha256 校验、systemd 托管、多实例、离线部署、升级/回滚与验收；不自动修改内核参数、不执行远程脚本、卸载需人工确认)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
+
 ### 独立诊断 skill
 
 | 技能 | 描述 |
@@ -218,6 +224,7 @@ app-tuner/
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
 | RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
+| Redis 环境部署 | "部署一个 Redis 环境（默认 7.0.15）" | `redis-deploy` |
 
 ### 优化工作流
 
