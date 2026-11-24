@@ -73,8 +73,11 @@ mkdir -p "$RUN_DIR"
 python3 "$SKILL_DIR/scripts/build_tpch_dbgen.py" --tools-dir "$PWD"
 bash bin/gen-tpch-data.sh -s 1 -c 2
 bash bin/create-tpch-tables.sh -s 1
-bash bin/load-tpch-data.sh -c 1 2>&1 | tee "$RUN_DIR/load.stdout"
+TXID="$(python3 -c 'import uuid; print("tpch-" + uuid.uuid4().hex)')"
+bash bin/load-tpch-data.sh -c 1 -x "$TXID" 2>&1 | tee "$RUN_DIR/load.stdout"
 ```
+
+上游脚本不带 `-x` 时 Doris 自动生成 `import_<uuid>` 形式的 label，不含表名，验收器无法把响应映射到表。这里在导入前用 Python 3 的 `uuid.uuid4().hex` 生成唯一 `TXID` 并通过 `-x "$TXID"` 传入，避免同日秒级重复或并行实验撞 id。上游会生成 `${TXID}_<table>`（单文件表）或 `${TXID}_<table>_<file>`（分片表）形式的 label；验收器用 `--txid "$TXID"` 只接受该事务的精确 label，同前缀的其他事务（例如 TXID `run` 与 `run_other`）不会计入。HTTP 与 HTTPS 两条导入路径各自生成自己的 `TXID`，不共用同一个值；HTTP 验收引用本块生成的变量，HTTPS 验收引用 HTTPS 块重新生成的变量。
 
 `build_tpch_dbgen.py` 在解压和 make 之前，按 [生成器来源清单](tpch-dbgen-provenance.json) 中项目钉定的 SHA-256 校验 ZIP；摘要不符、下载失败或已有未经验证的解压目录都会停止。校验通过后才解压并调用上游构建，把 URL、SHA-256 和源 Apache commit 写入 `bin/.kpbot-tpch-dbgen-verified.json`，同时记入实验记录。该摘要由项目针对钉定 Apache 源码中的 URL 在 TLS 校验下取得并固定，不是上游发布者签名；若上游之后提供独立发布的权威摘要，应改用该摘要。
 
@@ -83,6 +86,7 @@ bash bin/load-tpch-data.sh -c 1 2>&1 | tee "$RUN_DIR/load.stdout"
 ```bash
 python3 "$SKILL_DIR/scripts/verify_tpch_import.py" \
   --load-output "$RUN_DIR/load.stdout" --data-dir "$TPCH_DATA_DIR" \
+  --txid "$TXID" \
   --database "$DB" --host "$FE_HOST" --port "$FE_QUERY_PORT" --user "$USER" \
   --protocol=TCP --output "$RUN_DIR/import-check"
 ```
@@ -93,7 +97,7 @@ python3 "$SKILL_DIR/scripts/verify_tpch_import.py" \
 
 先按目标版本的官方 [FE 证书配置](https://doris.apache.org/docs/3.x/admin-manual/auth/fe-certificate/) 和 [BE HTTPS 配置](https://doris.apache.org/docs/3.x/admin-manual/config/be-config/#enable_https) 配置服务端证书，确认客户端所用主机名与证书匹配。这里不自动生成或修改服务端凭据。
 
-上游 `gen-tpch-data.sh` 对 partsupp、orders、lineitem 生成 `.tbl.1` 到 `.tbl.N`（N 等于 `-c`），其他五表生成单个 `.tbl`。下面的循环同时覆盖这两类文件，按实际文件 `wc -l` 得到 expected rows，为每个文件指定唯一输出目录和以 `${table}_${index}` 形式结尾的 label；`verify_tpch_import.py` 能按该 label 把响应聚合到表。把 `BE_HOSTS` 设为 `SHOW BACKENDS` 中 Alive 的 BE 地址（多个用空格分隔），`DORIS_CA_BUNDLE` 设为签发 FE/BE 证书的 CA 文件：
+上游 `gen-tpch-data.sh` 对 partsupp、orders、lineitem 生成 `.tbl.1` 到 `.tbl.N`（N 等于 `-c`），其他五表生成单个 `.tbl`。下面的循环同时覆盖这两类文件，按实际文件 `wc -l` 得到 expected rows，为每个文件指定唯一输出目录和以 `${table}_${index}` 形式结尾的 label；`verify_tpch_import.py` 能按该 label 把响应聚合到表。每次请求还必须带与上游 `load-tpch-data.sh` 一致的 `columns:` 头：dbgen 每行以分隔符结尾，建表没有 temp 列，用末尾 `temp` 吸收行尾空字段；且 lineitem、orders 的建表列序与文件列序不同（lineitem 建表以 `l_shipdate` 开头、文件以 `l_orderkey` 开头，orders 同样错位），缺 `columns:` 时 Stream Load 按位置映射会整单失败。把 `BE_HOSTS` 设为 `SHOW BACKENDS` 中 Alive 的 BE 地址（多个用空格分隔），`DORIS_CA_BUNDLE` 设为签发 FE/BE 证书的 CA 文件：
 
 ```bash
 export DORIS_PASSWORD   # 已按上文隐藏输入或受控注入
@@ -104,7 +108,17 @@ ALLOW_ARGS=()
 for host in "${ALLOWED_BE_HOSTS[@]}"; do
   ALLOW_ARGS+=(--allow-host "$host")
 done
-TXID="tpch-$(date +%Y%m%d%H%M%S)"
+declare -A COLUMNS=(
+  [region]="r_regionkey, r_name, r_comment, temp"
+  [nation]="n_nationkey, n_name, n_regionkey, n_comment, temp"
+  [supplier]="s_suppkey, s_name, s_address, s_nationkey, s_phone, s_acctbal, s_comment, temp"
+  [part]="p_partkey, p_name, p_mfgr, p_brand, p_type, p_size, p_container, p_retailprice, p_comment, temp"
+  [partsupp]="ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment, temp"
+  [customer]="c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment, temp"
+  [orders]="o_orderkey, o_custkey, o_orderstatus, o_totalprice, o_orderdate, o_orderpriority, o_clerk, o_shippriority, o_comment, temp"
+  [lineitem]="l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment, temp"
+)
+TXID="$(python3 -c 'import uuid; print("tpch-" + uuid.uuid4().hex)')"
 for table in region nation supplier part partsupp customer orders lineitem; do
   for file in "$TPCH_DATA_DIR/$table.tbl"*; do
     [ -f "$file" ] || continue
@@ -113,20 +127,22 @@ for table in region nation supplier part partsupp customer orders lineitem; do
     rows=$(wc -l < "$file")
     label="${TXID}_${table}_${index}"
     python3 "$SKILL_DIR/scripts/stream_load_https.py" \
-      --fe-url "https://$FE_HOST:${FE_HTTPS_PORT:-8443}/api/$DB/$table/_stream_load" \
+      --fe-url "https://$FE_HOST:${FE_HTTPS_PORT:-8050}/api/$DB/$table/_stream_load" \
       "${ALLOW_ARGS[@]}" --cafile "$DORIS_CA_BUNDLE" \
       --data-file "$file" --header "column_separator:|" \
+      --header "columns: ${COLUMNS[$table]}" \
       --header "label:${label}" --expected-rows "$rows" \
       --output "$RUN_DIR/https-${table}-${index}" || exit 1
   done
 done
 python3 "$SKILL_DIR/scripts/verify_tpch_import.py" \
   --responses "$RUN_DIR" --data-dir "$TPCH_DATA_DIR" \
+  --txid "$TXID" \
   --database "$DB" --host "$FE_HOST" --port "$FE_QUERY_PORT" --user "$USER" \
   --protocol=TCP --output "$RUN_DIR/import-check-https"
 ```
 
-循环结束后，校验器把同一表的多个分片响应相加，再与 `--data-dir` 中生成文件的逐表行数核对；八表全部一致才通过。FE 的 307 目标不是 HTTPS、主机不在列表内或证书校验失败时，脚本在发送数据前停止；失败响应、过滤行或导入行不符同样返回非零并保留原始响应。受信隔离网络仍可使用上游脚本，但必须在实验记录中注明明文 HTTP 条件。
+循环结束后，校验器把同一表的多个分片响应相加，再与 `--data-dir` 中生成文件的逐表行数核对；八表全部一致才通过。HTTPS 块在循环前重新生成自己的 `TXID`；`--txid "$TXID"` 只接受 `${TXID}_<table>` 或 `${TXID}_<table>_<数字分片>` 形式的精确 label，历史响应和同前缀的其他事务都不会混入。缺 `columns:` 或列序不对时 Doris 返回非 Success 或过滤行非 0，脚本和校验器都会停止。FE 的 307 目标不是 HTTPS、主机不在列表内或证书校验失败时，脚本在发送数据前停止；失败响应、过滤行或导入行不符同样返回非零并保留原始响应。`FE_HTTPS_PORT` 未设置时使用钉定版本 FE 配置的默认 HTTPS 端口 8050；服务端改过端口时必须显式导出。受信隔离网络仍可使用上游脚本，但必须在实验记录中注明明文 HTTP 条件。
 
 单独执行查询计时：只有上面的导入验收通过后才运行下面命令。检查查询结果后，先预热再多轮测量，保存每次脚本输出与查询级耗时。规模、分桶、副本、会话设置、查询集合与集群资源固定。比较参数时一次只改一个变量；内存不足先关联 BE 指标、容器限制与导入/compaction 状态，不能仅凭日志关键字改 OS 参数。
 

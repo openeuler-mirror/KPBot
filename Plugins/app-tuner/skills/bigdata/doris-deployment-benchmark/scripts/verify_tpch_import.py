@@ -28,9 +28,9 @@ SF1 = {
     "orders": 1500000,
     "lineitem": 6001215,
 }
+TABLE_NAMES = "partsupp|supplier|nation|region|customer|orders|lineitem|part"
 LABEL = re.compile(
-    r"(?:^|_)(partsupp|supplier|nation|region|customer|orders|lineitem|part)"
-    r"(?:_\d+)?$",
+    r"(?:^|_)(" + TABLE_NAMES + r")(?:_\d+)?$",
     re.IGNORECASE,
 )
 
@@ -67,6 +67,15 @@ def table_for(label):
         return None
     match = LABEL.search(label)
     return match.group(1).lower() if match else None
+
+
+def belongs_to(label, txid):
+    if txid is None:
+        return True
+    if not isinstance(label, str):
+        return False
+    pattern = r"^" + re.escape(txid) + r"_(?i:" + TABLE_NAMES + r")(?:_\d+)?$"
+    return re.fullmatch(pattern, label) is not None
 
 
 def count_lines(path):
@@ -125,6 +134,16 @@ def load_output(args):
             "expected counts must contain exactly the eight tables"
         )
     payloads = collect(args.load_output, args.responses)
+    if args.txid is not None:
+        payloads = [
+            payload
+            for payload in payloads
+            if belongs_to(payload.get("Label"), args.txid)
+        ]
+        if not payloads:
+            raise ValueError(
+                "no Stream Load responses for transaction id " + args.txid
+            )
     if not payloads:
         raise ValueError("no Stream Load responses found")
     stats = {
@@ -262,6 +281,10 @@ def parser():
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--load-output", type=Path)
     result.add_argument("--responses", type=Path)
+    result.add_argument(
+        "--txid",
+        help="only accept Stream Load labels belonging to this transaction id",
+    )
     expected = result.add_mutually_exclusive_group()
     expected.add_argument("--expected-json", type=Path)
     expected.add_argument(
@@ -290,6 +313,8 @@ def main():
     args = parser().parse_args()
     if args.load_output is None and args.responses is None:
         parser().error("provide --load-output and/or --responses")
+    if args.txid is not None and not args.txid.strip():
+        parser().error("--txid must not be empty")
     if not 0 < args.port <= 65535:
         parser().error("invalid port")
     if args.output is not None:
