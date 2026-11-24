@@ -1,0 +1,7 @@
+# 场景 B 证据（perf report 摘要，https 网关）
+perf report --stdio --no-children | head:
+  18.2%  ngx_ssl_handshake
+   9.1%  RSA_private_encrypt
+   8.0%  EVP_DecryptUpdate
+   6.5%  ngx_epoll_process_events
+   4.0%  memcpy

@@ -1,0 +1,25 @@
+// Extracted from CubeSandbox v0.7.1. SPDX-License-Identifier: Apache-2.0
+}
+
+func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
+	replicas, err := ListReplicas(ctx, templateID)
+	if err != nil {
+		return ReplicaStatus{}, err
+	}
+	preferredNodeID = strings.TrimSpace(preferredNodeID)
+	for _, item := range replicas {
+		replica := replicaModelToStatus(item)
+		if !isReplicaSchedulableNow(ctx, replica) {
+			continue
+		}
+		if preferredNodeID == "" || strings.TrimSpace(replica.NodeID) == preferredNodeID {
+			return replica, nil
+		}
+	}
+	return ReplicaStatus{}, ErrTemplateHasNoReadyReplica
+}
+
+func isTemplateReplicaSchedulable(ctx context.Context, templateID, nodeID string) bool {
+	if !isReady() || strings.TrimSpace(templateID) == "" || strings.TrimSpace(nodeID) == "" {
+		return false
+	}

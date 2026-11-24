@@ -1,0 +1,47 @@
+# 用例：tier A —— uadk-accelerator-optimization skill 契约与知识库事实单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 提及 UADK 与硬件加速器）
+#                  红线不变量（只读体检、结论三态 recommended/not_applicable/blocked、
+#                  与 performance-library-selection 互斥声明、confidence 恒不标 measured）
+#   注册完整性     主编排 Dynamic Skill Catalog 行 + Step 7 候选规则、
+#                  candidate-skill-list.md 信号行与 0.5% 阈值、knowledge-technique-routing.md
+#                  两处路由、CHANGELOG 条目
+#   引用完整性     references/ 两文件存在、跨 skill 复用
+#                  ../performance-library-selection/scripts/ 采样脚本存在
+#   知识库事实     uadk-algorithm-map.json：schema/阈值 0.5/三设备(SEC/HPRE/ZIP 驱动名)/
+#                  11 算法全集/族-设备一致性/hotspot_patterns 与 exclude_patterns 正则可编译/
+#                  压缩类排除 crc32、adler32
+#   playbook SOP   驱动加载顺序(uacce→hisi_qm→hisi_sec2/hisi_hpre/hisi_zip, uacce_mode=1)、
+#                  WD_*_CTX_NUM 格式、uadk_tool benchmark / openssl speed / yum install
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/kpbot-app-tuner/subskills/uadk-accelerator-optimization/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/静态，python3+bash 标准库，无真机依赖）。
+
+name: skill-integrity
+skill: uadk-accelerator-optimization
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: integrity_ran
+    op: gte
+    expect: 18
+  - type: json_field
+    file: results/result.json
+    field: integrity_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0

@@ -9,6 +9,7 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 |---|---|
 | [`cubesandbox-create-optimize`](cubesandbox-create-optimize/SKILL.md) | CubeSandbox 完整创建路径与多机制组合调优：核对 Guest 预连接、Master 解析缓存与异步 spec、rootfs 影子预派生池之间的交互，做组合消融与端到端归因 |
 | [`cubesandbox-restore-runtime-reuse`](cubesandbox-restore-runtime-reuse/SKILL.md) | Reuse a VMM restore runtime and replace the pool when the worker count changes. Choose this implementation or the fixed-pool device manager hunk in `scheme1-rpc.patch` for a given build. |
+| [`cubesandbox-replica-metadata-ttl`](cubesandbox-replica-metadata-ttl/SKILL.md) | Opt-in, process-local reuse of READY replica metadata by template for one second, with per-request placement checks. The reference patch is mutually exclusive with `scheme2-rsi-cache.patch`. |
 
 **场景收益 / 定位**（原插件 README 技能表条目）：面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口。
 

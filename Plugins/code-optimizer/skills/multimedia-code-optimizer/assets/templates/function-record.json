@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "function": "<函数名>",
+  "file": "<相对项目根的路径>",
+  "line": 0,
+  "started_at": "<ISO8601>",
+  "finished_at": "<ISO8601>",
+  "status": "unverified",
+  "verify_method": "native",
+  "reference": {
+    "summary_files_read": [
+      "summary/manual/<file>.md",
+      "summary/auto/C_SVE/summary.md",
+      "summary/auto/C_SVE/patterns/<slug>.md"
+    ],
+    "matched_methods": [
+      "<方法标题>"
+    ],
+    "deviations": "<和方法的差异，为什么改>",
+    "web_sources": [
+      "<url>"
+    ]
+  },
+  "analysis": {
+    "why_hot": "<为什么先做这个函数：占比 / 调用点 / 结构判断>",
+    "vectorizable": true,
+    "hazards": [
+      "<跨迭代依赖 / 溢出 / 别名 / 浮点语义 / 尾部>"
+    ],
+    "chosen_technique": "<最终采用的手法>"
+  },
+  "correctness": {
+    "verdict": "pass",
+    "cases": 0,
+    "mismatches": 0,
+    "bit_exact": true,
+    "evidence": "test/<fn>/result.json"
+  },
+  "performance": {
+    "harness": "qemu",
+    "harness_detail": "qemu-system-aarch64 -M virt -cpu max -icount shift=0",
+    "timer": "cntvct_el0",
+    "deterministic": true,
+    "rounds": 5,
+    "ref_ns": 0,
+    "simd_ns": 0,
+    "speedup": 0.0,
+    "verdict": "faster",
+    "command": "<可复现的完整命令>"
+  },
+  "attempts": [
+    {
+      "technique": "<试过的另一种手法>",
+      "speedup": 0.0,
+      "result": "not_faster"
+    }
+  ],
+  "reject_reason": "",
+  "notes": "<残留风险、只覆盖了哪些输入形态>"
+}

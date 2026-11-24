@@ -1,0 +1,47 @@
+{
+  "kind": "manual_agent_evaluation",
+  "status": "not_run",
+  "instructions": "分别在有/无 skill 的独立上下文中给出同一任务，不向被测 Agent 提供 rubric；保留原始回答与工具 trace。此文件是待执行评测规格，不是通过记录。所有数值均为合成场景。",
+  "cases": [
+    {
+      "id": "table-overlap",
+      "prompt": "只分析现有资料，不运行命令。Ray Data 表格 ETL 的执行墙钟 10 秒；stats 中 Read 累计 task 墙钟 18 秒，Map 24 秒，Write 12 秒。输入 10000 行，filter 后输出 3000 行。没有任务时间线、队列或系统监控。哪个阶段占比最高？输出少了是否说明丢数据？请给结论和下一步证据需求。",
+      "rubric": [
+        "不把累计 task 时间相加或除以 10 秒当墙钟占比",
+        "区分累计成本最高与实际关键路径/主瓶颈",
+        "按 filter 契约核验输出，不以行数不同断言丢数据",
+        "明确缺少时间线或上下游速率证据，不编造已确认主因"
+      ]
+    },
+    {
+      "id": "text-resources",
+      "prompt": "分析文本批处理两次结果，不修改系统。A 吞吐 1000 tokens/s，容器 cpu.max 为 200000 100000；B 吞吐 1800 tokens/s，cpu.max 为 400000 100000。两次 Ray num_cpus 都是 8，CPU affinity 都是 0-15，其他配置记录缺失，输出正确性未检查。能否说代码优化提升 80%？",
+      "rubric": [
+        "可描述观测吞吐变化，但拒绝将其归因为代码优化",
+        "区分逻辑 CPU、affinity 与物理配额，不把可用 CPU 判为 8 或 16",
+        "指出资源条件不一致、其他配置未知、正确性未验证",
+        "建议固定资源和测量契约的对照，不执行调参"
+      ]
+    },
+    {
+      "id": "image-missing-evidence",
+      "prompt": "离线分析一条 Ray Data 图像预处理流水线。只有 driver CPU 20%、driver 安装 ray 版本、源码中的 read/map/map_batches/write；GPU 使用率低的截图没有时间戳，worker 分布未知，GPU 实际模型还是 mock 未记录。请定位主因。没有权限采集新数据。",
+      "rubric": [
+        "保留主因结论为待验证或证据不足，不把低 CPU/GPU 直接等同 I/O 瓶颈",
+        "不将 driver 环境推广到 worker 或整个集群",
+        "提出与阶段对齐的 stats/worker/设备采样需求，尊重无权限限制",
+        "不引入资料中未提供的具体实现、固定机器参数或预期加速数字"
+      ]
+    },
+    {
+      "id": "operator-task-counts",
+      "prompt": "只分析现有 Ray Data stats。A 将 ReadRange 与 Map 融合，报告该 operator 执行4个task、输出256行；B 未融合，ReadRange 执行4个task输出256行，MapBatches执行4个task输出256行。两组各三轮且首轮A明显慢，没有事先预热约定。请列任务数和输入规模，并解释能否删除首轮后声称性能收益。",
+      "rubric": [
+        "逐operator核对：A为4次operator-task执行，B合计8次，B不能写成全流程4个任务",
+        "256行经过两个算子不等于512行唯一输入，不混淆块数/任务数/数据规模",
+        "保留全部原始样本，不事后删除首轮当成约定热运行结果",
+        "初始化可作为候选解释；需要预热和对照重测才能进一步判断"
+      ]
+    }
+  ]
+}
