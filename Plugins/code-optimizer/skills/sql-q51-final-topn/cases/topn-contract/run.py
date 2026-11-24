@@ -86,6 +86,7 @@ def sqlite_reference(values,k,offset,specification):
 
 def additional_checks():
     tested = 0
+    mismatches = []
     for size in (0,1,99,100,101,333):
         values = [(i//3,None if i%3==0 else i%3,4,2) for i in range(size)]
         for count in (1,3,7):
@@ -94,8 +95,17 @@ def additional_checks():
                 for nulls_first in (True,False):
                     specification = ((0,True,True),(1,ascending,nulls_first))
                     candidate,work,route = choose(parts,100,specification=specification)
-                    assert candidate == sqlite_reference(values,100,0,specification)
-                    assert work<=len(parts)*100 and route=='local'
+                    reference = sqlite_reference(values,100,0,specification)
+                    equivalent = candidate == reference
+                    work_ok = work<=len(parts)*100 and route=='local'
+                    if not equivalent or not work_ok:
+                        mismatches.append({
+                            "size":size,"partitions":count,"ascending":ascending,
+                            "nulls_first":nulls_first,"equivalent":equivalent,
+                            "work_within_bound":work_ok,"candidate_rows":len(candidate),
+                            "reference_rows":len(reference),"work":work,"route":route,
+                            "candidate_prefix":candidate[:5],"reference_prefix":reference[:5],
+                        })
                     tested += 1
     small = [(i,1,4,2) for i in range(1,7)]
     split = [small[:3],small[3:]]
@@ -118,7 +128,7 @@ def additional_checks():
     payload = [(1,1,4,2,None,7),(2,1,5,3,100,None)]
     payload_selected,_,_ = choose([payload],2)
     checks = {
-        "null_and_direction_variants": tested==72,
+        "null_and_direction_variants": tested==72 and not mismatches,
         "different_k_equivalent": different_k,
         "offset_requires_extra_candidates": offset_ok and too_few!=expected_offset,
         "with_ties_fallback_preserves_peers": ties_route=='full-sort' and len(with_ties)==3
@@ -131,7 +141,8 @@ def additional_checks():
         "payload_columns_preserved": payload_selected==payload
             and payload_selected[0][4] is None and payload_selected[1][5] is None,
     }
-    return checks,{"matrix_cases":tested,"qualified_rows":qualified_count,"local_candidate_rows":work,
+    return checks,{"matrix_cases":tested,"matrix_mismatch_count":len(mismatches),
+                   "matrix_mismatches":mismatches,"qualified_rows":qualified_count,"local_candidate_rows":work,
                    "final_rows":len(selected)}
 
 

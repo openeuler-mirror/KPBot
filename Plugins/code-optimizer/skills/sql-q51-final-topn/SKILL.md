@@ -84,4 +84,6 @@ WITH TIES 可能返回超过 K 的行，普通局部 K 条会丢失必需 peers�
 
 用例还覆盖不同 K/分区形状、方向与 NULL 组合、OFFSET 需要 K+M、边界 peers 和实际候选计数；断言在 `cases/topn-contract/case.yaml`，结果写入对应 `results/result.json`。
 
+72 组矩阵的等价性和工作量检查使用普通控制流，并将差异写入 `matrix_mismatch_count`/`matrix_mismatches`；不依赖会被 `-O` 删除的裸 `assert`。正常模式及 `python -O cases/topn-contract/run.py` 均须得到零差异，错误实现应在优化模式下仍以失败退出，不能只核对循环次数。
+
 模型评估规格在 `evals/evals.json`。本地用例不验证真实原生 TopN 命中、目标比较器或性能，目标未执行时标记 `awaiting_target_evidence`。

@@ -69,3 +69,11 @@ assert:
     file: results/result.json
     field: payload_columns_preserved
     expect: true
+  - type: json_field
+    file: results/result.json
+    field: matrix_mismatch_count
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: matrix_mismatches
+    expect: []

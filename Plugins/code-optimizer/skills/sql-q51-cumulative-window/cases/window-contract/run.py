@@ -64,6 +64,9 @@ def additional_checks():
                                      FROM sales ORDER BY rowid""").fetchall()
     streamed = stream_batches(batches)
     wrong_reset = [row for batch in batches for row in prefix(batch)]
+    descending_dates = [(1,2,20),(1,1,10)]
+    only_item_sorted = sorted(descending_dates,key=lambda row:row[0])
+    expected_ascending = [(1,1,10,10),(1,2,30,30)]
     assert route(True,True,"ROWS",True)=="stream"
     return {
         "cross_batch_state_retained": streamed == expected and wrong_reset != expected,
@@ -76,6 +79,8 @@ def additional_checks():
         "unsupported_function_falls_back": route(True,True,"ROWS",False)=="sort",
         "unsupported_bounds_falls_back": route(True,True,"ROWS",True,
             bounds=("1 PRECEDING","CURRENT ROW"))=="sort",
+        "item_sort_does_not_prove_date_order": sorted(prefix(only_item_sorted))!=expected_ascending
+            and prefix(sorted(descending_dates,key=lambda row:(row[0],row[1])))==expected_ascending,
     }
 
 
