@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "description": "UADK 支持算法目录与热点函数匹配模式。数据来源：openEuler 22.03 LTS SP4 官方文档 uadk_quick_start.md。hotspot_patterns 为 perf 热点函数名/DSO 的正则（EREG，大小写敏感）；exclude_patterns 用于排除误匹配。占比阈值与 performance-library-selection 对齐。注意：EVP_EncryptUpdate/EVP_DecryptUpdate/EVP_DigestUpdate 等通用 EVP 符号只能完成族级归因，算法级归因需 call stack 或 EVP_CIPHER_CTX 上下文佐证。",
+  "matching_rules": {
+    "hotspot_pct_threshold_pct": 0.5,
+    "noise_threshold_pct": 0.5,
+    "confidence_mapping": {
+      "high": "hotspot_pct >= 5 且设备就绪（feasibility=ready）",
+      "medium": "0.5 <= hotspot_pct < 5，或设备未就绪（device_not_ready）",
+      "low": "仅静态依赖证据（libcrypto/libz 链接）命中",
+      "experience_only": "无现场 perf 证据，仅依赖分析"
+    }
+  },
+  "devices": {
+    "SEC": {
+      "driver": "hisi_sec2",
+      "chardev": "/dev/hisi_sec",
+      "scope": "对称加解密、摘要、AEAD、HMAC",
+      "pf_q_num_default": 256
+    },
+    "HPRE": {
+      "driver": "hisi_hpre",
+      "chardev": "/dev/hisi_hpre",
+      "scope": "RSA、DH 非对称运算",
+      "pf_q_num_default": 64
+    },
+    "ZIP": {
+      "driver": "hisi_zip",
+      "chardev": "/dev/hisi_zip",
+      "scope": "gzip、zlib 压缩解压",
+      "pf_q_num_default": 64
+    }
+  },
+  "algorithms": [
+    {
+      "family": "digest",
+      "algorithm": "MD5",
+      "device": "SEC",
+      "uadk_tool_alg": "md5",
+      "openssl_speed_args": ["-evp md5"],
+      "hotspot_patterns": ["\\bMD5_(Init|Update|Final)\\b", "\\bmd5_(init|update|final)\\b", "ossl_md5_", "EVP_md5\\b"],
+      "exclude_patterns": [],
+      "engine_entry": "Digest engine"
+    },
+    {
+      "family": "digest",
+      "algorithm": "SM3",
+      "device": "SEC",
+      "uadk_tool_alg": "sm3",
+      "openssl_speed_args": ["-evp sm3"],
+      "hotspot_patterns": ["\\bSM3_(Init|Update|Final)\\b", "\\bsm3_(init|update|final|compress)\\b", "ossl_sm3_", "EVP_sm3\\b"],
+      "exclude_patterns": [],
+      "engine_entry": "Digest engine"
+    },
+    {
+      "family": "digest",
+      "algorithm": "SHA (SHA1/SHA256/SHA512)",
+      "device": "SEC",
+      "uadk_tool_alg": "sha-512",
+      "openssl_speed_args": ["sha1", "sha256", "sha512"],
+      "hotspot_patterns": ["\\bSHA1_(Init|Update|Final)\\b", "\\bSHA256_(Init|Update|Final)\\b", "\\bSHA512_(Init|Update|Final)\\b", "\\bsha1_(block|update)\\b", "\\bsha256_(block|update)\\b", "\\bsha512_(block|update)\\b", "sha256_block_data_order", "sha512_block_data_order", "EVP_sha(1|224|256|384|512)\\b"],
+      "exclude_patterns": [],
+      "engine_entry": "Digest engine"
+    },
+    {
+      "family": "cipher",
+      "algorithm": "AES-CBC/ECB/CTR",
+      "device": "SEC",
+      "uadk_tool_alg": "aes-128-cbc",
+      "openssl_speed_args": ["-evp aes-128-cbc", "-evp aes-256-cbc", "-evp aes-128-ctr"],
+      "hotspot_patterns": ["\\bAES_(encrypt|decrypt|set_encrypt_key|set_decrypt_key|cbc_encrypt|ecb_encrypt|ctr\\d*_encrypt)\\b", "\\baes(v\\d)?_(encrypt|decrypt|setenckey|setenckey_asm)\\b", "ossl_aes_", "EVP_aes_(128|192|256)_(cbc|ecb|ctr)\\b"],
+      "exclude_patterns": ["_gcm"],
+      "engine_entry": "Cipher engine"
+    },
+    {
+      "family": "cipher",
+      "algorithm": "SM4-ECB/CBC",
+      "device": "SEC",
+      "uadk_tool_alg": "sm4-128-ecb",
+      "openssl_speed_args": ["-evp sm4-cbc", "-evp sm4-ecb"],
+      "hotspot_patterns": ["\\bsm4_(encrypt|decrypt|set_key|set_encrypt_key|set_decrypt_key|ecb|cbc)\\b", "ossl_sm4_", "EVP_sm4_(cbc|ecb)\\b"],
+      "exclude_patterns": [],
+      "engine_entry": "Cipher engine"
+    },
+    {
+      "family": "cipher",
+      "algorithm": "DES/3DES (des-ede3)",
+      "device": "SEC",
+      "uadk_tool_alg": "3des-128-ecb",
+      "openssl_speed_args": ["-evp des-ede3-cbc", "-evp des-ede3"],
+      "hotspot_patterns": ["\\bDES_(ecb|cbc|ede|ede3)_[a-z_]+", "\\bdes_ede3_[a-z_]+", "EVP_des_ede3"],
+      "exclude_patterns": [],
+      "engine_entry": "Cipher engine"
+    },
+    {
+      "family": "aead",
+      "algorithm": "AEAD (AES-GCM 等)",
+      "device": "SEC",
+      "uadk_tool_alg": "aead",
+      "openssl_speed_args": ["-evp aes-128-gcm", "-evp aes-256-gcm"],
+      "hotspot_patterns": ["\\bEVP_aes_(128|192|256)_gcm\\b", "_gcm_(encrypt|decrypt|setiv|settag)", "\\b(CRYPTO_)?gcm_(encrypt|decrypt|finish)\\b", "\\bEVP_aead"],
+      "exclude_patterns": [],
+      "engine_entry": "Cipher engine"
+    },
+    {
+      "family": "mac",
+      "algorithm": "HMAC",
+      "device": "SEC",
+      "uadk_tool_alg": "hmac(md5)",
+      "openssl_speed_args": ["-evp md5 -hmac <key>"],
+      "hotspot_patterns": ["\\bHMAC_(Init|Init_ex|Update|Final|CTX_[a-z]+)\\b", "ossl_hmac_", "\\bEVP_DigestSign(Init|Update|Final)\\b", "\\bEVP_DigestVerify(Init|Update|Final)\\b"],
+      "exclude_patterns": [],
+      "engine_entry": "Digest engine"
+    },
+    {
+      "family": "asymmetric",
+      "algorithm": "RSA",
+      "device": "HPRE",
+      "uadk_tool_alg": "rsa",
+      "openssl_speed_args": ["rsa1024", "rsa2048", "rsa4096"],
+      "hotspot_patterns": ["\\bRSA_(public_encrypt|public_decrypt|private_encrypt|private_decrypt|sign|verify|generate_key|generate_key_ex)\\b", "\\brsa_(priv|pub|mod_exp|generate|ossl)_[a-z_]+", "ossl_rsa_[a-z_]+", "\\bBN_mod_exp_mont(_consttime)?\\b", "\\bEVP_PKEY_(encrypt|decrypt|sign|verify)\\b"],
+      "exclude_patterns": ["RSA_(setup|pkey)"],
+      "engine_entry": "RSA engine"
+    },
+    {
+      "family": "asymmetric",
+      "algorithm": "DH",
+      "device": "HPRE",
+      "uadk_tool_alg": "dh",
+      "openssl_speed_args": ["-evp dh"],
+      "hotspot_patterns": ["\\bDH_(compute_key|generate_params|generate_key)\\b", "\\bdh_(generate|compute|check)_[a-z_]+", "ossl_dh_[a-z_]+", "\\bEVP_PKEY_derive\\b"],
+      "exclude_patterns": ["ECDH", "X25519"],
+      "engine_entry": "DH engine"
+    },
+    {
+      "family": "compression",
+      "algorithm": "gzip/zlib (deflate/inflate)",
+      "device": "ZIP",
+      "uadk_tool_alg": "zlib",
+      "openssl_speed_args": [],
+      "hotspot_patterns": ["\\bdeflate(_(init|init2|reset|prime|bound|copy|SetDictionary|Params))?\\b", "\\binflate(_(init|init2|reset|prime|SetDictionary|GetHeader))?\\b", "\\bcompress2?\\b", "\\buncompress\\b", "\\bzlib[A-Z_][a-zA-Z_]*\\b", "\\bgzip[A-Z_][a-zA-Z_]*\\b"],
+      "exclude_patterns": ["crc32", "adler32"],
+      "note": "crc32/adler32 单独热点不算压缩热点（UADK ZIP 卸载 deflate/inflate 流处理，非孤立校验和），交回 performance-library-selection（ISA-L CRC）。压缩不支持 openssl engine 路径，接入方式为 UADK 原生 wd_comp API。",
+      "engine_entry": "无（UADK 原生 wd_comp API）"
+    }
+  ]
+}

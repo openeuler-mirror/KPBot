@@ -1,0 +1,7 @@
+{"t":"h","v":1}
+{"t":"r","id":"target-short","ts":1700000000,"ep":"chat","lvl":"meta","sess":"s-in","nm":1,"pc":5}
+{"t":"e","id":"target-short","st":"ok","t0":1700000000,"t_end":1700000000.1}
+{"t":"r","id":"target-long","ts":1700000001,"ep":"chat","lvl":"meta","sess":"s-in","nm":2,"pc":25}
+{"t":"e","id":"target-long","st":"ok","t0":1700000001,"t_end":1700000001.1}
+{"t":"r","id":"other-window","ts":1700003600,"ep":"chat","lvl":"meta","sess":"s-out","nm":1,"pc":999}
+{"t":"e","id":"other-window","st":"ok","t0":1700003600,"t_end":1700003600.1}

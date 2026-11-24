@@ -47,9 +47,11 @@ $PY "$S/scripts/capturectl.py" --config /data/pc/capture.json set out_dir=/data/
 授权部署和健康检查通过后：
 
 ```bash
-$PY "$S/scripts/capturectl.py" --config /data/pc/capture.json on --duration 600
+$PY "$S/scripts/capturectl.py" --config /data/pc/capture.json on --duration 600 --metadata-only
 $PY "$S/scripts/capturectl.py" --config /data/pc/capture.json status --json
 ```
+
+开启前用 `show` 核对已确认的配置。仅采元数据时，`text_rate`、`gold_rate`、`follow_new` 均为 0，`follow_sessions` 为空，`follow_gold` 为 false，`output` 和 `follow_output` 不得为 `text`。`--metadata-only` 将限制写入本次采集窗口，`set`、`load` 或重复 `on` 均不能放宽；遇到冲突会退出且不写配置。有正文权限时，先结束原窗口，再按授权准备并开启新窗口。
 
 `on` 的 `--duration` 必须为有限正数，单位为秒。控制器将其换算为绝对截止时间，采集模块逐请求检查，并在后台更新有效 enabled 状态。终端断开不影响截止检查，proxy 重启也不延长时限。配置文件中的 enabled 可能仍为 true，实际状态以各 worker 的 enabled 为准。截止时间依赖系统时钟，时钟异常时需重新核对并在报告中说明。
 
@@ -82,7 +84,10 @@ $PY "$S/scripts/session_view.py" DATA --out SV --top 3
 需要分词特征时，给分析命令增加 `--tokenizer MODEL`。部署使用 `--default-chat-template-kwargs` 时，通过 `--template-kwargs JSON` 传入相同值。自定义 tokenizer 代码需经授权后使用 `--trust-remote-code`，不会自动重试加载。存在 golden 时逐项核对 token IDs；token 数相等不代表 ID 序列一致。核对失败时，标注离线结果未验证，其余分析按可用数据继续。
 
 ```bash
-$PY "$S/scripts/join_vllm_log.py" --requests AN/requests.csv --p-log P.log --d-log D.log --out JOIN
+# 只有 P 日志时
+$PY "$S/scripts/join_vllm_log.py" --requests AN/requests.csv --p-log P.log --out JOIN
+# 只有 D 日志时
+$PY "$S/scripts/join_vllm_log.py" --requests AN/requests.csv --d-log D.log --out JOIN
 $PY "$S/scripts/export_corpus.py" DATA --format requests --out requests.jsonl
 $PY "$S/scripts/export_corpus.py" DATA --format gold --split eval --out eval_gold.jsonl
 $PY "$S/scripts/check_tokenizer.py" --corpus eval_gold.jsonl --tokenizer MODEL
@@ -92,6 +97,7 @@ $PY "$S/scripts/dump_requests.py" --help
 语料导出与原始请求查看会输出原文，需用户明确要求。训练集与评估集按会话切分，推断会话的限制同上；正文经脱敏修改后，需重新核对分词结果，不再沿用原始 golden 的一致性结论。
 
 日志关联要求 TTFT_DEBUG 格式兼容且请求 ID 相同，报告中列出匹配数和总数。未匹配的请求不计算对应内部耗时。本技能不自动部署参考 vLLM 请求 ID 补丁。普通 proxy 未接入 P/D 钩子时，对应时延列为空，标注“未测”。
+两侧都有日志时可同时传入 `--p-log` 和 `--d-log`；缺哪侧就省略哪侧的整个选项。
 
 `--jobs N` 用于并行内容分析，进程数应按空闲 CPU 设置。分词纯计算时间、吞吐和排队估计用于性能比较时使用 `--jobs 1`。离线重放缓存命中率与线上命中率分别标注；proxy 首块响应不一定包含首 token，P 往返包含排队与通信等时间，不是纯 prefill 耗时。
 

@@ -56,7 +56,8 @@ def value_of(entry, key):
 
     pair_status 和 matrix_rows 都只经过这里，两处判据因此始终一致。
     """
-    if entry.get('error'):
+    if entry.get('error') or (entry.get('cgroup_unavailable') and
+                              key[0] == fields.CATEGORY_BASE and key[1].startswith('cgroup: ')):
         return fields.FAILED
     value = entry['items'].get(key, fields.NOT_SET)
     if fields.is_missing(value) and key[0] in (entry.get('unreliable_categories') or ()):

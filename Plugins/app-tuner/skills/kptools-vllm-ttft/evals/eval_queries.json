@@ -1,0 +1,11 @@
+{
+  "skill_name": "kptools-vllm-ttft",
+  "queries": [
+    { "id": "TTFT-01", "prompt": "用已有的 vLLM Prefill 日志生成首 token 延迟分解 HTML", "should_trigger": true },
+    { "id": "TTFT-02", "prompt": "排查 vLLM-Ascend 0.27.1rc 的 wait_for_save 和 Mooncake Python put 耗时", "should_trigger": true },
+    { "id": "TTFT-03", "prompt": "给 vLLM 0.27.1rc 的 Prefill 源码检查打点兼容性并给出回滚流程", "should_trigger": true },
+    { "id": "TTFT-04", "prompt": "采集昇腾 NPU 算子执行时间和 HCCL 通信 trace", "should_trigger": false },
+    { "id": "TTFT-05", "prompt": "比较 Prefill 和 Decode 容器的 CANN、驱动和 cgroup 配置", "should_trigger": false },
+    { "id": "TTFT-06", "prompt": "给 0.32 源码直接应用 0.27 TTFT 打点", "should_trigger": false }
+  ]
+}

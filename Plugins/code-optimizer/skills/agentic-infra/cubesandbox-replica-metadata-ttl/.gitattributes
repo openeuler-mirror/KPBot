@@ -1,0 +1,2 @@
+references/*.patch text eol=lf
+cases/*/fixtures/*.txt text eol=lf

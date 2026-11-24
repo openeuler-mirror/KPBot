@@ -58,12 +58,16 @@ function readJsonLines(file) {
   return fs
     .readFileSync(file, "utf8")
     .split("\n")
-    .filter(Boolean)
-    .flatMap((line) => {
+    .flatMap((line, index) => {
+      if (!line.trim()) return [];
       try {
-        return [JSON.parse(line)];
-      } catch {
-        return [];
+        const record = JSON.parse(line);
+        if (!record || Array.isArray(record) || typeof record !== "object") {
+          throw new Error("expected a JSON object");
+        }
+        return [record];
+      } catch (error) {
+        throw new Error(`invalid JSONL at ${file}:${index + 1}: ${error.message}`);
       }
     });
 }

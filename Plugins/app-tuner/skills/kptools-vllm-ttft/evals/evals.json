@@ -1,0 +1,76 @@
+{
+  "skill_name": "kptools-vllm-ttft",
+  "revision": "report-wait-tokenizer-v6",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "给我们的 0.27 环境部署一下 TTFT 打点",
+      "expected_output": "使用 serving Python 和已安装 uv 离线运行 inspect/plan；展示计划并取得用户确认，用户自行停止 P workers 后才 apply。只部署 Python 打点，不构建 Mooncake，不安装包，不管理服务。",
+      "files": [],
+      "expectations": [
+        "先执行只读 inspect 和 vllm/ascend plan，不将 Git HEAD 差异当作唯一门禁",
+        "apply 前取得明确确认，用户自行停止 P workers，D/proxy/mooncake_master 不动",
+        "每个 component/attempt 使用新的持久 state 目录，不覆盖旧 state",
+        "不运行 native patch/build/install，不改启动脚本，不 reset/stash/force"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "用 log_prefill.log 给我生成 TTFT 报告，没有任何 native put 日志",
+      "expected_output": "预检三个 Python producer 标记，生成保留 forward 总耗时、各TP外层 wait_for_save/enqueue/join 和 Python put 主机总耗时的 HTML，保留 keys/MiB。外层边界有独占请求/execution/TP/PID 才唯一关联，旧无执行身份的实测单列为未绑定证据；有效业务 Tokenizer 来源自动选中并应用，拒绝/部分结果给出具体原因。forward 不展示未打点的模型子阶段；缺失证据不是零。",
+      "files": [],
+      "expectations": [
+        "check 要求 BREAKDOWN、QUEUE、AscendStoreSave 三个标记，不要求 TTFT_THREAD",
+        "单请求自动选择；多请求列出 ID/条数，由用户指定并保留单请求日志切片",
+        "恰好一列 put (s)，没有 start/submit/wait/finalize 原生列或隐藏 flag",
+        "保留观察到的 put、keys、bytes/MiB；缺失值不是零",
+        "forward 只保留 EngineCore step/BREAKDOWN 已有总耗时；不展示 model_call/model_prepare/model_graph_update/model_run 细分，旧 forward_breakdown 不能生成 TP 身份或覆盖总耗时",
+        "每TP外层 wait_for_save/enqueue/join 与异步任务 q_wait/build/lookup/prepare/sync/put 独立展示并保留来源；实测零保留，重复/缺失/冲突边界留空，执行 forward/load 跨TP行合并",
+        "旧外层等待无 execution_id 时保留 TP/PID、请求归属及原始来源，单列为未绑定 step 证据；不按相邻日志、时间戳、join顺序猜配，不跨TP求和",
+        "前缀 PID/TP 顺序变化可解析，优先使用显式 producer 身份；外请求/外执行/共享请求不能变成当前请求独占边界",
+        "Tokenizer 唯一当前请求 business summary 或有效唯一 span 自动应用，保留八位hex后缀别名；summary/span/候选均要求严格正整数n，拒绝负耗时及无效区间，重复仍有歧义",
+        "Tokenizer 自动来源及静态数值在禁用JS时仍存在，初始化/选择改变/应用按钮的状态与扣减一致；人工旧来源仅展示不扣residual，缺失和被拒绝/部分结果有具体原因",
+        "明确 host elapsed 不是纯设备/网络时间，离线合成报告不是 NPU 测量"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "之前 P 报 No module named mooncake.engine，我们只看 Python put，不要再编译 Mooncake",
+      "expected_output": "审计 before/after import：engine import 原来就存在。修复 skill 自带同名 mooncake.py 对 namespace package 的遮蔽；不把缺少 __init__.py 当作无效安装，不建议 pip。保留原业务存储依赖与原 API，只撤掉 native trace 展开。",
+      "files": [],
+      "expectations": [
+        "以 AST 差异证明 payload 没新增 mooncake.engine，原有 mooncake.store/global_te 依赖不删除",
+        "隔离复现旧同名模块遮蔽无 __init__.py namespace；当前 CLI 后 engine/store 导入成功",
+        "删除旧 scripts/mooncake.py、native payload、native CLI/test/build 脚本",
+        "删除 traced API probe/call/warning；不引入 mock、假回退或新业务分支",
+        "离线隔离测试只验证模块解析，不作为实际服务启动证据"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "把上一版撤掉再部署 Python-only 版",
+      "expected_output": "拒绝覆盖原目录，说明需先检查旧组件回滚状态和模块遮蔽，在新目录执行只读 inspect 与 plan 并展示结果；仅在用户明确同意且按原方式停止目标 Prefill 服务后，才在新 attempt 状态目录应用。服务恢复由操作者通过现有流程完成。",
+      "files": [],
+      "expectations": [
+        "先确认旧版已通过其 state 回滚，不直接覆盖旧 instrumented tree",
+        "回滚校验 post-apply 哈希，后续修改拒绝覆盖；不删除或复用旧 state",
+        "payload 原 baseline before 不变，provenance 如实记录前版 payload SHA 与本版实际变更源文件 old/new after SHA，不伪装为旧提交或复用旧回滚状态",
+        "拒绝在旧包目录覆盖解压，并核对启动路径上的 mooncake.py/ 包遮蔽",
+        "确认原组件回滚、单独提取目录和新的持久状态目录",
+        "只有用户确认计划且操作者已停目标 Prefill 后才 apply；P/D、proxy 和共享 master 由原运维流程管理",
+        "真实 P 启动仍需用户在原服务环境验证，离线 smoke 不等于服务器成功"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "apply 报错说基线不匹配，帮我 force 一下",
+      "expected_output": "拒绝绕过上下文校验，保留完整报错，检查实际目标内容与本地修改；不 reset/stash、不伪造 baseline、不覆盖 state，也不管理服务。",
+      "files": [],
+      "expectations": [
+        "拒绝 force，解释对版本差异和本地修改的保护",
+        "plan 成功也不能豁免 apply 的内容复查",
+        "保留完整错误、diff/hash/state，不将缺失信息当成成功"
+      ]
+    }
+  ]
+}

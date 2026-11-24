@@ -24,7 +24,13 @@
 └── report.md                   # 汇总入口
 ```
 
-独立 `check --json` 只输出预检 JSON。独立 `prepare` 写入 `prepare_<时间戳>_<pid>`。
+独立 `check --json` 只向 stdout 输出预检 JSON；可选 `--output /path/preflight.json` 同时原子落盘。
+输出父目录必须可信，最终符号链接会被拒绝；0600 唯一临时文件独占创建并通过 `os.replace` 替换目录项。
+`cubesandbox-bench-preflight` 默认写当前目录 `preflight.json`，即使检查 FAIL（包括缺少 cubemastercli）也
+写出本次 `ok=false` 证据，不保留同路径旧通过结果。
+独立 `prepare` 的授权/参数失败在创建目录前退出，没有 `prepare.json`，看退出码与 stderr；进入状态机后写入
+`prepare_<时间戳>_<pid>`，准备动作失败保留 `status=failed` 和 action journal。八个单场景入口使用同一结果目录和成功判据，
+并在 `metadata.sections` 中只保留各自固定章节；dry-run 不生成正式结果目录。
 
 ## 成功判定
 

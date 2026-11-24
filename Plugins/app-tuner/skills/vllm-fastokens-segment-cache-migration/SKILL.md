@@ -31,6 +31,7 @@ description: 评估 vLLM 部署将分词后端切换为 fastokens 官方最新�
 | 路径 | 说明 |
 |---|---|
 | `scripts/fastokens_segment_cache.py` | 检查工具，含迁移判定逻辑；仅依赖 Python 3.9 及以上版本的标准库 |
+| `subskills/` | 可按任务使用的六项技能 |
 | `tests/` | 检查工具的单元测试与端到端测试 |
 | `evals/` | 技能评测用例 |
 
@@ -57,116 +58,34 @@ description: 评估 vLLM 部署将分词后端切换为 fastokens 官方最新�
 
 - 本技能不重启服务，不变更服务的依赖、镜像与环境变量。服务的切换、重启与回退由用户按其发布流程执行。
 - 候选版本安装在独立目录中，探测、快照与分词器层对比均不变更服务环境。
+- 仅在用户已授权加载模型自定义代码时使用 `--trust-remote-code`。
 - 报告不应包含凭证。
 - 分词耗时与内存占用的验收阈值由用户提供；未提供时，评估结论在与用户确认阈值后给出。
 
 ## 前置条件
 
-检查工具应使用 vLLM 服务所用的 Python 解释器运行（下文记为 `$PY`），以使采集的 vllm、transformers 及 fastokens 信息同服务环境一致。容器化部署时，检查工具在服务容器内运行。检查工具的路径记为 `$S`。
+探测、快照和验证使用 vLLM 服务所用的 Python 解释器（记为 `$PY`）。容器化部署时，在指定的服务容器内运行。已安装的父技能目录记为 `$S`。只生成回放数据或汇总已有报告时，无需访问服务。
+
+## 按任务选择
+
+用户指定单项任务时，读取下表对应技能，只执行该项。已有符合要求的产物可直接使用，无需重复探测或测量。
+
+| 任务 | 子技能 |
+|---|---|
+| 核对当前分词后端及迁移条件；复核切换或回退结果 | [当前分词后端分析](subskills/inspect-tokenizer-backend/SKILL.md) |
+| 准备指定 fastokens 版本并确认能加载 | [候选版本准备与加载验证](subskills/prepare-fastokens-candidate/SKILL.md) |
+| 保存已有构建及恢复配置 | [迁移快照与回退准备](subskills/snapshot-tokenizer-environment/SKILL.md) |
+| 生成多轮合成回放 | [生成多轮回放数据](subskills/generate-replay-sessions/SKILL.md) |
+| 检查一致性、并发、缓存命中及分词性能 | [分词回放验证](subskills/verify-tokenizer-replay/SKILL.md) |
+| 用已有证据给出迁移结论 | [迁移评估报告](subskills/summarize-fastokens-migration/SKILL.md) |
 
 ## 操作流程
 
-`probe` 在三个时间点使用：迁移前（第 1 步）、用户完成切换后（第 6 步）、用户完成回退后（第 7 步）。
-
-### 1. 环境探测
-
-```bash
-$PY $S probe --model <模型名或本地分词器路径> [--tokenizer-mode <服务的分词模式>] --out <输出目录>
-```
-
-`--model` 的取值为服务的 `--tokenizer` 参数值；服务未指定 `--tokenizer` 时，取服务的 `--model` 参数值。
-
-生效的分词后端根据运行中的 vLLM 进程判定：进程环境变量中 `VLLM_USE_FASTOKENS=1` 且进程已加载 fastokens 原生库时，判定为 fastokens。在 Linux 上，检查工具读取 vLLM 进程及其各级子进程的环境变量、已加载的共享库与 RSS，也可通过 `--pid` 指定进程。无运行中的 vLLM 进程时，检查工具按当前 shell 环境加载分词器并据此判定。
-
-### 2. 迁移判定
-
-| 判定 | 后续处理 |
-|---|---|
-| 不支持 | 向用户报告判定原因，流程终止 |
-| 已是最新官方发行版 | 跳过安装，执行第 4 步；`verify` 不指定 `--overlay` |
-| 可切换至 fastokens==X | 执行第 3 步；X 取自 PyPI |
-| 缺少目标版本 | 无法访问 PyPI 时给出该判定。向用户索取 wheel 文件（要求见第 3 步），以该文件的版本作为 X，执行第 3 步 |
-
-### 3. 迁移准备
-
-1. 保存迁移前快照：
-
-   ```bash
-   $PY $S snapshot --out <快照目录> [--pid <vLLM 进程号>]
-   ```
-
-   快照包含依赖清单、相关环境变量、由已安装文件重新打包的 fastokens wheel，以及回退说明 `RESTORE.md`。回退时安装快照中的 wheel，以恢复同一构建：自行构建的 fastokens 可能与官方发行版版本号相同，相同版本号可能对应不同构建。
-
-2. 将候选版本安装到独立目录（下文称候选安装目录），不变更服务环境。安装方式按环境条件确定：
-
-   | 环境条件 | 安装方式 |
-   |---|---|
-   | pip 可访问 PyPI 或镜像源 | `$PY -m pip install --no-deps --target <候选安装目录> fastokens==X` |
-   | 环境中无 pip，uv 可访问 PyPI 或镜像源 | `uv pip install --python "$PY" --no-deps --target <候选安装目录> fastokens==X` |
-   | 无法访问 PyPI 或镜像源 | 由用户提供 wheel 文件，以 Python 标准库解包：`$PY -m zipfile -e <wheel 文件> <候选安装目录>` |
-
-   向用户索取的 wheel 文件应满足以下要求：
-
-   - fastokens 官方发行版，版本不低于 0.3.5，宜为 PyPI 上的最新版本；
-   - 取自 PyPI 的 fastokens 文件列表（https://pypi.org/project/fastokens/#files），文件类型为 wheel（`.whl`）；
-   - 文件名中的平台标签与服务所在机器一致：Linux 上为 manylinux 标签（例如 `manylinux_2_28_aarch64`），架构与第 1 步输出的架构一致，标签中的 glibc 版本不高于第 1 步输出的 libc 版本。
-
-   wheel 文件名中的版本即为 X。解包后的候选安装目录应包含 `fastokens` 包目录与 `fastokens-X.dist-info` 目录。解包过程不检查平台兼容性，兼容性由下一项加载测试确认。
-
-   第 6 步的安装命令与 `RESTORE.md` 中的回退命令按上表所选的安装方式相应替换。无法使用 pip 或 uv 安装时，服务环境的安装与回退由用户按其发布流程（例如更新镜像）执行。
-
-3. 执行加载测试：
-
-   ```bash
-   $PY $S probe --model <同上> --overlay <候选安装目录> [--target-version X --offline]
-   ```
-
-   无法访问 PyPI 时追加 `--target-version X --offline`。输出中“按 VLLM_USE_FASTOKENS=1 加载”一项应显示后端为 fastokens、版本为 X。该测试与服务使用相同的加载入口（vLLM 的 `get_tokenizer`）。加载测试失败时，服务以相同配置启动亦将失败，流程终止。
-
-### 4. 生成回放数据
-
-```bash
-$PY $S make-sessions --out <回放文件> [--sessions <会话数>] [--turns <轮数>] [--block-chars <工具输出长度>] [--seed <随机种子>]
-```
-
-合成会话的结构：每个会话以一条 system 消息开头，每轮追加一条 user 消息与一条 assistant 消息，每隔一轮的 user 消息附带一段代码形式的工具输出；每条请求包含截至该轮的完整对话，因此历史文本段在后续请求中重复出现。默认参数为 8 个会话、每个会话 12 轮、工具输出 6000 字符、随机种子 0。会话数、轮数与工具输出长度宜按部署的流量特征设置；参数相同时生成的数据相同。
-
-### 5. 分词器层对比
-
-```bash
-$PY $S verify --model <同上> --sessions <回放文件> --overlay <候选安装目录> \
-    --orig-env <服务当前配置> --cache-mib <段缓存预算（MiB）> --out <输出目录>
-```
-
-参数说明：
-
-- `--orig-env` 设定基线组的环境变量，使其与服务当前配置一致。服务当前使用 HF tokenizers 时取 `VLLM_USE_FASTOKENS=`（空值表示删除该变量）；服务当前已使用 fastokens 时，按服务配置设定 `VLLM_USE_FASTOKENS=1` 与 `FASTOKENS_SEGMENT_CACHE`。
-- 服务使用 `--chat-template` 时，通过 `--chat-template` 传入同一文件。
-- 计时应在无其他高负载任务的机器上进行。
-
-两组分别在独立进程中运行，默认 3 轮，每轮轮换两组的执行顺序；第 1 轮按会话分配线程，进行并发检查。
-
-验收：报告结论为“通过”时执行第 6 步。结论为“未通过”时，向用户报告所列问题，流程终止；此时服务未变更，不必回退。判为未通过的情形包括：
-
-- token ID 不一致；
-- 各轮结果不一致；
-- 并发检查出现结果不一致或异常；
-- 运行超时；
-- 段缓存开启组生效的分词后端并非 fastokens；
-- 段缓存开启组的命中数为 0。
-
-### 6. 评估与切换方案
-
-将分词耗时与内存占用逐项同用户给定的阈值比较；内存占用为单个分词器测试进程的 RSS。任一项未达标时，向用户报告结果，流程终止。全部达标时，向用户给出切换方案：
-
-- 安装：`$PY -m pip install --no-deps --force-reinstall fastokens==X`；容器化部署时更新镜像。
-- 环境变量：`VLLM_USE_FASTOKENS=1` 与 `FASTOKENS_SEGMENT_CACHE=<段缓存预算（MiB）>`，写入服务配置（启动脚本、容器环境或 systemd 单元），以传递至每个 API 进程；重启服务后生效。
-
-用户完成切换后，以 `probe` 确认：各 vLLM 进程的环境变量包含上述设置，已加载 fastokens 原生库，迁移判定为“已是最新官方发行版”。无法访问 PyPI 时追加 `--target-version X --offline`。
-
-### 7. 回退
-
-切换后服务出现异常时，由用户按快照目录中的 `RESTORE.md` 回退：安装快照中的 wheel，恢复环境变量，重启服务。回退完成后，以 `probe` 核对 fastokens 原生库的 sha256 与环境变量是否与快照一致。
+1. 用 [当前分词后端分析](subskills/inspect-tokenizer-backend/SKILL.md) 确认实际后端及适用性。不支持时说明原因；缺少目标版本时，向用户索取官方 wheel。
+2. 用 [迁移快照与回退准备](subskills/snapshot-tokenizer-environment/SKILL.md) 保存原环境，再按 [候选版本准备与加载验证](subskills/prepare-fastokens-candidate/SKILL.md) 准备候选版本。环境已安装指定官方版本时仍做加载核对；加载不符则停止回放。
+3. 使用已有回放文件，或按 [生成多轮回放数据](subskills/generate-replay-sessions/SKILL.md) 生成，再运行 [分词回放验证](subskills/verify-tokenizer-replay/SKILL.md)。
+4. 按 [迁移评估报告](subskills/summarize-fastokens-migration/SKILL.md) 汇总验证及回退准备。如果满足切换条件，给出指定版本的安装方案（容器部署则更新镜像），把 `VLLM_USE_FASTOKENS=1` 与 `FASTOKENS_SEGMENT_CACHE=<段缓存预算（MiB）>` 配置到所有 API 进程的启动环境。使用服务原有的发布和安装方式。
+5. 切换或回退由用户执行。执行后用 [当前分词后端分析](subskills/inspect-tokenizer-backend/SKILL.md) 核对进程读到的配置和加载的原生库。回退时以快照的 `RESTORE.md` 为准。
 
 ## 报告要求
 
