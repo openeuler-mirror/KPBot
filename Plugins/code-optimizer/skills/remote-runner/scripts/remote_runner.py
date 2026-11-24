@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""KPBot 远端目标模式：把本地工作树同步到受限 SSH 主机，执行白名单脚本并回传日志。
-
-只依赖 Python 3 标准库与本地 ssh/scp；本地/远端都可用 rsync 时走增量同步，
-否则回退为「临时目录 + scp 全量 + 整体替换」。不做指标解析，日志交给 Agent 读取。
-"""
+"""KPBot 远端目标模式：提供受限 SSH 主机的配置校验与 probe 原语。"""
 
 from __future__ import annotations
 
@@ -24,7 +20,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, NoReturn, Optional, Tuple
 
 ENGINE_VERSION = "1.0.0"
 
@@ -36,7 +32,6 @@ LAST_SYNC_REL = Path(".kpbot") / "remote" / "last_sync.json"
 ACTIONS = ("build", "test", "bench", "collect")
 DEFAULT_TIMEOUT = 3600
 DEFAULT_TRANSFER_TIMEOUT = 3600
-DEFAULT_PULL_MAX_MB = 2048
 TAIL_LINES = 40
 
 SSH_OPTS = (
@@ -128,6 +123,16 @@ class UserError(Exception):
         self.code = code
 
 
+class UsageError(UserError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, 64)
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise UsageError(f"参数错误：{message}")
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -199,16 +204,16 @@ def _windows_local_path(value: str) -> str:
 def project_path(value: str) -> Path:
     path = Path(_windows_local_path(value)).expanduser().resolve()
     if not path.is_dir():
-        raise UserError(f"项目目录不存在：{path}")
+        raise UsageError(f"项目目录不存在：{path}")
     if path == Path(path.anchor):
-        raise UserError("--project 不能是文件系统根目录")
+        raise UsageError("--project 不能是文件系统根目录")
     try:
         if path == Path.home().resolve():
-            raise UserError("--project 不能是用户主目录")
+            raise UsageError("--project 不能是用户主目录")
     except OSError:
         pass
     if str(path) in SYSTEM_PROJECT_PATHS:
-        raise UserError(f"--project 不能是系统目录：{path}")
+        raise UsageError(f"--project 不能是系统目录：{path}")
     if os.name == "nt":
         protected = {
             os.path.normcase(os.environ.get("SystemRoot", r"C:\Windows")),
@@ -218,7 +223,7 @@ def project_path(value: str) -> Path:
             ),
         }
         if os.path.normcase(str(path)) in protected:
-            raise UserError(f"--project 不能是系统目录：{path}")
+            raise UsageError(f"--project 不能是系统目录：{path}")
     return path
 
 
@@ -251,61 +256,50 @@ def validate_remote_chars(value: str, label: str) -> None:
             or ord(ch) == 127
             or ch in FORBIDDEN_REMOTE_CHARS
         ):
-            raise UserError(f"{label} 不能包含空白或 shell 特殊字符：{ch!r}")
+            raise UsageError(f"{label} 不能包含空白或 shell 特殊字符：{ch!r}")
 
 def normalize_workspace(value: str) -> str:
     ws = _unmangle_git_bash_path((value or "").strip())
     if not ws:
-        raise UserError("workspace 不能为空")
+        raise UsageError("workspace 不能为空")
     if "\\" in ws:
-        raise UserError("workspace 必须是远端 POSIX 绝对路径（不能使用反斜杠）")
+        raise UsageError("workspace 必须是远端 POSIX 绝对路径（不能使用反斜杠）")
     if re.match(r"^[A-Za-z]:", ws):
-        raise UserError("workspace 必须是远端 POSIX 绝对路径，不能是 Windows 盘符路径")
+        raise UsageError("workspace 必须是远端 POSIX 绝对路径，不能是 Windows 盘符路径")
     if not ws.startswith("/"):
-        raise UserError("workspace 必须是绝对路径，例如 /ssd/KBot-workspace")
+        raise UsageError("workspace 必须是绝对路径，例如 /ssd/KBot-workspace")
     if any(ch.isspace() for ch in ws):
-        raise UserError("workspace 不能包含空白字符")
+        raise UsageError("workspace 不能包含空白字符")
     normalized = posixpath.normpath(ws)
     if normalized in FORBIDDEN_EXACT:
-        raise UserError(f"workspace 不能是系统目录：{normalized}")
+        raise UsageError(f"workspace 不能是系统目录：{normalized}")
     for prefix in FORBIDDEN_PREFIX:
         if normalized == prefix or normalized.startswith(prefix + "/"):
-            raise UserError(f"workspace 不能位于系统目录下：{normalized}")
+            raise UsageError(f"workspace 不能位于系统目录下：{normalized}")
     validate_remote_chars(normalized, "workspace")
     if len([part for part in normalized.split("/") if part]) < 2:
-        raise UserError("workspace 必须是专用目录（至少两级，例如 /ssd/KBot-workspace）")
-    return normalized
-
-
-def normalize_remote_relative(value: str) -> str:
-    raw = (value or "").strip().replace("\\", "/")
-    if not raw:
-        raise UserError("pull 需要 --path")
-    normalized = posixpath.normpath(raw)
-    if raw.startswith("/") or normalized in (".", "..") or normalized.startswith("../"):
-        raise UserError("--path 必须是项目内相对路径，不能是绝对路径或包含 ..")
-    validate_remote_chars(normalized, "--path")
+        raise UsageError("workspace 必须是专用目录（至少两级，例如 /ssd/KBot-workspace）")
     return normalized
 
 
 def validate_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(raw, dict):
-        raise UserError("配置必须是 JSON 对象")
+        raise UsageError("配置必须是 JSON 对象")
 
     host = str(raw.get("host", "")).strip()
     if not HOST_RE.match(host):
-        raise UserError("host 无效（只支持 IPv4/主机名，不允许空格或参数前缀）")
+        raise UsageError("host 无效（只支持 IPv4/主机名，不允许空格或参数前缀）")
 
     user = str(raw.get("user", "")).strip()
     if not USER_RE.match(user):
-        raise UserError("user 无效（只允许字母、数字、下划线、点、短横线）")
+        raise UsageError("user 无效（只允许字母、数字、下划线、点、短横线）")
 
     try:
         port = int(raw.get("port", 22))
     except (TypeError, ValueError):
-        raise UserError("port 必须是整数")
+        raise UsageError("port 必须是整数")
     if not 1 <= port <= 65535:
-        raise UserError("port 必须在 1-65535 之间")
+        raise UsageError("port 必须在 1-65535 之间")
 
     workspace = normalize_workspace(str(raw.get("workspace", "")))
     return {"host": host, "user": user, "port": port, "workspace": workspace}
@@ -318,8 +312,13 @@ def config_file(project: Path) -> Path:
 def load_config(project: Path) -> Dict[str, Any]:
     path = config_file(project)
     if not path.is_file():
-        raise UserError(f"未找到 {CONFIG_REL.as_posix()}；请先运行 init", 2)
-    return validate_config(read_json(path))
+        raise UserError(f"未找到 {CONFIG_REL.as_posix()}；请先运行 config", 5)
+    try:
+        return validate_config(read_json(path))
+    except UsageError:
+        raise
+    except UserError as exc:
+        raise UserError(f"配置读取失败：{exc}；请重新运行 config", 5) from exc
 
 
 def remote_root(cfg: Dict[str, Any], project: Path) -> str:
@@ -734,3 +733,205 @@ def write_last_sync(
             "remote_src": remote_src(cfg, project),
         },
     )
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    project = project_path(args.project)
+    target = config_file(project)
+    if target.exists() and not args.force:
+        raise UserError(f"配置已存在：{target}（如需覆盖请加 --force）")
+    if not args.host or not args.user or not args.workspace:
+        raise UsageError("config 需要 --host、--user、--workspace")
+
+    cfg = validate_config(
+        {"host": args.host, "user": args.user, "port": args.port, "workspace": args.workspace}
+    )
+    if args.create_workspace:
+        try:
+            home_proc = run_ssh(cfg, 'printf "%s\\n" "$HOME"', timeout=30)
+        except subprocess.TimeoutExpired:
+            raise UserError("读取远端 home 超时（30s）", 4)
+        if home_proc.returncode != 0:
+            raise ssh_error(cfg, home_proc)
+        home = posixpath.normpath(home_proc.stdout.strip() or "/")
+        if cfg["workspace"] == home:
+            raise UsageError("workspace 不能是远端 home 目录；请使用专用子目录")
+        create_cmd = (
+            f"if [ -d {q(cfg['workspace'])} ]; then "
+            f"test -w {q(cfg['workspace'])}; "
+            f"else mkdir -p {q(cfg['workspace'])} && chmod 700 {q(cfg['workspace'])}; fi"
+        )
+        try:
+            proc = run_ssh(cfg, create_cmd, timeout=60)
+        except subprocess.TimeoutExpired:
+            raise UserError("创建远端 workspace 超时（60s）", 4)
+        if proc.returncode != 0:
+            raise ssh_error(cfg, proc)
+
+    data = {
+        **cfg,
+        "project_id": project_id(project),
+        "remote_src": remote_src(cfg, project),
+        "created_at": utc_now().isoformat(),
+    }
+    write_json(target, data)
+    try:
+        (project / LAST_SYNC_REL).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        print(f"[warn] 无法删除旧同步标记：{exc}", file=sys.stderr)
+    ensure_kpbot_gitignore(project)
+    json_print({"ok": True, "config": data, "config_path": str(target)})
+    return 0
+
+
+def cmd_probe(args: argparse.Namespace) -> int:
+    project = project_path(args.project)
+    cfg = load_config(project)
+
+    try:
+        probe = run_ssh(cfg, "true", timeout=30)
+    except subprocess.TimeoutExpired:
+        json_print({"ok": False, "ssh": False, "code": 4, "error": "SSH 连接超时（30s）"})
+        return 4
+    if probe.returncode != 0:
+        error = ssh_error(cfg, probe)
+        json_print({"ok": False, "ssh": False, "code": error.code, "error": str(error)})
+        return error.code
+
+    remote_cmd = "; ".join(
+        [
+            'printf "arch=%s\\n" "$(uname -m 2>/dev/null)"',
+            'printf "hostname=%s\\n" "$(hostname 2>/dev/null)"',
+            'printf "home=%s\\n" "$HOME"',
+            'printf "bash=%s\\n" "$(command -v bash || echo missing)"',
+            'printf "rsync=%s\\n" "$(command -v rsync || echo missing)"',
+            'printf "tar=%s\\n" "$(command -v tar || echo missing)"',
+            'printf "realpath=%s\\n" "$(command -v realpath || echo missing)"',
+            'printf "timeout=%s\\n" "$(command -v timeout || echo missing)"',
+            f'printf "ws_exists=%s\\n" "$(test -d {q(cfg["workspace"])} && echo 1 || echo 0)"',
+            f'printf "ws_writable=%s\\n" "$(test -w {q(cfg["workspace"])} && echo 1 || echo 0)"',
+            f'printf "df=%s\\n" "$(df -Pk {q(cfg["workspace"])} 2>/dev/null | tail -1)"',
+        ]
+    )
+    try:
+        info = run_ssh(cfg, remote_cmd, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        json_print({"ok": False, "ssh": True, "code": 4, "error": str(exc)})
+        return 4
+    if info.returncode != 0:
+        error = ssh_error(cfg, info)
+        json_print({"ok": False, "ssh": True, "code": error.code, "error": str(error)})
+        return error.code
+
+    values: Dict[str, str] = {}
+    for line in info.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key] = value.strip()
+
+    df_line = values.get("df", "")
+    free_gb = None
+    if df_line:
+        fields = df_line.split()
+        try:
+            free_gb = round(int(fields[3]) / (1024 * 1024), 1)
+        except (IndexError, ValueError):
+            free_gb = None
+
+    json_print(
+        {
+            "ok": True,
+            "ssh": True,
+            "arch": values.get("arch", ""),
+            "hostname": values.get("hostname", ""),
+            "home": values.get("home", ""),
+            "bash": values.get("bash") not in ("", "missing"),
+            "rsync": values.get("rsync") not in ("", "missing"),
+            "tar": values.get("tar") not in ("", "missing"),
+            "timeout": values.get("timeout") not in ("", "missing"),
+            "workspace": {
+                "path": cfg["workspace"],
+                "exists": values.get("ws_exists") == "1",
+                "writable": values.get("ws_writable") == "1",
+                "free_gb": free_gb,
+            },
+            "fingerprints": known_host_fingerprints(cfg),
+        }
+    )
+    return 0
+
+
+def cmd_version(_: argparse.Namespace) -> int:
+    print(f"KPBot remote {ENGINE_VERSION}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = JsonArgumentParser(
+        prog="remote-runner",
+        description="KPBot 远端安全原语：配置与 probe。",
+    )
+    parser.add_argument("--version", action="version", version=f"KPBot remote {ENGINE_VERSION}")
+    sub = parser.add_subparsers(
+        dest="command", required=True, parser_class=JsonArgumentParser
+    )
+
+    def with_project(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--project", default=".", help="项目根目录（默认当前目录）")
+
+    config = sub.add_parser("config", help="校验并写入 .kpbot/remote/config.json")
+    with_project(config)
+    config.add_argument("--host", required=True)
+    config.add_argument("--user", required=True)
+    config.add_argument("--port", type=int, default=22)
+    config.add_argument("--workspace", required=True, help="远端专用 workspace 绝对路径")
+    config.add_argument("--force", action="store_true", help="覆盖已有配置")
+    config.add_argument(
+        "--create-workspace",
+        action="store_true",
+        help="在远端创建 workspace（需用户确认）",
+    )
+    config.set_defaults(func=cmd_config)
+
+    probe = sub.add_parser("probe", help="采集 SSH/远端能力事实，不做判定")
+    with_project(probe)
+    probe.set_defaults(func=cmd_probe)
+
+    version = sub.add_parser("version", help="打印版本")
+    version.set_defaults(func=cmd_version)
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    if sys.version_info < (3, 8):
+        json_print({"ok": False, "code": 3, "error": "需要 Python >= 3.8"})
+        return 3
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not reconfigure:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+    try:
+        args = build_parser().parse_args(argv)
+        return args.func(args)
+    except UserError as exc:
+        json_print({"ok": False, "code": exc.code, "error": str(exc)})
+        return exc.code
+    except subprocess.TimeoutExpired:
+        json_print({"ok": False, "code": 10, "error": "操作超时"})
+        return 10
+    except (OSError, subprocess.SubprocessError) as exc:
+        json_print({"ok": False, "code": 3, "error": str(exc)})
+        return 3
+    except KeyboardInterrupt:
+        json_print({"ok": False, "code": 130, "error": "interrupted"})
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

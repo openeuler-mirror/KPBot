@@ -1,0 +1,65 @@
+{
+  "skill_name": "sql-runtime-filter-pushdown",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "integer-widening",
+      "prompt": "内连接的探测键是 CAST(f.date_id AS BIGINT)，原列为 INTEGER。构建侧在月份过滤后只有 101、102，销售键为 99、101、101、102。旧引擎只认原样列。解释改动和需要验证的指标。",
+      "expected_output": "构建侧先给出可匹配日期，能力判断和安装共同识别保值扩宽，过滤映射回扫描原列。扫描留三行并保持两个 101，连接仍补齐字段。验证过滤安装、扫描输出、探测行及准确结果，另外测量磁盘读取量。",
+      "files": [],
+      "assertions": [
+        "区分生成、能力判断和扫描安装",
+        "输出保留三个销售行及两个 101",
+        "没有从少一条扫描输出推断磁盘 I/O 一定下降"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "lossy-cast-and-outer-join",
+      "prompt": "我想把 LEFT JOIN 右表生成的非空键白名单直接下推给左表原始 BIGINT 列。连接表达式会把 BIGINT 转 INTEGER，出界行为在引擎配置里可变。怎么做？",
+      "expected_output": "保留左侧不匹配行和异常行为。当前证据不足以用该白名单过滤左侧；即使换成允许提前淘汰的内连接，也要证明配置下逆向谓词不产生假阴性。",
+      "files": [],
+      "assertions": [
+        "保留外连接的左侧不匹配行",
+        "不假设窄化与扩宽等价",
+        "说明回退与出界语义"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "bloom-representation",
+      "prompt": "INTEGER 扩宽为 BIGINT 的连接已生成按 8 字节哈希的 Bloom。能把位图直接装到原始 4 字节扫描列吗？投影还交换了两列。",
+      "expected_output": "核对 channel 映射与哈希编码；不同字节表示不能直接复用位图。证明无假阴性后安装，否则回退。分别取证生成、安装和应用。",
+      "files": [],
+      "assertions": [
+        "不直接复用不兼容哈希表示",
+        "追踪投影重排后的原列",
+        "区分安装与应用计数"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "anti-unmatched-row",
+      "prompt": "普通 NOT EXISTS 反连接，构建键只有1、探测键只有2。能安装正向构建键过滤减少探测吗？",
+      "expected_output": "不能丢掉键2，它是应输出的未匹配行。确定不匹配可以跳过查表，但仍进入反连接输出路径；空值感知变体另证。",
+      "files": [],
+      "assertions": [
+        "保留键2的输出",
+        "不在扫描端安装正向成员过滤",
+        "区分跳过探测和丢弃行"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "whole-projection-errors",
+      "prompt": "内连接键只做 INTEGER 扩宽；同一投影另一列要 CAST(text AS INTEGER)，按引擎契约先于连接求值。不匹配行的 text 非法，可以先下推过滤丢掉吗？",
+      "expected_output": "不能只证明键转换安全；须核对整个跨越投影的求值与错误。不足以证明可跳过时拒绝下推，并比较原版和候选的异常类型及消息。",
+      "files": [],
+      "assertions": [
+        "检查非键表达式",
+        "不掩盖原本应发生的错误",
+        "保留原路径并对照错误结果"
+      ]
+    }
+  ]
+}
