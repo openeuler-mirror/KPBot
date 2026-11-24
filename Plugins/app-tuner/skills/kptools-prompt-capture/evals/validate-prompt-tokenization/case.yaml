@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: validate-prompt-tokenization
+expected_outcome: |
+  已有 golden 时直接核对 token ID 序列，即使 token 数相同也要报不一致；不导出正文或加载自定义 tokenizer 代码。缺少 golden 时不判定线上一致。

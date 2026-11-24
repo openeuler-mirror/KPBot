@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-cluster-check",
+  "evals": [
+    {
+      "id": "after-jar-swap",
+      "query": "换了 lib 里的 gluten jar 之后，集群是不是还在跑旧的那套",
+      "expected": "触发本 skill：跑 scripts/cluster_check.py，读 cluster.consistent_with_lib / jars_replaced_after_start；不一致为 fail，next_step 重启集群加载现有 lib（重启须用户同意）"
+    },
+    {
+      "id": "which-build-loaded",
+      "query": "集群现在加载的是 native 还是 GFV 构建，TaskManager 都在吗",
+      "expected": "触发本 skill：cluster.loaded_build（native / gfv / mixed）、jobmanagers / taskmanagers 的 pid 与加载的 jar 作答；JM 无 TM 或 mixed 判 fail"
+    },
+    {
+      "id": "safe-to-restart",
+      "query": "现在能不能重启 Flink 集群，有没有作业在跑",
+      "expected": "触发本 skill：读 rest_jobs_running（jobs warn 说明重启会打断）与 running 状态作答；本 skill 不重启"
+    },
+    {
+      "id": "not-lib-state",
+      "query": "lib 里是 native 构建还是 GFV 构建，部署齐不齐",
+      "expected": "不触发：lib 内容分类属 flink-velox-lib-state-check（本 skill 只看进程加载的那套）"
+    },
+    {
+      "id": "not-jdk",
+      "query": "守护进程用的是哪个 Java",
+      "expected": "不触发：Java 属 flink-velox-jdk-check"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check"
+    },
+    {
+      "id": "not-restart",
+      "query": "把集群重启一下",
+      "expected": "不触发：本 skill 只读；重启属切换类 skill（审中 !325）且须用户同意，本 skill 只给出该重启的 next_step"
+    }
+  ]
+}

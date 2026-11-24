@@ -60,6 +60,16 @@
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["memory", "experience", "recall", "cross-session", "knowledge", "openviking", "tencentdb", "mem0"]
+    },
+    {
+      "name": "kpbot-skill-quality-review",
+      "description": "按 KPBot 静态质量检测规则评审 Skill，并提供逐项证据、评分和修改建议",
+      "author": {"name": "Kunpeng Acceleration Team"},
+      "category": "development",
+      "source": "./Plugins/public/kpbot-skill-quality-review",
+      "version": "1.0.0",
+      "platforms": ["claude", "opencode"],
+      "tags": ["skill", "quality", "static-review"]
     }
   ]
 }

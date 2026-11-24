@@ -1,0 +1,61 @@
+# 用例：tier A — NebulaGraph app-tuner 五个 skill 的完整性契约
+#
+# 覆盖（checks.py）：
+#   1. SKILL.md frontmatter：name 与目录一致、description 非空/长度合法
+#   2. SKILL.md / references 中引用的 references/* 与 scripts/* 均存在
+#   3. 每个 skill 的关键内容锚点仍在语料中
+#   4. evals/evals.json 结构完整（skill_name/id/prompt/expectations 等）
+#   5. 脚本 shebang 与敏感内容扫描（私网 IP、个人 home/ssd 路径）
+#
+# 运行（在任意目录）：
+#   bash cases/skill-integrity/run.sh
+#   # 产物 cases/skill-integrity/results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A，仅依赖 python3 标准库；不需要真实 Nebula 环境。
+
+name: skill-integrity
+skill: nebula-architecture
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: skills_checked
+    op: gte
+    expect: 5
+  - type: json_field
+    file: results/result.json
+    field: links_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: scripts_checked
+    op: gte
+    expect: 3
+  - type: json_field
+    file: results/result.json
+    field: anchors_found
+    op: gte
+    expect: 20
+  - type: json_field
+    file: results/result.json
+    field: evals_checked
+    op: gte
+    expect: 15
+  - type: json_field
+    file: results/result.json
+    field: sensitive_findings
+    expect: 0

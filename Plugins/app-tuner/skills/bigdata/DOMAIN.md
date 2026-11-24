@@ -1,18 +1,19 @@
 # 大数据域（app-tuner 侧）
 
-大数据框架与服务的部署、验证和性能调优。已落地的独立技能见成员表；
-现有 Spark / Flink 知识涵盖 ARM（鲲鹏）参数推荐、资源计算与基准执行协议。
+大数据框架与服务的部署、验证和性能调优。已落地的独立技能与子域见成员表；
+现有 Spark / Flink 知识仍内嵌于 `kpbot-app-tuner` 主框架，涵盖 ARM（鲲鹏）参数推荐、资源计算与基准执行协议。
 
 ## 独立成员
 
-| Skill | 职责 |
+| 成员 | 定位 |
 |---|---|
 | [`doris-deployment-benchmark`](doris-deployment-benchmark/SKILL.md) | 部署、健康检查、正确性验证与性能基准 |
+| [`flink-velox-env/`](flink-velox-env/DOMAIN.md) | 子域：Flink + GlutenFlink（velox 向量化栈）环境检查家族——具体项检查子 skill 各自独立安装与触发，统筹 skill 按目标（build / native）聚合并给出唯一 next_step；只扫不改，是本域安装/构建/验证类 skill 的共同前置裁决点，详见其 DOMAIN.md |
 
 ## 现有 Spark / Flink 知识
 
-Spark / Flink 相关内容仍位于 `kpbot-app-tuner` 主框架的子技能里，
-不随 `install.sh` 安装（`subskills/` 不单独安装），具体资源如下：
+除上述独立成员覆盖的内容外，Spark / Flink 等大数据相关内容仍位于 `kpbot-app-tuner` 主框架的子技能里，
+不随 `install.sh` 安装（`subskills/` 不单独安装），也没有独立的 review 归属，具体资源如下：
 
 | 位置 | 内容 |
 |---|---|
