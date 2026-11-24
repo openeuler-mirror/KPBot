@@ -969,6 +969,10 @@ def run_concurrency(tokenizer, requests, texts, digests, thread_count) -> dict:
         # vLLM 服务端会将排队的请求合并为批量调用，此处同样执行一次批量调用
         try:
             batch = tokenize(local, [texts[index] for index in indices])
+            if len(batch) != len(indices):
+                with lock:
+                    errors.append(f"批量调用：预期 {len(indices)} 条结果，实际返回 {len(batch)} 条")
+                return
             for index, ids in zip(indices, batch):
                 if digest_of(ids) != digests[index]:
                     with lock:
@@ -1152,15 +1156,6 @@ def summarize_arm(name, results, request_count, problems) -> dict:
             f"{ARM_LABELS[name]}生效的分词后端为 {first['backend_module']}，"
             "并非 fastokens（候选版本未生效）"
         )
-    concurrency = arm["concurrency"]
-    status = concurrency_status(concurrency)
-    if status == "failed":
-        problems.append(
-            f"{ARM_LABELS[name]}并发检查：{len(concurrency.get('mismatch') or [])} 条结果不一致，"
-            f"{len(concurrency.get('errors') or [])} 个异常"
-        )
-    elif status == "not_measured":
-        problems.append(f"{ARM_LABELS[name]}缺少有效的多线程并发检查结果")
     return arm
 
 
@@ -1168,19 +1163,31 @@ def summarize(args, requests, runs, out, load_before, load_after) -> dict:
     problems, arms = [], {}
     token_mismatch = False
     for name, results in runs.items():
-        failed = next((r for r in results if not r.get("ok")), None)
-        if failed:
-            problems.append(f"{ARM_LABELS[name]}运行失败：{failed.get('error')}")
+        concurrency = results[0].get("concurrency")
+        failed_round = next((i for i, r in enumerate(results) if not r.get("ok")), None)
+        if failed_round is not None:
+            failed = results[failed_round]
+            problems.append(f"{ARM_LABELS[name]}第 {failed_round + 1} 轮运行失败：{failed.get('error')}")
             arms[name] = {
                 "ok": False,
                 "error": failed.get("error"),
                 "stderr_tail": failed.get("stderr_tail"),
+                "failed_round": failed_round + 1,
+                "concurrency": concurrency,
             }
         else:
             arms[name] = summarize_arm(name, results, len(requests), problems)
             if any(r["digests"] != results[0]["digests"] for r in results[1:]):
                 token_mismatch = True
                 problems.append(f"{ARM_LABELS[name]}各轮的 token ID 不一致")
+        status = concurrency_status(concurrency)
+        if status == "failed":
+            problems.append(
+                f"{ARM_LABELS[name]}首轮并发检查：{len(concurrency.get('mismatch') or [])} 条结果不一致，"
+                f"{len(concurrency.get('errors') or [])} 个异常"
+            )
+        elif status == "not_measured":
+            problems.append(f"{ARM_LABELS[name]}缺少有效的多线程并发检查结果")
 
     parity = {}
     completed = all(arm["ok"] for arm in arms.values())
@@ -1300,8 +1307,6 @@ def verify_text(report) -> str:
             "各轮结果一致"
         )
     for name, arm in report["arms"].items():
-        if not arm.get("ok"):
-            continue
         concurrency = arm.get("concurrency") or {}
         threads = concurrency.get("threads", 0)
         mismatch = concurrency.get("mismatch")

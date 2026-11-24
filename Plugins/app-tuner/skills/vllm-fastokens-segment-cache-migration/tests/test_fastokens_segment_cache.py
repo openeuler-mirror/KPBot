@@ -86,6 +86,29 @@ class HelperTests(unittest.TestCase):
                 indices = {i for i in range(8) if requests[i]["session"] == session}
                 self.assertTrue(indices <= set(group) or not indices & set(group))
 
+    def test_concurrency_rejects_short_or_long_batch_results(self):
+        requests = [{"session": "a"}, {"session": "b"}]
+        ids = {"a": [1], "b": [2]}
+        digests = [tool.digest_of(ids[text]) for text in ("a", "b")]
+        for returned_count in (0, 1, 2):
+            with self.subTest(returned_count=returned_count):
+                def tokenize(_, value):
+                    if isinstance(value, list):
+                        return [ids[value[0]]] * returned_count
+                    return ids[value]
+
+                with mock.patch.object(tool, "tokenize", side_effect=tokenize):
+                    result = tool.run_concurrency(object(), requests, ["a", "b"], digests, 2)
+                self.assertEqual(result["threads"], 2)
+                self.assertEqual(result["mismatch"], [])
+                if returned_count == 1:
+                    self.assertEqual(tool.concurrency_status(result), "passed")
+                else:
+                    self.assertEqual(tool.concurrency_status(result), "failed")
+                    self.assertEqual(result["errors"], [
+                        f"批量调用：预期 1 条结果，实际返回 {returned_count} 条"
+                    ] * 2)
+
     def test_generated_sessions_are_deterministic_and_grow(self):
         first = tool.generate_sessions(3, 4, seed=1, block_chars=500)
         self.assertEqual(first, tool.generate_sessions(3, 4, seed=1, block_chars=500))
@@ -455,6 +478,24 @@ class VerdictTests(unittest.TestCase):
                 text = tool.verify_text(report)
                 self.assertIn("段缓存开启组：并发检查结果不完整", text)
                 self.assertNotIn("并发子检查未发现", text)
+
+    def test_later_timeout_keeps_first_round_concurrency_failure(self):
+        self.args.rounds = 2
+        orig = fake_run(["a", "b"], [1, 1], backend="tokenizers")
+        orig["concurrency"] = {"threads": 2, "mismatch": [], "errors": []}
+        on = fake_run(["a", "b"], [1, 1], stats={"hits": 3, "misses": 1})
+        on["concurrency"] = {"threads": 2, "mismatch": [1], "errors": []}
+        timed_out = {"ok": False, "error": "运行超时"}
+        report = self.summarize({"orig": [orig, orig], "on": [on, timed_out]})
+        self.assertFalse(report["correctness_pass"])
+        self.assertEqual(report["concurrency_acceptance"], "failed")
+        self.assertEqual(report["token_consistency"], "not_measured")
+        self.assertEqual(report["arms"]["on"]["failed_round"], 2)
+        self.assertEqual(report["arms"]["on"]["concurrency"], on["concurrency"])
+        text = tool.verify_text(report)
+        self.assertIn("第 2 轮运行失败：运行超时", text)
+        self.assertIn("首轮并发检查：1 条结果不一致", text)
+        self.assertIn("并发验收：未通过", text)
 
     def test_verify_exits_nonzero_when_one_session_cannot_show_concurrency(self):
         sessions = Path(self.args.sessions)
