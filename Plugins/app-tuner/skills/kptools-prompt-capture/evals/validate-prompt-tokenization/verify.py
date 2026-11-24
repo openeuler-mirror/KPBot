@@ -4,6 +4,7 @@ import contextlib
 import io
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -13,6 +14,12 @@ import check_tokenizer
 
 
 class FixtureTokenizer:
+    @classmethod
+    def from_pretrained(cls, directory, *, trust_remote_code):
+        if trust_remote_code:
+            raise ValueError("fixture should not load remote code")
+        return cls(Path(directory) / "vocab.txt")
+
     def __init__(self, filename):
         self.tokens = filename.read_text().splitlines()
 
@@ -33,9 +40,9 @@ def main():
     fixture = HERE / "fixtures"
     command = ["check_tokenizer.py", "--corpus", str(fixture / "gold.jsonl"),
                "--tokenizer", str(fixture / "tokenizer"), "--show", "0"]
-    stub = FixtureTokenizer(fixture / "tokenizer/vocab.txt")
+    dependency = SimpleNamespace(AutoTokenizer=FixtureTokenizer)
     load = (contextlib.nullcontext() if args.real_tokenizer else
-            patch.object(check_tokenizer, "load", lambda *unused: setattr(check_tokenizer, "_TOK", stub)))
+            patch.dict(sys.modules, {"transformers": dependency}))
     output = io.StringIO()
     with patch.object(sys, "argv", command), load, contextlib.redirect_stdout(output):
         code = check_tokenizer.main()

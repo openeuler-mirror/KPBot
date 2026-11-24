@@ -45,6 +45,7 @@ metadata:
 | `scripts/join_vllm_log.py` | 按请求 ID 关联兼容的 vLLM 日志 |
 | `scripts/export_corpus.py`、`scripts/check_tokenizer.py`、`scripts/dump_requests.py` | 导出语料、核对分词结果与查看原始请求 |
 | `assets/` | 采集配置预设与报告样式 |
+| `subskills/` | 按任务选择的八项工作流 |
 | `tests/`、`cases/`、`evals/` | 单元与端到端测试、agent 对照用例及技能评测用例 |
 
 ## 参考依据

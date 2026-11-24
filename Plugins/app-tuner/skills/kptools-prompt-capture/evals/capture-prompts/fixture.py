@@ -12,7 +12,8 @@ from tempfile import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tests"))
-from test_capture import cli, config, mock_process, pcap, request, wait_worker_count
+from mock_support import cli, config, mock_process, request, wait_worker_count
+import pcap
 
 
 @contextlib.contextmanager
@@ -36,6 +37,8 @@ def verify():
         cli("--config", cfg, "on", "--duration", 4, "--metadata-only").check_returncode()
         if not status(cfg)["workers"][0]["enabled"]:
             raise SystemExit("capture did not become effective")
+        if cli("--config", cfg, "set", "text_rate=1").returncode != 2:
+            raise SystemExit("an active metadata-only worker accepted a text setting")
         if request(port, session="inside-window")[0] != 200:
             raise SystemExit("mock rejected request inside the capture window")
         deadline = time.monotonic() + 8

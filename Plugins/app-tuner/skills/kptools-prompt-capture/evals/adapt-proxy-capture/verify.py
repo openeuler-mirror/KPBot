@@ -12,7 +12,9 @@ from tempfile import TemporaryDirectory
 HERE = Path(__file__).resolve().parent
 TESTS = HERE.parents[1] / "tests"
 sys.path.insert(0, str(TESTS))
-from test_capture import capturectl, cli, config, mock_process, pcap, request, wait_worker_count
+from mock_support import cli, config, mock_process, request, wait_worker_count
+import capturectl
+import pcap
 
 
 @contextlib.contextmanager

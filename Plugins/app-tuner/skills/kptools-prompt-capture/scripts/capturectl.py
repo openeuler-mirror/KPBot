@@ -75,9 +75,10 @@ def main() -> int:
             parser.error("load needs one preset JSON path")
         with open(args.values[0], encoding="utf-8") as stream:
             patch = capture_validate(json.load(stream))
-        # Presets cannot start capture or change its deadline/data path.
+        # Presets cannot change the active window or its authorization.
         for key in ("out_dir", "enabled", "stop_at_unix"):
             patch[key] = current.get(key, patch[key])
+        patch["metadata_only"] = current.get("metadata_only", False)
     elif args.cmd == "set":
         if not args.values:
             parser.error("set needs key=value")
@@ -85,7 +86,7 @@ def main() -> int:
             if "=" not in value:
                 parser.error("set needs key=value")
             key, raw = value.split("=", 1)
-            if key in ("enabled", "stop_at_unix"):
+            if key in ("enabled", "stop_at_unix", "metadata_only"):
                 parser.error("use on --duration or off instead")
             try:
                 patch[key] = json.loads(raw)
@@ -94,16 +95,14 @@ def main() -> int:
     elif args.cmd == "on":
         if args.duration is None or not math.isfinite(args.duration) or args.duration <= 0:
             parser.error("on requires --duration > 0 (seconds)")
-        patch = {"enabled": True, "stop_at_unix": time.time() + args.duration}
+        now = time.time()
+        prior = capture_validate(current)
+        protected = prior["enabled"] and prior["metadata_only"] and prior["stop_at_unix"] > now
+        patch = {"enabled": True, "stop_at_unix": now + args.duration,
+                 "metadata_only": args.metadata_only or protected}
     elif args.cmd == "off":
-        patch = {"enabled": False}
+        patch = {"enabled": False, "metadata_only": False}
     new = capture_validate({**current, **patch})
-    if args.metadata_only:
-        fields = ["text_rate", "gold_rate", "follow_sessions", "follow_new", "follow_gold"]
-        conflicts = [field for field in fields if new[field]]
-        conflicts += [field for field in ("output", "follow_output") if new[field] == "text"]
-        if conflicts:
-            parser.error("metadata-only capture conflicts with: " + ", ".join(conflicts))
     if new["enabled"] and new["stop_at_unix"] <= time.time():
         parser.error("deadline expired; off first, configure, then on --duration")
     write_config(path, new)

@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import http.client
 import importlib
 import json
 import os
@@ -24,59 +22,7 @@ import capture_runtime as pc
 import capturectl
 import pcap
 import analyze
-
-
-def config(path, **values):
-    capturectl.write_config(path, {"out_dir": str(path.parent / "data"), **values})
-
-
-def cli(*args):
-    return subprocess.run([sys.executable, str(SCRIPTS / "capturectl.py"), *map(str, args)],
-                          capture_output=True, text=True, timeout=15)
-
-
-def wait_worker_count(path, expected, timeout=6):
-    deadline = time.monotonic() + timeout
-    while len(capturectl.active_state(path)["workers"]) != expected:
-        if time.monotonic() >= deadline:
-            raise AssertionError("expected workers did not publish their initial state")
-        time.sleep(0.05)
-
-
-@contextlib.contextmanager
-def mock_process(*args):
-    proc = subprocess.Popen([sys.executable, str(ROOT / "tests/mock_proxy.py"), *map(str, args)],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    try:
-        # Fail clearly rather than hanging if a mock fails to bind/start.
-        import select
-        ready, _, _ = select.select([proc.stdout], [], [], 10)
-        if not ready:
-            raise AssertionError("mock startup timeout")
-        line = proc.stdout.readline()
-        if not line:
-            raise AssertionError(proc.stderr.read())
-        yield proc, int(line)
-    finally:
-        proc.terminate()
-        try:
-            proc.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.communicate()
-
-
-def request(port, stream=False, session="session-test"):
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    body = {"model": "mock", "stream": stream,
-            "messages": [{"role": "user", "content": "PRIVATE_SENTINEL"}]}
-    try:
-        connection.request("POST", "/v1/chat/completions", json.dumps(body),
-                           {"x-session-id": session, "Authorization": "Bearer SECRET"})
-        response = connection.getresponse()
-        return response.status, response.getheaders(), response.read()
-    finally:
-        connection.close()
+from mock_support import cli, config, mock_process, request, wait_worker_count
 
 
 class ConfigTests(unittest.TestCase):
@@ -255,6 +201,37 @@ class ConfigTests(unittest.TestCase):
                     self.assertIn("metadata-only capture conflicts with: " + field, result.stderr)
                     self.assertEqual(path.read_bytes(), before)
             self.assertFalse((path.parent / "data").exists())
+
+    def test_metadata_only_survives_hot_updates_and_ends_with_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "capture.json"
+            preset = path.with_name("session.json")
+            preset.write_text('{"metadata_only": false, "follow_new": 1}')
+            config(path)
+
+            def control(*command):
+                return cli("--config", path, "--timeout", 0, *command)
+
+            self.assertEqual(control("on", "--duration", 60, "--metadata-only").returncode, 4)
+            self.assertTrue(json.loads(path.read_text())["metadata_only"])
+            before = path.read_bytes()
+            for command in (("set", "text_rate=0.05"), ("load", preset),
+                            ("set", "metadata_only=false"), ("set", "output=text")):
+                with self.subTest(command=command):
+                    self.assertEqual(control(*command).returncode, 2)
+                    self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(control("set", "meta_rate=0.5").returncode, 4)
+            self.assertEqual(control("on", "--duration", 60).returncode, 4)
+            self.assertTrue(json.loads(path.read_text())["metadata_only"])
+            self.assertEqual(control("off").returncode, 4)
+            self.assertFalse(json.loads(path.read_text())["metadata_only"])
+            self.assertEqual(control("load", preset).returncode, 4)
+            self.assertEqual(control("on", "--duration", 60).returncode, 4)
+            self.assertEqual(json.loads(path.read_text())["follow_new"], 1)
+
+            config(path, enabled=True, metadata_only=True, stop_at_unix=time.time() - 1)
+            self.assertEqual(control("on", "--duration", 60).returncode, 4)
+            self.assertFalse(json.loads(path.read_text())["metadata_only"])
 
     def test_no_automatic_remote_code_retry(self):
         calls = []
