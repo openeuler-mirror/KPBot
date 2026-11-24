@@ -97,4 +97,6 @@ description: 优化列式 SQL 引擎连接输出和原生 Shuffle 的字符串�
 
 ## 本地用例
 
-在 `cases/shuffle-contract/` 中执行 `python3 run.py`。用例检查合成数据的拷贝范围、越界写拒绝和读端分派，结果写入用例目录的 `results/result.json`。LZ4 兼容性用项目中的真实编解码器验证。模型评估规格在 `evals/evals.json`，Gluten 和 LZ4 的源码位置及历史验证见 [Q67 案例](references/velox-q67.md)。
+在 `cases/shuffle-contract/` 中执行 `python3 run.py`。除原有长度、越界写拒绝和读端分派外，用例增加 88 组源/目标偏移与边界组合，含 44 组目标容量恰好够用、22 组源和目标偏移都非零，逐字节检查目标区域、区域外哨兵及源缓冲区不变。结果写入用例目录的 `results/result.json`，`case.yaml` 还要求失败数为 0、失败明细为空。
+
+用例使用普通控制流决定成功和退出码，`python3 -O run.py` 或 `PYTHONOPTIMIZE=1` 下仍须检测错误实现。Python 用例只验证拷贝几何，不验证原生指针越界、别名、所有权或 ISA；LZ4 兼容性仍需真实编解码器。模型评估规格在 `evals/evals.json`，Gluten 和 LZ4 的源码位置及历史验证见 [Q67 案例](references/velox-q67.md)。
