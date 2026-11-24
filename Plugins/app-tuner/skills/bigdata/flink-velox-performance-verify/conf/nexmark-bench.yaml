@@ -1,0 +1,39 @@
+#==============================================================================
+# Fixed benchmark conf — managed by the flink-velox-performance-verify skill.
+# performance_verify.py swaps this file in as $NEXMARK_HOME/conf/nexmark.yaml
+# for the duration of a run (the flink.rest.* lines carry the cluster's own
+# endpoint, derived from the config file Flink actually reads) and restores
+# the original afterwards — also on failure or interrupt.
+#
+# One suite on purpose: a query listed by two suites aborts the benchmark
+# (upstream WorkloadSuite refuses the ambiguity), and a single suite is what
+# keeps the calibre fixed. q6 is left out — the nexmark sources mark it as
+# not runnable.
+#==============================================================================
+
+#==============================================================================
+# Rest & web frontend
+#==============================================================================
+
+# The metric reporter server host.
+nexmark.metric.reporter.host: localhost
+# The metric reporter server port.
+nexmark.metric.reporter.port: 9098
+
+#==============================================================================
+# Benchmark workload configuration (fixed calibre: 1e8 events, 5e7 tps)
+#==============================================================================
+
+nexmark.workload.suite.bench.events.num: 100000000
+nexmark.workload.suite.bench.tps: 50000000
+nexmark.workload.suite.bench.queries: "q0,q1,q2,q3,q4,q5,q7,q8,q9,q10,q11,q12,q13,q14,q15,q16,q17,q18,q19,q20,q21,q22,q23"
+nexmark.workload.suite.bench.warmup.duration: 120s
+nexmark.workload.suite.bench.warmup.events.num: 100000000
+nexmark.workload.suite.bench.warmup.tps: 50000000
+
+#==============================================================================
+# Flink REST (templated from the config file Flink actually reads)
+#==============================================================================
+
+flink.rest.address: localhost
+flink.rest.port: 8081
