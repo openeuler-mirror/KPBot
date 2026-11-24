@@ -80,6 +80,8 @@ node scripts/validate_metrics.mjs --manifest /data/run/manifest.json --parsed /d
 
 选择文件形式、未知状态及脚本退出码见 [契约](references/contracts.md)。
 自动规则只检查可机器判定部分，原始警告、线程覆盖和指标模型仍需人工复核。
+无论是否命中警告关键词，都须填写 warnings_reviewed 及原始日志复核证据。
+每单位计数需要同窗完成量及明确的 work.unit，报告同时展示派生值和单位。
 
 ### 5. 异常诊断与复采
 

@@ -24,7 +24,7 @@ export function report(result) {
     lines.push(`| ${cell(name)} | ${cell(item.value)} | ${cell(item.unit)} | ${cell(item.line)} |`);
   }
   lines.push('', '这些值不自动成为可信结论；需结合下列质量检查解释。', '');
-  lines.push(`每单位 cycles：${cell(result.cycles_per_unit)}。`, '');
+  lines.push(`每单位 cycles：${cell(result.cycles_per_unit)}；单位：${cell(result.cycles_per_unit_unit)}。`, '');
   lines.push('## 质量检查', '', '| 检查 | 状态 | 说明 | 证据 |', '|---|---|---|---|');
   for (const check of result.checks) {
     lines.push(`| ${cell(check.id)} | ${cell(check.status)} | ${cell(check.detail)} | ${cell(check.evidence)} |`);

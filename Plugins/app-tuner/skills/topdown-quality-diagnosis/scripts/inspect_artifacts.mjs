@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {METRICS, args, main, writeJson} from './common.mjs';
+import {METRICS, L1, args, main, writeJson} from './common.mjs';
 
 // Strict full-field parsing: signs, grouping and unavailable values are retained.
-export function parseValue(raw) {
+export function parseValue(raw, metric = null) {
+  if (raw.includes('%') && !L1.includes(metric)) {
+    return {value: null, status: 'unrecognized'};
+  }
   const cleaned = raw.trim().replace(/%$/, '').trim();
   if (/^(?:N\/A|<not counted>|<not supported>|not counted|not supported)$/i.test(cleaned)) {
     return {value: null, status: 'unavailable'};
@@ -19,7 +22,10 @@ export function parseValue(raw) {
   return {value, status: 'parsed'};
 }
 
-export function inspect(text, source = 'memory') {
+export function inspect(input, source = 'memory') {
+  // File callers pass the original bytes; strings are UTF-8 in-memory fixtures.
+  const bytes = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
+  const text = bytes.toString('utf8');
   const rows = [];
   const warnings = [];
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
@@ -29,7 +35,7 @@ export function inspect(text, source = 'memory') {
       const match = line.match(new RegExp(`^\\s*${name}\\s*(?::|\\s)\\s*(.*?)\\s*$`, 'i'));
       if (!match) continue;
       const raw = match[1];
-      const numeric = parseValue(raw);
+      const numeric = parseValue(raw, name);
       if (['Cycles', 'Instructions'].includes(name) && numeric.status === 'parsed' &&
           !Number.isSafeInteger(numeric.value)) {
         numeric.value = null;
@@ -54,7 +60,7 @@ export function inspect(text, source = 'memory') {
   return {
     schema_version: 1,
     source,
-    sha256: crypto.createHash('sha256').update(text).digest('hex'),
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
     adapter: 'devkit-l1-english-lines-v1',
     rows,
     warnings,
@@ -68,6 +74,6 @@ export function inspect(text, source = 'memory') {
 
 main(import.meta.url, () => {
   const opt = args(process.argv.slice(2), ['log', 'out']);
-  const text = fs.readFileSync(opt.log, 'utf8');
-  writeJson(opt.out, inspect(text, path.resolve(opt.log)));
+  const bytes = fs.readFileSync(opt.log);
+  writeJson(opt.out, inspect(bytes, path.resolve(opt.log)));
 });

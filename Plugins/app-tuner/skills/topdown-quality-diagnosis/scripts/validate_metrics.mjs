@@ -75,9 +75,8 @@ export function validate(manifest, parsed, selection = {}) {
   } else {
     add('duration', 'unknown', '需要请求与实际采集秒数；不能使用素材时长');
   }
-  if (parsed.warnings.length) {
-    assertion('warnings_reviewed', manifest.warnings_reviewed);
-  }
+  // Keyword extraction is only a hint, never a substitute for raw-log review.
+  assertion('warnings_reviewed', manifest.warnings_reviewed);
   const metrics = {};
   for (const name of METRICS) {
     const candidates = parsed.rows.filter(row => row.name === name);
@@ -146,13 +145,14 @@ export function validate(manifest, parsed, selection = {}) {
       `运行比例=${running / enabled}；阈值=${pmu.minimum_ratio}`, pmu.evidence);
   }
   const work = manifest.work || {};
+  const workUnit = typeof work.unit === 'string' ? work.unit.trim() : '';
   let cyclesPerUnit = null;
   if (work.same_window === true && finite(work.units) && work.units > 0 &&
-      evidence(work) && finite(cycles) && cycles > 0) {
+      workUnit && evidence(work) && finite(cycles) && cycles > 0) {
     cyclesPerUnit = cycles / work.units;
     add('work_denominator', 'pass', '使用同窗实际完成量', work.evidence);
   } else {
-    add('work_denominator', 'limited', '不计算每单位计数：同窗完成量不足');
+    add('work_denominator', 'limited', '不计算每单位计数：同窗完成量、单位名称或证据不足');
   }
   const quality = aggregate(checks);
   return {
@@ -165,6 +165,7 @@ export function validate(manifest, parsed, selection = {}) {
     comparison_reason: '单次审核不证明两组可比；需人工核对配对契约和重复性',
     metrics,
     cycles_per_unit: quality === 'invalid' ? null : cyclesPerUnit,
+    cycles_per_unit_unit: quality !== 'invalid' && cyclesPerUnit !== null ? `cycles/${workUnit}` : null,
     checks,
     warnings: parsed.warnings,
     manifest,

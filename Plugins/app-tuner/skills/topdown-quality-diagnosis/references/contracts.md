@@ -4,6 +4,7 @@
 
 `manifest.json` 是人工核实的运行清单，不由解析器猜测。
 `parsed.json` 保存文本匹配、源行、原始字段和文件哈希。
+SHA-256 从原文件 Buffer 计算；逐行解析另按 UTF-8 解码，不用解码后的字符串替代原始字节计算摘要。
 `selection.json` 在多窗口时指定每项指标的源行。
 `quality.json` 保存规则结果和输入清单快照。
 `report.md` 是可读审核底稿，最终还需补充人工诊断。
@@ -39,6 +40,7 @@
 | work | 同窗实际完成单位数及单位名称 |
 
 布尔断言格式：value 为 true/false/null，evidence 为证据定位，reason 为解释。
+warnings_reviewed 始终检查，不依赖关键词是否命中；有证据的 false 为 limited，缺少证据为 unknown。
 表中 pmu 的两项时间必须同单位；不用不同事件轮次拼成一个比值。
 minimum_ratio 是本次策略值，需要依据，不提供通用准确率阈值。
 若工具未暴露时间，保持 null，结果 unknown 是正常且诚实的输出。
@@ -57,7 +59,8 @@ Retiring            38.62
 Backend Bound       37.30
 ```
 
-字段可有符号、小数、科学计数法，比例可带 %。
+字段可有符号、小数、科学计数法；仅四个 L1 占比允许带 %。
+Cycles、Instructions 或 IPC 带 % 时标记 unrecognized，原文保留，不参与数值复算。
 千位分隔必须为三位分组，不接受 1,23 这类歧义。
 N/A、not counted、not supported 记录 unavailable。
 NaN/Inf 记录 nonfinite，JSON 中 value 为 null，原文仍保留。
@@ -94,7 +97,9 @@ Cycles/Instructions 非安全整数记 unsafe_count，原文保留，不用舍�
 聚合优先级 invalid > unknown > limited > pass。
 missing 为 unknown；已识别字段明确不可用为 invalid。
 未知不等于差，表示没有足够证据支持更强判断。
-有同窗工作量时输出 cycles_per_unit；invalid 时抑制该派生值。
+有同窗工作量、非空字符串 work.unit 及证据时输出 cycles_per_unit；invalid 时抑制该派生值。
+派生值单位随 cycles_per_unit_unit 输出，例如 cycles/frames；未计算时两者均为 null。
+单位缺失或仅有空白时保留原始计数，不计算每单位计数。
 其他状态下派生值仍需结合限制解释。
 comparison_candidate 只反映本次规则是否全部通过。
 comparison_eligible 始终 false，单次脚本不替代人工 A/B 审核。
