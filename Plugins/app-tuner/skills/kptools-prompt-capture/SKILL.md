@@ -45,6 +45,7 @@ metadata:
 | `scripts/join_vllm_log.py` | 按请求 ID 关联兼容的 vLLM 日志 |
 | `scripts/export_corpus.py`、`scripts/check_tokenizer.py`、`scripts/dump_requests.py` | 导出语料、核对分词结果与查看原始请求 |
 | `assets/` | 采集配置预设与报告样式 |
+| `subskills/` | 按任务选择的八项工作流 |
 | `tests/`、`cases/`、`evals/` | 单元与端到端测试、agent 对照用例及技能评测用例 |
 
 ## 参考依据
@@ -76,9 +77,26 @@ metadata:
 
 采集控制工具使用 proxy 所用的 Python 解释器（下文记为 `$PY`），在相同容器或 PID 命名空间执行。安装后的技能目录记为 `$S`，采集配置文件的绝对路径记为 `$CFG`。
 
+## 按任务选择
+
+用户指定单项任务时，读取下表对应的 `subskills/<目录>/SKILL.md`。用户已给出的产物可直接用作输入，无需重做前序步骤。只检查现有 proxy、只准备改造和只做离线分析分别在对应任务结束后交付结果。
+
+| 任务 | 子技能目录 | 未安装时使用 |
+|---|---|---|
+| 判断当前 proxy 是否支持采集 | `inspect-proxy-capture` | 第 1 步，核对运行入口及已有钩子，不进入改造 |
+| 接入采集；经授权部署或恢复 | `adapt-proxy-capture` | 第 1–4 步；获授权后按第 5 步部署并检查健康状态，需要恢复时走第 7 步 |
+| 在已接入的 proxy 上采集 | `capture-prompts` | 第 4 步的采集配置和第 5 步的开关与写盘核验，不替换或重启 |
+| 分析请求总体分布 | `analyze-request-distribution` | 第 6 步，只运行宏观分析 |
+| 分析指定或抽样会话 | `analyze-session-prompts` | 第 6 步，只运行会话分析 |
+| 核对 tokenizer 与 golden | `validate-prompt-tokenization` | [分析说明](references/capture-and-analysis.md#分析入口)中的分词核验 |
+| 按请求 ID 关联 vLLM 日志 | `correlate-vllm-logs` | [分析说明](references/capture-and-analysis.md#分析入口)中的日志关联 |
+| 汇总已有证据 | `summarize-capture-findings` | 下文“报告要求”，只使用已有产物 |
+
+单项分析不默认生成总报告；使用第 6 步作为备选时，只执行对应分析。需要串联多个任务时，按用户目标使用下文流程，已有证据的阶段可跳过。Proxy 改造、部署重启、开启采集和恢复涉及不同动作，前一阶段完成不代表后续动作已获授权。
+
 ## 操作流程
 
-仅分析已有数据时，直接执行第 6 步。
+使用下列流程分析已有数据时，直接执行第 6 步。
 
 ### 1. 检查目标环境
 
@@ -125,9 +143,11 @@ $PY "$S/scripts/capturectl.py" --config "$CFG" load "$S/assets/macro.json"
 服务正常后按用户确认的时长开启采集：
 
 ```bash
-$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration <采集秒数>
+$PY "$S/scripts/capturectl.py" --config "$CFG" on --duration <采集秒数> --metadata-only
 $PY "$S/scripts/capturectl.py" --config "$CFG" status --json
 ```
+
+上例仅采元数据。开启前按 [采集控制说明](references/capture-and-analysis.md#采集控制) 核对普通请求与跟踪会话的有效配置；超出本轮权限时先调整已确认的配置，不开启采集。
 
 核对预期 worker 数、配置版本、有效开关状态及数据写入情况。配置写入成功不代表采集已生效。到期后采集模块停止接收新请求的记录；达到磁盘预算或出现持续采集错误时执行 `off` 并报告。会话数未达到目标时，仍按约定时间结束。
 

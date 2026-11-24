@@ -56,6 +56,7 @@ _CAP_PT_BUCKETS = ((1024, "<1k"), (4096, "1k-4k"), (16384, "4k-16k"), (32768, "1
 # [capture] 参数表：键 → (默认值, 取值要求)。配置文件里出现表外的键会被拒绝（防止拼错键名却以为生效了）。
 _CAP_SCHEMA: dict[str, tuple[Any, Any]] = {
     "enabled": (False, bool),
+    "metadata_only": (False, bool),
     "out_dir": ("", str),
     "meta_rate": (1.0, "rate"),
     "text_rate": (0.0, "rate"),
@@ -127,6 +128,12 @@ def capture_validate(raw: Any) -> dict[str, Any]:
             errs.append(f"{key} must not contain credential headers")
     if errs:
         raise ValueError("; ".join(errs))
+    if out["enabled"] and out["metadata_only"]:
+        conflicts = [key for key in ("text_rate", "gold_rate", "follow_sessions", "follow_new", "follow_gold")
+                     if out[key]]
+        conflicts += [key for key in ("output", "follow_output") if out[key] == "text"]
+        if conflicts:
+            raise ValueError("metadata-only capture conflicts with: " + ", ".join(conflicts))
     return out
 
 

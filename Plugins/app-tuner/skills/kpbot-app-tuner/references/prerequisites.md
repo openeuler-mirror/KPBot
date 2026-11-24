@@ -63,7 +63,7 @@
 - 对外数据库型工作负载专项归属 `application-config-optimization`
 - 缺失数据库专项输入时，应由 `application-config-optimization` 输出保守建议和降级说明
 
-### `io-memory-network-bottleneck-analysis`
+### `io-optimization`
 
 | 工具 | 用途 | 分级 | 缺失时处理 |
 | --- | --- | --- | --- |
@@ -73,6 +73,9 @@
 | `iostat` | 磁盘利用率 | 推荐 | 记入 `iostat_missing`，磁盘带宽判定降级 |
 | `ss` | 网络层基础线索 | 推荐 | 记入 `ss_missing`，网络判断降级 |
 | `free` | 内存压力代理指标 | 推荐 | 记入 `free_missing`，内存判断降级 |
+| `findmnt` | 块设备挂载与挂载选项（`collect_io_evidence.sh` 专项采集） | 推荐 | 记入 `findmnt_missing`，挂载选项分析缺失 |
+| `perf` | cache-miss 率采样（`collect_memory_evidence.sh` 专项采集） | 推荐 | 记入 `perf_missing`，内存带宽代理证据缺失 |
+| `numastat` | NUMA 远端缺失率（`collect_memory_evidence.sh` 专项采集） | 推荐 | 记入 `numastat_missing`，NUMA 判定证据缺失 |
 
 ### `compiler-optimization`
 

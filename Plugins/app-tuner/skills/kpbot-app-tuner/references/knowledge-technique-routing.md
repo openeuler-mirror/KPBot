@@ -13,6 +13,7 @@
 | L2 Application Config: MySQL/PostgreSQL/Flink/Async/Tokenizer/Prefix Cache | 应用内部状态能解释瓶颈 | `application-config-optimization`，按需 `database-workload-analysis` |
 | L2 Application Config: Ceph（OS 系统层参数、ceph.conf、PG 分布/balancer、OSD 绑核） | 场景为 Ceph 存储集群或瓶颈归因于 OSD/存储集群 | `ceph-optimization`，按需 `network-optimization`、`cpu-affinity-optimization`、`bios-optimization` |
 | L3 Performance Libraries: libc string、BiSheng Stringlibs、jemalloc、tcmalloc、KQMalloc | 热点落在 malloc/free、memcpy/memset/string、allocator 或高性能库可替换 | `performance-library-selection`，按需 `compiler-optimization` |
+| L3+ Hardware Accelerator: UADK/UACCE（鲲鹏 SEC/HPRE/ZIP）、libwd、uadk_engine | 热点函数命中 AES/SM4/DES/SM3/SHAx/MD5/HMAC/RSA/DH 或 gzip/zlib 压缩 | `uadk-accelerator-optimization`，按需 `performance-library-selection` |
 | L4 Compiler: Architecture Flags、CRC and LSE、GCC/LLVM/BiSheng、PGO、LTO、Function Alignment、Loop Vectorization、MySQL Patch | 编译选项、代码生成、profile-guided、平台编译器或源码补丁相关 | `compiler-optimization` |
 | L3/L4 Go Runtime: sync.Pool 保留与预分配、GODEBUG=poolretain/poolprealloc、Go runtime 补丁重编译 | Go 微服务 GC 频繁、堆内存颠簸、Pool 两代缓存被清空、允许重编译 runtime | `microservice-go-syncpool-optimization` |
 | L5 Source Code: Zero Copy and Batching、Data Structure Alignment/Slimming、Operator Fusion、Scheduling、Deep Copy to Shallow Copy | 热点需要源码/算法/数据结构配套，不是单纯系统参数 | `other-optimization`，按需 `application-config-optimization` 或 `compiler-optimization` |
@@ -34,6 +35,7 @@
 | Frontend Bound、I-cache/ITLB、branch miss | L4 Function Alignment、PGO、LTO、LLVM Compiler |
 | 原子/锁热点、LL/SC 重试、mutex 扩展差 | L4 CRC and LSE Instructions、Architecture Flags |
 | CRC/checksum 软件热点 | L4 CRC and LSE Instructions、Architecture Flags、MySQL Patch Optimization |
+| AES/SM4/DES/SM3/SHA/MD5/HMAC/RSA/DH/deflate/inflate 算法热点 | UADK 硬件加速卸载（uadk-accelerator-optimization）、L3 isa-l_crypto/ISA-L 库替换 |
 | malloc/free、内存分配锁 | L3 jemalloc、tcmalloc、KQMalloc |
 | memcpy/memset/string 热点 | L3 libc Memory String Functions、BiSheng Stringlibs |
 | softirq/NAPI/netfilter/TCP 热点 | L1 Network Parameter Tuning |

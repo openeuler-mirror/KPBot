@@ -1,0 +1,306 @@
+diff --git a/CubeMaster/pkg/templatecenter/artifact_lifecycle.go b/CubeMaster/pkg/templatecenter/artifact_lifecycle.go
+index 2f5e5e7..1381479 100644
+--- a/CubeMaster/pkg/templatecenter/artifact_lifecycle.go
++++ b/CubeMaster/pkg/templatecenter/artifact_lifecycle.go
+@@ -178,6 +178,10 @@ func cleanupArtifactFully(ctx context.Context, artifactID, instanceType, exclude
+ 	}); err != nil {
+ 		return err
+ 	}
++	if excludeTemplateID != "" {
++		// The transaction above can delete replica metadata before physical cleanup.
++		invalidateReadyReplicaTTL()
++	}
+ 	if !proceed {
+ 		return nil
+ 	}
+diff --git a/CubeMaster/pkg/templatecenter/cache.go b/CubeMaster/pkg/templatecenter/cache.go
+index 08052a8..2c7ea75 100644
+--- a/CubeMaster/pkg/templatecenter/cache.go
++++ b/CubeMaster/pkg/templatecenter/cache.go
+@@ -217,6 +217,7 @@ func invalidateTemplateCaches(templateID string) {
+ 	if templateID == "" {
+ 		return
+ 	}
++	invalidateReadyReplicaTTL()
+ 	templateDefinitionCache.Delete(templateID)
+ 	templateLocalityReadyCache.Delete(templateID)
+ 	templateKindCache.Delete(templateID)
+diff --git a/CubeMaster/pkg/templatecenter/compat.go b/CubeMaster/pkg/templatecenter/compat.go
+index 57d2033..c911937 100644
+--- a/CubeMaster/pkg/templatecenter/compat.go
++++ b/CubeMaster/pkg/templatecenter/compat.go
+@@ -111,18 +111,18 @@ func ScanNodeCompat(ctx context.Context, nodeID string) error {
+ 
+ func updateReplicaCompat(ctx context.Context, templateID, nodeID, status string) error {
+ 	now := time.Now()
+-	return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++	return finishReadyReplicaWrite(store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+ 		Where("template_id = ? AND node_id = ? AND status = ?", templateID, nodeID, ReplicaStatusReady).
+ 		Updates(map[string]any{
+ 			"compat_status":       normalizeCompatStatus(status),
+ 			"compat_checked_unix": now.Unix(),
+ 			"updated_at":          now,
+-		}).Error
++		}).Error)
+ }
+ 
+ func updateReplicaCompatBaseline(ctx context.Context, templateID, nodeID string, current map[string]string) error {
+ 	now := time.Now()
+-	return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++	return finishReadyReplicaWrite(store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+ 		Where("template_id = ? AND node_id = ? AND status = ? AND compat_status = ?", templateID, nodeID, ReplicaStatusReady, CompatStatusUnknown).
+ 		Updates(map[string]any{
+ 			"guest_image_version": current[compatComponentGuestImage],
+@@ -131,7 +131,7 @@ func updateReplicaCompatBaseline(ctx context.Context, templateID, nodeID string,
+ 			"compat_status":       CompatStatusOK,
+ 			"compat_checked_unix": now.Unix(),
+ 			"updated_at":          now,
+-		}).Error
++		}).Error)
+ }
+ 
+ func evictReplicaFromSchedulingCaches(templateID, nodeID string) {
+diff --git a/CubeMaster/pkg/templatecenter/delete.go b/CubeMaster/pkg/templatecenter/delete.go
+index 11a2d31..5d04daf 100644
+--- a/CubeMaster/pkg/templatecenter/delete.go
++++ b/CubeMaster/pkg/templatecenter/delete.go
+@@ -380,8 +380,8 @@ func (t *templateCleanupTargets) shouldCheckInUse() bool {
+ 
+ func cleanupTemplateMetadata(ctx context.Context, templateID string) error {
+ 	var cleanupErr error
+-	if err := store.db.WithContext(ctx).Unscoped().Table(constants.TemplateReplicaTableName).
+-		Where("template_id = ?", templateID).Delete(&models.TemplateReplica{}).Error; err != nil {
++	if err := finishReadyReplicaWrite(store.db.WithContext(ctx).Unscoped().Table(constants.TemplateReplicaTableName).
++		Where("template_id = ?", templateID).Delete(&models.TemplateReplica{}).Error); err != nil {
+ 		cleanupErr = errors.Join(cleanupErr, err)
+ 	}
+ 	if err := store.db.WithContext(ctx).Unscoped().Table(constants.TemplateDefinitionTableName).
+diff --git a/CubeMaster/pkg/templatecenter/ready_replica_ttl.go b/CubeMaster/pkg/templatecenter/ready_replica_ttl.go
+new file mode 100644
+index 0000000..abb350a
+--- /dev/null
++++ b/CubeMaster/pkg/templatecenter/ready_replica_ttl.go
+@@ -0,0 +1,160 @@
++// SPDX-License-Identifier: Apache-2.0
++
++package templatecenter
++
++import (
++	"context"
++	"os"
++	"strings"
++	"sync"
++	"time"
++)
++
++const (
++	readyReplicaTTL     = time.Second
++	readyReplicaTTLKeys = 128
++	readyReplicaTTLRows = 64
++)
++
++var (
++	readyReplicaTTLEnabled = os.Getenv("CUBEMASTER_READY_REPLICA_TTL") == "1"
++	readyReplicaCache      = readyReplicaTTLCache{now: time.Now}
++)
++
++func resolveCachedReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
++	replicas, err := readyReplicaCache.load(ctx, templateID, readReplicaMetadata)
++	if err != nil {
++		return ReplicaStatus{}, err
++	}
++	preferredNodeID = strings.TrimSpace(preferredNodeID)
++	for _, replica := range replicas {
++		if !isReplicaSchedulableNow(ctx, replica) {
++			continue
++		}
++		if preferredNodeID == "" || strings.TrimSpace(replica.NodeID) == preferredNodeID {
++			return replica, nil
++		}
++	}
++	return ReplicaStatus{}, ErrTemplateHasNoReadyReplica
++}
++
++func readReplicaMetadata(ctx context.Context, templateID string) ([]ReplicaStatus, error) {
++	rows, err := ListReplicas(ctx, templateID)
++	if err != nil {
++		return nil, err
++	}
++	metadata := make([]ReplicaStatus, 0, len(rows))
++	for _, row := range rows {
++		metadata = append(metadata, replicaModelToStatus(row))
++	}
++	return metadata, nil
++}
++
++type readyReplicaTTLEntry struct {
++	rows      []ReplicaStatus
++	expiresAt time.Time
++}
++
++// A process-wide epoch fences reads across committed local replica writes.
++// Slices hold ordered, value-only metadata and are read-only after publication.
++type readyReplicaTTLCache struct {
++	mu      sync.Mutex
++	epoch   uint64
++	entries map[string]readyReplicaTTLEntry
++	now     func() time.Time
++}
++
++func (c *readyReplicaTTLCache) load(ctx context.Context, templateID string,
++	query func(context.Context, string) ([]ReplicaStatus, error),
++) ([]ReplicaStatus, error) {
++	for attempt := 0; ; attempt++ {
++		if err := ctx.Err(); err != nil {
++			return nil, err
++		}
++		c.mu.Lock()
++		started := c.now()
++		epoch := c.epoch
++		if row, ok := c.entries[templateID]; ok && started.Before(row.expiresAt) {
++			c.mu.Unlock()
++			return row.rows, nil
++		}
++		delete(c.entries, templateID)
++		c.mu.Unlock()
++
++		// Each miss reads independently. The lock is never held across SQL.
++		rows, err := query(ctx, templateID)
++		if err != nil {
++			return nil, err
++		}
++		if err := ctx.Err(); err != nil {
++			return nil, err
++		}
++		cacheable := len(rows) <= readyReplicaTTLRows && containsReadyReplica(rows)
++		c.mu.Lock()
++		if epoch != c.epoch {
++			c.mu.Unlock()
++			if attempt == 1 {
++				// Frequent writes should degrade to the original direct read.
++				return query(ctx, templateID)
++			}
++			continue
++		}
++		if cacheable {
++			c.publish(templateID, started.Add(readyReplicaTTL), rows)
++		}
++		c.mu.Unlock()
++		return rows, nil
++	}
++}
++
++// publish runs under mu. The TTL starts at query entry to avoid renewing the
++// lifetime of data from a slow query. Keep a valid entry from another miss.
++func (c *readyReplicaTTLCache) publish(key string, expiresAt time.Time, rows []ReplicaStatus) {
++	now := c.now()
++	if !now.Before(expiresAt) {
++		return
++	}
++	if entry, ok := c.entries[key]; ok && now.Before(entry.expiresAt) {
++		return
++	}
++	if len(c.entries) >= readyReplicaTTLKeys {
++		for key, entry := range c.entries {
++			if !now.Before(entry.expiresAt) {
++				delete(c.entries, key)
++			}
++		}
++		if len(c.entries) >= readyReplicaTTLKeys {
++			return
++		}
++	}
++	if c.entries == nil {
++		c.entries = make(map[string]readyReplicaTTLEntry)
++	}
++	c.entries[key] = readyReplicaTTLEntry{rows: rows, expiresAt: expiresAt}
++}
++
++func containsReadyReplica(rows []ReplicaStatus) bool {
++	for _, row := range rows {
++		if strings.TrimSpace(row.Status) == ReplicaStatusReady {
++			return true
++		}
++	}
++	return false
++}
++
++func invalidateReadyReplicaTTL() {
++	if !readyReplicaTTLEnabled {
++		return
++	}
++	readyReplicaCache.mu.Lock()
++	readyReplicaCache.epoch++
++	readyReplicaCache.entries = nil
++	readyReplicaCache.mu.Unlock()
++}
++
++func finishReadyReplicaWrite(err error) error {
++	if err == nil {
++		invalidateReadyReplicaTTL()
++	}
++	return err
++}
+diff --git a/CubeMaster/pkg/templatecenter/replica_cleanup_reconciler.go b/CubeMaster/pkg/templatecenter/replica_cleanup_reconciler.go
+index 6b0e46e..c2fc5bb 100644
+--- a/CubeMaster/pkg/templatecenter/replica_cleanup_reconciler.go
++++ b/CubeMaster/pkg/templatecenter/replica_cleanup_reconciler.go
+@@ -60,10 +60,10 @@ var (
+ 		return rows, err
+ 	}
+ 	deleteReplicaRowByID = func(ctx context.Context, id uint) error {
+-		return store.db.WithContext(ctx).Unscoped().
++		return finishReadyReplicaWrite(store.db.WithContext(ctx).Unscoped().
+ 			Table(constants.TemplateReplicaTableName).
+ 			Where("id = ?", id).
+-			Delete(nil).Error
++			Delete(nil).Error)
+ 	}
+ 	// cleanupOrphanReplicaOnNode retries the cubelet cleanup for one locator.
+ 	// It goes through cleanupTemplateReplicasWithLocators (single-element
+diff --git a/CubeMaster/pkg/templatecenter/snapshot_ops.go b/CubeMaster/pkg/templatecenter/snapshot_ops.go
+index 056c31b..ba3fa36 100644
+--- a/CubeMaster/pkg/templatecenter/snapshot_ops.go
++++ b/CubeMaster/pkg/templatecenter/snapshot_ops.go
+@@ -1108,8 +1108,8 @@ func updateDefinitionFields(ctx context.Context, templateID string, values map[s
+ }
+ 
+ func deleteReplicasByTemplateID(ctx context.Context, templateID string) error {
+-	return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+-		Where("template_id = ?", templateID).Delete(&models.TemplateReplica{}).Error
++	return finishReadyReplicaWrite(store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++		Where("template_id = ?", templateID).Delete(&models.TemplateReplica{}).Error)
+ }
+ 
+ func deleteSnapshotMetadataOnly(ctx context.Context, snapshotID string) error {
+diff --git a/CubeMaster/pkg/templatecenter/store.go b/CubeMaster/pkg/templatecenter/store.go
+index 31312a3..a0415d8 100644
+--- a/CubeMaster/pkg/templatecenter/store.go
++++ b/CubeMaster/pkg/templatecenter/store.go
+@@ -1982,12 +1982,12 @@ func UpsertReplica(ctx context.Context, templateID, instanceType string, replica
+ 		if !errors.Is(err, gorm.ErrRecordNotFound) {
+ 			return err
+ 		}
+-		return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+-			Create(replicaStatusToModel(templateID, instanceType, replica)).Error
++		return finishReadyReplicaWrite(store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++			Create(replicaStatusToModel(templateID, instanceType, replica)).Error)
+ 	}
+-	return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++	return finishReadyReplicaWrite(store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+ 		Where("template_id = ? AND node_id = ?", templateID, replica.NodeID).
+-		Updates(replicaStatusUpdateFields(instanceType, replica)).Error
++		Updates(replicaStatusUpdateFields(instanceType, replica)).Error)
+ }
+ 
+ func EnsureReadyReplica(ctx context.Context, templateID string) error {
+@@ -2007,6 +2007,9 @@ func EnsureReadyReplica(ctx context.Context, templateID string) error {
+ }
+ 
+ func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
++	if readyReplicaTTLEnabled && isReady() {
++		return resolveCachedReadyReplica(ctx, templateID, preferredNodeID)
++	}
+ 	replicas, err := ListReplicas(ctx, templateID)
+ 	if err != nil {
+ 		return ReplicaStatus{}, err

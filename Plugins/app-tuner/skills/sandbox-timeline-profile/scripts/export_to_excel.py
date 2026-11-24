@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Convert CubeSandbox V2 profiling results to Excel.
+"""Lightweight compatibility exporter for existing CubeSandbox analysis results.
+
+This exporter never invokes the analyzer and does not create charts. Use
+sandbox-profile-report for the complete multi-sheet/PNG report contract.
 
 Usage:
     python export_to_excel.py <analysis.json> [<stage-latency.csv>] [output.xlsx]
@@ -101,5 +104,6 @@ for path, cnt in cd.get("path_counts", {}).items():
 for metric, value in items:
     ws2.append([metric, value])
 
+output_path.parent.mkdir(parents=True, exist_ok=True)
 wb.save(output_path)
-print(f"Saved: {output_path}  ({len(rows)} stage rows)")
+print(f"Saved: {output_path}  ({len(rows)} stage rows; existing analysis reused)")
