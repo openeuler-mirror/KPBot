@@ -32,10 +32,13 @@
 ssh -o BatchMode=yes <devenv-alias> '<命令>'
 ```
 
-引号规则（违反必出诡异 bug，详见 pitfalls #1-#3）：
+引号规则（违反必出诡异 bug，详见 pitfalls #1-#3；与 SKILL.md 同口径）：
 
-- 远程命令**值**一律单引号；外层 PowerShell 双引号包整条
-- 远程命令本身含单引号：`'\''` 转义，或转脚本文件
+- 外层 PowerShell **一律用单引号**包整条 ssh 命令；远程命令内部需要
+  shell 引号的**值**也一律用单引号；**外层禁止双引号**（触发本地插值）
+- 单引号串中需要嵌入单引号时用 PowerShell 的 `''` 双写转义（**不是**
+  POSIX bash 的"反斜杠续接三引号"写法——那在 PowerShell 中是反斜杠加
+  悬空引号，直接语法错误）
 - **复杂脚本铁律**：本地写 → scp → 远端 `bash xxx.sh`，永远不要内联
 
 ### 文件传输
@@ -92,33 +95,41 @@ remote_tool.sh exec -v \
 ### 4.3 直接开机（预热）
 
 ```bash
-python3 <devenv-api.py 平台预置路径> ensure-on \
+python3 <devenv_api.py 平台预置路径> ensure-on \
   --npu-id <npu-id> --cpu-id <cpu-id> \
   --token $(cat <token-file>) \
   --api-base https://dev.gitcode.com/api/v1/proxy
 ```
 
 - 输出 `pod_ip=... boot_triggered=true` 表示成功；实测 40s~5min
+- **凭据暴露提示**：`--token`（`$(cat ...)` 展开后）把令牌写进 python
+  进程 argv——同 Pod 其他账号经 `ps` 可见明文。平台工具支持文件/stdin
+  传递时优先之；多账号 Pod 建议跳过本节，用 remote_tool.sh exec 触发
+  开机（其链路自行读取预置凭据）
 - 不配公钥/不同步/不写缓存——都由后续 exec 自动补齐
 - 开机后用 `remote_tool.sh check` 确认 SSH 就绪
 - 家族：`start`（只发请求）/ `npu-status`（只查）/ `wait-running`（只等）
 
 ## 5. 长任务模式（超过 exec 超时的任务）
 
+`pgrep -f` 按进程名模糊匹配——无法区分本次任务与同机其他训练，也不
+区分成功与崩溃。用 **PID + 退出码文件**锚定本次运行：
+
 ```bash
-# 1) 启动（CPU 上）
-remote_tool.sh exec --command 'cd /mnt/workspace && nohup python3 train.py > train.log 2>&1 & echo started'
+# 1) 启动（CPU 上）：保存 PID 与退出码
+remote_tool.sh exec --command 'cd /mnt/workspace && nohup bash -c "python3.12 train.py > train.log 2>&1; echo \$? > train.exit" & echo $! > train.pid && echo started'
 
-# 2) 轮询（不刷执行记录、不同步、保活）
-remote_tool.sh exec --no-sync --command 'tail -20 /mnt/workspace/train.log; pgrep -f train.py'
+# 2) 轮询（不刷执行记录、不同步、保活）：看日志 + PID 存活 + 退出码
+remote_tool.sh exec --no-sync --command 'tail -20 /mnt/workspace/train.log; pid=$(cat /mnt/workspace/train.pid 2>/dev/null); if [ -n "$pid" ] && kill -0 $pid 2>/dev/null; then echo RUNNING; else echo DONE exit=$(cat /mnt/workspace/train.exit 2>/dev/null); fi'
 
-# 3) 结束后回收
-remote_tool.sh pull '/mnt/workspace/train.log,/mnt/workspace/output'
+# 3) 结束后按 train.exit 判定成功/崩溃，再回收
+remote_tool.sh pull '/mnt/workspace/train.log,/mnt/workspace/train.exit,/mnt/workspace/output'
 ```
 
 要点：
 
-- 启动后立即返回（nohup + &），长跑交给后台
+- 启动后立即返回（nohup + &）；`$!` 写 PID 文件、内层 `\$?` 写退出码
+  文件——回收与否以 `train.exit` 为准，不以"进程消失"为准
 - 轮询一律 `--no-sync`——正向同步会 unlink 任务正在写的日志
 - NPU 有"最后使用时间"探活（`/tmp/npu_last_use_time`），纯 sleep 的长间隔
   轮询本身也是保活；间隔过长（小时级）需注意可能被自动关机
@@ -147,7 +158,7 @@ remote_tool.sh pull '/mnt/workspace/train.log,/mnt/workspace/output'
 ```bash
 # 标准 Python 环境（exec 时自动 source /etc/profile 和 ~/.bashrc）
 source ~/Ascend/ascend-toolkit/set_env.sh
-TILE_FWK_DEVICE_ID=0
+export TILE_FWK_DEVICE_ID=0        # 必须 export——单独赋值传不到下一行启动的 python
 # 构建版解释器（镜像预置，路径见环境文档；非系统 python）：
 python3.12
 ```

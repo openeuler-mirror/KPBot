@@ -58,8 +58,10 @@
 - **症状**：`pip install` 报 "Requirement already satisfied" 却没真装 /
   sdist 装完没有可执行文件 / 镜像源不对
 - **根因**：① `~/.local` 残缺包（实测有无二进制的 ninja），`--system-site-
-  packages` venv 里永远"已满足"；② pip 26.x 不再安装 sdist 的 data_files
-  scripts；③ `-i` 镜像参数被环境里的 huaweicloud 镜像配置盖掉
+  packages` venv 里永远"已满足"；② 实测环境里 pip 26.x 装 sdist 未产出
+  data_files scripts——按实测行为规避（pip 官方 NEWS 未见对应移除
+  记录，升级 pip 后可复测）；③ `-i` 镜像参数被环境里的 huaweicloud
+  镜像配置盖掉
 - **解法**：`--ignore-installed` 真装；`--only-binary :all:` 强制 wheel；
   以日志 "Looking in indexes" 行为准确认实际源
 
@@ -97,7 +99,10 @@
   `/usr/lib64/aicpu_kernels/0/aicpu_kernels_device/<pid>_<devid>/` 写运行时
   SO）初始化失败
 - **根因**：真机由驱动包创建，Pod 里缺失
-- **解法**：`sudo -n mkdir -p` + `chmod 777` 建出来（同样写进环境脚本）
+- **解法**：`sudo -n mkdir -p` 建出后，把**写权限收敛给实际运行账号**
+  （`sudo -n chown <运行账号> <目录>` 或按运行组建组 `chmod 2770`），
+  并以运行身份验证"能创建、能加载"。**不要 chmod 777**——同 Pod 的
+  其他账号将可改动目录项，运行时加载路径即被污染（同样写进环境脚本）
 
 ### 11. warmup 报 21008/507018/ERR99999 的两种根因要分清【特定栈】
 
@@ -139,10 +144,12 @@
 ### 15. PowerShell 管道/传参的 GBK 编码坑（中文变 mojibake）【通用】
 
 - **症状**：`git commit -m '中文...'` 或 `git log | Out-File` 后，中文
-  变成"鍒嗚璁"类 mojibake（UTF-8 字节被按 GBK 解读再重新编码）
+  变成 mojibake——如"分支"变成 `鍒嗘敮`、"规则"变成 `瑙勫垯`
+  （UTF-8 字节被按 GBK 解读再重新编码）
 - **根因**：Windows PowerShell 5.1 向原生命令传参按系统 ANSI（GBK）编码；
   管道读取原生命令输出同样按 GBK 解码——两次转换把 UTF-8 中文固化成
   合法但错误的字符，且**不可从外观一眼分辨**
 - **解法**：含中文的内容**不经 PowerShell 管道**——写入 UTF-8 文件后用
   `git commit -F <file>`；读取用工具直接按字节处理。mojibake 可逆：
-  按 GBK 编码回字节再按 UTF-8 解码即得原文（双重 mojibake 做两次）
+  按 GBK 编码回字节再按 UTF-8 解码即得原文（如 `鍒嗘敮` →
+  bytes `e5 88 86 e6 94 af` → "分支"；双重 mojibake 做两次）

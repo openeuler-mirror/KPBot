@@ -18,7 +18,7 @@ metadata:
   skill_type: tool_assisted
   category: environment
   domain: cannlab_remote_ops
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # kptools-cannlab-env — cannlab 分设环境连接与远程调试
@@ -68,13 +68,15 @@ ssh -o BatchMode=yes <devenv-alias> '<命令>'
 
 ⚠️ **Windows 引号大坑（最重要的一条）**：PowerShell 传给 ssh 的远程命令中
 **双引号会被吞掉**（远程收到时已丢失，参数解析错乱）；且 PowerShell
-**双引号字符串会本地插值**（`$(...)`、`?`、`$HOME` 在本地被求值后才发
-出去，见 pitfalls #2）。规则（一条铁律 + 三个推论）：
+**双引号字符串会本地插值**（`$(...)`、`$?`、`$HOME` 在本地被求值后才发
+出，见 pitfalls #2）。规则（一条铁律 + 三个推论）：
 
 1. 外层 PowerShell **一律用单引号**包裹整条 ssh 命令；远程命令内部需要
    shell 引号的值也一律用单引号
-2. **外层禁止用双引号**——双引号触发本地插值；含 `$` 的命令一律走
-   脚本文件
+2. **外层禁止用双引号**——双引号触发本地插值（`$(...)`、`$?`、`$HOME`
+   都会在本地被求值）。需要**远端求值**的 `$`（如 ensure-on 的
+   `$(cat <token-file>)`）保持整条命令在外层单引号里即可安全到达远端；
+   需要**字面 `$`** 或嵌套复杂内容时走脚本文件（见 pitfalls #2）
 3. 单引号串中需要嵌入单引号时，用 PowerShell 的 `''` 双写转义
    （**不是** POSIX bash 的"反斜杠续接三引号"写法——那在 PowerShell 中
    会解析成反斜杠 + 悬空引号，直接语法错误）
@@ -104,17 +106,17 @@ remote_tool.sh <子命令>
 | `config` | 输出连接参数 HOST/PORT/USER/IDENTITY（**不触发开机**） |
 | `shutdown` | 主动关机 NPU |
 
-完整示例（在 CPU 容器上）：
+完整示例（在 CPU 容器上；NPU 层用构建版解释器 `python3.12`，非系统 python）：
 
 ```bash
-remote_tool.sh exec -v --command 'cd /mnt/workspace && python3 run.py' \
+remote_tool.sh exec -v --command 'cd /mnt/workspace && python3.12 run.py' \
   --pull-dir '/mnt/workspace/output'
 ```
 
 ### 单独开机（预热，不执行任务）
 
 ```bash
-python3 <devenv-api.py 平台预置路径> ensure-on \
+python3 <devenv_api.py 平台预置路径> ensure-on \
   --npu-id <npu-id> --cpu-id <cpu-id> \
   --token $(cat <token-file>) \
   --api-base https://dev.gitcode.com/api/v1/proxy
@@ -122,11 +124,17 @@ python3 <devenv-api.py 平台预置路径> ensure-on \
 
 - `devenv_api.py`（ensure-on 的实现）与 token 文件均为 devenv 平台预置，
   具体路径见平台环境文档——本 skill 不硬编码机器内路径
+- **凭据暴露提示**：`--token <值>` 形式（`$(cat ...)` 展开后）会把令牌
+  写进 python 进程的命令行参数——同 Pod 的其他账号经 `ps` 能看到明文。
+  平台工具若支持文件/标准输入传递（如 `--token-file`）优先之；只支持
+  `--token` 时单账号 Pod 可接受，多账号环境建议跳过 ensure-on，直接用
+  `remote_tool.sh exec` 触发开机（其开机链路自行读取预置凭据，不经 argv）
 - `ensure-on`：开机 → 轮询直到 RUNNING（约 40s~5min）→ 输出 `pod_ip` 与
   `boot_triggered=true`；**不配置公钥、不做同步、不写缓存**——后续任何
   `remote_tool.sh exec` 会自动补齐
 - 附属：`start`（仅发开机请求不轮询）/ `npu-status` / `wait-running`（只查/只等）
-- 整条命令放在 PowerShell **单引号**里传给 ssh，`$(cat ...)` 由远端求值
+- 整条命令放在 PowerShell **单引号**里传给 ssh，`$(cat <token-file>)` 类
+  远端求值由远端 bash 完成（单引号内不会被本地插值）
 
 ## 退出码契约
 
@@ -155,9 +163,12 @@ remote_tool.sh / exec 的退出码是排障的第一入口，**先看码再决�
    - NPU 上产生的产出物**当次就用 `--pull-dir` 拉回 CPU**，不要指望下次还在
    - NPU 上临时文件放 /mnt/workspace 之外也逃不过定时清理
    - NPU 上有任务在跑时**不要做同步 exec**（正在写的日志会被 unlink）
-3. **长任务模式**：`nohup ... > log 2>&1 &` 后台启动 → 用 `--no-sync` 的 exec
-   轮询 `tail` 日志/查进程 → 结束后 pull 日志与产出。注意 NPU 有"最后使用
-   时间"探活，长时间无活动可能被自动关机
+3. **长任务模式**：`nohup ... > log 2>&1 &` 后台启动并**保存 PID 与退出码
+   文件**（`echo $! > run.pid` / 内层 `echo $? > run.exit`——按进程名
+   `pgrep -f` 模糊匹配无法区分本次任务与同机其他训练，也不区分成功与
+   崩溃）→ 用 `--no-sync` 的 exec 轮询日志/PID 存活/退出码 → 按
+   `run.exit` 判定成功后回收产出。注意 NPU 有"最后使用时间"探活，长
+   时间无活动可能被自动关机
 4. **探活/查活**：`remote_tool.sh exec --no-sync --command 'cat /tmp/npu_last_use_time'`
    ——保活且不刷执行记录
 5. **节约资源**：任务全部完成后主动 `remote_tool.sh shutdown`（CPU 容器不用关）
@@ -168,7 +179,9 @@ remote_tool.sh / exec 的退出码是排障的第一入口，**先看码再决�
 - CANN：9.2.0（用户目录下 `~/Ascend/`（CANN 官方惯例路径），从 CPU 同步）
 - Python：镜像预置的构建版 Python 3.12（**非系统 python**，路径见环境
   文档；自带 torch/torch_npu CPU 版、safetensors、pydantic、httpx、tokenizers）
-- 标准环境：`source ~/Ascend/ascend-toolkit/set_env.sh; TILE_FWK_DEVICE_ID=0`
+- 标准环境：`source ~/Ascend/ascend-toolkit/set_env.sh; export TILE_FWK_DEVICE_ID=0`
+  （**必须 export**——单独赋值只对当前 shell 内置命令生效，传不到下一行
+  启动的 python 进程）
 - ⚠️ **绝不要把 CPU 层预置的 pyfix312 兼容目录加进 NPU 构建版 python 的
   PYTHONPATH**——它会 shadow 标准库 C 扩展，pypto/torch/numpy 全部
   SIGSEGV（rc=139）。pyfix312 只给 **CPU 容器的系统 python 3.12** 用
@@ -218,4 +231,4 @@ remote_tool.sh / exec 的退出码是排障的第一入口，**先看码再决�
 ## 参考资料
 
 - [cannlab 操作指南](references/cannlab-ops-guide.md) — 开机/同步/长任务/文件生命周期/收尾的逐步详解
-- [踩坑实录](references/pitfalls.md) — 引号传递/Python 环境/同步/NPU 系统层四类实战坑（含每条的"症状→根因→解法"）
+- [踩坑实录](references/pitfalls.md) — 五组 15 条实战坑：引号与命令传递/文件与脚本/Python 环境/同步与文件生命周期/NPU Pod 系统层（含每条的"症状→根因→解法"）

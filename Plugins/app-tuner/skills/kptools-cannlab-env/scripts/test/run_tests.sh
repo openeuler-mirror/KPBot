@@ -60,12 +60,29 @@ if grep -qF "'''\\''" "$SK" 2>/dev/null || grep -qE "'\\\\''" "$SK"; then
 else
   ok "T5f-4 POSIX '\\'' 转义已移除"
 fi
-check_in "T5f-5 ops-guide 同口径" "一律单引号" "$OPS"
+check_in "T5f-5 ops-guide 同口径" "一律用单引号" "$OPS"
 
 # ============================================================ T5g 路由真实存在（检视意见 #2 修复）
-for r in "kptools-ascend-profiling-analysis" "kptools-ascend-smi" "kptools-os-collector"; do
+# 引号内含 grep 自身会匹配的文本——先提取路由名，再验证目标 skill 目录
+# 在本仓 skills/ 下真实存在（幽灵 skill 换名即红，不靠 SKILL.md 自证）。
+# 独立目录运行（skill 目录单独拷走、兄弟 skill 不可见）时跳过存在性部分。
+SKILLS_ROOT="$(cd "$SKILL_DIR/.." && pwd)"
+_n_siblings=$(ls "$SKILLS_ROOT" 2>/dev/null | wc -l | tr -d ' ')
+_route_targets="kptools-ascend-profiling-analysis kptools-ascend-smi kptools-os-collector kptools-openeuler-agentenv"
+for r in $_route_targets; do
   check_in "T5g 路由存在 [$r]" "$r" "$SK"
 done
+if [ "$_n_siblings" -lt 5 ]; then
+  skip "T5g-2 独立目录运行（skills/ 下兄弟 skill 不可见），跳过路由目标存在性校验"
+else
+  for r in $_route_targets; do
+    if [ -d "$SKILLS_ROOT/$r" ]; then
+      ok "T5g-2 路由目标真实存在 [$r]"
+    else
+      bad "T5g-2 路由目标是幽灵 skill [$r]"
+    fi
+  done
+fi
 for ghost in "tool-perf-collect" "tool-perf-analysis" "train-metrics"; do
   if grep -qF "$ghost" "$SK" "$(dirname "$SK")/evals/eval_queries.json" 2>/dev/null; then
     bad "T5g 幽灵 skill 仍被引用: $ghost"
@@ -94,10 +111,10 @@ done
 
 # ============================================================ T7 pitfalls 分组与条目数
 n=$(grep -c '^### ' "$PIT")
-if [ "$n" -ge 14 ]; then
-  ok "T7a pitfalls 条目数 $n >= 14"
+if [ "$n" -eq 15 ]; then
+  ok "T7a pitfalls 条目数精确 = 15（与 SKILL.md/README 口径一致）"
 else
-  bad "T7a pitfalls 条目不足: $n"
+  bad "T7a pitfalls 条目数 $n != 15（三处规模画像须同步）"
 fi
 for g in "一、引号与命令传递" "二、文件与脚本" "三、Python 环境" \
          "四、同步与文件生命周期" "五、NPU Pod 系统层"; do
@@ -115,6 +132,70 @@ if grep -qF -- "--command '" "$SK" && grep -qF -- "--pull-dir '" "$OPS"; then
 else
   bad "T9 示例引号模式缺失"
 fi
+
+# ============================================================ T11 第二轮检视意见（口径一致性）
+# T11b ops-guide 引号规则与 SKILL.md 同口径（外层一律单引号/禁双引号；
+# 文档描述用文字而非字面 POSIX 转义序列——字面量会被 grep 误判为残留指令）
+check_in "T11a ops-guide 外层一律单引号" "一律用单引号" "$OPS"
+if grep -qF "外层 PowerShell 双引号包整条" "$OPS" || grep -qF "'\''" "$OPS"; then
+  bad "T11b ops-guide 残留旧引号口径（双引号包整条/POSIX 转义）"
+else
+  ok "T11b ops-guide 无旧引号口径残留"
+fi
+# T11c 插值变量列表口径（$? 而非裸 ?）
+if grep -qF '`$(...)`、`$?`、`$HOME`' "$SK"; then
+  ok "T11c SKILL.md 插值变量三件套完整（\$(...)/\$?/\$HOME）"
+else
+  bad "T11c SKILL.md 插值变量列表不完整"
+fi
+if grep -qF '`?`' "$SK"; then
+  bad "T11c-2 插值列表残留裸 ?（缺 \$）"
+else
+  ok "T11c-2 无裸 ? 残留"
+fi
+# T11d NPU 层示例用构建版 python3.12（非裸 python3）
+if grep -qF 'python3.12 run.py' "$SK" && grep -qF 'python3.12 train.py' "$OPS"; then
+  ok "T11d NPU 层示例用 python3.12（与配方一致）"
+else
+  bad "T11d NPU 层示例裸 python3 与配方冲突"
+fi
+# T11e 平台工具拼写统一（devenv_api.py，无连字符变体）
+if grep -qF "devenv-api.py" "$SK" "$OPS" "$PIT" 2>/dev/null; then
+  bad "T11e 拼写残留 devenv-api.py"
+else
+  ok "T11e 平台工具拼写统一为 devenv_api.py"
+fi
+# T11f 长任务 PID/退出码文件模式（不再依赖 pgrep -f）
+check_in "T11f-1 长任务保存 PID 文件" "train.pid" "$OPS"
+check_in "T11f-2 长任务保存退出码文件" "train.exit" "$OPS"
+if grep -qF "pgrep -f train.py" "$OPS" || grep -qF "pgrep -f train.py" "$SK"; then
+  bad "T11f-3 长任务轮询仍用 pgrep -f（无法区分任务/成功失败）"
+else
+  ok "T11f-3 长任务轮询不再依赖 pgrep -f"
+fi
+# T11g TILE_FWK_DEVICE_ID 必须 export
+check_in "T11g TILE_FWK_DEVICE_ID export" "export TILE_FWK_DEVICE_ID=0" "$SK"
+# T11h 凭据 argv 暴露提示（--token 形式的 ps 可见性）
+check_in "T11h token argv 暴露提示" "ps" "$SK"
+check_in "T11h-2 凭据传递替代方案" "不经 argv" "$SK"
+# T11i 规模画像一致（SKILL.md 五组 15 条）
+check_in "T11i SKILL.md 五组 15 条口径" "五组 15 条" "$SK"
+# T11j AICPU 目录权限（旧解法 777 不得再作为指令出现；警示性提及允许）
+if grep -qF "chmod 777\` 建出来" "$PIT" || grep -qE '\+ \`chmod 777\`' "$PIT"; then
+  bad "T11j AICPU 目录解法仍是 chmod 777（指令形态）"
+else
+  ok "T11j AICPU 目录解法已收敛权限（非 777 指令）"
+fi
+check_in "T11j-2 AICPU 运行账号权限" "运行账号" "$PIT"
+# T11k mojibake 示例可往返（真实对 分支→鍒嗘敮）
+check_in "T11k mojibake 真实往返对" "鍒嗘敮" "$PIT"
+if grep -qF "鍒嗚璁" "$PIT"; then
+  bad "T11k-2 不可往返的旧示例残留"
+else
+  ok "T11k-2 旧示例已清除"
+fi
+# T11l pip 26.x 断言降级为实测口径
+check_in "T11l pip 断言实测口径" "按实测行为规避" "$PIT"
 
 # ============================================================ T10 可选真环境 smoke
 # 本机 ssh 配置（~/.ssh/config 或其 Include 的 ~/.atomgitdevenv/.ssh/config）
