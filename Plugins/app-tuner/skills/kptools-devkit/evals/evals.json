@@ -1,0 +1,43 @@
+{
+  "skill_name": "kptools-devkit",
+  "version": 1,
+  "notes": "Behavioral evals for DevKit usage discipline (read-only contract + workflow ordering).",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想做鲲鹏平台的 topdown 微架构分析，帮我用 DevKit 采集并解读数据。不要改任何系统配置。",
+      "expected_output": "按 skill 流程：先 discover_devkit.sh 确认工具可用性与部署位置，再 run_devkit.sh 按模式（topdown/frequency/numa）采集，采集结果解读对照 references/topdown-guide.md 的指标语义（FRONTEND_BOUND/BACKEND_BOUND/RETIRING/BAD_SPECULATION）；明确只读契约，不改系统配置。",
+      "files": [],
+      "expectations": [
+        "先做 DevKit 可用性发现（discover_devkit.sh 或等价检查），不假定工具已部署",
+        "采集模式与用户需求匹配（topdown → topdown 模式）",
+        "指标解读引用 topdown 四分类语义（frontend/backend/retiring/bad speculation）",
+        "明确只读，不修改任何系统配置"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "CPU 频率在压测时不稳定，帮我采集 core/uncore 频率看是否有降频。",
+      "expected_output": "使用 DevKit 频率采集模式（turbostat 参考指南在 references/turbostat-guide.md），给出 core/uncore 频率随时间的采样方法与判读（是否存在 throttling 或 P-state 骤降）；只读采集。",
+      "files": [],
+      "expectations": [
+        "选择频率采集模式（turbostat/DevKit frequency），而不是 topdown",
+        "覆盖 core 与 uncore 频率两个维度",
+        "给出降频判定参考（如持续低于标称频率的阈值）",
+        "明确只读"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "NUMA 跨节点访存延迟好像很高，帮我确认。",
+      "expected_output": "使用 DevKit NUMA 访存分析模式（references/numafast-guide.md），给出跨节点 vs 本地访存延迟的采集与对比方法，判读标准参考指南中的参考值；只读。",
+      "files": [],
+      "expectations": [
+        "选择 NUMA 访存分析模式",
+        "区分本地与跨节点访存延迟",
+        "引用参考值或经验阈值做判定",
+        "明确只读"
+      ]
+    }
+  ]
+}

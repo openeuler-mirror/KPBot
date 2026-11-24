@@ -15,6 +15,9 @@ metadata:
   version: "1.0.0"
 ---
 
+
+> **采集契约（主动探测）**：本 skill 不修改系统配置、不写入被测环境（产物仅写入输出目录）。**已知副作用**：py-spy 通过 ptrace 附加目标进程，默认 record/dump 会短暂暂停目标（毫秒级）；容器内通常需 `--cap-add=SYS_PTRACE`（非容器主机同 uid + ptrace_scope=0 即可）。需要变更的优化动作归属对应调优 skill。
+
 # kptools-py-spy — Python 进程级性能采集
 
 ## 工作流程
@@ -80,9 +83,9 @@ bash scripts/collect.sh --dump -p <PID>
 
 ## 约束
 
-- ptrace 权限：需 root，或同 uid 且 `kernel.yama.ptrace_scope=0`；容器内需 `--cap-add=SYS_PTRACE`
+- ptrace 权限：非容器 Linux 需 root，或同 uid 且 `kernel.yama.ptrace_scope=0`；容器内需 `--cap-add=SYS_PTRACE`（同 uid 且策略允许时无需额外 capability）
 - 仅支持 Python 进程；非 Python PID 报错并提示语言路由
-- 默认采样会短暂暂停目标进程；生产敏感场景可加 py-spy 原生 `--nonblocking`（有丢样代价，可在 collect.sh 命令后追加）
+- 默认 record/top 采样会短暂暂停目标进程；生产敏感场景可加 `--nonblocking`（有丢样代价，collect.sh 已透传）。非 TTY 的 `--top` 会降级为 record，同样受此影响
 - `-n` Native：需 Python 带 debug symbols；torch_npu C++ 扩展栈可见性待实测，实测前视为实验性
 - 训练推理场景建议与 kptools-ascend-profiling 配合：py-spy 看 CPU/Python 侧，ascend-profiling 看 NPU 算子/HCCL 侧
 
@@ -90,7 +93,7 @@ bash scripts/collect.sh --dump -p <PID>
 
 - `py-spy not found` → `pip install py-spy` 或运行 `bash scripts/deploy.sh`
 - `目标进程不是 Python 进程` → 执行语言路由判定，切换对应工具
-- `无 ptrace 权限` → root 或 `sysctl kernel.yama.ptrace_scope=0`，容器内 `--cap-add=SYS_PTRACE`
+- `无 ptrace 权限` → 非容器：root 或 `sysctl kernel.yama.ptrace_scope=0`（同 uid 且策略允许即可）；容器内 `--cap-add=SYS_PTRACE`
 - `top 在非 TTY 环境` → 自动降级为 raw 统计排序（stderr 标注），无需处理
 
 ## 参考
