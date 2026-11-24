@@ -40,22 +40,28 @@ class HandoffContract(unittest.TestCase):
         self.assertEqual(result.returncode, status, result.stdout + result.stderr)
         return result
 
-    def collect(self, request_id='selected', status=0):
-        return self.cli(HANDOFF, 'collect', '--log', self.log, '--request-id', request_id,
+    def collect(self, request_id='selected', status=0, log=None):
+        return self.cli(HANDOFF, 'collect', '--log', self.log if log is None else log,
+                        '--request-id', request_id,
                         '--origin', 'existing_logs', status=status)
 
-    def test_relocated_log_generates_selected_report(self):
-        receipt = self.collect().stdout
+    def test_existing_logs_snapshot_generates_both_artifacts(self):
+        collection_snapshot = self.root / 'collection-snapshot.log'
+        collection_snapshot.write_bytes(self.log.read_bytes())
+        receipt = self.collect(log=collection_snapshot).stdout
         self.receipt.write_text(receipt, encoding='utf-8')
-        local_copy = self.log.rename(self.root / 'transferred.log')
-        result = self.cli(HANDOFF, 'verify', self.receipt, '--log', local_copy)
+        with self.log.open('ab') as source:
+            source.write(b'[TTFT][BREAKDOWN] req=other steps=1 ttft=2\n')
+        snapshot = self.root / 'report-snapshot.log'
+        snapshot.write_bytes(collection_snapshot.read_bytes())
+        result = self.cli(HANDOFF, 'verify', self.receipt, '--log', snapshot)
         evidence = json.loads(result.stdout)
-        self.assertEqual(Path(evidence['prefill_log']), local_copy.resolve())
+        self.assertEqual(Path(evidence['prefill_log']), snapshot.resolve())
         self.assertEqual(self.receipt.read_text(encoding='utf-8'), receipt)
         self.assertEqual(evidence['origin'], 'existing_logs')
         html = self.root / 'report.html'
-        self.cli(TTFT, 'check', local_copy)
-        self.cli(TTFT, 'report', local_copy, '--req', evidence['request_id'],
+        self.cli(TTFT, 'check', snapshot)
+        self.cli(TTFT, 'report', snapshot, '--req', evidence['request_id'],
                  '--mode', 'prefill', '-o', html)
         rendered = html.read_text(encoding='utf-8')
         self.assertIn('selected', rendered)
@@ -84,13 +90,14 @@ class HandoffContract(unittest.TestCase):
 
 if __name__ == '__main__':
     result = unittest.main(verbosity=2, exit=False).result
+    success = result.wasSuccessful() and result.testsRun > 0 and not result.skipped
     output = Path(__file__).resolve().parent / 'results' / 'result.json'
     output.parent.mkdir(exist_ok=True)
     output.write_text(json.dumps({
-        'success': result.wasSuccessful() and result.testsRun > 0 and not result.skipped,
+        'success': success,
         'tests_run': result.testsRun,
         'skipped': len(result.skipped),
         'failures': len(result.failures),
         'errors': len(result.errors),
     }, indent=2) + '\n', encoding='utf-8')
-    sys.exit(0 if result.wasSuccessful() else 1)
+    sys.exit(0 if success else 1)
