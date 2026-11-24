@@ -1,8 +1,10 @@
 """Stream Load into Doris over certificate-validated HTTPS.
 
-The FE redirect is inspected first, its target must be HTTPS and explicitly
-allowed, and only then is the data sent with the password. There is no -k
-option and the password is read from the environment, never from argv.
+The FE redirect is inspected first and its host must be explicitly allowed.
+Doris 3.0.8's plaintext redirect is upgraded to an explicitly configured TLS
+port without following HTTP or retaining URL credentials. Data and the Basic
+Authorization header are sent only after certificate validation. The password
+is read from the environment, never from argv.
 """
 
 import argparse
@@ -12,9 +14,10 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import ssl
 import sys
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 
 class LoadError(Exception):
@@ -83,27 +86,58 @@ def send(url, body, headers, auth, context, timeout):
         connection.close()
 
 
-def redirect_target(current, headers, allowed):
+def redirect_target(current, headers, allowed, be_https_port=None):
     location = headers.get("location")
     if not location:
         raise LoadError("redirect response has no Location header")
     target = urljoin(current, location)
-    parts = parse_https_url(target)
-    if parts.hostname.lower() not in allowed:
-        raise LoadError(
-            "redirect host is not in --allow-host: " + parts.hostname
-        )
-    return target
+    parts = urlsplit(target)
+    if parts.scheme not in ("http", "https"):
+        raise LoadError("redirect URL must use http or https")
+    if not parts.hostname:
+        raise LoadError("redirect URL has no host")
+    if parts.fragment:
+        raise LoadError("redirect URL must not contain a fragment")
+    hostname = parts.hostname.lower()
+    if hostname not in allowed:
+        raise LoadError("redirect host is not in --allow-host: " + hostname)
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise LoadError("redirect URL has an invalid port") from exc
+    if parts.scheme == "http":
+        if be_https_port is None:
+            raise LoadError(
+                "plaintext redirect requires --be-https-port; "
+                "refusing to send data over HTTP"
+            )
+        port = be_https_port
+    # Doris 3.0.8 embeds Basic credentials in this Location. Never reuse or
+    # persist them: reconstruct a credential-free URL and keep TLS validation.
+    host = f"[{hostname}]" if ":" in hostname else hostname
+    netloc = host + (f":{port}" if port is not None else "")
+    return urlunsplit(("https", netloc, parts.path, parts.query, ""))
 
 
-def discover(url, headers, auth, context, timeout, allowed, max_redirects):
+def discover(
+    url,
+    headers,
+    auth,
+    context,
+    timeout,
+    allowed,
+    max_redirects,
+    be_https_port=None,
+):
     hops = 0
     while True:
         status, response_headers, _ = send(
             url, None, headers, auth, context, timeout
         )
         if 300 <= status < 400:
-            target = redirect_target(url, response_headers, allowed)
+            target = redirect_target(
+                url, response_headers, allowed, be_https_port
+            )
             hops += 1
             if hops > max_redirects:
                 raise LoadError("too many redirects")
@@ -111,14 +145,26 @@ def discover(url, headers, auth, context, timeout, allowed, max_redirects):
         return status, url
 
 
-def follow(url, body, headers, auth, context, timeout, allowed, max_redirects):
+def follow(
+    url,
+    body,
+    headers,
+    auth,
+    context,
+    timeout,
+    allowed,
+    max_redirects,
+    be_https_port=None,
+):
     hops = 0
     while True:
         status, response_headers, payload = send(
             url, body, headers, auth, context, timeout
         )
         if 300 <= status < 400:
-            url = redirect_target(url, response_headers, allowed)
+            url = redirect_target(
+                url, response_headers, allowed, be_https_port
+            )
             hops += 1
             if hops > max_redirects:
                 raise LoadError("too many redirects")
@@ -131,7 +177,36 @@ def basic_auth(user, password):
     return "Basic " + token
 
 
-def load(args):
+URL_USERINFO = re.compile(r"(https?://)[^/\s@]+@", re.IGNORECASE)
+URL_SECRET = re.compile(
+    r"([?&](?:password|passwd|token|secret)=)[^&#\s]*", re.IGNORECASE
+)
+SENSITIVE_FIELDS = ("authorization", "password", "passwd", "secret", "token")
+
+
+def sanitize_text(value):
+    value = URL_USERINFO.sub(r"\1[redacted]@", value)
+    return URL_SECRET.sub(r"\1[redacted]", value)
+
+
+def sanitize_response(value):
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            normalized = str(key).lower().replace("-", "_")
+            if any(field in normalized for field in SENSITIVE_FIELDS):
+                sanitized[key] = "[redacted]"
+            else:
+                sanitized[key] = sanitize_response(item)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_response(item) for item in value]
+    if isinstance(value, str):
+        return sanitize_text(value)
+    return value
+
+
+def load(args, save_response=None):
     if not 0 < args.expected_rows:
         raise LoadError("expected rows must be positive")
     if not args.allow_host:
@@ -155,6 +230,7 @@ def load(args):
     headers = {
         "Content-Type": "application/octet-stream",
         "Accept": "application/json",
+        "Expect": "100-continue",
     }
     for name, value in args.header:
         headers[name] = value
@@ -168,6 +244,7 @@ def load(args):
         args.timeout,
         allowed,
         args.max_redirects,
+        args.be_https_port,
     )
     if 200 <= status < 300:
         raise LoadError(
@@ -185,15 +262,27 @@ def load(args):
         args.timeout,
         allowed,
         args.max_redirects,
+        args.be_https_port,
     )
-    if status < 200 or status >= 300:
-        raise LoadError(f"BE Stream Load returned HTTP {status}")
+    def persist_response(value):
+        sanitized = sanitize_response(value)
+        if save_response is not None:
+            save_response(sanitized)
+        return sanitized
+
     try:
         response = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        persist_response(
+            {"RawResponse": payload.decode("utf-8", errors="replace")}
+        )
         raise LoadError("BE returned invalid JSON") from exc
     if not isinstance(response, dict):
+        persist_response(response)
         raise LoadError("BE response is not a JSON object")
+    response = persist_response(response)
+    if status < 200 or status >= 300:
+        raise LoadError(f"BE Stream Load returned HTTP {status}")
     if response.get("Status") != "Success":
         raise LoadError(
             "Stream Load Status is not Success: " + str(response.get("Status"))
@@ -229,6 +318,11 @@ def parser():
     result.add_argument("--fe-url", required=True)
     result.add_argument("--data-file", type=Path, required=True)
     result.add_argument("--allow-host", action="append", default=[])
+    result.add_argument(
+        "--be-https-port",
+        type=int,
+        help="TLS port used to upgrade Doris 3.0.8's plaintext FE redirect",
+    )
     result.add_argument("--cafile", type=Path)
     result.add_argument("--client-cert", type=Path)
     result.add_argument("--client-key", type=Path)
@@ -248,6 +342,8 @@ def main():
     args = parser().parse_args()
     if not 0 <= args.max_redirects <= 8:
         parser().error("max redirects must be between 0 and 8")
+    if args.be_https_port is not None and not 0 < args.be_https_port <= 65535:
+        parser().error("BE HTTPS port must be between 1 and 65535")
     if args.client_cert and not args.client_key:
         parser().error("--client-cert requires --client-key")
     if args.cafile and not args.cafile.is_file():
@@ -255,6 +351,7 @@ def main():
     if not args.data_file.is_file():
         parser().error("data file does not exist")
     output = args.output
+    response_writer = None
     if output is not None:
         try:
             output.mkdir(parents=True, exist_ok=False)
@@ -264,8 +361,15 @@ def main():
         except OSError as exc:
             print(str(exc), file=sys.stderr)
             return 2
+
+        def response_writer(response):
+            (output / "stream-load-response.json").write_text(
+                json.dumps(response, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
     try:
-        result = load(args)
+        result = load(args, save_response=response_writer)
     except (
         LoadError,
         OSError,
@@ -281,11 +385,7 @@ def main():
             )
         return 1
     if output is not None:
-        response = result.pop("response")
-        (output / "stream-load-response.json").write_text(
-            json.dumps(response, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        result.pop("response")
         (output / "result.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2),
             encoding="utf-8",

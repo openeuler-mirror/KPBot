@@ -59,10 +59,12 @@ class DbgenVerificationTests(unittest.TestCase):
         self.builds = []
 
     def fake_build(self, argv, cwd, check):
-        marker = Path(cwd) / module.MARKER
+        marker = Path(cwd) / module.BUILD_MARKER
         self.assertTrue(marker.is_file())
-        dbgen = Path(cwd) / ROOT / "dbgen/dbgen"
-        dbgen.write_text("built", encoding="utf-8")
+        dbgen_dir = Path(cwd) / ROOT / "dbgen"
+        (dbgen_dir / "makefile").write_text("generated\n", encoding="utf-8")
+        (dbgen_dir / "main.o").write_text("object\n", encoding="utf-8")
+        (dbgen_dir / "dbgen").write_text("built", encoding="utf-8")
         self.builds.append(argv)
         return subprocess.CompletedProcess(argv, 0)
 
@@ -84,12 +86,48 @@ class DbgenVerificationTests(unittest.TestCase):
             (self.tools / "bin" / ROOT / "dbgen/makefile.suite").is_file()
         )
         self.assertTrue((self.tools / "bin" / ROOT / "dbgen/dbgen").is_file())
+        source = self.tools / "bin" / module.SOURCE_DIR / ROOT / "dbgen"
+        self.assertTrue((source / "makefile.suite").is_file())
+        self.assertFalse((source / "makefile").exists())
+        self.assertFalse((source / "main.o").exists())
+        self.assertFalse((source / "dbgen").exists())
         marker = json.loads(
-            (self.tools / "bin" / module.MARKER).read_text(encoding="utf-8")
+            (
+                self.tools
+                / "bin"
+                / module.SOURCE_DIR
+                / module.MARKER
+            ).read_text(encoding="utf-8")
         )
         self.assertEqual(marker["sha256"], self.digest)
         self.assertEqual(marker["source_apache_commit"], "a" * 40)
         self.assertEqual(len(self.builds), 1)
+
+    def test_rerun_reuses_verified_source_and_replaces_only_build_tree(self):
+        first = self.run_tool()
+        source = self.tools / "bin" / module.SOURCE_DIR / ROOT
+        verified_marker = (
+            self.tools / "bin" / module.SOURCE_DIR / module.MARKER
+        )
+        source_digest = module.tree_sha256(source)
+        marker_before = verified_marker.read_text(encoding="utf-8")
+        build = self.tools / "bin" / ROOT / "dbgen"
+        self.assertTrue((build / "makefile").is_file())
+        self.assertTrue((build / "main.o").is_file())
+
+        second = self.run_tool()
+
+        self.assertEqual(first["dbgen"], second["dbgen"])
+        self.assertEqual(module.tree_sha256(source), source_digest)
+        marker_after = json.loads(verified_marker.read_text(encoding="utf-8"))
+        self.assertEqual(
+            marker_after["tree_sha256"], json.loads(marker_before)["tree_sha256"]
+        )
+        self.assertFalse((source / "dbgen/makefile").exists())
+        self.assertFalse((source / "dbgen/main.o").exists())
+        self.assertFalse((source / "dbgen/dbgen").exists())
+        self.assertEqual((build / "dbgen").read_text(encoding="utf-8"), "built")
+        self.assertEqual(len(self.builds), 2)
 
     def test_tampered_archive_is_rejected_before_extraction_and_build(self):
         content = bytearray(self.archive.read_bytes())
@@ -116,9 +154,7 @@ class DbgenVerificationTests(unittest.TestCase):
         (stale / "dbgen").write_text("stale", encoding="utf-8")
         with self.assertRaises(ValueError) as caught:
             self.run_tool()
-        self.assertIn(
-            "without a matching verified marker", str(caught.exception)
-        )
+        self.assertIn("without a matching build marker", str(caught.exception))
         self.assertEqual(
             (stale / "dbgen").read_text(encoding="utf-8"), "stale"
         )
@@ -141,7 +177,7 @@ class DbgenVerificationTests(unittest.TestCase):
         target, _ = module.prepare(
             self.archive,
             module.load_manifest(self.manifest),
-            self.tools / "bin",
+            self.tools / "bin" / module.SOURCE_DIR,
             False,
         )
         (target / "dbgen/makefile.suite").write_text("stale", encoding="utf-8")

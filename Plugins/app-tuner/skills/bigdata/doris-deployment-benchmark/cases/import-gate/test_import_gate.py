@@ -283,6 +283,49 @@ class ImportGateTests(unittest.TestCase):
             self.check()
         self.assertIn("no Stream Load responses", str(caught.exception))
 
+    def test_count_timeout_is_saved_with_partial_results_and_fails(self):
+        output = self.root / "verification-output"
+        args = self.args(output=output, timeout=1.5)
+
+        def timeout_region(argv, **kwargs):
+            if argv[-1].endswith(" region"):
+                raise subprocess.TimeoutExpired(
+                    argv,
+                    args.timeout,
+                    output=b"partial count\n",
+                    stderr=b"query still running\n",
+                )
+            return self.client(argv, **kwargs)
+
+        with (
+            patch.object(module.subprocess, "run", side_effect=timeout_region),
+            patch.object(module, "parser") as parser_mock,
+        ):
+            parser_mock.return_value.parse_args.return_value = args
+            returncode = module.main()
+
+        self.assertEqual(returncode, 1)
+        result = json.loads((output / "result.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["tables"]["nation"]["count"], COUNTS["nation"])
+        check = result["checks"][0]
+        self.assertEqual(check["table"], "region")
+        self.assertTrue(check["timed_out"])
+        self.assertEqual(check["timeout_seconds"], 1.5)
+        self.assertEqual(check["stdout"], "partial count\n")
+        self.assertEqual(check["stderr"], "query still running\n")
+        self.assertTrue(
+            any(
+                "region timed out after 1.5 seconds" in error
+                for error in result["errors"]
+            )
+        )
+        self.assertEqual(
+            (output / "00-region.stdout").read_text(encoding="utf-8"),
+            "partial count\n",
+        )
+        self.assertEqual(len(self.calls), 7)
+
     def test_object_scanning_tolerates_noise(self):
         values = module.objects_in(
             'noise {"Status":"Success","Label":"x_region",'

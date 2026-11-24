@@ -67,6 +67,7 @@ SF=1 起步，容量验证后再调整；以下命令接着上面的 Git 或下�
 ```bash
 set -euo pipefail
 source conf/doris-cluster.conf
+: "${DORIS_CLIENT_CONFIG:?set DORIS_CLIENT_CONFIG to the client authentication file}"
 RUN_DIR="$PWD/runs/$(date +%Y%m%dT%H%M%S)"
 TPCH_DATA_DIR="$PWD/bin/tpch-data"
 mkdir -p "$RUN_DIR"
@@ -79,7 +80,7 @@ bash bin/load-tpch-data.sh -c 1 -x "$TXID" 2>&1 | tee "$RUN_DIR/load.stdout"
 
 上游脚本不带 `-x` 时 Doris 自动生成 `import_<uuid>` 形式的 label，不含表名，验收器无法把响应映射到表。这里在导入前用 Python 3 的 `uuid.uuid4().hex` 生成唯一 `TXID` 并通过 `-x "$TXID"` 传入，避免同日秒级重复或并行实验撞 id。上游会生成 `${TXID}_<table>`（单文件表）或 `${TXID}_<table>_<file>`（分片表）形式的 label；验收器用 `--txid "$TXID"` 只接受该事务的精确 label，同前缀的其他事务（例如 TXID `run` 与 `run_other`）不会计入。HTTP 与 HTTPS 两条导入路径各自生成自己的 `TXID`，不共用同一个值；HTTP 验收引用本块生成的变量，HTTPS 验收引用 HTTPS 块重新生成的变量。
 
-`build_tpch_dbgen.py` 在解压和 make 之前，按 [生成器来源清单](tpch-dbgen-provenance.json) 中项目钉定的 SHA-256 校验 ZIP；摘要不符、下载失败或已有未经验证的解压目录都会停止。校验通过后才解压并调用上游构建，把 URL、SHA-256 和源 Apache commit 写入 `bin/.kpbot-tpch-dbgen-verified.json`，同时记入实验记录。该摘要由项目针对钉定 Apache 源码中的 URL 在 TLS 校验下取得并固定，不是上游发布者签名；若上游之后提供独立发布的权威摘要，应改用该摘要。
+`build_tpch_dbgen.py` 在解压和 make 之前，按 [生成器来源清单](tpch-dbgen-provenance.json) 中项目钉定的 SHA-256 校验 ZIP；摘要不符、下载失败或已有未经验证的解压目录都会停止。校验通过后，脚本把完整目录摘要记入 `bin/.kpbot-tpch-dbgen-source/.kpbot-tpch-dbgen-verified.json`，保留该目录为不再参与编译的已校验源树，再复制到独立的 `bin/TPC-H_Tools_v3.0.0/` 构建树调用上游脚本。上游生成的 makefile、目标文件和 dbgen 只进入构建树；重跑会重新核对源树摘要，并仅替换带匹配构建标记的构建树，因此首次成功后的产物不会使下次校验失败。未标记的已有目录仍需人工核对，并用 `--replace-existing` 明确授权替换。URL、SHA-256 和源 Apache commit 同时记入实验记录。该摘要由项目针对钉定 Apache 源码中的 URL 在 TLS 校验下取得并固定，不是上游发布者签名；若上游之后提供独立发布的权威摘要，应改用该摘要。
 
 **导入验收（全部通过后才开始查询计时）。** 先确认八表 COUNT(*) 与生成文件行数一致，再从原始 Stream Load 输出逐项核对 Status、过滤行和导入行；脚本退出码 0 不代表导入成功。用随附校验器聚合 `load.stdout` 中的每个响应，并连接实验库核对八表：
 
@@ -88,21 +89,25 @@ python3 "$SKILL_DIR/scripts/verify_tpch_import.py" \
   --load-output "$RUN_DIR/load.stdout" --data-dir "$TPCH_DATA_DIR" \
   --txid "$TXID" \
   --database "$DB" --host "$FE_HOST" --port "$FE_QUERY_PORT" --user "$USER" \
+  --config "$DORIS_CLIENT_CONFIG" \
   --protocol=TCP --output "$RUN_DIR/import-check"
 ```
 
-`import-check/result.json` 中 `status` 为 `passed`、八表 `filtered` 全为 0、`loaded` 与 `expected` 一致，且 `count` 与 `expected` 一致后，才允许执行下一步查询。`--data-dir` 从本次生成的 `.tbl`/`.tbl.N` 文件逐行求和得到八表期望值，其他规模不需要手抄 SF1 数字；也可用 `--expected-json` 传入同样来源的计数。SF=1 的 region/nation/supplier/part/partsupp/customer/orders/lineitem 期望行数依次为 5、25、10000、200000、800000、150000、1500000、6001215。任何 Status 不是 Success、过滤行非 0、缺表或计数不一致都必须停止并保留原始响应。
+`import-check/result.json` 中 `status` 为 `passed`、八表 `filtered` 全为 0、`loaded` 与 `expected` 一致，且 `count` 与 `expected` 一致后，才允许执行下一步查询。`--data-dir` 从本次生成的 `.tbl`/`.tbl.N` 文件逐行求和得到八表期望值，其他规模不需要手抄 SF1 数字；也可用 `--expected-json` 传入同样来源的计数。SF=1 的 region/nation/supplier/part/partsupp/customer/orders/lineitem 期望行数依次为 5、25、10000、200000、800000、150000、1500000、6001215。任何 Status 不是 Success、过滤行非 0、缺表或计数不一致都必须停止并保留原始响应。两处验收命令都通过 `--config "$DORIS_CLIENT_CONFIG"` 把口令配置显式交给 mysql 子进程，不依赖 `DORIS_PASSWORD` 或 `PASSWORD` 被客户端自动读取。若某表 COUNT(*) 超过 `--timeout`，验收仍以非零结束并写出 `result.json`；对应 `checks` 项记录表名、`timed_out`、`timeout_seconds` 及超时前已取得的 stdout/stderr，其他已完成的表结果也保留。
 
-**Stream Load 传输与凭据。** 钉定 commit 的上游 `bin/load-tpch-data.sh` 用 `curl -u` 通过 HTTP 发送口令，并用 `--location-trusted` 把凭据转发给重定向目标；口令在链路上明文传输。该方式只适用于已确认可信、隔离且无窃听风险的测试网络，不得用于跨网段、共享网络或生产网络。其他环境启用 FE/BE HTTPS 后，用随附脚本导入：先请求 FE 的 307 目标，确认目标是 HTTPS 且主机在显式 `--allow-host` 列表中，再用 `--cacert` 验证 FE/BE 证书后发送数据；不使用 `-k`，也不会把口令转发给未校验的重定向目标。口令只从 `DORIS_PASSWORD` 环境变量读取，不进入 argv。
+**Stream Load 传输与凭据。** 钉定 commit 的上游 `bin/load-tpch-data.sh` 用 `curl -u` 通过 HTTP 发送口令，并用 `--location-trusted` 把凭据转发给重定向目标；口令在链路上明文传输。该方式只适用于已确认可信、隔离且无窃听风险的测试网络，不得用于跨网段、共享网络或生产网络。其他环境启用 FE/BE HTTPS 后，用随附脚本导入。脚本默认发送 Doris 3.0.8 要求的 `Expect: 100-continue`，先通过带 CA 和主机名校验的 FE HTTPS 请求取得 307，再向白名单内 BE 的 HTTPS 地址发送数据和 Basic 凭据；不使用 `-k`，也不会把口令转发给未校验的重定向目标。口令只从 `DORIS_PASSWORD` 环境变量读取，不进入 argv，示例始终用 `--user "$USER"` 显式选择与该口令对应的实验账号。
 
-先按目标版本的官方 [FE 证书配置](https://doris.apache.org/docs/3.x/admin-manual/auth/fe-certificate/) 和 [BE HTTPS 配置](https://doris.apache.org/docs/3.x/admin-manual/config/be-config/#enable_https) 配置服务端证书，确认客户端所用主机名与证书匹配。这里不自动生成或修改服务端凭据。
+钉定 Doris 3.0.8 的 FE `RestBaseController.redirectTo` 会把 Stream Load 307 `Location` 写成 `http://`，并可能在 URL userinfo 中嵌入账号口令；不能原样跟随，也不能把它当作端到端 HTTPS。兼容模式下，`--allow-host` 仍必须逐个覆盖 FE 返回的 BE 主机，`--be-https-port` 显式指定该 BE 的 TLS 监听端口；脚本只在内存中把该地址重建为无 userinfo 的 `https://BE主机:BE_HTTPS端口/原路径`，丢弃 URL 中的账号口令，绝不向原 `http://` 地址发请求。重建后仍执行 CA 链和证书主机名校验，任一检查失败均在发送数据前停止；该逻辑不是关闭重定向白名单或 TLS 校验。
 
-上游 `gen-tpch-data.sh` 对 partsupp、orders、lineitem 生成 `.tbl.1` 到 `.tbl.N`（N 等于 `-c`），其他五表生成单个 `.tbl`。下面的循环同时覆盖这两类文件，按实际文件 `wc -l` 得到 expected rows，为每个文件指定唯一输出目录和以 `${table}_${index}` 形式结尾的 label；`verify_tpch_import.py` 能按该 label 把响应聚合到表。每次请求还必须带与上游 `load-tpch-data.sh` 一致的 `columns:` 头：dbgen 每行以分隔符结尾，建表没有 temp 列，用末尾 `temp` 吸收行尾空字段；且 lineitem、orders 的建表列序与文件列序不同（lineitem 建表以 `l_shipdate` 开头、文件以 `l_orderkey` 开头，orders 同样错位），缺 `columns:` 时 Stream Load 按位置映射会整单失败。把 `BE_HOSTS` 设为 `SHOW BACKENDS` 中 Alive 的 BE 地址（多个用空格分隔），`DORIS_CA_BUNDLE` 设为签发 FE/BE 证书的 CA 文件：
+服务端所需配置如下（修改配置和重启须另行获得授权）：FE 按目标版本的官方 [FE 证书配置](https://doris.apache.org/docs/3.x/admin-manual/auth/fe-certificate/) 设置 `enable_https = true` 及 keystore 参数，FE HTTPS 端口写入 `FE_HTTPS_PORT`（未设置时示例使用 8050）。每个 Alive BE 按 [BE HTTPS 配置](https://doris.apache.org/docs/3.x/admin-manual/config/be-config/#enable_https) 设置 `enable_https = true`、`ssl_certificate_path` 和 `ssl_private_key_path`，并重启生效；BE TLS 端口写入 `BE_HTTPS_PORT`（`webserver_port` 未改时为 8040）。若实际 TLS 由每个 BE 前的反向代理终止，则把代理的 HTTPS 监听端口写入 `BE_HTTPS_PORT`，并确保代理只转发到对应 BE；不得以此降级到明文公网传输。FE/BE（或代理）证书都必须包含 FE 307 中返回且列入 `BE_HOSTS` 的主机名/IP SAN，`DORIS_CA_BUNDLE` 必须能验证整条链。这里不自动生成或修改服务端凭据，真实配置与端到端结果需在目标集群核验。
+
+上游 `gen-tpch-data.sh` 对 partsupp、orders、lineitem 生成 `.tbl.1` 到 `.tbl.N`（N 等于 `-c`），其他五表生成单个 `.tbl`。下面的循环同时覆盖这两类文件，按实际文件 `wc -l` 得到 expected rows，为每个文件指定唯一输出目录和以 `${table}_${index}` 形式结尾的 label；`verify_tpch_import.py` 能按该 label 把响应聚合到表。每次请求还必须带与上游 `load-tpch-data.sh` 一致的 `columns:` 头：dbgen 每行以分隔符结尾，建表没有 temp 列，用末尾 `temp` 吸收行尾空字段；且 lineitem、orders 的建表列序与文件列序不同（lineitem 建表以 `l_shipdate` 开头、文件以 `l_orderkey` 开头，orders 同样错位），缺 `columns:` 时 Stream Load 按位置映射会整单失败。把 `BE_HOSTS` 设为 `SHOW BACKENDS` 中 Alive 且与 FE 307 返回主机一致的 BE 地址（多个用空格分隔），不要用未列入白名单的别名；`DORIS_CA_BUNDLE` 设为签发 FE/BE 证书的 CA 文件，并按上文设置 `BE_HTTPS_PORT` 与 `DORIS_CLIENT_CONFIG`：
 
 ```bash
 export DORIS_PASSWORD   # 已按上文隐藏输入或受控注入
 : "${BE_HOSTS:?set BE_HOSTS to Alive BE addresses from SHOW BACKENDS, space separated}"
 : "${DORIS_CA_BUNDLE:?set DORIS_CA_BUNDLE to the CA bundle for FE/BE certificates}"
+: "${DORIS_CLIENT_CONFIG:?set DORIS_CLIENT_CONFIG to the client authentication file}"
 read -r -a ALLOWED_BE_HOSTS <<< "$BE_HOSTS"
 ALLOW_ARGS=()
 for host in "${ALLOWED_BE_HOSTS[@]}"; do
@@ -128,6 +133,7 @@ for table in region nation supplier part partsupp customer orders lineitem; do
     label="${TXID}_${table}_${index}"
     python3 "$SKILL_DIR/scripts/stream_load_https.py" \
       --fe-url "https://$FE_HOST:${FE_HTTPS_PORT:-8050}/api/$DB/$table/_stream_load" \
+      --user "$USER" --be-https-port "${BE_HTTPS_PORT:-8040}" \
       "${ALLOW_ARGS[@]}" --cafile "$DORIS_CA_BUNDLE" \
       --data-file "$file" --header "column_separator:|" \
       --header "columns: ${COLUMNS[$table]}" \
@@ -139,10 +145,11 @@ python3 "$SKILL_DIR/scripts/verify_tpch_import.py" \
   --responses "$RUN_DIR" --data-dir "$TPCH_DATA_DIR" \
   --txid "$TXID" \
   --database "$DB" --host "$FE_HOST" --port "$FE_QUERY_PORT" --user "$USER" \
+  --config "$DORIS_CLIENT_CONFIG" \
   --protocol=TCP --output "$RUN_DIR/import-check-https"
 ```
 
-循环结束后，校验器把同一表的多个分片响应相加，再与 `--data-dir` 中生成文件的逐表行数核对；八表全部一致才通过。HTTPS 块在循环前重新生成自己的 `TXID`；`--txid "$TXID"` 只接受 `${TXID}_<table>` 或 `${TXID}_<table>_<数字分片>` 形式的精确 label，历史响应和同前缀的其他事务都不会混入。缺 `columns:` 或列序不对时 Doris 返回非 Success 或过滤行非 0，脚本和校验器都会停止。FE 的 307 目标不是 HTTPS、主机不在列表内或证书校验失败时，脚本在发送数据前停止；失败响应、过滤行或导入行不符同样返回非零并保留原始响应。`FE_HTTPS_PORT` 未设置时使用钉定版本 FE 配置的默认 HTTPS 端口 8050；服务端改过端口时必须显式导出。受信隔离网络仍可使用上游脚本，但必须在实验记录中注明明文 HTTP 条件。
+循环结束后，校验器把同一表的多个分片响应相加，再与 `--data-dir` 中生成文件的逐表行数核对；八表全部一致才通过。HTTPS 块在循环前重新生成自己的 `TXID`；`--txid "$TXID"` 只接受 `${TXID}_<table>` 或 `${TXID}_<table>_<数字分片>` 形式的精确 label，历史响应和同前缀的其他事务都不会混入。缺 `columns:` 或列序不对时 Doris 返回非 Success 或过滤行非 0，脚本和校验器都会停止。FE 的 307 主机不在列表内、未给明文 307 配置 `--be-https-port`、重建后的 TLS 连接或证书校验失败时，脚本在发送数据前停止。每次取得 BE 响应后，脚本先将递归脱敏的 JSON 写入本轮 `stream-load-response.json`（URL userinfo、口令、token 等不会落盘），再检查 HTTP 状态、Status、过滤行和导入行数；失败同样返回非零并保留该响应与 `result.json`，不会只留下摘要。受信隔离网络仍可使用上游脚本，但必须在实验记录中注明明文 HTTP 条件。
 
 单独执行查询计时：只有上面的导入验收通过后才运行下面命令。检查查询结果后，先预热再多轮测量，保存每次脚本输出与查询级耗时。规模、分桶、副本、会话设置、查询集合与集群资源固定。比较参数时一次只改一个变量；内存不足先关联 BE 指标、容器限制与导入/compaction 状态，不能仅凭日志关键字改 OS 参数。
 

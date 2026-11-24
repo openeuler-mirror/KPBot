@@ -7,7 +7,7 @@
 | 编号、时间、目的、对比变量 | |
 | Doris 版本、发行包 URL/SHA-512、架构 | |
 | tpch-tools tag、解析 commit、source.json 或源码校验和 | |
-| 生成器 ZIP URL、SHA-256、源 Apache commit、校验标记文件 | |
+| 生成器 ZIP URL、SHA-256、源 Apache commit、已校验源树与独立构建树标记文件 | |
 | FE/BE 数量、客户端位置、连接拓扑 | |
 | 操作系统、JDK、编译器、MySQL 客户端版本 | |
 | CPU quota/cpuset、内存/swap 限额、磁盘容量 | |
@@ -16,7 +16,7 @@
 | 独立实验库、DDL/查询集校验和、分桶、副本数 | |
 | SF、生成分片数、数据清单及校验和 | |
 | 导入并发、预热/缓存策略、会话设置、查询顺序 | |
-| Stream Load 传输方式（受信隔离网络明文 HTTP 或 HTTPS）、CA/证书校验结果 | |
+| Stream Load 传输方式（受信隔离网络明文 HTTP 或 HTTPS）、FE/BE HTTPS 端口、CA/证书与 307 白名单校验结果 | |
 
 逐表填写；SF=1 的预期行数见指南，其他规模使用本次生成文件计数。Status、过滤行与导入行须从原始 Stream Load 响应核对。
 

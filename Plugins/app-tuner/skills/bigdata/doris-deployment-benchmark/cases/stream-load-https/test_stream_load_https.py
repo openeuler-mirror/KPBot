@@ -37,6 +37,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "auth": self.headers.get("Authorization"),
                 "label": self.headers.get("label"),
                 "separator": self.headers.get("column_separator"),
+                "expect": self.headers.get("Expect"),
             }
         )
         self.server.responder(self)
@@ -124,6 +125,12 @@ class StreamLoadHttpsTests(unittest.TestCase):
         server.filtered = 0
         server.status = "Success"
         server.redirect = None
+        server.extras = {
+            "ErrorURL": (
+                "http://root:secret@127.0.0.1:8040/api/_load_error_log"
+                "?token=secret"
+            )
+        }
 
         def responder(handler):
             if server.redirect:
@@ -134,14 +141,14 @@ class StreamLoadHttpsTests(unittest.TestCase):
                     b"",
                 )
                 return
-            payload = json.dumps(
-                {
-                    "Status": server.status,
-                    "Label": "123_region",
-                    "NumberLoadedRows": server.loaded,
-                    "NumberFilteredRows": server.filtered,
-                }
-            ).encode()
+            value = {
+                "Status": server.status,
+                "Label": "123_region",
+                "NumberLoadedRows": server.loaded,
+                "NumberFilteredRows": server.filtered,
+            }
+            value.update(server.extras)
+            payload = json.dumps(value).encode()
             respond(
                 handler,
                 200,
@@ -154,7 +161,10 @@ class StreamLoadHttpsTests(unittest.TestCase):
 
     def start_fe(self, be_port):
         server = self.start_server(self.ca_cert, self.ca_key)
-        location = f"https://127.0.0.1:{be_port}/api/test/region/_stream_load"
+        location = (
+            "http://root:secret@127.0.0.1:8040"
+            "/api/test/region/_stream_load"
+        )
         server.location = location
 
         def responder(handler):
@@ -171,6 +181,7 @@ class StreamLoadHttpsTests(unittest.TestCase):
             ),
             "data_file": self.data_file,
             "allow_host": ["127.0.0.1"],
+            "be_https_port": self.be.server_port,
             "cafile": self.ca_cert,
             "client_cert": None,
             "client_key": None,
@@ -201,6 +212,10 @@ class StreamLoadHttpsTests(unittest.TestCase):
         ]
         for name, value in values["header"]:
             options += ["--header", f"{name}:{value}"]
+        if values["be_https_port"] is not None:
+            options += ["--be-https-port", str(values["be_https_port"])]
+        if values["user"] is not None:
+            options += ["--user", values["user"]]
         return module.parser().parse_args(options)
 
     def load(self, **overrides):
@@ -216,11 +231,40 @@ class StreamLoadHttpsTests(unittest.TestCase):
         self.assertEqual(len(self.fe.requests), 1)
         self.assertEqual(self.fe.requests[0]["body"], b"")
         self.assertTrue(self.fe.requests[0]["auth"].startswith("Basic "))
+        self.assertEqual(self.fe.requests[0]["expect"], "100-continue")
         self.assertEqual(len(self.be.requests), 1)
         self.assertEqual(self.be.requests[0]["body"], self.data)
         self.assertTrue(self.be.requests[0]["auth"].startswith("Basic "))
-        self.assertTrue(result["be_url"].startswith("https://"))
+        self.assertEqual(self.be.requests[0]["expect"], "100-continue")
+        self.assertEqual(
+            result["be_url"],
+            f"https://127.0.0.1:{self.be.server_port}"
+            "/api/test/region/_stream_load",
+        )
         self.assertNotIn("secret", json.dumps(result))
+        self.assertNotIn("root@", json.dumps(result))
+
+    def test_explicit_user_is_used_for_basic_auth(self):
+        result = self.load(user="benchmark")
+        self.assertEqual(result["status"], "passed")
+        expected = module.basic_auth("benchmark", "secret")
+        self.assertEqual(self.fe.requests[0]["auth"], expected)
+        self.assertEqual(self.be.requests[0]["auth"], expected)
+
+    def test_plaintext_redirect_requires_a_configured_tls_port(self):
+        with self.assertRaises(module.LoadError) as caught:
+            self.load(be_https_port=None)
+        self.assertIn("--be-https-port", str(caught.exception))
+        self.assertEqual(self.be.requests, [])
+
+    def test_native_https_redirect_does_not_require_rewrite_port(self):
+        self.fe.location = (
+            f"https://127.0.0.1:{self.be.server_port}"
+            "/api/test/region/_stream_load"
+        )
+        result = self.load(be_https_port=None)
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["be_url"], self.fe.location)
 
     def test_explicit_label_header_is_sent_to_be(self):
         result = self.load(
@@ -276,6 +320,57 @@ class StreamLoadHttpsTests(unittest.TestCase):
         self.assertIn("not in --allow-host", str(caught.exception))
         self.assertEqual(len(self.be.requests), 1)
 
+    def test_business_failures_save_sanitized_response_before_nonzero(self):
+        scenarios = (
+            ("status", "status", "Fail"),
+            ("filtered", "filtered", 1),
+            ("loaded", "loaded", 2),
+        )
+        for name, attribute, value in scenarios:
+            with self.subTest(failure=name):
+                self.be.status = "Success"
+                self.be.filtered = 0
+                self.be.loaded = 3
+                setattr(self.be, attribute, value)
+                output = self.root / f"failed-{name}"
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        str(SCRIPT),
+                        "--fe-url",
+                        f"https://127.0.0.1:{self.fe.server_port}"
+                        "/api/test/region/_stream_load",
+                        "--data-file",
+                        str(self.data_file),
+                        "--allow-host",
+                        "127.0.0.1",
+                        "--be-https-port",
+                        str(self.be.server_port),
+                        "--cafile",
+                        str(self.ca_cert),
+                        "--expected-rows",
+                        "3",
+                        "--output",
+                        str(output),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    env=dict(os.environ, DORIS_PASSWORD="secret"),
+                    timeout=30,
+                )
+                self.assertEqual(completed.returncode, 1, completed.stderr)
+                evidence = output / "stream-load-response.json"
+                self.assertTrue(evidence.is_file())
+                text = evidence.read_text(encoding="utf-8")
+                response = json.loads(text)
+                self.assertEqual(response["Status"], self.be.status)
+                self.assertNotIn("secret", text)
+                self.assertIn("[redacted]", text)
+                result = json.loads(
+                    (output / "result.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(result["status"], "failed")
+
     def test_cli_writes_fresh_evidence_and_rejects_existing_output(self):
         output = self.root / "evidence"
         args = [
@@ -287,6 +382,10 @@ class StreamLoadHttpsTests(unittest.TestCase):
             str(self.data_file),
             "--allow-host",
             "127.0.0.1",
+            "--be-https-port",
+            str(self.be.server_port),
+            "--user",
+            "benchmark",
             "--cafile",
             str(self.ca_cert),
             "--expected-rows",
@@ -302,6 +401,10 @@ class StreamLoadHttpsTests(unittest.TestCase):
         result = json.loads((output / "result.json").read_text())
         self.assertEqual(result["status"], "passed")
         self.assertTrue((output / "stream-load-response.json").is_file())
+        self.assertNotIn(
+            "secret",
+            (output / "stream-load-response.json").read_text(encoding="utf-8"),
+        )
         second = subprocess.run(
             args, capture_output=True, text=True, env=env, timeout=30
         )

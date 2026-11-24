@@ -191,6 +191,12 @@ def load_output(args):
     return expected, stats, errors
 
 
+def subprocess_text(value):
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def query_count(args, table):
     argv = [args.client]
     if args.config:
@@ -250,6 +256,16 @@ def check(args):
                     f"{table} COUNT(*) is {item['count']}, "
                     f"expected {expected[table]}"
                 )
+        except subprocess.TimeoutExpired as exc:
+            message = (
+                f"COUNT(*) for {table} timed out after "
+                f"{args.timeout} seconds"
+            )
+            errors.append(message)
+            error["timed_out"] = True
+            error["timeout_seconds"] = args.timeout
+            error["stdout"] = subprocess_text(exc.stdout)
+            error["stderr"] = subprocess_text(exc.stderr)
         except (OSError, ValueError) as exc:
             errors.append(str(exc))
             error["stderr"] = str(exc)

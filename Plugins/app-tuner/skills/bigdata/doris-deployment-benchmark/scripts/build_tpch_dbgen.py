@@ -1,4 +1,4 @@
-"""Verify the pinned TPC-H dbgen archive, then extract and build it."""
+"""Verify a pristine TPC-H dbgen source tree and build a separate copy."""
 
 import argparse
 from datetime import datetime, timezone
@@ -17,7 +17,9 @@ MANIFEST = (
     / "references/tpch-dbgen-provenance.json"
 )
 EXTRACTED = "TPC-H_Tools_v3.0.0"
+SOURCE_DIR = ".kpbot-tpch-dbgen-source"
 MARKER = ".kpbot-tpch-dbgen-verified.json"
+BUILD_MARKER = ".kpbot-tpch-dbgen-build.json"
 
 
 def sha256_file(path):
@@ -95,10 +97,11 @@ def safe_members(archive):
         return bundle.namelist()
 
 
-def prepare(archive, manifest, bin_dir, replace_existing):
-    target = bin_dir / EXTRACTED
-    marker = bin_dir / MARKER
+def prepare(archive, manifest, source_dir, replace_existing):
+    target = source_dir / EXTRACTED
+    marker = source_dir / MARKER
     verified = verify_archive(archive, manifest)
+    source_dir.mkdir(parents=True, exist_ok=True)
     if target.exists():
         current = None
         if marker.is_file():
@@ -120,13 +123,13 @@ def prepare(archive, manifest, bin_dir, replace_existing):
                 )
             resolved = target.resolve()
             if (
-                resolved.parent != bin_dir.resolve()
+                resolved.parent != source_dir.resolve()
                 or resolved.name != EXTRACTED
             ):
                 raise ValueError("refusing to remove an unexpected directory")
             shutil.rmtree(resolved)
     if not target.exists():
-        staging = Path(tempfile.mkdtemp(prefix=".tpch-dbgen-", dir=bin_dir))
+        staging = Path(tempfile.mkdtemp(prefix=".tpch-dbgen-", dir=source_dir))
         try:
             safe_members(archive)
             with zipfile.ZipFile(archive) as bundle:
@@ -154,16 +157,51 @@ def prepare(archive, manifest, bin_dir, replace_existing):
     return target, verified
 
 
-def build(tools_dir):
+def build(tools_dir, source_dir, verified, replace_existing=False):
     script = tools_dir / "bin/build-tpch-dbgen.sh"
     if not script.is_file():
         raise ValueError(f"missing upstream build script: {script}")
+    source_tree = source_dir / EXTRACTED
+    build_bin = tools_dir / "bin"
+    target = build_bin / EXTRACTED
+    marker = build_bin / BUILD_MARKER
+    if target.exists():
+        owned = None
+        if marker.is_file():
+            try:
+                owned = json.loads(marker.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                owned = None
+        if not replace_existing and not (
+            owned and owned.get("sha256") == verified["sha256"]
+        ):
+            raise ValueError(
+                f"{target} exists without a matching build marker; "
+                "rerun with --replace-existing to remove only that build "
+                "directory and copy the verified source tree"
+            )
+        resolved = target.resolve()
+        if resolved.parent != build_bin.resolve() or resolved.name != EXTRACTED:
+            raise ValueError("refusing to remove an unexpected directory")
+        shutil.rmtree(resolved)
+    shutil.copytree(source_tree, target)
+    marker.write_text(
+        json.dumps(
+            {
+                "sha256": verified["sha256"],
+                "source_apache_commit": verified["source_apache_commit"],
+                "source_tree": str(source_tree),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     subprocess.run(
         ["bash", str(script)],
-        cwd=str(tools_dir / "bin"),
+        cwd=str(build_bin),
         check=True,
     )
-    dbgen = tools_dir / "bin" / EXTRACTED / "dbgen/dbgen"
+    dbgen = target / "dbgen/dbgen"
     if not dbgen.is_file():
         raise ValueError(f"upstream build did not produce {dbgen}")
     return dbgen
@@ -184,13 +222,19 @@ def run(
             archive = archive.resolve()
             if not archive.is_file():
                 raise ValueError(f"archive does not exist: {archive}")
+        source_dir = tools_dir / "bin" / SOURCE_DIR
         target, verified = prepare(
             archive,
             manifest,
-            tools_dir / "bin",
+            source_dir,
             replace_existing,
         )
-        dbgen = build(tools_dir)
+        dbgen = build(
+            tools_dir,
+            source_dir,
+            verified,
+            replace_existing=replace_existing,
+        )
     return {
         "status": "passed",
         "archive": manifest["artifact"],
@@ -214,7 +258,8 @@ def main():
     parser.add_argument(
         "--replace-existing",
         action="store_true",
-        help="remove only the extracted dbgen tree after the archive verifies",
+        help="replace only the verified-source or dbgen build tree after "
+        "the archive verifies",
     )
     parser.add_argument("--timeout", type=float, default=120)
     args = parser.parse_args()

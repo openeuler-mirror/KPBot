@@ -247,7 +247,9 @@ class Recorder(http.server.BaseHTTPRequestHandler):
         )
         table = table_from_path(self.path)
         if self.server.role == "fe":
-            location = f"https://127.0.0.1:{self.server.be_port}{self.path}"
+            location = (
+                "http://root:secret@127.0.0.1:8040" + self.path
+            )
             send(self, 307, {"Location": location}, b"")
             return
         self.server.respond_be(self, table, body)
@@ -369,8 +371,16 @@ class GuideImportTests(unittest.TestCase):
         script.write_text(
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
-            "sql = ''\n"
             "args = sys.argv[1:]\n"
+            "expected = '--defaults-extra-file=' + "
+            "os.environ['DORIS_CLIENT_CONFIG']\n"
+            "if not args or args[0] != expected:\n"
+            "    raise SystemExit('missing client config as first option')\n"
+            "if '--protocol=TCP' not in args:\n"
+            "    raise SystemExit('missing explicit TCP protocol')\n"
+            "if args[args.index('--user') + 1] != os.environ['EXPECTED_USER']:\n"
+            "    raise SystemExit('wrong Doris user')\n"
+            "sql = ''\n"
             "for index, arg in enumerate(args):\n"
             "    if arg == '--execute' and index + 1 < len(args):\n"
             "        sql = args[index + 1]\n"
@@ -395,8 +405,12 @@ class GuideImportTests(unittest.TestCase):
                 "FE_QUERY_PORT": "9030",
                 "DB": "guide_test",
                 "USER": "root",
+                "EXPECTED_USER": "root",
+                "DORIS_USER": "wrong-user",
                 "BE_HOSTS": "127.0.0.1",
+                "BE_HTTPS_PORT": str(self.be.server_port),
                 "DORIS_CA_BUNDLE": str(self.ca_cert),
+                "DORIS_CLIENT_CONFIG": str(self.root / "client.conf"),
                 "DORIS_PASSWORD": "secret",
                 "GUIDE_COUNTS": str(counts),
                 "PATH": str(fake) + os.pathsep + env.get("PATH", ""),
@@ -406,6 +420,9 @@ class GuideImportTests(unittest.TestCase):
 
     def run_https_guide(self):
         fake, counts = self.write_fake_mysql()
+        (self.root / "client.conf").write_text(
+            "[client]\nprotocol=TCP\n", encoding="utf-8"
+        )
         block = guide_block("stream_load_https.py")
         return subprocess.run(
             ["bash", "-c", block],
@@ -431,9 +448,16 @@ class GuideImportTests(unittest.TestCase):
 
         expected_requests = len(COUNTS) + len(SHARDED)
         self.assertEqual(len(self.be.requests), expected_requests)
+        self.assertEqual(len(self.fe.requests), expected_requests)
+        for request in self.fe.requests:
+            self.assertEqual(request["headers"].get("expect"), "100-continue")
         for request in self.be.requests:
             table = table_from_path(request["path"])
             headers = request["headers"]
+            self.assertEqual(headers.get("expect"), "100-continue")
+            self.assertEqual(
+                headers.get("authorization"), "Basic cm9vdDpzZWNyZXQ="
+            )
             self.assertEqual(
                 split_columns(headers.get("columns")), UPSTREAM_COLUMNS[table]
             )
@@ -482,8 +506,16 @@ class GuideImportTests(unittest.TestCase):
     def test_https_guide_uses_8050_default_port(self):
         block = guide_block("stream_load_https.py")
         self.assertIn("${FE_HTTPS_PORT:-8050}", block)
+        self.assertIn("${BE_HTTPS_PORT:-8040}", block)
+        self.assertIn('--user "$USER"', block)
         self.assertNotIn("8443", block)
         self.assertIn('--header "columns: ${COLUMNS[$table]}"', block)
+
+    def test_both_count_gates_pass_client_configuration(self):
+        for token in ("--load-output", "stream_load_https.py"):
+            with self.subTest(block=token):
+                block = guide_block(token)
+                self.assertIn('--config "$DORIS_CLIENT_CONFIG"', block)
 
     def test_http_guide_sets_txid_before_upstream_load(self):
         block = guide_block("load-tpch-data.sh")
