@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- app-tuner 新增 `flink-velox-env` 检查子域（`skills/bigdata/flink-velox-env/`，DOMAIN.md 含准入判据：只读 / 单一诉求 / 自带契约）及 3 个检查 skill：`flink-velox-toolchain-check`（git cmake gcc g++ mvn，PATH 探测取版本，g++ → gcc-c++、mvn → maven）、`flink-velox-build-tools-check`（ninja ccache autoconf automake libtool flex bison python3 patchelf，ninja → ninja-build）、`flink-velox-cpp-deps-check`（两层：13 个包管理器级库按头文件在 /usr/include（含 <triplet>/ 子目录）与 /usr/local/include 探测并给 -devel 包名；源码级库清单解析自 velox checkout 自带 setup 脚本的 install_velox_deps 调用序列（去包管理器与 conda 条目、止于函数右括号），按 /usr/local 下 cmake 配置目录 / include / 头文件 / 探针二进制探测；没有 checkout 时为 skipped 不判负）；每个 skill 独立 Python 标准库脚本，JSON + 人读报告、退出码 0/1/2、唯一 next_step，只扫不改；统筹 skill `flink-velox-env-check` 与其余 6 个具体项检查子 skill 分后续 PR 提交；附各自 tier-A 契约用例（11 / 11 / 16 测试，假机器不触真机）与触发评估集
 - code-optimizer 新增 `sql-shuffle-string-codec` skill：列式 SQL 引擎 join 输出与原生 Shuffle 的字符串搬运、重建和 LZ4 候选查找优化；附 tier-A 用例 `cases/shuffle-contract` 与 3 条模型评估规格。
 - app-tuner 为 `kptools-prompt-capture` 新增八项任务技能，覆盖 proxy 检查与接入、限时采集、请求分布与会话分析、分词核验、vLLM 日志关联及汇总；仅元数据的采集窗口拒绝热更为全文或 golden，附合成数据评测。
 - app-tuner 新增 `uadk-accelerator-optimization` subskill：从热点函数匹配 UADK 支持的密码学（AES/SM4/DES/SM3/SHAx/MD5/AEAD/HMAC/RSA/DH）与压缩（gzip/zlib）算法，命中时建议替换鲲鹏硬件加速器并输出建议配置（SVA 驱动加载、WD_*_CTX_NUM 队列、uadk_engine 接入、uadk_tool/openssl speed 验证），未命中输出不适用结论；含算法映射 JSON 与 playbook，注册到主编排候选规则、Dynamic Skill Catalog 与知识路由；附 tier-A 用例 `cases/skill-integrity` 与触发评估集 `evals/`（evals.json 含 expectations、eval_queries.json 正/负例路由矩阵）
