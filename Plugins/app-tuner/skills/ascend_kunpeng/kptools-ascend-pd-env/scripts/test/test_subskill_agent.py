@@ -4,6 +4,7 @@
 用法：python3 scripts/test/test_subskill_agent.py
 可附带用例名，只运行指定用例。在六个子 skill 齐备的目录运行；
 缺失子 skill 的场景由用例自行构造。
+需要支持下文隔离参数和 JSONL 输出的 Codex CLI；可用 CODEX_BIN 选择已验证的版本。
 """
 
 import json
@@ -33,9 +34,27 @@ def bundle(work, name, container, role, day=24):
     path.write_text(json.dumps(meta), encoding='utf-8')
 
 
+def completed_items(output):
+    items = []
+    for number, line in enumerate(output.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError as exc:
+            raise RuntimeError('Codex JSONL line %d is not valid JSON' % number) from exc
+        if not isinstance(event, dict):
+            raise RuntimeError('Codex JSONL line %d is not an event object' % number)
+        if event.get('type') == 'item.completed':
+            if not isinstance(event.get('item'), dict):
+                raise RuntimeError('Codex JSONL line %d has no completed item' % number)
+            items.append(event['item'])
+    return items
+
+
 def run(work, prompt, child=None):
     result = subprocess.run(
-        ['codex', '-a', 'never', 'exec', '--ephemeral', '--ignore-user-config',
+        [os.environ.get('CODEX_BIN', 'codex'), '-a', 'never', 'exec', '--ephemeral', '--ignore-user-config',
          '--skip-git-repo-check', '-s', 'workspace-write', '--json', '-C', str(work),
          '从 ' + ENTRY + '/SKILL.md 开始，按该 skill 处理以下请求。'
          '只使用此测试目录及其中的工具。\n' + prompt],
@@ -43,8 +62,7 @@ def run(work, prompt, child=None):
         env=dict(os.environ, DOCKER_HOST='unix:///no-such-pdenv-docker.sock'))
     if result.returncode:
         raise RuntimeError(result.stderr)
-    items = [event['item'] for event in map(json.loads, result.stdout.splitlines())
-             if event.get('type') == 'item.completed']
+    items = completed_items(result.stdout)
     executions = [item for item in items if item['type'] == 'command_execution']
     commands = [item['command'] for item in executions]
     messages = [item['text'] for item in items if item['type'] == 'agent_message']
@@ -188,7 +206,7 @@ def missing_child(work):
 
 
 def main():
-    if not shutil.which('codex'):
+    if not shutil.which(os.environ.get('CODEX_BIN', 'codex')):
         sys.exit('需要 Codex CLI')
     for child in ('collect-environment', 'analyze-environment', 'compare-p-over-time',
                   'compare-d-over-time', 'compare-p-and-d', SUMMARY):
