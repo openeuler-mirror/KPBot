@@ -10,7 +10,7 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 | [`cubesandbox-guest-rpc-overlap`](cubesandbox-guest-rpc-overlap/SKILL.md) | Evaluate concurrent guest clock setup and RNG reseeding during snapshot restore, including the create barrier and failure semantics. |
 | [`cubesandbox-create-optimize`](cubesandbox-create-optimize/SKILL.md) | CubeSandbox 完整创建路径与多机制组合调优：核对 Guest 预连接、Master 解析缓存与异步 spec、rootfs 影子预派生池之间的交互，做组合消融与端到端归因 |
 
-**场景收益 / 定位**（原插件 README 技能表条目）：面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口。
+**场景收益 / 定位**（原插件 README 技能表条目）：`cubesandbox-create-optimize` 面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口。
 
 本域后续迁入（逐个独立 PR）：
 
@@ -18,7 +18,9 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 - app-tuner 侧（`Plugins/app-tuner/skills/agentic-infra/`）：`cubesandbox-deployment`、`cubesandbox-bench-protocol`、
   `cubesandbox-lifecycle-bench`、`sandbox-timeline-profile`、`kptools-agentenv-tuning`（含 3 个专项子技能包）、`kptools-openeuler-agentenv`
 
-路由：多阶段联调/组合消融走本 skill；单阶段（创建路径、rootfs、预连接）后续各自成 skill 后直接进对应条目。
+快照恢复创建时，若 SetGuestDateTime 与 ReseedRandomDev 串行占用关键路径，且失败实例可隔离，选择 [`cubesandbox-guest-rpc-overlap`](cubesandbox-guest-rpc-overlap/SKILL.md)。
+
+路由：多阶段联调/组合消融走 `cubesandbox-create-optimize`；单阶段（创建路径、rootfs、预连接）后续各自成 skill 后直接进对应条目。
 
 ## Review
 
