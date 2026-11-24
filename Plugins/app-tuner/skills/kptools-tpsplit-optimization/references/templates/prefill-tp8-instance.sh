@@ -83,7 +83,6 @@ vllm serve <MODEL_PATH> \
 --max-num-seqs <MAX_NUM_SEQS> \
 --tool-call-parser <TOOL_CALL_PARSER> \
 --reasoning-parser <REASONING_PARSER> \
---enable-prompt-tokens-details \
---kv-transfer-config "$KV_TRANSFER_CONFIG"
-# 可选（压测/profiling 时再启用）：
-# --profiler-config '{"profiler": "torch","torch_profiler_dir": "xx","torch_profiler_with_stack": false}'
+  --enable-prompt-tokens-details \
+  --kv-transfer-config "$KV_TRANSFER_CONFIG" \
+  --profiler-config '{"profiler": "torch","torch_profiler_dir": "xx","torch_profiler_with_stack": false}'

@@ -15,7 +15,7 @@ metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
@@ -130,7 +130,6 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 - 每实例单独一份脚本，实例间差异项只有 `--data-parallel-rank` / `ASCEND_RT_VISIBLE_DEVICES` / `--port` 三处，其余参数全组一致——生成后 diff 一遍，差异项之外的改动都是笔误
 - DP 组网参数口径（对齐 vLLM 官方旗标）：`--data-parallel-size`（组大小）、`--data-parallel-rank`（本实例 rank）、`--data-parallel-address`（组主节点 IP）、`--data-parallel-rpc-port 16600`（组内统一）。注意 `--data-parallel-rank` 外部 LB 模式适用于 **MoE 模型**（GLM 系列 `--enable-expert-parallel` 场景即 MoE）；现场 vLLM-Ascend 版本若旗标名不同，以 `vllm serve --help | grep -i data-parallel` 实际输出为准
 - **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**，其他启动参数不动；改前备份原文件
-- 旧脚本里的 `--profiler-config` 是 profiling 期开关，新脚本默认注释关闭（模板已处理），压测时再打开——带着它上生产会白白吃掉 profiling 开销
 - **旧脚本与配置一律备份后再改**（同目录 `*.bak.<日期>` 或 backup/ 子目录，禁止原地覆盖删除）——回滚靠的就是这些备份
 - 分发：每台主机只放自己的实例脚本；上传用 ssh-mcp-server upload 或 scp
 - 远端自检通过才进阶段 5：`bash -n <脚本>` 逐个过；KV_TRANSFER_CONFIG 是嵌在脚本里的字符串，用一段 python 从脚本中抽出该变量并 `json.loads` 校验合法性
