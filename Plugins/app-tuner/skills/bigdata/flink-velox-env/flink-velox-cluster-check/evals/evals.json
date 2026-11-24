@@ -34,7 +34,7 @@
     {
       "id": "not-restart",
       "query": "把集群重启一下",
-      "expected": "不触发：本 skill 只读；重启属切换类 skill（规划中）且须用户同意，本 skill 只给出该重启的 next_step"
+      "expected": "不触发：本 skill 只读；重启属切换类 skill（审中 !325）且须用户同意，本 skill 只给出该重启的 next_step"
     }
   ]
 }

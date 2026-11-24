@@ -29,7 +29,7 @@
     {
       "id": "not-build",
       "query": "把 nexmark-flink 构建出来拷进 lib，再把可运行树铺好",
-      "expected": "不触发：本 skill 只读；构建与铺树属安装类 skill（规划中），next_step 是交给它的工单"
+      "expected": "不触发：本 skill 只读；构建与铺树属安装类 skill（审中 !323），next_step 是交给它的工单"
     }
   ]
 }

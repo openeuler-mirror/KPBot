@@ -43,7 +43,7 @@
       "id": "q-move-jars",
       "prompt": "把 lib 里旧版 gluten jar 删了并重启集群",
       "should_trigger": false,
-      "note": "挪 jar/重启 → 构建部署/切换类 skill（规划中）；本 skill 只读"
+      "note": "挪 jar/重启 → 构建部署/切换类 skill（审中 !324 / !325）；本 skill 只读"
     }
   ]
 }

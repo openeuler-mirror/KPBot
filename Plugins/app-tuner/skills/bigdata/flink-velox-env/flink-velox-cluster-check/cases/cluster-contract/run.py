@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -227,7 +228,7 @@ class ClusterCase(unittest.TestCase):
         self.assertEqual((c["running"], c["jobmanagers"], c["taskmanagers"], c["consistent_with_lib"],
                           c["loaded_build"], c["rest_reachable"]), (False, [], [], None, None, False))
         self.assertEqual(self.item(r, "processes")["detail"], "not running: no JobManager and no TaskManager "
-                         "of this installation")
+                         "of this installation on this machine")
         self.assertEqual(self.item(r, "processes")["fix"], "start the cluster (starting or restarting needs "
                          "the user consent)")
         self.assertEqual(self.item(r, "rest")["status"], "info")
@@ -253,9 +254,12 @@ class ClusterCase(unittest.TestCase):
         self.assertNotIn("started_epoch", c["jobmanagers"][0])
         self.assertEqual((c["jars_replaced_after_start"], c["other_flink_daemons"]), ([], 0))
         self.assertEqual((c["flink_home"], c["found_via"], c["lib_version"]), (str(self.m.flink), "FLINK_HOME", "1.19.2"))
-        self.assertEqual(self.item(r, "processes")["detail"], "JobManager 101 and 2 TaskManager(s) of this installation")
-        self.assertEqual(self.item(r, "loaded-build")["detail"], "every daemon carries " + ", ".join(sorted(GFV_JARS)))
-        self.assertIn("lib/ is unchanged since the cluster started (", self.item(r, "lib-vs-cluster")["detail"])
+        self.assertEqual(self.item(r, "processes")["detail"], "JobManager 101 and 2 TaskManager(s) of this "
+                         "installation on this machine")
+        self.assertEqual(self.item(r, "loaded-build")["detail"], "every daemon on this machine carries " + ", ".join(sorted(GFV_JARS)))
+        self.assertIn("every daemon on this machine loads what is in lib/ (unchanged since ", self.item(r, "lib-vs-cluster")["detail"])
+        for daemon in c["jobmanagers"] + c["taskmanagers"]:  # each one compared with lib/ on its own
+            self.assertEqual((daemon["missing_vs_lib"], daemon["extra_vs_lib"]), ([], []))
         self.assertEqual(self.item(r, "rest")["status"], "warn")
         self.assertIn("does not answer although the daemons are up", self.item(r, "rest")["detail"])
         self.assertEqual(r["next_step"], "ready: the cluster runs the gfv build that is in lib (warnings above)")
@@ -267,8 +271,8 @@ class ClusterCase(unittest.TestCase):
         self.m.daemon(102, "taskmanager", gfv=[])
         _, _, _, r = self.run_check("--json")
         self.assertEqual((r["success"], r["cluster"]["loaded_build"], r["cluster"]["consistent_with_lib"]), (True, "native", True))
-        self.assertEqual(self.item(r, "loaded-build")["detail"], "every daemon carries no gluten/velox jar on "
-                         "its classpath (native build)")
+        self.assertEqual(self.item(r, "loaded-build")["detail"], "every daemon on this machine carries no "
+                         "gluten/velox jar on its classpath (native build)")
 
     def test_rest_overview_ok(self):
         self.m.flink_home("gfv")
@@ -300,7 +304,7 @@ class ClusterCase(unittest.TestCase):
                          "registering, or registered with another JobManager")
         jobs = self.item(r, "jobs")
         self.assertEqual((jobs["status"], jobs["detail"]), ("warn", "3 job(s) are running — a restart would interrupt them"))
-        self.assertIn("warnings above", r["next_step"])
+        self.assertEqual(r["next_step"], "ready: the cluster runs the gfv build that is in lib (warnings above)")  # nothing asks for a restart
 
     def test_rest_answers_while_nothing_runs_is_a_warning(self):
         self.m.flink_home("gfv")
@@ -363,9 +367,11 @@ class ClusterCase(unittest.TestCase):
         lc = self.item(r, "lib-vs-cluster")
         self.assertEqual(lc["detail"], "lib/ changed since the cluster started (replaced after the start: "
                          "gluten-flink-runtime-1.9.0-SNAPSHOT.jar) — the cluster still runs what it loaded")
-        self.assertEqual(r["next_step"], "restart the cluster so it loads what is in lib now (a restart needs "
-                         "the user consent), then rerun")
-        self.assertIn("        fix: restart the cluster so it loads what is in lib now", self.run_check()[1])
+        self.assertEqual(self.item(r, "lib-vs-cluster")["fix"], "restart the cluster so every daemon loads what "
+                         "is in lib now (a restart needs the user consent)")
+        self.assertEqual(r["next_step"], "restart the cluster so every daemon loads what is in lib now (a restart "
+                         "needs the user consent), then rerun")
+        self.assertIn("        fix: restart the cluster so every daemon loads what is in lib now", self.run_check()[1])
 
     def test_loaded_jars_differ_from_disk_fails(self):
         self.m.flink_home("gfv")
@@ -375,6 +381,106 @@ class ClusterCase(unittest.TestCase):
         self.assertEqual((code, r["cluster"]["loaded_build"], r["cluster"]["consistent_with_lib"]), (1, "native", False))
         self.assertEqual(self.item(r, "lib-vs-cluster")["detail"], "lib/ changed since the cluster started (on disk "
                          + ", ".join(sorted(GFV_JARS)) + "; loaded none) — the cluster still runs what it loaded")
+
+    def test_one_daemon_missing_a_jar_the_others_have_fails(self):
+        # the JobManager loads planner and runtime, the TaskManager only runtime: together they
+        # still equal what is on disk — comparing each daemon on its own is what catches it
+        planner = "gluten-flink-planner-1.9.0-SNAPSHOT.jar"
+        self.m.flink_home("gfv")
+        self.m.daemon(101, "jobmanager", gfv=GFV_JARS)
+        self.m.daemon(102, "taskmanager", gfv=[j for j in GFV_JARS if j != planner])
+        code, out, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["cluster"]["loaded_build"]), (1, False, "gfv"))
+        lc = self.item(r, "lib-vs-cluster")
+        self.assertEqual(lc["status"], "fail")
+        self.assertEqual(lc["detail"], "lib/ changed since the cluster started (per daemon: taskmanager pid 102 loads "
+                         + ", ".join(j for j in GFV_JARS if j != planner) + f" — missing {planner}) — the cluster still "
+                         "runs what it loaded")
+        tm = r["cluster"]["taskmanagers"][0]
+        self.assertEqual((tm["missing_vs_lib"], tm["extra_vs_lib"]), ([planner], []))
+        self.assertEqual((r["cluster"]["jobmanagers"][0]["missing_vs_lib"], r["cluster"]["consistent_with_lib"]), ([], False))
+        self.assertEqual(r["next_step"], "restart the cluster so every daemon loads what is in lib now (a restart "
+                         "needs the user consent), then rerun")
+        self.assertIn("  FAIL  lib-vs-cluster: lib/ changed since the cluster started (per daemon: taskmanager pid 102", self.run_check()[1])
+        # a jar a daemon still holds that lib no longer has is said too
+        gone = "gluten-flink-loader-1.9.0-SNAPSHOT.jar"
+        (self.m.lib / gone).unlink()
+        _, _, _, r = self.run_check("--json")
+        jm = r["cluster"]["jobmanagers"][0]
+        self.assertEqual((jm["missing_vs_lib"], jm["extra_vs_lib"]), ([], [gone]))
+        self.assertIn(f"jobmanager pid 101 loads " + ", ".join(GFV_JARS) + f" — no longer in lib: {gone}", self.item(r, "lib-vs-cluster")["detail"])
+
+    def test_running_jobs_turn_every_restart_advice_into_wait(self):
+        # lib changed under a cluster that has jobs running: the only safe next step is to wait
+        self.m.flink_home("gfv")
+        self.m.daemon(101, "jobmanager")
+        self.m.daemon(102, "taskmanager")
+        self.m.age(self.m.lib / "gluten-flink-runtime-1.9.0-SNAPSHOT.jar", 60)
+        self.rest({"flink-version": "1.19.2", "taskmanagers": 1, "jobs-running": 2})
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], self.item(r, "lib-vs-cluster")["status"]), (1, False, "fail"))
+        self.assertEqual(r["next_step"], "2 job(s) are running — let them finish (or stop them with the user's "
+                         "consent), then rerun; a restart now would interrupt them")
+        self.assertEqual(self.item(r, "lib-vs-cluster")["fix"], "restart the cluster so every daemon loads what is in "
+                         "lib now (a restart needs the user consent) (2 job(s) are running: let them finish first — "
+                         "a restart would interrupt them)")
+        # with the jobs gone the restart advice is back
+        self.rest({"flink-version": "1.19.2", "taskmanagers": 1, "jobs-running": 0})
+        _, _, _, r = self.run_check("--json")
+        self.assertTrue(r["next_step"].startswith("restart the cluster so every daemon loads what is in lib now"))
+        self.assertNotIn("let them finish", self.item(r, "lib-vs-cluster")["fix"])
+
+    def test_taskmanagers_registered_from_elsewhere_are_said_not_failed(self):
+        # JobManager and TaskManagers on different machines: only the JobManager is a process here
+        self.m.flink_home("gfv")
+        self.m.daemon(101, "jobmanager")
+        self.rest({"flink-version": "1.19.2", "taskmanagers": 3, "jobs-running": 0})
+        code, out, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["status"]), (0, True, "warn"))
+        proc = self.item(r, "processes")
+        self.assertEqual((proc["status"], proc.get("fix")), ("warn", None))
+        self.assertEqual(proc["detail"], "JobManager 101 runs; no TaskManager of this installation runs on this "
+                         "machine — REST lists 3 TaskManager(s) registered from elsewhere (other hosts or containers); "
+                         "their loaded build is not checked here")
+        self.assertEqual((r["cluster"]["remote_taskmanagers"], r["cluster"]["consistent_with_lib"]), (3, True))
+        self.assertEqual(self.item(r, "loaded-build")["detail"], "every daemon on this machine carries "
+                         + ", ".join(sorted(GFV_JARS)) + "; 3 TaskManager(s) registered elsewhere are not checked")
+        self.assertEqual(r["next_step"], "ready: the cluster runs the gfv build that is in lib (warnings above)")
+        self.assertIn("  WARN  processes: JobManager 101 runs; no TaskManager of this installation runs on this machine", self.run_check()[1])
+        # the REST endpoint is another cluster's (version differs): its TaskManagers say nothing about this one
+        self.rest({"flink-version": "1.18.1", "taskmanagers": 3, "jobs-running": 0})
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, self.item(r, "processes")["status"]), (1, "fail"))
+        self.assertIsNone(r["cluster"]["remote_taskmanagers"])
+        # and an endpoint that lists none either: jobs cannot start
+        self.rest({"flink-version": "1.19.2", "taskmanagers": 0, "jobs-running": 0})
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, self.item(r, "processes")["detail"]), (1, "JobManager 101 runs but no TaskManager of "
+                         "this installation does — jobs cannot start"))
+
+    def test_rest_listing_more_taskmanagers_than_run_here_warns(self):
+        self.m.flink_home("gfv")
+        self.m.daemon(101, "jobmanager")
+        self.m.daemon(102, "taskmanager")
+        self.rest({"flink-version": "1.19.2", "taskmanagers": 4, "jobs-running": 0})
+        code, _, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["status"]), (0, True, "warn"))
+        self.assertEqual(r["cluster"]["remote_taskmanagers"], 3)
+        self.assertEqual([i for i in r["items"] if i["name"] == "rest"][-1]["detail"], "REST lists 4 TaskManager(s), "
+                         "3 of them registered from elsewhere — their loaded build is not checked here")
+
+    def test_only_the_conf_file_flink_reads_is_used(self):
+        self.m.flink_home("gfv")
+        # both files, different endpoints: Flink 1.19 reads flink-conf.yaml and ignores config.yaml
+        self.m.write(self.m.flink / "conf" / "flink-conf.yaml", "rest.address: flink.local\nrest.port: 8081\n")
+        _, _, _, r = self.run_check("--json", env=self.m.env(FLINK_REST_URL=None))
+        self.assertEqual((r["cluster"]["conf_file"], r["cluster"]["rest_url"]),
+                         (str(self.m.flink / "conf" / "flink-conf.yaml"), "http://flink.local:8081"))
+        # only config.yaml: that one
+        (self.m.flink / "conf" / "flink-conf.yaml").unlink()
+        _, _, _, r = self.run_check("--json", env=self.m.env(FLINK_REST_URL=None))
+        self.assertEqual((r["cluster"]["conf_file"], r["cluster"]["rest_url"]),
+                         (str(self.m.flink / "conf" / "config.yaml"), "http://localhost:8081"))
 
     def test_jobmanager_without_taskmanager_fails(self):
         self.m.flink_home("gfv")
@@ -418,12 +524,13 @@ class ClusterCase(unittest.TestCase):
         self.m.daemon(102, "taskmanager")
         _, _, _, r = self.run_check("--json")
         self.assertEqual(set(r), {"success", "checked_at", "status", "cluster", "items", "missing", "next_step", "error_message"})
-        self.assertEqual(set(r["cluster"]), {"flink_home", "found_via", "running", "jobmanagers", "taskmanagers",
-                                             "other_flink_daemons", "loaded_build", "loaded_gfv_jars", "lib_gfv_jars",
-                                             "lib_version", "earliest_start", "jars_replaced_after_start",
-                                             "consistent_with_lib", "rest_url", "rest_reachable", "rest_version",
-                                             "rest_taskmanagers", "rest_jobs_running"})
-        self.assertEqual(set(r["cluster"]["jobmanagers"][0]), {"pid", "gfv_jars", "started"})
+        self.assertEqual(set(r["cluster"]), {"flink_home", "found_via", "conf_file", "running", "jobmanagers",
+                                             "taskmanagers", "other_flink_daemons", "remote_taskmanagers",
+                                             "loaded_build", "loaded_gfv_jars", "lib_gfv_jars", "lib_version",
+                                             "earliest_start", "jars_replaced_after_start", "consistent_with_lib",
+                                             "rest_url", "rest_reachable", "rest_version", "rest_taskmanagers",
+                                             "rest_jobs_running"})
+        self.assertEqual(set(r["cluster"]["jobmanagers"][0]), {"pid", "gfv_jars", "started", "missing_vs_lib", "extra_vs_lib"})
         module = load_module()
 
         def boom():
@@ -465,6 +572,18 @@ class ClusterCase(unittest.TestCase):
         self.assertEqual((code, target.read_text(encoding="utf-8")), (2, "keep me\n"))
         self.assertIn("not a symlink", err)
         self.assertEqual(self.run_check("--json", "--out", str(archive), "--overwrite")[0], 0)
+
+    def test_out_never_opens_a_fifo(self):
+        self.m.flink_home("gfv")
+        fifo = self.tmp / "project" / "pipe.json"
+        fifo.parent.mkdir()
+        os.mkfifo(str(fifo))
+        # open() on a fifo blocks until a reader appears: the guard must refuse instead
+        # (a blocked check would run into the subprocess timeout of run_check and error out)
+        code, _, err, _ = self.run_check("--json", "--out", str(fifo), "--overwrite")
+        self.assertEqual((code, stat.S_ISFIFO(fifo.lstat().st_mode)), (2, True))
+        self.assertIn("--out exists and is not a regular file, refusing to overwrite it", err)
+        self.assertIn("NOT READY", self.run_check()[1])  # the verdict itself is unaffected
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")

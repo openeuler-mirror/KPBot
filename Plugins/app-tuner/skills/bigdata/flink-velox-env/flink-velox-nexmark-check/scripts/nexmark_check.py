@@ -30,6 +30,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 
 KEY = 'flink_velox_nexmark_check_result'
@@ -39,6 +40,10 @@ SYSROOT = os.environ.get('ENV_CHECK_SYSROOT', '')
 STATUS_ORDER = ('ok', 'info', 'skipped', 'warn', 'fail')
 HINT_FLINK = ('install the official binary distribution '
               'flink-1.19.x-bin-scala_2.12.tgz and point FLINK_HOME at it')
+# What bin/run_query.sh needs besides the jar (its classpath is $NEXMARK_HOME/lib/*:$FLINK_HOME/lib/*).
+TREE_MANIFEST = ('bin/run_query.sh', 'bin/config.sh', 'conf/log4j.properties', 'conf/nexmark.yaml',
+                 'conf/config.yaml', 'queries/ddl_gen.sql', 'queries/ddl_kafka.sql', 'queries/ddl_views.sql',
+                 'queries/insert_kafka.sql')
 
 
 def sys_path(rel):
@@ -76,10 +81,23 @@ def find_flink_home():
     return (None, None)
 
 
+def tree_missing(tree):
+    """Manifest entries absent (or not executable) under a nexmark tree, plus
+    'queries/q*.sql' when there is no query definition at all."""
+    missing = []
+    for rel in TREE_MANIFEST:
+        path = os.path.join(tree, *rel.split('/'))
+        if not os.path.isfile(path) or (rel.endswith('.sh') and not os.access(path, os.X_OK)):
+            missing.append(rel)
+    if not glob.glob(os.path.join(tree, 'queries', 'q*.sql')):
+        missing.append('queries/q*.sql')
+    return missing
+
+
 def scan():
     home, source = find_flink_home()
     payload = {'flink_home': home, 'found_via': source, 'jar': None, 'jars': [],
-               'home': None, 'home_via': None}
+               'home': None, 'home_via': None, 'home_missing': []}
     if not home:
         return payload, [make_item(
             'flink', 'fail',
@@ -111,7 +129,19 @@ def scan():
             'build nexmark-flink from https://github.com/nexmark/nexmark '
             '(mvn -pl nexmark-flink -am package -DskipTests) and copy the jar into lib'))
     if tree:
-        items.append(make_item('home', 'ok', f'runnable tree at {tree} (via {home_via})'))
+        # run_query.sh alone does not make the tree runnable: the launcher sources bin/config.sh
+        # and the queries need their ddl / config files
+        missing = tree_missing(tree)
+        payload['home_missing'] = missing
+        if missing:
+            items.append(make_item(
+                'home', 'fail',
+                f'the nexmark tree at {tree} (via {home_via}) is incomplete: missing {", ".join(missing)} — '
+                'run_query.sh needs them',
+                f'copy the rest of nexmark-flink/src/main/resources over {tree} (existing files are kept), '
+                'then rerun'))
+        else:
+            items.append(make_item('home', 'ok', f'runnable tree at {tree} (via {home_via})'))
     else:
         items.append(make_item(
             'home', 'fail',
@@ -130,7 +160,9 @@ def next_step(payload, items):
     if by['jar']['status'] == 'fail':
         todos.append('build the nexmark-flink jar (mvn -pl nexmark-flink -am package -DskipTests) and copy it into lib')
     if by['home']['status'] == 'fail':
-        todos.append('lay out the runnable nexmark tree (nexmark-flink/src/main/resources) and point NEXMARK_HOME at it')
+        todos.append(('complete the nexmark tree at ' + payload['home'] + ' (missing '
+                      + ', '.join(payload['home_missing']) + ')') if payload['home'] else
+                     'lay out the runnable nexmark tree (nexmark-flink/src/main/resources) and point NEXMARK_HOME at it')
     if todos:
         return 'nexmark is not ready: ' + ' and '.join(todos) + ', then rerun'
     extra = [i for i in items if i['status'] == 'warn']
@@ -160,7 +192,8 @@ def aborted(exc):
         'success': False,
         'checked_at': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
         'status': 'fail',
-        'nexmark': {'flink_home': None, 'found_via': None, 'jar': None, 'jars': [], 'home': None, 'home_via': None},
+        'nexmark': {'flink_home': None, 'found_via': None, 'jar': None, 'jars': [], 'home': None, 'home_via': None,
+                    'home_missing': []},
         'items': [],
         'missing': [],
         'next_step': 'fix the check error first (see error_message), then rerun',
@@ -177,6 +210,12 @@ def write_out(path, result, overwrite):
         return 2
     if os.path.exists(target) and not overwrite:
         print(f'nexmark_check.py: --out already exists, pass --overwrite to replace it: {path}',
+              file=sys.stderr)
+        return 2
+    if overwrite and os.path.exists(target) and not stat.S_ISREG(os.stat(target).st_mode):
+        # a fifo (or a directory, socket, device) is never opened: open() on a fifo
+        # blocks until a reader shows up and the check would never return
+        print(f'nexmark_check.py: --out exists and is not a regular file, refusing to overwrite it: {path}',
               file=sys.stderr)
         return 2
     try:

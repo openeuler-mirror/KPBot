@@ -19,6 +19,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -42,6 +43,11 @@ def load_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+# What bin/run_query.sh needs besides the jar — pinned independently of the script.
+MANIFEST = ("bin/run_query.sh", "bin/config.sh", "conf/log4j.properties", "conf/nexmark.yaml", "conf/config.yaml",
+            "queries/ddl_gen.sql", "queries/ddl_kafka.sql", "queries/ddl_views.sql", "queries/insert_kafka.sql")
 
 
 class FakeMachine:
@@ -75,10 +81,17 @@ class FakeMachine:
         for name in names:
             self.write(self.lib / name, "jar\n")
 
-    def nexmark_tree(self, home, runnable=True):
+    def nexmark_tree(self, home, complete=True):
+        """A nexmark tree under `home`; complete=False lays out the launcher and one
+        query only (a copy interrupted after bin/)."""
         home = Path(home)
-        if runnable:
-            self.script(home / "bin" / "run_query.sh")
+        self.script(home / "bin" / "run_query.sh")
+        if complete:
+            for rel in MANIFEST[1:]:
+                if rel.endswith(".sh"):
+                    self.script(home / rel, "exit 0\n")
+                else:
+                    self.write(home / rel, "")
         self.write(home / "queries" / "q0.sql", "SELECT 1;\n")
         return home
 
@@ -192,6 +205,34 @@ class NexmarkCase(unittest.TestCase):
         self.assertEqual(r["next_step"], "nexmark is not ready: lay out the runnable nexmark tree "
                          "(nexmark-flink/src/main/resources) and point NEXMARK_HOME at it, then rerun")
 
+    def test_a_tree_with_the_launcher_only_is_incomplete(self):
+        # a copy interrupted after bin/: run_query.sh is there, what it needs is not
+        self.m.flink_home()
+        self.m.nexmark_jars("nexmark-flink-0.3-SNAPSHOT.jar")
+        self.m.nexmark_tree(self.m.nexmark_local, complete=False)
+        code, out, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["error_message"]), (1, False, "1 item(s) missing: home"))
+        home = self.item(r, "home")
+        self.assertEqual((home["status"], r["nexmark"]["home_missing"]), ("fail", list(MANIFEST[1:])))
+        self.assertEqual(home["detail"], f"the nexmark tree at {self.m.nexmark_local} (via $NEXMARK_HOME) is incomplete: "
+                         f"missing {', '.join(MANIFEST[1:])} — run_query.sh needs them")
+        self.assertEqual(home["fix"], f"copy the rest of nexmark-flink/src/main/resources over {self.m.nexmark_local} "
+                         "(existing files are kept), then rerun")
+        self.assertEqual(r["next_step"], "nexmark is not ready: complete the nexmark tree at "
+                         f"{self.m.nexmark_local} (missing {', '.join(MANIFEST[1:])}), then rerun")
+        report = self.run_check()[1]
+        self.assertIn("  FAIL  home: the nexmark tree at", report)
+        self.assertIn("        fix: copy the rest of nexmark-flink/src/main/resources over", report)
+        # completing it turns the item ok
+        self.m.nexmark_tree(self.m.nexmark_local)
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual((r["success"], r["nexmark"]["home_missing"]), (True, []))
+        # no query definition at all is a missing entry of its own
+        (self.m.nexmark_local / "queries" / "q0.sql").unlink()
+        _, _, _, r = self.run_check("--json")
+        self.assertEqual(r["nexmark"]["home_missing"], ["queries/q*.sql"])
+        self.assertIn("missing queries/q*.sql", self.item(r, "home")["detail"])
+
     def test_both_missing_names_both_actions(self):
         self.m.flink_home()
         code, _, _, r = self.run_check("--json")
@@ -217,7 +258,7 @@ class NexmarkCase(unittest.TestCase):
         self.assertEqual((code, r["success"]), (1, False))
         self.assertEqual(self.item(r, "flink")["status"], "fail")
         self.assertEqual(r["nexmark"], {"flink_home": None, "found_via": None, "jar": None, "jars": [],
-                                        "home": None, "home_via": None})
+                                        "home": None, "home_via": None, "home_missing": []})
         self.assertTrue(r["next_step"].startswith("install the official binary distribution"))
 
     def test_json_contract_shape_and_crash_shape(self):
@@ -225,7 +266,7 @@ class NexmarkCase(unittest.TestCase):
         _, _, _, r = self.run_check("--json")
         self.assertEqual(set(r), {"success", "checked_at", "status", "nexmark", "items", "missing",
                                   "next_step", "error_message"})
-        self.assertEqual(set(r["nexmark"]), {"flink_home", "found_via", "jar", "jars", "home", "home_via"})
+        self.assertEqual(set(r["nexmark"]), {"flink_home", "found_via", "jar", "jars", "home", "home_via", "home_missing"})
         module = load_module()
 
         def boom():
@@ -265,6 +306,18 @@ class NexmarkCase(unittest.TestCase):
         self.assertEqual((code, target.read_text(encoding="utf-8")), (2, "keep me\n"))
         self.assertIn("not a symlink", err)
         self.assertEqual(self.run_check("--json", "--out", str(archive), "--overwrite")[0], 0)
+
+    def test_out_never_opens_a_fifo(self):
+        self.ready()
+        fifo = self.tmp / "project" / "pipe.json"
+        fifo.parent.mkdir()
+        os.mkfifo(str(fifo))
+        # open() on a fifo blocks until a reader appears: the guard must refuse instead
+        # (a blocked check would run into the subprocess timeout of run_check and error out)
+        code, _, err, _ = self.run_check("--json", "--out", str(fifo), "--overwrite")
+        self.assertEqual((code, stat.S_ISFIFO(fifo.lstat().st_mode)), (2, True))
+        self.assertIn("--out exists and is not a regular file, refusing to overwrite it", err)
+        self.assertIn("nexmark     OK", self.run_check()[1])  # the verdict itself is unaffected
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--bogus")

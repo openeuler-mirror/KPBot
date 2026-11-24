@@ -14,7 +14,7 @@ lib 里全部 `*.jar`（按名序）：
 
 运行依赖（14）：guava、failureaccess、arrow-c-data、arrow-format、arrow-memory-core、arrow-memory-unsafe、arrow-vector、commons-io、flatbuffers-java、jackson-annotations、jackson-core、jackson-databind、jackson-datatype-jdk8、jackson-datatype-jsr310。
 
-`duplicates`：同一 artifact 多个版本——三个 gluten artifact 与 velox4j 各自多于一个 jar 时记入，列出全部 jar 名。
+`duplicates`：同一 artifact 多个版本——三个 gluten artifact、velox4j 与 14 个运行依赖（按 `artifactId-` 前缀）各自多于一个 jar 时记入，列出全部 jar 名。
 
 ## 2. 判定
 

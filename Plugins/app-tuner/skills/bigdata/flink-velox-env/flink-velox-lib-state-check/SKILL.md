@@ -6,7 +6,7 @@ description: >
   类加载会在半途炸）；同一 artifact 多版本并存给 warn；`--expect native|gfv` 声明想要的构建，其它判 fail 并给到达它的动作。
   逐项 ok/warn/fail + fix + 唯一 next_step。只扫不改：不挪 jar、不重启集群。触发词：lib 里是 native 还是 GFV、
   部署齐不齐、gluten jar 在不在、多版本并存、partial。不负责：集群实际加载了哪套 → flink-velox-cluster-check；
-  编译并部署进 lib → 构建部署类 skill（规划中）；"能不能编译 GFV 栈"的总裁决 → flink-velox-env-check。
+  编译并部署进 lib → 构建部署类 skill（审中 !324）；"能不能编译 GFV 栈"的总裁决 → flink-velox-env-check。
 compatibility: Linux (aarch64/x86_64)，Python 3.7+ 标准库
 metadata:
   skill_type: tool_assisted
@@ -34,7 +34,7 @@ GFV 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime
 - 指望它挪 jar、清理多版本或重启集群——`fix` 与 `next_step` 只是工单，重启须用户同意
 - 集群进程**实际加载**了哪套、lib 改了之后集群是否还在跑旧的 → `flink-velox-cluster-check`
 - Flink 安装本身是否完整、版本线 → `flink-velox-flink-dist-check`
-- 编译 velox4j / gluten-flink 并部署进 lib → 构建部署类 skill（规划中）
+- 编译 velox4j / gluten-flink 并部署进 lib → 构建部署类 skill（审中 !324）
 - "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`
 
 ## 期望（--expect）
@@ -51,7 +51,7 @@ GFV 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime
 |---|---|
 | `home` / `lib` | Flink 安装按 FLINK_HOME → PATH 上的 flink → /opt/flink → /usr/local/flink 定位（须有 `bin/flink`）；安装没有 `lib/` 目录为 fail |
 | `build` | lib 里 `*.jar`：无 gluten/velox jar → native；`gluten-flink-planner-` / `gluten-flink-runtime-` / `gluten-flink-loader-` 各至少一个、`velox4j-` 至少一个、14 个运行依赖各至少一个 → gfv；否则 partial，`missing_parts` 点名缺的 artifact（velox4j 排最前） |
-| `duplicates` | 同一 artifact 多个版本（如 `gluten-flink-runtime-1.8.0` 与 `1.9.0`）为 warn，列出全部 jar |
+| `duplicates` | 同一 artifact 多个版本为 warn，列出全部 jar——三个 gluten artifact、velox4j **和 14 个运行依赖**都算（如 `guava-31.1-jre` 与 `guava-33.4.0-jre` 并存：哪个被加载由类路径先后顺序决定，与 gluten jar 多版本是同一个问题） |
 
 ## 执行步骤
 
@@ -70,7 +70,7 @@ python3 <skill_dir>/scripts/lib_state_check.py [--expect any|native|gfv] [--json
 1. 先看 `next:`——按"partial 补齐或清空 → 不符期望则切换 → 清理多版本"的顺序给出唯一一个下一步；每条涉及重启的都注明须用户同意。
 2. `READY` 只说明 lib 里的内容符合期望，**不代表集群加载的就是它**：改了 jar 没重启时集群还在跑旧的，由 `flink-velox-cluster-check` 回答。
 3. 多版本的 warn 不阻断，但必须转述：类路径上先后顺序决定实际加载哪个版本。
-4. 本 skill 不挪 jar、不重启：把 `next:` 交给构建部署 / 切换类 skill（规划中）并**征得用户同意**，做完重扫直到 READY。
+4. 本 skill 不挪 jar、不重启：把 `next:` 交给构建部署 / 切换类 skill（审中 !324 / !325）并**征得用户同意**，做完重扫直到 READY。
 
 ## 环境约定
 
@@ -107,7 +107,7 @@ python3 <skill_dir>/scripts/lib_state_check.py [--expect any|native|gfv] [--json
 }
 ```
 
-- 原始观测 `lib_state`：`build`（native / gfv / partial / null）、`lib`、`flink_home` / `found_via`、`gfv_jars`（所有 gluten/velox jar，按名序）、`gluten_jars`（三个 artifact 各自的 jar）、`velox4j_jars`、`runtime_deps`（`expected` 14 / `missing` artifactId 列表）、`duplicates`（artifact → jar 列表）、`missing_parts`；`items` 是逐项判定（`name` / `status` / `detail`，fail 另带 `fix`），`status` 是全部条目的最差值
+- 原始观测 `lib_state`：`build`（native / gfv / partial / null）、`lib`、`flink_home` / `found_via`、`gfv_jars`（所有 gluten/velox jar，按名序）、`gluten_jars`（三个 artifact 各自的 jar）、`velox4j_jars`、`runtime_deps`（`expected` 14 / `missing` artifactId 列表）、`duplicates`（artifact → jar 列表；gluten 三件、velox4j 与运行依赖都算）、`missing_parts`；`items` 是逐项判定（`name` / `status` / `detail`，fail 另带 `fix`），`status` 是全部条目的最差值
 - `success`：没有 fail。`missing`：fail 条目，形如 `build: an incomplete GFV set …`
 - 失败形态：`success: false`，`error_message` 形如 `1 item(s) missing: build`；检查崩溃：退出码 2，JSON 仍是完整契约形态（`status: fail`、空观测与条目、`next_step` 指向先修检查错误），`error_message` 以 `check aborted:` 开头
 
@@ -116,4 +116,4 @@ python3 <skill_dir>/scripts/lib_state_check.py [--expect any|native|gfv] [--json
 - `flink-velox-cluster-check`：集群守护进程实际加载了哪套、lib 与集群是否一致——它消费本 skill 同一套 lib 判定
 - `flink-velox-flink-dist-check`：Flink 安装完整性与版本线（lib 里只有一个 `flink-dist` jar 等）
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一
-- 编译并部署进 lib、挪 jar、重启集群：同族构建部署 / 切换类 skill（规划中，后续 PR）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复
+- 编译并部署进 lib、挪 jar、重启集群：同族构建部署 / 切换类 skill（审中 !324 / !325）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复

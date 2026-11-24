@@ -37,7 +37,7 @@
       "id": "q-build",
       "prompt": "把 nexmark-flink 构建出来拷进 lib",
       "should_trigger": false,
-      "note": "构建 → 安装类 skill（规划中）；本 skill 只读"
+      "note": "构建 → 安装类 skill（审中 !323）；本 skill 只读"
     }
   ]
 }

@@ -32,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 
 KEY = 'flink_velox_lib_state_check_result'
@@ -99,6 +100,12 @@ def classify(names):
     duplicates = {a: gluten[a] for a in GLUTEN_ARTIFACTS if len(gluten[a]) > 1}
     if len(velox4j) > 1:
         duplicates['velox4j'] = velox4j
+    # the runtime dependencies count too: which of two guava versions gets loaded is
+    # decided by classpath order, exactly as for the gluten jars
+    for a in RUNTIME_DEPS:
+        found = [n for n in names if n.startswith(a + '-')]
+        if len(found) > 1:
+            duplicates[a] = found
     gfv_jars = [n for n in names if GFV_JAR_RE.search(n)]
     if not gfv_jars:
         build, absent = 'native', []
@@ -229,6 +236,12 @@ def write_out(path, result, overwrite):
         return 2
     if os.path.exists(target) and not overwrite:
         print(f'lib_state_check.py: --out already exists, pass --overwrite to replace it: {path}',
+              file=sys.stderr)
+        return 2
+    if overwrite and os.path.exists(target) and not stat.S_ISREG(os.stat(target).st_mode):
+        # a fifo (or a directory, socket, device) is never opened: open() on a fifo
+        # blocks until a reader shows up and the check would never return
+        print(f'lib_state_check.py: --out exists and is not a regular file, refusing to overwrite it: {path}',
               file=sys.stderr)
         return 2
     try:

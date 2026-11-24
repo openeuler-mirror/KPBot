@@ -35,6 +35,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import urllib.error
 import urllib.request
@@ -47,6 +48,8 @@ PROC_ROOT = os.environ.get('ENV_CHECK_PROC_ROOT', '/proc')
 STATUS_ORDER = ('ok', 'info', 'skipped', 'warn', 'fail')
 
 DEFAULT_REST_URL = 'http://localhost:8081'
+# Flink 1.19 reads flink-conf.yaml when both files exist and ignores config.yaml then.
+CONF_FILES = ('flink-conf.yaml', 'config.yaml')
 JM_ENTRY_RE = re.compile(r'^org\.apache\.flink\.runtime\.entrypoint\.\w+Entrypoint$')
 TM_ENTRY_RE = re.compile(r'^org\.apache\.flink\.runtime\.taskexecutor\.TaskManagerRunner$')
 GFV_JAR_RE = re.compile(r'gluten|velox', re.I)
@@ -90,30 +93,40 @@ def find_flink_home():
     return (None, None)
 
 
-def load_flink_conf(flink_home):
+def effective_conf(flink_home):
+    """The one conf file Flink reads (flink-conf.yaml when it exists, else
+    config.yaml), or None when there is neither."""
+    for name in CONF_FILES:
+        if os.path.isfile(os.path.join(flink_home, 'conf', name)):
+            return os.path.join(flink_home, 'conf', name)
+    return None
+
+
+def load_flink_conf(conf_file):
+    """Flatten the one conf file Flink reads — config.yaml (nested maps) or
+    flink-conf.yaml (flat dotted keys) — without a YAML dependency. The two
+    files are never merged: Flink ignores config.yaml as soon as flink-conf.yaml
+    exists. Scalar leaves only."""
     conf = {}
-    for name in ('config.yaml', 'flink-conf.yaml'):
-        try:
-            fh = open(os.path.join(flink_home, 'conf', name), encoding='utf-8', errors='replace')
-        except OSError:
-            continue
-        stack = []
-        with fh:
-            for raw in fh:
-                line = re.sub(r'(^|\s)#.*$', r'\1', raw).rstrip()
-                if not line or line in ('---', '...'):
-                    continue
-                m = re.match(r'^(\s*)([A-Za-z0-9_.-]+):(?:\s+(.*))?$', line)
-                if not m:
-                    continue
-                indent, key, value = m.group(1), m.group(2), (m.group(3) or '').strip()
-                while stack and stack[-1][0] >= len(indent):
-                    stack.pop()
-                prefix = f'{stack[-1][1]}.' if stack else ''
-                if value:
-                    conf[prefix + key] = value.strip('\'"')
-                else:
-                    stack.append((len(indent), prefix + key))
+    if not conf_file:
+        return conf
+    stack = []  # [(indent, dotted prefix)]
+    with open(conf_file, encoding='utf-8', errors='replace') as fh:
+        for raw in fh:
+            line = re.sub(r'(^|\s)#.*$', r'\1', raw).rstrip()
+            if not line or line in ('---', '...'):
+                continue
+            m = re.match(r'^(\s*)([A-Za-z0-9_.-]+):(?:\s+(.*))?$', line)
+            if not m:
+                continue
+            indent, key, value = m.group(1), m.group(2), (m.group(3) or '').strip()
+            while stack and stack[-1][0] >= len(indent):
+                stack.pop()
+            prefix = f'{stack[-1][1]}.' if stack else ''
+            if value:
+                conf[prefix + key] = value.strip('\'"')
+            else:
+                stack.append((len(indent), prefix + key))
     return conf
 
 
@@ -213,11 +226,11 @@ def started_at(epoch):
 
 def scan():
     home, source = find_flink_home()
-    payload = {'flink_home': home, 'found_via': source, 'running': False, 'jobmanagers': [], 'taskmanagers': [],
-               'other_flink_daemons': 0, 'loaded_build': None, 'loaded_gfv_jars': [], 'lib_gfv_jars': [],
-               'lib_version': None, 'earliest_start': None, 'jars_replaced_after_start': [],
-               'consistent_with_lib': None, 'rest_url': None, 'rest_reachable': False, 'rest_version': None,
-               'rest_taskmanagers': None, 'rest_jobs_running': None}
+    payload = {'flink_home': home, 'found_via': source, 'conf_file': None, 'running': False, 'jobmanagers': [],
+               'taskmanagers': [], 'other_flink_daemons': 0, 'remote_taskmanagers': None, 'loaded_build': None,
+               'loaded_gfv_jars': [], 'lib_gfv_jars': [], 'lib_version': None, 'earliest_start': None,
+               'jars_replaced_after_start': [], 'consistent_with_lib': None, 'rest_url': None,
+               'rest_reachable': False, 'rest_version': None, 'rest_taskmanagers': None, 'rest_jobs_running': None}
     if not home:
         payload['rest_url'] = DEFAULT_REST_URL
         return payload, [make_item(
@@ -225,8 +238,8 @@ def scan():
             'Flink not found: FLINK_HOME is unset or has no bin/flink, no flink on PATH, nothing under '
             '/opt/flink or /usr/local/flink — running daemons cannot be attributed to an installation',
             HINT_FLINK)]
-    conf = load_flink_conf(home)
-    payload['rest_url'] = resolve_rest_url(conf)
+    payload['conf_file'] = effective_conf(home)
+    payload['rest_url'] = resolve_rest_url(load_flink_conf(payload['conf_file']))
     version, _ = dist_version(home)
     payload['lib_version'] = version
     lib = os.path.join(home, 'lib')
@@ -246,9 +259,27 @@ def scan():
             'other-clusters', 'info',
             f'{others} Flink daemon(s) of other installations run on this machine — a WebUI or REST port '
             f'other than {payload["rest_url"]} is theirs'))
+    # the REST overview is read once, before the verdicts: it tells whether TaskManagers
+    # exist that do not run as processes of this installation on this machine
+    overview = rest_overview(payload['rest_url'])
+    if overview is not None:
+        payload.update(rest_reachable=True, rest_version=str(overview.get('flink-version') or '') or None,
+                       rest_taskmanagers=overview.get('taskmanagers'), rest_jobs_running=overview.get('jobs-running'))
+    rest_tms, rest_version = payload['rest_taskmanagers'], payload['rest_version']
+    # the endpoint is this cluster's when its version is this installation's (or either is unknown)
+    rest_is_ours = overview is not None and (not rest_version or not version or rest_version == version)
+    rest_lists_tms = isinstance(rest_tms, int) and rest_tms >= 1 and rest_is_ours
     if jm and tm:
         items.append(make_item('processes', 'ok', f'JobManager {jm[0]["pid"]} and {len(tm)} TaskManager(s) '
-                                                  'of this installation'))
+                                                  'of this installation on this machine'))
+    elif jm and rest_lists_tms:
+        # the TaskManagers are registered with the JobManager but live elsewhere (other hosts,
+        # other containers): this check scans processes, so it cannot see them — said, not failed
+        items.append(make_item(
+            'processes', 'warn',
+            f'JobManager {jm[0]["pid"]} runs; no TaskManager of this installation runs on this machine — '
+            f'REST lists {rest_tms} TaskManager(s) registered from elsewhere (other hosts or containers); '
+            'their loaded build is not checked here'))
     elif jm:
         items.append(make_item(
             'processes', 'fail', f'JobManager {jm[0]["pid"]} runs but no TaskManager of this installation '
@@ -261,14 +292,18 @@ def scan():
             'stop the leftover TaskManagers and restart the cluster cleanly (a restart needs the user consent)'))
     else:
         items.append(make_item('processes', 'fail', 'not running: no JobManager and no TaskManager of this '
-                                                  'installation',
+                                                  'installation on this machine',
                                 'start the cluster (starting or restarting needs the user consent)'))
+    remote = rest_tms - len(tm) if running and jm and isinstance(rest_tms, int) and rest_tms > len(tm) \
+        and rest_is_ours else None
+    payload['remote_taskmanagers'] = remote
     if running:
         daemons_all = jm + tm
         per = ['gfv' if d['gfv_jars'] else 'native' for d in daemons_all]
         payload['loaded_build'] = per[0] if len(set(per)) == 1 else 'mixed'
         loaded = sorted({j for d in daemons_all for j in d['gfv_jars']})
         payload['loaded_gfv_jars'] = loaded
+        scope = f'; {remote} TaskManager(s) registered elsewhere are not checked' if remote else ''
         if payload['loaded_build'] == 'mixed':
             items.append(make_item(
                 'loaded-build', 'fail',
@@ -277,8 +312,9 @@ def scan():
         else:
             items.append(make_item(
                 'loaded-build', 'ok',
-                'every daemon carries ' + (', '.join(loaded) if loaded
-                                           else 'no gluten/velox jar on its classpath (native build)')))
+                'every daemon on this machine carries ' + (', '.join(loaded) if loaded
+                                                           else 'no gluten/velox jar on its classpath (native build)')
+                + scope))
         starts = [d['started_epoch'] for d in daemons_all if d['started_epoch']]
         earliest = min(starts) if starts else None
         payload['earliest_start'] = started_at(earliest)
@@ -291,11 +327,26 @@ def scan():
                 except OSError:
                     continue
         payload['jars_replaced_after_start'] = replaced
-        if loaded != payload['lib_gfv_jars'] or replaced:
+        # one daemon at a time against lib/: a merged set would hide a TaskManager that
+        # lacks a jar the JobManager has (both together still equal what is on disk)
+        disk = payload['lib_gfv_jars']
+        per_daemon = []
+        for d in daemons:  # the scan results carry the role
+            missing = sorted(set(disk) - set(d['gfv_jars']))
+            extra = sorted(set(d['gfv_jars']) - set(disk))
+            entry = next(e for e in daemons_all if e['pid'] == d['pid'])
+            entry.update(missing_vs_lib=missing, extra_vs_lib=extra)
+            if missing or extra:
+                per_daemon.append(f"{d['role']} pid {d['pid']} loads {', '.join(d['gfv_jars']) or 'no gluten/velox jar'}"
+                                  + (f' — missing {", ".join(missing)}' if missing else '')
+                                  + (f' — no longer in lib: {", ".join(extra)}' if extra else ''))
+        same_everywhere = len({tuple(d['gfv_jars']) for d in daemons}) == 1
+        if per_daemon or replaced:
             what = []
-            if loaded != payload['lib_gfv_jars']:
-                what.append(f'on disk {", ".join(payload["lib_gfv_jars"]) or "none"}; '
-                            f'loaded {", ".join(loaded) or "none"}')
+            if same_everywhere and loaded != disk:
+                what.append(f'on disk {", ".join(disk) or "none"}; loaded {", ".join(loaded) or "none"}')
+            elif not same_everywhere:
+                what.append('per daemon: ' + '; '.join(per_daemon))
             if replaced:
                 what.append('replaced after the start: ' + ', '.join(replaced[:5]) + (' ...' if len(replaced) > 5 else ''))
             payload['consistent_with_lib'] = False
@@ -303,19 +354,17 @@ def scan():
                 'lib-vs-cluster', 'fail',
                 'lib/ changed since the cluster started (' + '; '.join(what) + ') — the cluster still runs '
                 'what it loaded',
-                'restart the cluster so it loads what is in lib now (a restart needs the user consent)'))
+                'restart the cluster so every daemon loads what is in lib now (a restart needs the user consent)'))
         else:
             payload['consistent_with_lib'] = True
             items.append(make_item(
-                'lib-vs-cluster', 'ok', f'lib/ is unchanged since the cluster started ({payload["earliest_start"]})'))
+                'lib-vs-cluster', 'ok', f'every daemon on this machine loads what is in lib/ '
+                                        f'(unchanged since {payload["earliest_start"]})'))
         for d in daemons_all:
             d.pop('started_epoch', None)
     else:
         payload['consistent_with_lib'] = None
-    overview = rest_overview(payload['rest_url'])
     if overview is not None:
-        payload.update(rest_reachable=True, rest_version=str(overview.get('flink-version') or '') or None,
-                       rest_taskmanagers=overview.get('taskmanagers'), rest_jobs_running=overview.get('jobs-running'))
         summary = (f'REST {payload["rest_url"]} answers: Flink {payload["rest_version"] or "?"}, '
                    f'{payload["rest_taskmanagers"]} TaskManager(s), {payload["rest_jobs_running"]} job(s) running')
         if not running:
@@ -324,24 +373,34 @@ def scan():
                 'installation, a container, or a remote rest.address; it is not this cluster'))
         else:
             items.append(make_item('rest', 'ok', summary))
-            if payload['rest_version'] and version and payload['rest_version'] != version:
+            if rest_version and version and rest_version != version:
                 items.append(make_item(
                     'rest', 'warn', f'the REST endpoint reports Flink {payload["rest_version"]} while {home} '
-                    f'is {version} — it is not this installation'))
-            if isinstance(payload['rest_taskmanagers'], int) and payload['rest_taskmanagers'] < len(tm):
+                                    f'is {version} — it is not this installation'))
+            if isinstance(rest_tms, int) and rest_tms < len(tm):
                 items.append(make_item(
                     'rest', 'warn', f'{len(tm)} TaskManager(s) of this installation run but REST lists '
-                    f'{payload["rest_taskmanagers"]} — still registering, or registered with another JobManager'))
+                                    f'{payload["rest_taskmanagers"]} — still registering, or registered with another JobManager'))
+            if remote and tm:
+                items.append(make_item(
+                    'rest', 'warn', f'REST lists {payload["rest_taskmanagers"]} TaskManager(s), {remote} of them '
+                                    'registered from elsewhere — their loaded build is not checked here'))
             if payload['rest_jobs_running']:
                 items.append(make_item(
                     'jobs', 'warn', f'{payload["rest_jobs_running"]} job(s) are running — a restart would '
-                    'interrupt them'))
+                                    'interrupt them'))
     elif running:
         items.append(make_item(
             'rest', 'warn', f'REST {payload["rest_url"]} does not answer although the daemons are up — still '
-            'starting, or rest.address/rest.port differ'))
+                            'starting, or rest.address/rest.port differ'))
     else:
         items.append(make_item('rest', 'info', f'REST {payload["rest_url"]} does not answer (not running)'))
+    if isinstance(payload['rest_jobs_running'], int) and payload['rest_jobs_running'] > 0:
+        # no fix may read as "restart now" while jobs run
+        note = f" ({payload['rest_jobs_running']} job(s) are running: let them finish first — a restart would interrupt them)"
+        for item in items:
+            if item.get('fix') and 'restart' in item['fix']:
+                item['fix'] += note
     return payload, items
 
 
@@ -353,14 +412,21 @@ def next_step(payload, items):
         return HINT_FLINK + ', then rerun'
     if not payload['running']:
         return by['processes']['fix'] + ', then rerun'  # the same wording as the item's fix
+    # every branch below ends in a restart: a cluster with running jobs is not restarted
+    restart, proc_fix = None, by.get('processes', {}).get('fix')
     proc = by.get('processes', {})
     if proc.get('status') == 'fail':
-        return proc['fix'] + ', then rerun'
-    if by.get('loaded-build', {}).get('status') == 'fail':
-        return 'restart the cluster as a whole so every daemon loads the same build (a restart needs the ' \
-               'user consent), then rerun'
-    if by.get('lib-vs-cluster', {}).get('status') == 'fail':
-        return 'restart the cluster so it loads what is in lib now (a restart needs the user consent), then rerun'
+        restart = proc['fix']
+    elif by.get('loaded-build', {}).get('status') == 'fail':
+        restart = 'restart the cluster as a whole so every daemon loads the same build'
+    elif by.get('lib-vs-cluster', {}).get('status') == 'fail':
+        restart = 'restart the cluster so every daemon loads what is in lib now'
+    if restart:
+        jobs = payload.get('rest_jobs_running')
+        if isinstance(jobs, int) and jobs > 0:
+            return (f'{jobs} job(s) are running — let them finish (or stop them with the user\'s consent), '
+                    'then rerun; a restart now would interrupt them')
+        return restart + ('' if restart is proc_fix else ' (a restart needs the user consent)') + ', then rerun'
     warnings = [i['name'] for i in items if i['status'] == 'warn']
     return f"ready: the cluster runs the {payload['loaded_build']} build that is in lib" \
         + (' (warnings above)' if warnings else '')
@@ -392,8 +458,9 @@ def aborted(exc):
         'cluster': {'flink_home': None, 'found_via': None, 'running': False, 'jobmanagers': [], 'taskmanagers': [],
                     'other_flink_daemons': 0, 'loaded_build': None, 'loaded_gfv_jars': [], 'lib_gfv_jars': [],
                     'lib_version': None, 'earliest_start': None, 'jars_replaced_after_start': [],
-                    'consistent_with_lib': None, 'rest_url': None, 'rest_reachable': False, 'rest_version': None,
-                    'rest_taskmanagers': None, 'rest_jobs_running': None},
+                    'consistent_with_lib': None, 'conf_file': None, 'remote_taskmanagers': None, 'rest_url': None,
+                    'rest_reachable': False, 'rest_version': None, 'rest_taskmanagers': None,
+                    'rest_jobs_running': None},
         'items': [],
         'missing': [],
         'next_step': 'fix the check error first (see error_message), then rerun',
@@ -410,6 +477,12 @@ def write_out(path, result, overwrite):
         return 2
     if os.path.exists(target) and not overwrite:
         print(f'cluster_check.py: --out already exists, pass --overwrite to replace it: {path}', file=sys.stderr)
+        return 2
+    if overwrite and os.path.exists(target) and not stat.S_ISREG(os.stat(target).st_mode):
+        # a fifo (or a directory, socket, device) is never opened: open() on a fifo
+        # blocks until a reader shows up and the check would never return
+        print(f'cluster_check.py: --out exists and is not a regular file, refusing to overwrite it: {target}',
+              file=sys.stderr)
         return 2
     try:
         os.makedirs(os.path.dirname(target), exist_ok=True)

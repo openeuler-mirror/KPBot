@@ -43,7 +43,7 @@
       "id": "q-restart",
       "prompt": "重启 Flink 集群",
       "should_trigger": false,
-      "note": "重启 → 切换类 skill（规划中）；本 skill 只读"
+      "note": "重启 → 切换类 skill（审中 !325）；本 skill 只读"
     }
   ]
 }

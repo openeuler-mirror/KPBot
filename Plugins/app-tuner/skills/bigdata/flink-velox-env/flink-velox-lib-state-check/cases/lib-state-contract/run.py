@@ -19,6 +19,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -253,6 +254,30 @@ class LibStateCase(unittest.TestCase):
                          "cluster (a restart needs the user consent), then rerun")
         self.assertIn("  WARN  duplicates: several versions of velox4j", self.run_check()[1])
 
+    def test_two_versions_of_a_runtime_dependency_warn_too(self):
+        # an upgrade that left the old guava next to the new one: which of them loads is decided
+        # by classpath order — the same reason duplicates of the gluten jars warn
+        self.m.flink_home()
+        self.m.lib_jars("gfv")
+        self.m.write(self.m.lib / "guava-31.1-jre.jar", "old\n")
+        self.m.write(self.m.lib / "jackson-core-2.15.0.jar", "old\n")
+        code, out, _, r = self.run_check("--json")
+        self.assertEqual((code, r["success"], r["status"]), (0, True, "warn"))
+        self.assertEqual(r["lib_state"]["duplicates"], {
+            "guava": ["guava-31.1-jre.jar", "guava-33.4.0-jre.jar"],
+            "jackson-core": ["jackson-core-2.15.0.jar", "jackson-core-2.18.0.jar"]})
+        dups = [i for i in r["items"] if i["name"] == "duplicates"]
+        self.assertEqual([d["detail"] for d in dups], [
+            "several versions of guava in lib: guava-31.1-jre.jar, guava-33.4.0-jre.jar — remove the stale ones "
+            "and restart the cluster (a restart needs the user consent)",
+            "several versions of jackson-core in lib: jackson-core-2.15.0.jar, jackson-core-2.18.0.jar — remove "
+            "the stale ones and restart the cluster (a restart needs the user consent)"])
+        self.assertIn("remove the stale duplicate jars (guava: guava-31.1-jre.jar, guava-33.4.0-jre.jar; "
+                      "jackson-core: jackson-core-2.15.0.jar, jackson-core-2.18.0.jar)", r["next_step"])
+        self.assertIn("  WARN  duplicates: several versions of guava", self.run_check()[1])
+        # the build itself is still complete: a warning, not a failure
+        self.assertEqual((r["lib_state"]["build"], r["lib_state"]["missing_parts"]), ("gfv", []))
+
     def test_no_flink_home(self):
         code, out, _, r = self.run_check("--json", env=self.m.env(FLINK_HOME=None))
         self.assertEqual((code, r["success"]), (1, False))
@@ -329,6 +354,19 @@ class LibStateCase(unittest.TestCase):
         self.assertEqual((code, target.read_text(encoding="utf-8")), (2, "keep me\n"))
         self.assertIn("not a symlink", err)
         self.assertEqual(self.run_check("--json", "--out", str(archive), "--overwrite")[0], 0)
+
+    def test_out_never_opens_a_fifo(self):
+        self.m.flink_home()
+        self.m.lib_jars("native")
+        fifo = self.tmp / "project" / "pipe.json"
+        fifo.parent.mkdir()
+        os.mkfifo(str(fifo))
+        # open() on a fifo blocks until a reader appears: the guard must refuse instead
+        # (a blocked check would run into the subprocess timeout of run_check and error out)
+        code, _, err, _ = self.run_check("--json", "--out", str(fifo), "--overwrite")
+        self.assertEqual((code, stat.S_ISFIFO(fifo.lstat().st_mode)), (2, True))
+        self.assertIn("--out exists and is not a regular file, refusing to overwrite it", err)
+        self.assertIn("READY", self.run_check()[1])  # the verdict itself is unaffected
 
     def test_invalid_argument_is_2_without_json(self):
         code, out, err, r = self.run_check("--expect", "whatever")
