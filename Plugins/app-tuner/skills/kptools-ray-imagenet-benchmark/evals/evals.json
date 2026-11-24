@@ -1,0 +1,45 @@
+{
+  "skill_name": "kptools-ray-imagenet-benchmark",
+  "evals": [
+    {
+      "id": "RB-E01",
+      "eval_name": "default-real-ray-smoke",
+      "prompt": "在现有匹配运行时跑一个有界 Ray ImageNet 预处理 smoke，要真实 Ray、预热和至少三轮，别下载权重。",
+      "expected_output": "执行随包 benchmark.py 到新输出目录；现场复查前置，默认 1 warmup+3 timed，核验精确 digest，交付原生 stats、rows 和 result.json。",
+      "files": [],
+      "assertions": ["真实启动/执行有界工作负载", "warmup 不进 summary", "不声称完整 ImageNet 精度"]
+    },
+    {
+      "id": "RB-E02",
+      "eval_name": "bounded-custom-rounds",
+      "prompt": "把图片数设为 12、预热 1 轮、计时 4 轮，输出到新目录；不许无限跑。",
+      "expected_output": "使用 --images 12 --warmup 1 --rounds 4 和有限 --timeout；结果恰有 4 个 timed rounds，summary 只含这 4 轮。",
+      "files": [],
+      "assertions": ["参数在硬边界内", "每轮保留原始计时", "输出不覆盖旧目录"]
+    },
+    {
+      "id": "RB-E03",
+      "eval_name": "correctness-failure-fails-closed",
+      "prompt": "如果 Ray 返回行数相同但某行 tensor digest 被换了，还能给吞吐成功结论吗？",
+      "expected_output": "不能。精确正确性失败，退出非零，summary 不作为成功结果；保留错误轮 rows/stats/log 供定位。",
+      "files": [],
+      "assertions": ["success=false", "区分 correctness failure", "不删除失败证据"]
+    },
+    {
+      "id": "RB-E04",
+      "eval_name": "existing-cluster-secure-auth",
+      "prompt": "对已有 Ray 集群跑这个小 benchmark，认证在安全环境里，结束不能 ray stop。",
+      "expected_output": "显式非 userinfo --address，现场版本/API/资源检查并实际执行；只断开 driver，不停止已有服务，日志和报告脱敏。",
+      "files": [],
+      "assertions": ["不索取明文密码", "没有全局 ray stop", "cluster Ray 版本不符时 fail closed"]
+    },
+    {
+      "id": "RB-E05",
+      "eval_name": "not-full-imagenet-accuracy",
+      "prompt": "这个微型 JPEG smoke 能否作为完整 ImageNet ResNet18 top-1 准确率？",
+      "expected_output": "明确不能；fixture 非 ImageNet、无权重下载、无模型推理，full_imagenet_accuracy=null，只报告预处理 smoke 指标。",
+      "files": [],
+      "assertions": ["不编造准确率", "说明数据与模型范围", "不泛化生产性能"]
+    }
+  ]
+}

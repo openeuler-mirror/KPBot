@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Added
+- app-tuner 新增独立 `kptools-ray-imagenet-environment-check` skill：只读检查既有 Ray/ImageNet 预处理运行时、真实 API、可选现有端点与 CPU/共享内存/内存/磁盘前置；限定实际验证版本，逐项输出 ready/blocked/unknown 与 absent/wrong_version/timeout/auth 等证据，支持安全配置脱敏、有限进程组超时和独占 JSON；附 tier-A 契约、探针/官方来源参考与触发评测。
+- app-tuner 新增独立 `kptools-ray-imagenet-benchmark` skill：现场复查前置并运行确定性微型 JPEG → torchvision ResNet18 transforms → Ray Data 的真实有界 smoke；默认 1 轮预热 + 3 轮计时，Actor 内逐行 SHA-256 精确核验，保存原生 stats/raw rows/日志和 warmup 排除的吞吐/延迟 JSON；支持自有本地 Ray 或显式现有端点、有限进程组清理与失败证据保留，不下载权重或声称完整 ImageNet 精度；附 tier-A 契约、独立 E2E 证据复核、指标/官方来源参考与触发评测。
 - app-tuner 新增 `flink-velox-env` 检查子域（`skills/bigdata/flink-velox-env/`，DOMAIN.md 含准入判据：只读 / 单一诉求 / 自带契约）及 3 个检查 skill：`flink-velox-toolchain-check`（git cmake gcc g++ mvn，PATH 探测取版本，g++ → gcc-c++、mvn → maven）、`flink-velox-build-tools-check`（ninja ccache autoconf automake libtool flex bison python3 patchelf，ninja → ninja-build）、`flink-velox-cpp-deps-check`（两层：13 个包管理器级库按头文件在 /usr/include（含 <triplet>/ 子目录）与 /usr/local/include 探测并给 -devel 包名；源码级库清单解析自 velox checkout 自带 setup 脚本的 install_velox_deps 调用序列（去包管理器与 conda 条目、止于函数右括号），按 /usr/local 下 cmake 配置目录 / include / 头文件 / 探针二进制探测；没有 checkout 时为 skipped 不判负）；每个 skill 独立 Python 标准库脚本，JSON + 人读报告、退出码 0/1/2、唯一 next_step，只扫不改；统筹 skill `flink-velox-env-check` 与其余 6 个具体项检查子 skill 分后续 PR 提交；附各自 tier-A 契约用例（11 / 11 / 16 测试，假机器不触真机）与触发评估集
 - code-optimizer 新增 `sql-shuffle-string-codec` skill：列式 SQL 引擎 join 输出与原生 Shuffle 的字符串搬运、重建和 LZ4 候选查找优化；附 tier-A 用例 `cases/shuffle-contract` 与 3 条模型评估规格。
 - app-tuner 为 `kptools-prompt-capture` 新增八项任务技能，覆盖 proxy 检查与接入、限时采集、请求分布与会话分析、分词核验、vLLM 日志关联及汇总；仅元数据的采集窗口拒绝热更为全文或 golden，附合成数据评测。
