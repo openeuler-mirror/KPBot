@@ -4,7 +4,13 @@
 
 ## [Unreleased]
 
+### Changed
+- app-tuner 修复两个 `kptools-clickhouse-*` skill 的真实超时/取消悬挂：超时或 `KeyboardInterrupt` 等取消时直接 SIGKILL 各自新建的进程组，并对组长回收及管道读取设置有限上界，覆盖组长先退出且忽略 SIGTERM 的 fork 后代继承 stdout 、以及取消后子进程存活的场景；取消清理后原样重抛，双方新增显式耗时与 PID 清理回归，契约分别增至 13 / 16 项
+- app-tuner 两个 ClickHouse skill 继承 `MulanPSL-2.0`，兼容性移入 `metadata.compatibility`；TLS/认证示例默认只需现有官方 CLI 和目标，配置文件仅在实际提供时可选传入
+
 ### Added
+- app-tuner 新增独立 `kptools-clickhouse-environment-check` skill：对已有 ClickHouse 客户端、benchmark 接口、实时认证/版本、精确 SELECT 与日志空间做有限只读探针，输出 ready/blocked/unknown、mandatory 标记和脱敏证据；支持安全非默认端点及单二进制布局，附 tier-A 契约回归与触发评估集
+- app-tuner 新增独立 `kptools-clickhouse-benchmark` skill：实时预检后执行固定 `numbers(N)` SELECT-only 有界负载，预热与默认三轮测量分离，逐阶段精确正确性校验，保留原生 QPS/RPS/MiB/s、客户端延迟、查询计数、墙钟耗时和失败日志；支持 ClickHouse 26.8 原生输出与单二进制布局，附 tier-A 契约回归与触发评估集
 - app-tuner 新增 `flink-velox-env` 检查子域（`skills/bigdata/flink-velox-env/`，DOMAIN.md 含准入判据：只读 / 单一诉求 / 自带契约）及 3 个检查 skill：`flink-velox-toolchain-check`（git cmake gcc g++ mvn，PATH 探测取版本，g++ → gcc-c++、mvn → maven）、`flink-velox-build-tools-check`（ninja ccache autoconf automake libtool flex bison python3 patchelf，ninja → ninja-build）、`flink-velox-cpp-deps-check`（两层：13 个包管理器级库按头文件在 /usr/include（含 <triplet>/ 子目录）与 /usr/local/include 探测并给 -devel 包名；源码级库清单解析自 velox checkout 自带 setup 脚本的 install_velox_deps 调用序列（去包管理器与 conda 条目、止于函数右括号），按 /usr/local 下 cmake 配置目录 / include / 头文件 / 探针二进制探测；没有 checkout 时为 skipped 不判负）；每个 skill 独立 Python 标准库脚本，JSON + 人读报告、退出码 0/1/2、唯一 next_step，只扫不改；统筹 skill `flink-velox-env-check` 与其余 6 个具体项检查子 skill 分后续 PR 提交；附各自 tier-A 契约用例（11 / 11 / 16 测试，假机器不触真机）与触发评估集
 - code-optimizer 新增 `sql-shuffle-string-codec` skill：列式 SQL 引擎 join 输出与原生 Shuffle 的字符串搬运、重建和 LZ4 候选查找优化；附 tier-A 用例 `cases/shuffle-contract` 与 3 条模型评估规格。
 - app-tuner 为 `kptools-prompt-capture` 新增八项任务技能，覆盖 proxy 检查与接入、限时采集、请求分布与会话分析、分词核验、vLLM 日志关联及汇总；仅元数据的采集窗口拒绝热更为全文或 golden，附合成数据评测。

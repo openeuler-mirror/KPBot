@@ -1,0 +1,438 @@
+#!/usr/bin/env python3
+"""Offline contract regressions for the ClickHouse environment probes."""
+
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest import mock
+
+SCRIPT = (
+    Path(__file__).resolve().parents[1] / "scripts" / "check_environment.py"
+)
+SPEC = importlib.util.spec_from_file_location("clickhouse_environment", SCRIPT)
+ENVIRONMENT_MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ENVIRONMENT_MODULE)
+FORKED_DESCENDANT = r"""
+import os
+import signal
+import time
+pid = os.fork()
+if pid == 0:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    print(os.getpid(), flush=True)
+    while True:
+        time.sleep(60)
+os.waitpid(pid, 0)
+"""
+FAKE_CLIENT = r"""#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+root = Path(__file__).resolve().parent
+config_path = root / "fake-config.json"
+config = json.loads(config_path.read_text(encoding="utf-8"))
+args = sys.argv[1:]
+with (root / "calls.jsonl").open("a", encoding="utf-8") as stream:
+    stream.write(json.dumps(args) + "\n")
+if "--version" in args:
+    if "benchmark" in Path(__file__).name or args[:1] == ["benchmark"]:
+        print("UNRECOGNIZED_ARGUMENTS: benchmark --version", file=sys.stderr)
+        raise SystemExit(40)
+    print("ClickHouse client version " + config["tool_version"])
+    raise SystemExit(0)
+if "--help" in args:
+    print(" ".join(config["help_flags"]))
+    raise SystemExit(0)
+query = args[args.index("--query") + 1] if "--query" in args else ""
+if config.get("sleep_query") and config["sleep_query"] in query:
+    time.sleep(10)
+if config.get("auth_error") and query == "SELECT version()":
+    print(
+        "Code: 516. AUTHENTICATION_FAILED password="
+        + os.environ.get("CLICKHOUSE_PASSWORD", ""),
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if query == "SELECT version()":
+    print(config["server_version"])
+elif query == "SELECT sum(number) FROM numbers(1000)":
+    print(config.get("aggregate", "499500"))
+else:
+    print("unexpected query", file=sys.stderr)
+    raise SystemExit(3)
+"""
+DEFAULT_CONFIG = {
+    "tool_version": "26.8.42.13",
+    "server_version": "26.8.42.13",
+    "help_flags": [
+        "--query",
+        "--iterations",
+        "--concurrency",
+        "--delay",
+        "--client-side-time",
+        "--config",
+    ],
+}
+
+
+class EnvironmentContractTests(unittest.TestCase):
+    """Exercise real script processes against a bounded fake official CLI."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.client = self.root / "fake-clickhouse"
+        self.benchmark = self.root / "fake-clickhouse-benchmark"
+        self.secret = "contract-only-secret"
+        self.env = dict(os.environ, CLICKHOUSE_PASSWORD=self.secret)
+
+    def fake_client(self, **changes):
+        config = dict(DEFAULT_CONFIG)
+        config.update(changes)
+        (self.root / "fake-config.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
+        self.client.write_text(FAKE_CLIENT, encoding="utf-8")
+        self.client.chmod(0o700)
+        self.benchmark.write_text(FAKE_CLIENT, encoding="utf-8")
+        self.benchmark.chmod(0o700)
+        return self.client
+
+    def invoke(self, output, benchmark=None, extra=()):
+        command = [
+            sys.executable,
+            str(SCRIPT),
+            "--client",
+            str(self.client),
+            "--benchmark",
+            str(benchmark or self.benchmark),
+            "--timeout",
+            "0.2",
+            "--output",
+            str(output),
+            *map(str, extra),
+        ]
+        return subprocess.run(
+            command,
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+
+    def result(self, output):
+        return json.loads((output / "result.json").read_text(encoding="utf-8"))
+
+    def calls(self):
+        path = self.root / "calls.jsonl"
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_ready_checks_live_interface_and_exact_aggregate(self):
+        self.fake_client()
+        output = self.root / "new" / "ready"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.result(output)
+        self.assertEqual(result["status"], "ready")
+        self.assertTrue(result["ready"])
+        checks = {item["name"]: item for item in result["checks"]}
+        self.assertEqual(checks["server_interface"]["status"], "ready")
+        self.assertEqual(checks["exact_query"]["evidence"]["actual"], "499500")
+        self.assertTrue(checks["exact_query"]["mandatory"])
+        self.assertFalse(checks["client_server_series"]["mandatory"])
+        self.assertIn(
+            "--client-side-time",
+            checks["benchmark_interface"]["evidence"]["required_flags"],
+        )
+        self.assertIn("not a production-health", result["limitations"][1])
+
+    def test_unsupported_server_version_is_blocked(self):
+        self.fake_client(server_version="22.7.9.1")
+        output = self.root / "old"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 1)
+        result = self.result(output)
+        check = next(
+            item
+            for item in result["checks"]
+            if item["name"] == "server_interface"
+        )
+        self.assertEqual(check["reason"], "wrong_version")
+        self.assertEqual(check["evidence"]["minimum_version"], "22.8.0")
+        self.assertEqual(result["status"], "blocked")
+
+    def test_missing_benchmark_tool_is_not_ready(self):
+        self.fake_client()
+        output = self.root / "missing"
+        completed = self.invoke(output, benchmark=self.root / "not-installed")
+        self.assertEqual(completed.returncode, 1)
+        result = self.result(output)
+        check = next(
+            item
+            for item in result["checks"]
+            if item["name"] == "benchmark_interface"
+        )
+        self.assertEqual(check["reason"], "missing_tool")
+        self.assertEqual(result["status"], "blocked")
+
+    def test_authentication_failure_is_classified_and_redacted(self):
+        self.fake_client(auth_error=True)
+        output = self.root / "auth"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 1)
+        result = self.result(output)
+        server = next(
+            item
+            for item in result["checks"]
+            if item["name"] == "server_interface"
+        )
+        exact = next(
+            item for item in result["checks"] if item["name"] == "exact_query"
+        )
+        self.assertEqual(server["reason"], "auth")
+        self.assertEqual(exact["reason"], "dependency_failed")
+        log_text = (output / "server-interface.stderr.log").read_text()
+        evidence = completed.stdout + log_text
+        self.assertNotIn(self.secret, evidence)
+        self.assertIn("[REDACTED]", evidence)
+
+    def test_timeout_preserves_failure_evidence(self):
+        self.fake_client(sleep_query="SELECT version()")
+        output = self.root / "timeout"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 1)
+        result = self.result(output)
+        server = next(
+            item
+            for item in result["checks"]
+            if item["name"] == "server_interface"
+        )
+        self.assertEqual(server["reason"], "timeout")
+        self.assertTrue((output / "server-interface.stdout.log").exists())
+        self.assertIsNotNone(server["evidence"]["duration_ms"])
+
+    def test_timeout_kills_sigterm_ignoring_forked_descendant(self):
+        started = time.monotonic()
+        outcome = ENVIRONMENT_MODULE.run_process(
+            [sys.executable, "-c", FORKED_DESCENDANT], timeout=0.2
+        )
+        elapsed = time.monotonic() - started
+        self.assertTrue(outcome["timed_out"])
+        self.assertLess(elapsed, 2.5)
+        descendant_pid = int(outcome["stdout"].strip())
+        try:
+            deadline = time.monotonic() + 2
+            while True:
+                try:
+                    os.kill(descendant_pid, 0)
+                except ProcessLookupError:
+                    break
+                # A container's non-reaping PID 1 may retain a dead zombie.
+                try:
+                    state = Path(f"/proc/{descendant_pid}/stat").read_text()
+                except FileNotFoundError:
+                    break
+                if state.rpartition(") ")[2].split()[0] == "Z":
+                    break
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.02)
+        finally:
+            try:
+                os.kill(descendant_pid, 0)
+                os.kill(descendant_pid, 9)
+            except ProcessLookupError:
+                pass
+
+    def test_cancellation_kills_real_child_and_reraises(self):
+        real_popen = ENVIRONMENT_MODULE.subprocess.Popen
+        created = []
+
+        class InterruptOnce:
+            def __init__(self, process):
+                self.process = process
+                self.first = True
+
+            def communicate(self, timeout=None):
+                if self.first:
+                    self.first = False
+                    raise KeyboardInterrupt
+                return self.process.communicate(timeout=timeout)
+
+            def __getattr__(self, name):
+                return getattr(self.process, name)
+
+        def popen(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            created.append(process)
+            return InterruptOnce(process)
+
+        started = time.monotonic()
+        with mock.patch.object(
+            ENVIRONMENT_MODULE.subprocess, "Popen", side_effect=popen
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                ENVIRONMENT_MODULE.run_process(
+                    [sys.executable, "-c", "import time; time.sleep(60)"],
+                    timeout=30,
+                )
+        self.assertLess(time.monotonic() - started, 2.5)
+        child_pid = created[0].pid
+        try:
+            deadline = time.monotonic() + 2
+            while True:
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.02)
+        finally:
+            try:
+                os.kill(child_pid, 0)
+                os.kill(child_pid, 9)
+            except ProcessLookupError:
+                pass
+
+    def test_wrong_aggregate_fails_closed(self):
+        self.fake_client(aggregate="0")
+        output = self.root / "wrong-sum"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 1)
+        result = self.result(output)
+        exact = next(
+            item for item in result["checks"] if item["name"] == "exact_query"
+        )
+        self.assertEqual(exact["reason"], "correctness")
+        self.assertEqual(exact["evidence"]["expected"], "499500")
+        self.assertEqual(exact["evidence"]["actual"], "0")
+
+    def test_unknown_version_has_distinct_exit_and_status(self):
+        self.fake_client(server_version="unparseable")
+        output = self.root / "unknown"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 4)
+        self.assertEqual(self.result(output)["status"], "unknown")
+
+    def test_missing_required_interface_is_wrong_version(self):
+        flags = list(DEFAULT_CONFIG["help_flags"])
+        flags.remove("--client-side-time")
+        self.fake_client(help_flags=flags)
+        output = self.root / "interface"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 1)
+        result = self.result(output)
+        interface = next(
+            item
+            for item in result["checks"]
+            if item["name"] == "benchmark_interface"
+        )
+        self.assertEqual(interface["reason"], "wrong_version")
+        self.assertEqual(
+            interface["evidence"]["missing_flags"], ["--client-side-time"]
+        )
+
+    def test_secure_nondefault_target_never_puts_password_in_argv(self):
+        self.fake_client()
+        config = self.root / "private-client.xml"
+        config.write_text("<clickhouse/>", encoding="utf-8")
+        config.chmod(0o600)
+        output = self.root / "secure"
+        completed = self.invoke(
+            output,
+            extra=(
+                "--host",
+                "db.example",
+                "--port",
+                "9440",
+                "--user",
+                "benchmark-user",
+                "--secure",
+                "--config",
+                config,
+            ),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        flattened = (
+            "\n".join("\n".join(call) for call in self.calls())
+            + completed.stdout
+        )
+        self.assertNotIn(self.secret, flattened)
+        self.assertNotIn("--password", flattened)
+        version_call = next(
+            call for call in self.calls() if "SELECT version()" in call
+        )
+        self.assertIn("db.example", version_call)
+        self.assertIn("9440", version_call)
+        self.assertIn(str(config), version_call)
+        self.assertIn("--secure", version_call)
+
+    def test_single_binary_never_invokes_benchmark_version(self):
+        self.fake_client()
+        output = self.root / "single-binary"
+        completed = self.invoke(output, extra=("--single-binary",))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        version_calls = [call for call in self.calls() if "--version" in call]
+        self.assertEqual(version_calls, [["--version"]])
+        result = self.result(output)
+        checks = {item["name"]: item for item in result["checks"]}
+        self.assertEqual(
+            checks["client_tool"]["evidence"]["version"], "26.8.42.13"
+        )
+        self.assertEqual(
+            checks["benchmark_interface"]["evidence"]["version"],
+            "26.8.42.13",
+        )
+
+    def test_output_collision_preserves_sentinel_and_skips_probes(self):
+        self.fake_client()
+        output = self.root / "collision"
+        output.mkdir()
+        sentinel = output / "result.json"
+        sentinel.write_text("keep me", encoding="utf-8")
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 3)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep me")
+        self.assertEqual(self.calls(), [])
+
+
+if __name__ == "__main__":
+    suite = unittest.defaultTestLoader.loadTestsFromModule(
+        sys.modules[__name__]
+    )
+    test_result = unittest.TextTestRunner(verbosity=2).run(suite)
+    results = (
+        Path(__file__).resolve().parents[1] / "cases" / "contract" / "results"
+    )
+    results.mkdir(parents=True, exist_ok=True)
+    report = {
+        "success": test_result.wasSuccessful(),
+        "tests": test_result.testsRun,
+        "failures": len(test_result.failures),
+        "errors": len(test_result.errors),
+        "requires_live_service": False,
+        "semantic_checks": [
+            "ready/blocked/unknown",
+            "wrong_version/missing_tool/auth/timeout/correctness",
+            "secret redaction and nondefault endpoints",
+            "exclusive output preservation",
+            "bounded timeout/cancellation process and PID cleanup",
+        ],
+    }
+    (results / "result.json").write_text(
+        json.dumps(report, indent=2) + "\n", encoding="utf-8"
+    )
+    sys.exit(0 if test_result.wasSuccessful() else 1)
