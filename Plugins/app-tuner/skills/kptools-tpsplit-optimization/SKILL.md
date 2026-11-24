@@ -2,7 +2,8 @@
 name: kptools-tpsplit-optimization
 description: >
   连接远端机器部署新 TP size 的推理集群，典型场景是把跨机 TP32+Ray 的 Prefill 集群迁移为
-  单机 TP 闭环 + 显式 DP 组网（TP8/TP4/TP16 均可）。当用户提到以下场景时必须使用此技能：
+  单机 TP 闭环 + 显式 DP 组网（TP8/TP4/TP16 均可），旧集群无论是否 Ray 托管均自动适配
+  （读旧启动脚本识别形态，无 Ray 时跳过去 Ray 步骤）。当用户提到以下场景时必须使用此技能：
   TP 拆分、TP size 变更、按新 TP size 部署集群、tpsplit、张量并行度调整、单机 TP 闭环、
   去 Ray 化部署、显式 DP 组网（DP rank 分配 / rpc-port 16600）、Mooncake KV_TRANSFER_CONFIG
   的 tp/dp 对齐、单机双实例 9000/9001 分流、ASCEND_RT_VISIBLE_DEVICES 切分、按可行性分析
@@ -15,7 +16,7 @@ metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.2.1"
+  version: "0.3.0"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
@@ -52,6 +53,7 @@ metadata:
 | DP 组大小 | 引擎组内 DP（一组几个 TP8 实例） | 默认 4，确认 |
 | Mooncake 全局 dp_size | 所有主机 P 实例总数 | 由实例布局推导并自检；分析报告给定则双向核对 |
 | D 侧现状与位置 | D 侧 dp_size/tp_size（如 64/1）、D 侧启动脚本所在主机与路径 | 必须问 |
+| 旧方案形态 | 执行后端（ray / mp / 无旗标）、现有 TP size、KV connector 结构 | **读旧启动脚本自动识别**，结果与用户核对；**不要假设旧方案一定是 TP32+Ray** |
 | 旧集群状态 | 是否在跑、是否要停 | **必须问，绝不静默停** |
 | P 侧脚本与配置路径 | vLLM 启动脚本、KV_TRANSFER_CONFIG 所在位置 | 必须问 |
 | Proxy 网关 | 类型（MindIE Motor / Nginx / 自研等，各种可能都有）与配置文件路径 | 必须问；类型决定改法与 reload 方式 |
@@ -101,15 +103,15 @@ ss -ltn 2>/dev/null | grep -E ':(9000|9001|16600|30000|10001)\b'   # 计划端�
 ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 ```
 
-- **旧集群处置**：阶段 1 已问过要不要停，此处执行。停 P 侧旧实例：`ps -ef | grep vllm` 找到 PID 逐个 kill（**勿用宽匹配 pkill**，会误杀其他进程）；跨机 Ray 集群每台执行 `ray stop`；停完复查 `ps -ef | grep -E 'vllm|ray'` 确认干净、端口已释放
-- **去 Ray 残留**：检查旧启动脚本与用户 shell 环境，确认无 `--distributed-executor-backend ray`、无 Ray 相关环境变量（RAY_ADDRESS 等），新脚本中不引入
+- **旧集群处置**：阶段 1 已问过要不要停，此处执行。停 P 侧旧实例：`ps -ef | grep vllm` 找到 PID 逐个 kill（**勿用宽匹配 pkill**，会误杀其他进程）；**仅当旧方案确实用 Ray 时**（脚本含 ray backend 或现场有 ray 进程）才在每台执行 `ray stop`；停完复查 `ps -ef | grep -E 'vllm|ray'` 确认干净、端口已释放
+- **去 Ray 残留（仅旧方案有 Ray 时）**：检查旧启动脚本与用户 shell 环境，确认无 `--distributed-executor-backend ray`、无 Ray 相关环境变量（RAY_ADDRESS 等），新脚本中不引入。旧方案本来就没有 Ray 时这步无事可做，直接过
 - **防火墙/安全组**：DP 组跨主机时，组内所有主机对 16600 互通；Proxy 到各实例 http 端口可达
 - ⚠️ **新旧拓扑禁止混跑**：切换窗口内 D 侧必须整体指向同一套 P 拓扑。"先改一半 D 实例试试" = KV 错配，不允许分批切换 P 拓扑
 - 预检发现端口被占、卡数对不上、旧进程清不掉，立即反馈用户并停下，不要自行换端口/换卡继续
 
 ## 阶段 4：生成脚本与配置分发
 
-基于 `references/templates/prefill-tp8-instance.sh`（新方案占位符模板）为每个 P 实例生成启动脚本。旧方案基线见 `references/templates/legacy-prefill-tp32.sh`（识别现有部署、对比差异用）。
+基于 `references/templates/prefill-tp8-instance.sh`（新方案占位符模板）为每个 P 实例生成启动脚本。旧方案基线见 `references/templates/legacy-prefill-tp32.sh`（识别现有部署、对比差异用）；legacy 基线只是 **TP32+Ray 形态的样例**，现场旧脚本的后端/TP size/KV connector 以实际读取为准，不要硬套基线。
 
 占位符与数据来源：
 
@@ -126,10 +128,10 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 
 生成要点：
 
-- **去掉 `--distributed-executor-backend ray`**，这是新旧方案的分界线
+- 新脚本**不写 `--distributed-executor-backend`**（TP 单机闭环用默认后端即可）。旧脚本带 ray backend 的，生成时删除；旧脚本本来就没有的，保持没有——新方案任何情况下都不引入该旗标
 - 每实例单独一份脚本，实例间差异项只有 `--data-parallel-rank` / `ASCEND_RT_VISIBLE_DEVICES` / `--port` 三处，其余参数全组一致——生成后 diff 一遍，差异项之外的改动都是笔误
 - DP 组网参数口径（对齐 vLLM 官方旗标）：`--data-parallel-size`（组大小）、`--data-parallel-rank`（本实例 rank）、`--data-parallel-address`（组主节点 IP）、`--data-parallel-rpc-port 16600`（组内统一）。注意 `--data-parallel-rank` 外部 LB 模式适用于 **MoE 模型**（GLM 系列 `--enable-expert-parallel` 场景即 MoE）；现场 vLLM-Ascend 版本若旗标名不同，以 `vllm serve --help | grep -i data-parallel` 实际输出为准
-- **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**，其他启动参数不动；改前备份原文件
+- **KV_TRANSFER_CONFIG 只改 p_dp_size / p_tp_size 两个值**，engine_id / kv_port / lookup_rpc_port / decode 段一律原样保留；**D 侧同样只改 prefill 段的两个值**，其他启动参数不动；改前备份原文件。这一原则不依赖 KV connector 的具体结构——旧脚本无论用 MultiConnector 还是其他 connector，改动面都只是 prefill 段的 dp/tp 两个值，模板里的 MultiConnector 结构以现场旧脚本实际结构为准
 - **旧脚本与配置一律备份后再改**（同目录 `*.bak.<日期>` 或 backup/ 子目录，禁止原地覆盖删除）——回滚靠的就是这些备份
 - 分发：每台主机只放自己的实例脚本；上传用 ssh-mcp-server upload 或 scp
 - 远端自检通过才进阶段 5：`bash -n <脚本>` 逐个过；KV_TRANSFER_CONFIG 是嵌在脚本里的字符串，用一段 python 从脚本中抽出该变量并 `json.loads` 校验合法性
@@ -149,14 +151,14 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留进程
 1. 卡隔离：同机实例 ASCEND_RT_VISIBLE_DEVICES 无交集
 2. DP 组通信：16600 端口组内互通，防火墙/安全组放行
 3. Mooncake 同步：所有 P 侧 + D 侧 KV_TRANSFER_CONFIG 的 tp/dp 已更新为同一组值，无新旧拓扑混跑
-4. 去 Ray：启动命令无 `--distributed-executor-backend ray`，无 Ray 进程/环境变量残留
+4. 后端旗标：新实例启动命令无 `--distributed-executor-backend`；旧方案用 Ray 的，已确认无 Ray 进程/环境变量残留（旧方案本身无 Ray 则只查前半句）
 5. 端口规划：http（同机实例 9000/9001…）与 data-parallel-rpc-port 16600 无冲突；kv_port / lookup_rpc_port / engine_id 保持旧值未动
 6. 全局 DP 总数：Mooncake dp_size 精确等于所有主机 P 实例数之和（逐台数一遍）
 7. 负载模型：max-model-len / max-num-batched-tokens / max-num-seqs 已按新 TP 复核，压测计划已安排
 
 ## 回滚
 
-任一环节失败且短期修不好时：停新实例（按 PID），恢复备份的旧脚本/配置，按旧方案重启集群（含 Ray），D 侧 KV_TRANSFER_CONFIG 恢复旧 prefill 段。回滚步骤在部署指南中写完整命令，不要临场发挥。
+任一环节失败且短期修不好时：停新实例（按 PID），恢复备份的旧脚本/配置，按旧方案**原样**重启集群（旧方案含 Ray 就含 Ray，不含就不含——一切以备份的旧脚本为准），D 侧 KV_TRANSFER_CONFIG 恢复旧 prefill 段。回滚步骤在部署指南中写完整命令，不要临场发挥。
 
 ## 模板与参考
 

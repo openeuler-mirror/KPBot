@@ -47,13 +47,14 @@ Mooncake 是 Decode 和 Prefill 之间传输 KV Cache 的层，它的分片规�
 - 必须手动分配：每个 DP 组内 4 个实例，分配 rank 0/1/2/3（`--data-parallel-rank`）、统一主节点 IP（`--data-parallel-address`）、固定 rpc-port=16600（`--data-parallel-rpc-port`，组内所有实例必须使用同一端口）
 - 启动脚本上，每个 TP8 实例单独指定自己的 rank，**不能再一套脚本拉起整个 TP+DP 集群**（这正是去掉 Ray 的代价：编排从自动变手动，换来的是更少的依赖和更小的故障域）
 - 主节点（rank 0）要先起，其余实例向它 rendezvous；主节点没起其余实例会组网失败
+- **形态自适应**：本节描述的是"旧方案用 Ray"的典型迁移。旧方案本身没有 Ray 时（mp 后端、无旗标、或已是单机 TP），"去 Ray"相关步骤自然跳过——新方案目标不变，只是迁移差异项更少
 
 ## 6. 重点风险 & 上线检查清单
 
 1. ✅ 卡隔离：`ASCEND_RT_VISIBLE_DEVICES` 两台 TP8 实例不能看到同一批卡，会资源冲突
 2. ✅ DP 组通信：16600 端口（rpc-port）组内互通，防火墙 / 安全组放行
 3. ✅ Mooncake 配置同步：所有 P 侧、D 侧的 KV_TRANSFER_CONFIG tp/dp 必须同步更新，不能新旧拓扑混跑
-4. ✅ 去掉 Ray 依赖：启动命令删掉 `--distributed-executor-backend ray`，不要残留 Ray 环境变量
+4. ✅ 去掉 Ray 依赖：启动命令删掉 `--distributed-executor-backend ray`，不要残留 Ray 环境变量（旧方案本身无 Ray 时此项跳过）
 5. ✅ 端口规划：9000/9001 是 vLLM http 服务端口，16600 是 DP 内部 rpc 通信端口，避免冲突
 6. ✅ 全局 DP 总数：Mooncake dp_size=20 时，要确认所有主机上 TP8 实例加起来正好 20 个，数目对不上 KV 寻址异常
 7. ✅ 负载模型变化：单 TP8 的最大 batch、单序列长度上限相比 TP32 下降，需要重新压测 Prefill 吞吐、P-D KV 传输带宽
