@@ -30,8 +30,8 @@ class CollectRole(unittest.TestCase):
                 'printf "%s\\n" "$*" >> "$LOG"\n'
                 'case "$1" in\n'
                 'info) printf "%s\\n" "$MOCK_NODE" ;;\n'
-                'container) [ "${@: -1}" != missing ] || exit 42; '
-                'printf "%s /%s\\n" "$MOCK_ID" "${@: -1}" ;;\n'
+                'container) name="${@: -1}"; [ "$name" != missing ] || exit 42; '
+                'printf "%s /%s\\n" "$MOCK_ID" "${MOCK_NAME:-$name}" ;;\n'
                 'version) printf "test\\n" ;;\n'
                 '*) exit 1 ;;\n'
                 'esac\n', encoding='utf-8')
@@ -54,9 +54,9 @@ class CollectRole(unittest.TestCase):
                 second = root / 'p.sock'
                 other.bind(str(second))
                 def run(node, name, role, out, sock=endpoint, mock_node='node-fixture',
-                        ident=CONTAINER_ID):
+                        ident=CONTAINER_ID, inspected_name=''):
                     test_env = dict(env, EXPECTED_ENDPOINT='unix://' + str(sock),
-                                    MOCK_NODE=mock_node, MOCK_ID=ident)
+                                    MOCK_NODE=mock_node, MOCK_ID=ident, MOCK_NAME=inspected_name)
                     return subprocess.run(['bash', str(wrapper), str(sock), node, name, role, out],
                                           cwd=str(root), env=test_env, stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE, encoding='utf-8')
@@ -69,6 +69,9 @@ class CollectRole(unittest.TestCase):
                 second_result = run('node-two', 'engine.tar.gz', 'P', 'second',
                                     second, 'node-two', SECOND_ID)
                 missing = run('node-fixture', 'missing', 'P', 'missing-out')
+                wrong = run('node-fixture', CONTAINER_ID[:12], 'P', 'wrong-out',
+                            inspected_name='another-container')
+                hex_name = run('node-fixture', CONTAINER_ID[:12], 'P', 'hex-out')
             self.assertEqual(p.returncode, 0, p.stderr)
             self.assertIn('vllm-p.tgz (' + CONTAINER_ID + ')', p.stdout)
             self.assertEqual(d.returncode, 130, d.stderr)
@@ -79,6 +82,11 @@ class CollectRole(unittest.TestCase):
             self.assertIn('engine.tar.gz (' + SECOND_ID + ')', second_result.stdout)
             self.assertEqual(missing.returncode, 1, missing.stderr)
             self.assertFalse((root / 'missing-out').exists())
+            self.assertEqual(wrong.returncode, 1, wrong.stderr)
+            self.assertIn('Container name mismatch:', wrong.stderr)
+            self.assertFalse((root / 'wrong-out').exists())
+            self.assertEqual(hex_name.returncode, 0, hex_name.stderr)
+            self.assertTrue((root / 'hex-out/采集.tar.gz').exists())
             self.assertTrue((root / 'p-out/采集.tar.gz').exists())
             self.assertTrue((root / 'd-out/采集/SUMMARY.txt').exists())
             self.assertFalse((root / 'd-out/采集.tar.gz').exists())

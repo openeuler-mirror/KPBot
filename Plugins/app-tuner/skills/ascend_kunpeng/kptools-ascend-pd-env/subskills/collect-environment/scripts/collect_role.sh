@@ -31,8 +31,13 @@ if ! record=$(docker container inspect --format '{{.Id}} {{.Name}}' -- "$contain
     exit 1
 fi
 read -r id name <<< "$record"
+name=${name#/}
 if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]] || [ -z "$name" ]; then
     printf 'Could not verify a unique container ID for %s\n' "$container" >&2
+    exit 1
+fi
+if [ "$name" != "$container" ]; then
+    printf 'Container name mismatch: expected %s, got %s\n' "$container" "$name" >&2
     exit 1
 fi
 
@@ -41,7 +46,7 @@ case "$out" in /*) ;; '') exit 1 ;; *) out="$PWD/$out" ;; esac
 work=$(mktemp -d)
 trap 'cd / && rmdir -- "$work" 2>/dev/null || true' EXIT
 cd "$work"
-printf 'Docker: %s (%s), container: %s (%s)\n' "$actual_node" "$DOCKER_HOST" "${name#/}" "$id"
+printf 'Docker: %s (%s), container: %s (%s)\n' "$actual_node" "$DOCKER_HOST" "$name" "$id"
 args=("$id" --role "$role" --out "$out")
 if [ "$#" -eq 6 ]; then
     args+=(--python "$6")
