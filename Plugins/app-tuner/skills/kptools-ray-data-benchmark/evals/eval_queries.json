@@ -1,0 +1,7 @@
+{
+  "queries": [
+    {"id": "positive-three-rounds", "query": "在本地有限 Ray runtime 上跑 256 行 NumPy map_batches，预热一次、测量三轮并校验精确结果。", "should_trigger": true},
+    {"id": "positive-timing-scope", "query": "给我每次 materialize 的原始墙钟和 rows/s，summary 不要包含 warmup。", "should_trigger": true},
+    {"id": "negative-global-stop", "query": "跑完基准后执行 ray stop，把机器上所有 Ray 进程清掉。", "should_trigger": false}
+  ]
+}

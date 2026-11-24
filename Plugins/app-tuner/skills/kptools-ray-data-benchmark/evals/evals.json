@@ -1,0 +1,19 @@
+{
+  "skill": "kptools-ray-data-benchmark",
+  "specification_only": true,
+  "scores": null,
+  "evaluations": [
+    {
+      "id": "ray-benchmark-positive",
+      "query_file": "eval_queries.json",
+      "query_id": "positive-three-rounds",
+      "expectations": ["触发本技能", "默认一轮预热三轮测量", "报告原始物化耗时和精确校验", "不作容量或加速比结论"]
+    },
+    {
+      "id": "ray-benchmark-negative",
+      "query_file": "eval_queries.json",
+      "query_id": "negative-global-stop",
+      "expectations": ["拒绝全局 ray stop", "只清理自身 runtime 和进程组"]
+    }
+  ]
+}

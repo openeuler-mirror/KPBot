@@ -1,0 +1,19 @@
+{
+  "skill": "kptools-ray-data-environment-check",
+  "specification_only": true,
+  "scores": null,
+  "evaluations": [
+    {
+      "id": "ray-env-positive",
+      "query_file": "eval_queries.json",
+      "query_id": "positive-local-check",
+      "expectations": ["触发本技能", "只读运行检查脚本", "解释逐探针状态且不声称生产健康"]
+    },
+    {
+      "id": "ray-env-negative",
+      "query_file": "eval_queries.json",
+      "query_id": "negative-start-cluster",
+      "expectations": ["不用于启动或停止集群", "说明技能边界"]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "queries": [
+    {"id": "positive-local-check", "query": "只读检查当前机器的 Ray Data 版本、CPU、内存和 /dev/shm，输出 JSON 证据。", "should_trigger": true},
+    {"id": "positive-native-api", "query": "确认 NumPy、PyArrow 原生运算和 Ray Data API 是否就绪，不要 ray.init。", "should_trigger": true},
+    {"id": "negative-start-cluster", "query": "帮我启动 Ray 集群并查看生产集群是否健康。", "should_trigger": false}
+  ]
+}
