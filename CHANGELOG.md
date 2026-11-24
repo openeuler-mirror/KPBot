@@ -6,6 +6,7 @@
 
 ### Added
 - code-optimizer 新增 `sql-shuffle-string-codec` skill：列式 SQL 引擎 join 输出与原生 Shuffle 的字符串搬运、重建和 LZ4 候选查找优化；附 tier-A 用例 `cases/shuffle-contract` 与 3 条模型评估规格。
+- app-tuner 为 `kptools-prompt-capture` 新增八项任务技能，覆盖 proxy 检查与接入、限时采集、请求分布与会话分析、分词核验、vLLM 日志关联及汇总；仅元数据的采集窗口拒绝热更为全文或 golden，附合成数据评测。
 - app-tuner 新增 `uadk-accelerator-optimization` subskill：从热点函数匹配 UADK 支持的密码学（AES/SM4/DES/SM3/SHAx/MD5/AEAD/HMAC/RSA/DH）与压缩（gzip/zlib）算法，命中时建议替换鲲鹏硬件加速器并输出建议配置（SVA 驱动加载、WD_*_CTX_NUM 队列、uadk_engine 接入、uadk_tool/openssl speed 验证），未命中输出不适用结论；含算法映射 JSON 与 playbook，注册到主编排候选规则、Dynamic Skill Catalog 与知识路由；附 tier-A 用例 `cases/skill-integrity` 与触发评估集 `evals/`（evals.json 含 expectations、eval_queries.json 正/负例路由矩阵）
 - app-tuner 新增 `vllm-eplb-analysis` skill：vLLM MoE 服务的专家负载不均衡分析。用 balancedness、per-engine 在途请求、per-engine TTFT、prompt token 四类独立指标交叉判定（单指标不下结论、要求 ≥3 窗口与持续性），另设显存余量门控（KV 占用、换出增量、可负担副本数）；换出以两份 /metrics 的窗口增量判定，累计计数不参与门控。输出 imbalanced/borderline/balanced/inconclusive 与证据表，并给出可直接执行的模板改动清单（imbalanced 为 dynamic 参数，borderline 为 force 上限探针），不依赖未随本技能交付的脚本；附指标参考 `references/eplb-metrics.md`、tier-A 用例 `cases/skill-contract`（契约 14 项 + 脚本行为 28 项，含自包含检查）与触发评估集 `evals/`
 - app-tuner 新增 `microservice-go-syncpool-optimization` 子 skill：面向 Go 微服务 sync.Pool 堆内存颠簸，给 Go runtime 打补丁新增 `GODEBUG=poolretain` 与 `GODEBUG=poolprealloc` 两个控制开关，覆盖 Go 基线锁定、隔离构建根目录、补丁与 Go 基线匹配校验、工具链构建、服务重编译、二进制等价门控、单变量 A/B 和回退；补丁由外部私有制品提供，仓库只保留行为级说明；子 skill 已注册到任务包目录、覆盖集合和回归测试；附补丁/参数/验证三个 references 分册
