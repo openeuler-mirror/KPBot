@@ -13,6 +13,7 @@ SHEBANG = re.compile(
 )
 CONTINUATION = re.compile(r'(?<!\\)(?:\\\\)*\\[ \t]+$')
 SYNTAX_LINE = re.compile(rb'(?m)^.*?: (?:line )?(\d+):')
+HEREDOC_EOF = re.compile(rb'line (\d+): warning: here-document at line (\d+) delimited by end-of-file')
 
 
 def collect_paths(inputs, errors):
@@ -150,6 +151,12 @@ def check_file(path, mode, analyzer, analyzer_state, report, env):
                 status['syntax'] = 'failed'
                 location = SYNTAX_LINE.search(result.stderr)
                 add(int(location[1]) if location else None, 'error', 'syntax', f'{mode} -n rejected the script')
+            elif HEREDOC_EOF.search(result.stderr):
+                status['syntax'] = 'failed'
+                location = HEREDOC_EOF.search(result.stderr)
+                line = int(location[2])
+                add(line, 'error', 'syntax',
+                    f'{mode} -n reported an unterminated here-document at end-of-file')
             elif result.returncode == 0:
                 status['syntax'] = 'passed'
             else:

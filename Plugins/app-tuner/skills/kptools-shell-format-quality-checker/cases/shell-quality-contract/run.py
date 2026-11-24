@@ -81,6 +81,15 @@ class QualityContract(unittest.TestCase):
         self.assertEqual(report['errors'][0]['file'], 'missing.sh')
         self.assertEqual(report['findings'][0]['check'], 'syntax')
 
+    def test_unterminated_heredoc_fails_even_when_bash_n_exits_zero(self):
+        self.write('heredoc.sh', b'#!/bin/bash\ncat <<EOF\nhello\n')
+        report = self.run_check('heredoc.sh', code=1)
+        self.assertEqual(report['files'][0]['syntax'], 'failed')
+        self.assertEqual(len(report['findings']), 1)
+        self.assertEqual(report['findings'][0]['line'], 2)
+        self.assertEqual(report['findings'][0]['severity'], 'error')
+        self.assertEqual(report['findings'][0]['check'], 'syntax')
+
     def test_shellcheck_reports_current_tool_state(self):
         self.write('quote.sh', b'#!/bin/sh\nprintf "%s\\n" $missing\n')
         report = self.run_check('quote.sh', skip_shellcheck=False)
