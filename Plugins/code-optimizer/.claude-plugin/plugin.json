@@ -7,6 +7,10 @@
   },
   "homepage": "https://atomgit.com/openeuler/KPBot/tree/master/Plugins/code-optimizer",
   "license": "MulanPSL-2.0",
+  "skills": [
+    "./skills",
+    "./skills/vectordb/faiss"
+  ],
   "keywords": [
     "performance",
     "optimization",

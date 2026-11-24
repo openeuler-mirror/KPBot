@@ -14,7 +14,7 @@ except ImportError:
     jsonschema = None
 
 SKILLS = Path(__file__).resolve().parents[1] / "Plugins/code-optimizer/skills"
-WORKFLOW = SKILLS / "faiss-optimize/workflows"
+WORKFLOW = SKILLS / "vectordb/faiss/faiss-optimize/workflows"
 
 
 def state_fixture():
