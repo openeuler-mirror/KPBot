@@ -1,0 +1,83 @@
+{
+  "skill_name": "kptools-tpsplit-optimization",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "把 Prefill 集群从跨机 TP32 拆成单机 TP8 重新部署",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "这是 TP 可行性分析报告，按结论把新拓扑部署了",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "集群要改张量并行度，TP 通信别跨机，单机闭环",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "TP8 迁移后 Mooncake 的 tp/dp 怎么对齐？是不是所有实例的 KV 配置都要同步改",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "旧方案是 Ray 拉起的，新方案想去掉 Ray 改成显式 DP 组网",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "单机 16 卡想跑两个 TP8 实例走 9000/9001 分流，卡怎么切分",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "改 TP 之前先梳理一下启动脚本的配置调用链，这些参数是从哪个文件传进来的",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "TP8 部署完之后要做哪些测试验证，帮我列一下",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "看看 NPU 现在的利用率和温度",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-smi"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "P 容器和 D 容器的启动环境是不是一致",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-pd-env（环境对比诊断，非 TP 拓扑迁移部署）"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "分析 vLLM 的 profiling trace 找热点算子",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "MoE 的 balancedness 很低，专家负载不均，要不要开 EPLB",
+      "should_trigger": false,
+      "note": "routes to vllm-eplb-analysis"
+    },
+    {
+      "id": "EQ-13",
+      "prompt": "HCCN 网卡链路状态怎么查",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-hccn"
+    },
+    {
+      "id": "EQ-14",
+      "prompt": "把当前集群的 Prefill 吞吐压测一下看看基线",
+      "should_trigger": false,
+      "note": "单纯压测采集属 profiling/benchmark 范畴；本 skill 仅在 TP 拓扑迁移部署语境（迁移后 L5 对比测试）中生效"
+    }
+  ]
+}

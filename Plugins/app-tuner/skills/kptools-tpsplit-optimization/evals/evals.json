@@ -1,0 +1,41 @@
+{
+  "skill_name": "kptools-tpsplit-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我把 Prefill 从 TP32 改成 TP8 重新部署，10 台 16 卡机器，DP 组大小 4，Mooncake dp_size 20，Decode 64 实例 TP1 不动。",
+      "expected_output": "先 SSH 只读梳理配置调用链（source 引用/systemd/容器 env），产出《配置修改点清单》（每个要改的参数→真正定义的文件→消费方）；推导实例布局：每台 16÷8=2 实例共 20 个、卡 0-7/8-15 互斥、5 个 DP 组、同机 http 9000/9001；守恒自检 20=Mooncake dp_size；生成每实例启动脚本：--tensor-parallel-size 8、不含 --distributed-executor-backend、含 --data-parallel-rank/--data-parallel-address/--data-parallel-rpc-port 16600/--data-parallel-size 4，KV_TRANSFER_CONFIG 只改 prefill dp/tp 两个值、engine_id/kv_port/lookup_rpc_port/decode 段原样保留；方案经用户确认前不在远端做变更，旧集群绝不静默停。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "这是 TP 可行性分析的 .md 报告，结论建议拆 TP8，按报告部署新拓扑。",
+      "expected_output": "解析报告提取推荐 TP size/DP 组大小/Mooncake dp_size/rpc-port 等结论并向用户复述确认；报告没写的信息（主机清单、路径、Proxy 类型）继续问用户；报告结论与用户口头说法冲突时以用户为准并提醒差异；后续流程同直接输入场景（调用链梳理→布局推演→生成脚本→分层测试）。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Prefill 是 5 台 16 卡机器，Mooncake 那边配的 dp_size 是 20，DP 组大小 4，直接把部署方案和脚本生成出来。",
+      "expected_output": "发现拓扑矛盾：5 台 × 16 卡 ÷ TP8 = 10 个实例 ≠ dp_size 20（20×TP8=160 卡超过 80 卡物理上限），停下来向用户澄清并把矛盾放在产出最显著位置；不把 20 静默写进配置硬凑，脚本用修正值（如 10）时必须带显著的待确认标记或阻塞生成；给出具体解决方向（实际 10 台机则 20 成立 / 5 台机则应为 10 / TP4 下 5 台机可出 20 实例）；同时指出 DP 组大小 4 与 10 实例不整除并给分组备选。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "要改的 p_dp_size 好像不在我发的启动脚本里，可能是上面一层配置文件传下来的，你先确认下参数到底在哪定义。",
+      "expected_output": "SSH 只读追配置调用链：grep 启动脚本的 source/. 引用、定位 p_dp_size/p_tp_size 真正定义处、反查拉起方式（systemd EnvironmentFile=/容器 env/父级编排脚本）、确认 P/D 侧是否共享同一份拓扑配置；产出《配置修改点清单》（参数→定义文件→全部消费方→改一处是否覆盖）并等用户确认；修改落在源头文件（如共享 env 文件），不改下游脚本；生成的脚本保持现场传参形态（继续 source 同一文件），不把参数硬编码进脚本。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "旧集群没用 Ray，就是 systemd 拉起的单机脚本，这套流程还适用吗？",
+      "expected_output": "读旧启动脚本识别旧方案形态（无 ray backend/执行后端/现有 TP size），不假设旧方案是 TP32+Ray；无 Ray 时自动跳过去 Ray 相关步骤：不执行 ray stop、不做 Ray 残留清理，只按 PID 停旧 vllm 实例；新脚本任何情况下都不写 --distributed-executor-backend；回滚按备份的旧脚本原样重启（不含 Ray）；新方案目标不变（单机 TP 闭环+显式 DP 组网）。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "TP8 迁移完跑了两天，Decode 偶发报 KV 相关错误，偶尔还有 NPU 报错。",
+      "expected_output": "按迁移后故障路径排查而非泛泛检查：优先怀疑 Mooncake prefill tp/dp 与实际拓扑错配或新旧拓扑混跑；检查配置修改点清单中的源头文件改动是否被上游覆盖（systemd 重启/重新部署冲掉）；核对所有 P 侧+D 侧 KV_TRANSFER_CONFIG 是否同一组值、dp_size 是否等于实例总数；给出修复方向（改源头重下发）与回滚路径（恢复备份按旧方案原样重启），回滚命令完整不临场发挥。",
+      "files": []
+    }
+  ]
+}
