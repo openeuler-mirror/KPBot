@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "_comment": "线程角色识别配置（kptools-affinity-trace）。匹配对 comm 小写化后进行；tid==pid 的主线程无条件标 __main__，不进本表。新增框架/适配新版本线程名 = 加一条 rules，不改代码。rules 顺序即优先级（前 > 后）；role 命名空间自由，但参与 A2 设备对齐判定的 role 必须列入 npu_host_roles。真源：kpbot-app-tuner/subskills/cpu-affinity-optimization 的 PTA 分级模型与 vLLM/torchrun 实名映射表。",
-    "version": "1.0.0"
+    "_comment": "线程角色识别配置（kptools-thread-affinity-analyzer）。匹配对 comm 小写化后进行；tid==pid 的主线程无条件标 __main__，不进本表。新增框架/适配新版本线程名 = 加一条 rules，不改代码。rules 顺序即优先级（前 > 后）；role 命名空间自由，但参与 A2 设备对齐判定的 role 必须列入 npu_host_roles。顶层须为 JSON 对象、rules/npu_host_roles 须为数组、display 须为对象——结构非法时分析器回退内置规则集并 stderr 告警。真源：kpbot-app-tuner/subskills/cpu-affinity-optimization 的 PTA 分级模型与 vLLM/torchrun 实名映射表。",
+    "version": "1.1.0"
   },
   "rules": [
     { "match": "exact",    "pattern": "mainthread",     "role": "pta_main",  "label": "PTA 前向算子下发（第一热点）" },
