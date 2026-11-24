@@ -118,7 +118,9 @@ mk_thread 200 201 worker R 30 2 4 "0-127"
 tick 200 "$D8"   # tick1：200/201 在册
 check_in "T8a tick1 首个 tick 不报新线程？——报（初始化后全部为新）" "+ 新线程 tid=201" "$(cat "$D8/trace.log")"
 mk_thread 200 302 omp_worker R 40 2 2 "0-7"
-sed -i 's/Cpus_allowed_list:\t0-127/Cpus_allowed_list:\t0-7/' "$FAKE/200/task/201/status"
+sed 's/Cpus_allowed_list:\t0-127/Cpus_allowed_list:\t0-7/' \
+  "$FAKE/200/task/201/status" > "$FAKE/200/task/201/status.new" \
+  && mv "$FAKE/200/task/201/status.new" "$FAKE/200/task/201/status"
 tick 200 "$D8"   # tick2：新线程 302 + 201 掩码变化
 LOG=$(cat "$D8/trace.log")
 check_in "T8b 新线程事件" "+ 新线程 tid=302 (omp_worker) 允许核=0-7" "$LOG"
@@ -177,6 +179,134 @@ AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 --tick --out "$WORK/o10b" >/dev/null
 check_eq "T10b tick 未 init 目录 → 1" "1" "$?"
 AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 --out "$D3" >/dev/null 2>&1
 check_eq "T10c run 到非空目录 → 1" "1" "$?"
+
+# ============================================================ T11 非空目录（仅 trace.log 也拒）
+D11="$WORK/o11"; mkdir -p "$D11"
+: > "$D11/trace.log"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 --out "$D11" >/dev/null 2>&1
+check_eq "T11 run 到含旧 trace.log 的目录 → 1（防截断）" "1" "$?"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 --init --out "$D11" >/dev/null 2>&1
+check_eq "T11b init 到非空目录 → 1（防追加第二 meta）" "1" "$?"
+
+# ============================================================ T12 数值参数校验
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 -i abc --out "$WORK/o12a" >/dev/null 2>&1
+check_eq "T12a -i abc → 1" "1" "$?"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 -i 0.5x --out "$WORK/o12a" >/dev/null 2>&1
+check_eq "T12b -i 0.5x → 1" "1" "$?"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 --tolerate abc --out "$WORK/o12a" >/dev/null 2>&1
+check_eq "T12c --tolerate abc → 1" "1" "$?"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 -T abc --out "$WORK/o12a" >/dev/null 2>&1
+check_eq "T12d -T abc → 1" "1" "$?"
+
+# ============================================================ T13 --tick 会话身份校验
+mk_proc 700 python3 888
+mkdir -p "$FAKE/700/task/700"
+awk 'BEGIN{printf "700 (python3) S 1 1 1 0 -1 4194560 0 0 0 0 10 1 0 0 0 0 1 0 888 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0\n"}' \
+  > "$FAKE/700/task/700/stat"
+printf 'Name:\tpython3\nCpus_allowed_list:\t0-127\n' > "$FAKE/700/task/700/status"
+D13="$WORK/o13"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 700 --init --out "$D13" >/dev/null
+# a) PID 不一致
+mk_proc 701 python3 100
+mk_thread 701 701 python3 S 1 1 0 "0-127"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 701 --tick --out "$D13" >/dev/null 2>&1
+check_eq "T13a --tick 换 PID → 1" "1" "$?"
+# b) starttime 变化（PID 复用）
+sed 's/ 888 / 999 /' "$FAKE/700/task/700/stat" > "$FAKE/700/task/700/stat.new" \
+  && mv "$FAKE/700/task/700/stat.new" "$FAKE/700/task/700/stat"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 700 --tick --out "$D13" >/dev/null 2>&1
+check_eq "T13b --tick PID 复用（starttime 变）→ 1" "1" "$?"
+# c) 恢复后正常 tick
+sed 's/ 999 / 888 /' "$FAKE/700/task/700/stat" > "$FAKE/700/task/700/stat.new" \
+  && mv "$FAKE/700/task/700/stat.new" "$FAKE/700/task/700/stat"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 700 --tick --out "$D13" --quiet >/dev/null 2>&1
+check_eq "T13c 一致会话 tick → 0" "0" "$?"
+# d) 会话已结束（end 行）后拒续写
+printf '{"end":{"ts":1,"reason":"timeout","ticks":1}}\n' >> "$D13/samples.jsonl"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 700 --tick --out "$D13" >/dev/null 2>&1
+check_eq "T13d 已结束会话续 tick → 1" "1" "$?"
+
+# ============================================================ T14 不可见恢复：连续清零/累计保留
+D14="$WORK/o14"
+AT_PROC_ROOT="$FAKE" bash "$COLLECT" -p 200 --init --out "$D14" >/dev/null
+tick 200 "$D14" >/dev/null 2>&1
+: > "$FAKE/200/task/200/stat"
+tick 200 "$D14" >/dev/null 2>&1 || true       # gone #1
+mk_thread 200 200 python3 S 10 1 0 "0-127"     # 恢复
+tick 200 "$D14" >/dev/null 2>&1
+: > "$FAKE/200/task/200/stat"
+tick 200 "$D14" >/dev/null 2>&1 || true       # gone #2
+mk_thread 200 200 python3 S 10 1 0 "0-127"     # 再恢复
+tick 200 "$D14" >/dev/null 2>&1
+LOG14=$(cat "$D14/trace.log")
+check_in "T14a 恢复事件含累计数" "累计 2 tick" "$LOG14"
+v=$(grep -c '"absent_proc":1' "$D14/samples.jsonl")
+check_eq "T14b samples 累计 2 条 absent 行" "2" "$v"
+v=$(head -n 1 "$D14/.trace_state.tsv" | cut -f6)
+check_eq "T14c state 累计 absent=2（恢复不清零）" "2" "$v"
+v=$(head -n 1 "$D14/.trace_state.tsv" | cut -f5)
+check_eq "T14d state 连续 absent=0（恢复清零）" "0" "$v"
+
+# ============================================================ T15 proc_root JSON 转义
+W15="$WORK/we\"ird\\path"
+mkdir -p "$W15/810/task/810"
+printf 'python3\n' > "$W15/810/comm"
+awk 'BEGIN{printf "810 (python3) S 1 1 1 0 -1 4194560 0 0 0 0 10 1 0 0 0 0 1 0 100 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0\n"}' > "$W15/810/stat"
+awk 'BEGIN{printf "810 (python3) S 1 1 1 0 -1 4194560 0 0 0 0 10 1 0 0 0 0 1 0 100 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0\n"}' > "$W15/810/task/810/stat"
+printf 'Name:\tpython3\nCpus_allowed_list:\t0-127\n' > "$W15/810/task/810/status"
+D15="$WORK/o15"
+AT_PROC_ROOT="$W15" bash "$COLLECT" -p 810 --init --out "$D15" >/dev/null
+v=$("$PY" - "$D15/samples.jsonl" <<'PYEOF'
+import json, sys
+m = json.loads(open(sys.argv[1], encoding="utf-8").readline())["meta"]
+print(m["proc_root"])
+PYEOF
+)
+check_eq "T15 含引号/反斜杠的 proc_root 转义后可逆" "$W15" "$v"
+
+# ============================================================ T16 NPU 双校验 + 逗号分隔 + SYS_ROOT 注入
+SYSF="$WORK/sys"
+mkdir -p "$SYSF/devices/system/node/node0" \
+  "$SYSF/bus/pci/devices/0000:8f:00.0" \
+  "$SYSF/bus/pci/devices/0000:9f:00.0" \
+  "$SYSF/bus/pci/devices/0000:af:00.0"
+echo "0-3" > "$SYSF/devices/system/node/node0/cpulist"
+for bdf in 0000:8f:00.0 0000:9f:00.0; do
+  echo "0x19e5" > "$SYSF/bus/pci/devices/$bdf/vendor"
+  echo "0x12000001" > "$SYSF/bus/pci/devices/$bdf/class"
+  echo "1" > "$SYSF/bus/pci/devices/$bdf/numa_node"
+done
+# 同 vendor 的网卡（class 0x02xxxx）必须被排除
+echo "0x19e5" > "$SYSF/bus/pci/devices/0000:af:00.0/vendor"
+echo "0x02000000" > "$SYSF/bus/pci/devices/0000:af:00.0/class"
+echo "1" > "$SYSF/bus/pci/devices/0000:af:00.0/numa_node"
+printf 'OMP_NUM_THREADS=8\0KMP_AFFINITY=verbose,granularity=fine\0KMP_PROFILE_FILE=/home/u/work/prof.txt\0HCCL_WHITELIST_DISABLE=secret\0HCCL_CONNECT_TIMEOUT=1800\0' \
+  > "$FAKE/200/environ"
+D16="$WORK/o16"
+AT_PROC_ROOT="$FAKE" AT_SYS_ROOT="$SYSF" bash "$COLLECT" -p 200 --init --out "$D16" >/dev/null
+TOPO=$(cat "$D16/topology_raw.txt")
+check_eq "T16a npu_pci 只含双校验过的 2 台 NPU" "2" \
+  "$(printf '%s' "$TOPO" | awk '/^=== npu_pci/{f=1;next} /^===/{f=0} f&&NF' | wc -l | tr -d ' ')"
+if printf '%s' "$TOPO" | grep -q 'af:00.0'; then
+  bad "T16b Huawei 网卡误入 npu_pci"
+else
+  ok "T16b Huawei 网卡（vendor 同/class 异）被排除"
+fi
+check_in "T16c trace.log 头部多 NPU 逗号分隔" \
+  "NPU:2 台(0000:8f:00.0(node1),0000:9f:00.0(node1))" "$(cat "$D16/trace.log")"
+check_in "T16d target_env 白名单采集" "OMP_NUM_THREADS=8" "$TOPO"
+check_in "T16e 白名单内 KMP_AFFINITY 原值（无路径）" "KMP_AFFINITY=verbose,granularity=fine" "$TOPO"
+check_in "T16f HCCL_CONNECT_TIMEOUT 采集" "HCCL_CONNECT_TIMEOUT=1800" "$TOPO"
+if printf '%s' "$TOPO" | grep -q 'KMP_PROFILE_FILE'; then
+  bad "T16g KMP_PROFILE_FILE 绝对路径被带出"
+else
+  ok "T16g KMP_PROFILE_FILE（白名单外）不采集"
+fi
+if printf '%s' "$TOPO" | grep -q 'HCCL_WHITELIST'; then
+  bad "T16h 部署自定义 HCCL_* 被带出"
+else
+  ok "T16h HCCL_WHITELIST_DISABLE（白名单外）不采集"
+fi
 
 # ============================================================ 汇总
 echo

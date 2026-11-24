@@ -3,17 +3,20 @@
   "eval_type": "trigger_rate",
   "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
   "queries": [
-    { "id": "AQ-01", "prompt": "做个绑核分析，看看线程都绑在哪些核上", "should_trigger": true },
+    { "id": "AQ-01", "prompt": "持续采集训练进程的线程绑核情况", "should_trigger": true },
     { "id": "AQ-02", "prompt": "训练期间线程实际在哪些 CPU 上运行，有没有跨 NUMA 迁移", "should_trigger": true },
     { "id": "AQ-03", "prompt": "检查运行期 CPU 亲和性有没有变化", "should_trigger": true },
-    { "id": "AQ-04", "prompt": "NPU 的 host 线程和设备 NUMA 对齐了吗", "should_trigger": true },
-    { "id": "AQ-05", "prompt": "OMP 动态绑核把掩码改来改去怎么确认", "should_trigger": true },
-    { "id": "AQ-06", "prompt": "多个线程挤在同一个核上怎么诊断", "should_trigger": true },
+    { "id": "AQ-04", "prompt": "在 NPU 训练机上把 host 线程的绑核数据采下来", "should_trigger": true },
+    { "id": "AQ-05", "prompt": "OMP 动态绑核把掩码改来改去，把掩码时间线记录下来", "should_trigger": true },
+    { "id": "AQ-06", "prompt": "长时间观察线程出生退出和掩码被改", "should_trigger": true },
     { "id": "AQ-07", "prompt": "看一个进程的亲和性掩码快照", "should_trigger": false, "note": "routes to kptools-proc-collector --affinity (单次快照)" },
     { "id": "AQ-08", "prompt": "采集进程上下文切换次数", "should_trigger": false, "note": "routes to kptools-proc-collector --ctx" },
     { "id": "AQ-09", "prompt": "监测 NPU 利用率和温度", "should_trigger": false, "note": "routes to kptools-ascend-smi" },
     { "id": "AQ-10", "prompt": "帮我执行绑核优化", "should_trigger": false, "note": "routes to cpu-affinity-optimization (本 skill 只观测)" },
     { "id": "AQ-11", "prompt": "检查内核 numa_balancing 参数", "should_trigger": false, "note": "routes to kptools-os-collector" },
-    { "id": "AQ-12", "prompt": "分析进程内存分布在哪些 NUMA 节点", "should_trigger": false, "note": "routes to kptools-proc-collector --numa (v1 不含内存侧)" }
+    { "id": "AQ-12", "prompt": "分析进程内存分布在哪些 NUMA 节点", "should_trigger": false, "note": "routes to kptools-proc-collector --numa (v1 不含内存侧)" },
+    { "id": "AQ-13", "prompt": "做个绑核分析，看看线程都绑在哪些核上", "should_trigger": false, "note": "分析/判读意图 routes to kptools-thread-affinity-analyzer (本 skill 只采集)" },
+    { "id": "AQ-14", "prompt": "多个线程挤在同一个核上怎么诊断", "should_trigger": false, "note": "挤核判读归 kptools-thread-affinity-analyzer；需先采集时本 skill 承接采集动作" },
+    { "id": "AQ-15", "prompt": "看看线程当前在哪些核上运行", "should_trigger": false, "note": "routes to kptools-proc-collector (瞬时快照，非时间线)" }
   ]
 }

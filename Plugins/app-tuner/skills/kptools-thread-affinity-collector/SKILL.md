@@ -5,19 +5,19 @@ description: >
   CPU 允许掩码（Cpus_allowed_list）与实际落点（processor/utime/stime），
   产出三件配套产物——samples.jsonl（机器格式时间序列）、trace.log（人类
   可读事件日志：新线程/掩码变化/线程退出/心跳/终态名册/统计，cat 即懂）、
-  topology_raw.txt（采样机拓扑快照）。当用户需要记录线程绑核、采样线程
-  亲和性、采集线程掩码时间线、在 NPU 上采集线程分布数据、把线程数据
-  采下来之后拿回来分析、观察运行期线程变化时触发。采样机的机器特定
-  路径/凭据一律占位符化。只采集不出报告——判读与 HTML 报告由
-  kptools-thread-affinity-analyzer 对本 skill 的输出目录生成；单次瞬时
-  快照由 kptools-proc-collector 覆盖。
+  topology_raw.txt（采样机拓扑快照）。当用户需要持续记录线程绑核、采样
+  线程亲和性时间线、采集线程掩码演化、在 NPU 上采集线程分布数据、
+  观察运行期线程变化（出生/退出/掩码被改）时触发；需要"分析/判读/
+  报告"时路由 kptools-thread-affinity-analyzer；单次瞬时快照（一次
+  ps 式抓取）由 kptools-proc-collector 覆盖。采样机的机器特定路径/
+  凭据一律占位符化。
 license: MulanPSL-2.0
-compatibility: Linux（openEuler 验证基线）；/proc 只读，同 uid 免 root；bash 4+；采样机的机器特定路径/凭据一律占位符化
+compatibility: Linux（openEuler 验证基线）；/proc 只读，同 uid 免 root；bash 4+；采集端仅依赖 awk/sleep（分析才需要 python3）；采样机的机器特定路径/凭据一律占位符化
 metadata:
   skill_type: tool_assisted
   category: profiling
   domain: thread_affinity
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # kptools-thread-affinity-collector — 运行期线程绑核采集器
@@ -76,25 +76,30 @@ bash scripts/collect.sh -p 12345 -i 0.1 -T 60
 ```
 ==== kptools-thread-affinity-collector 线程绑核采集日志 ====
 目标    : pid=12345 (python3.11)
-拓扑    : 96 CPU / 2 NUMA 节点( node0:0-47 node1:48-95) / NPU:2 台(0000:8f:00.0(node1),...)
+拓扑    : 96 CPU / 2 NUMA 节点( node0:0-47 node1:48-95) / NPU:2 台(0000:8f:00.0(node1),0000:9f:00.0(node1))
 口径    : 间隔 0.5s；允许掩码=配置面 / 落点=实际面（处理器快照，迁移数为下界）
-======================================================================
-[10:21:33] #1 在册 9 线程（首 tick 全部视为新线程入册）
-[10:21:35] #4 掩码变化 tid=302 (omp_worker) : 0-127 → 0-7
+=====================================================================
+[10:21:33] #1 + 新线程 tid=12345 (python3.11) 允许核=0-127
+[10:21:33] #1 + 新线程 tid=302 (omp_worker) 允许核=0-127
+[10:21:35] #4 掩码变化 tid=302 (omp_worker): 0-127 → 0-7
 [10:21:40] #10 + 新线程 tid=623 (flash) 允许核=0-127
 [10:22:20] #50 心跳：9 线程在册，无变化
 [10:22:31] #60 - 线程退出 tid=610 (flash)（在册 #10-#57）
 [10:23:33] #120 ! 目标进程不可见（开始计数，连续 10 次判定结束）
-[10:24:00] #140 结束：原因 timeout，共 600 tick
+[10:24:00] #140 结束：原因 timeout，共 140 tick
 ==== 线程终态名册（8 个线程仍在册）====
 tid      comm               允许核       在册区间
-12345    python3.11         0            #1-#600
-302      omp_worker         0-7          #4-#600
+12345    python3.11         0            #1-#140
+302      omp_worker         0-7          #1-#140
 ==== 统计 ====
 新线程 2 / 线程退出 1 / 掩码变化 5 / 目标不可见 2 tick
 
 完整判读与 HTML 报告：python3 .../kptools-thread-affinity-analyzer/scripts/analyze.py <本目录>
 ```
+
+注：首个 tick 对每个在册线程各输出一行"+ 新线程"（无聚合行）；"线程退出"
+是**推断**事件——连续 3 个 tick 缺失才判退（至多晚于实际消失 3 个 tick，
+procfs 读取抖动也可能触发），analyzer 的实例判定与该事件口径独立。
 
 日志事件由持久化状态（输出目录内 `.trace_state.tsv`，结束后自动删除）
 驱动，`--tick` 跨进程调用同样生效。
@@ -105,9 +110,21 @@ tid      comm               允许核       在册区间
 <out>/
 ├── trace.log            # 人类可读事件日志（cat 即懂）
 ├── samples.jsonl        # 机器格式时间序列：首行 meta，中间每行一个 tick，run 模式末行 end
-├── topology_raw.txt     # 采样机拓扑快照（=== 分节：clk_tck/NUMA/NPU PCI/cpuset/线程环境变量）
+├── topology_raw.txt     # 采样机拓扑快照（=== 分节：host/clk_tck/node_cpulist/l3_domains/npu_pci/npu_smi_info_l/target_view/target_env）
 └── .trace_state.tsv     # 事件状态（run 结束/中断后自动删除；--tick 模式保留供续采）
 ```
+
+samples.jsonl 行格式（判读方无需翻找外部契约即可校验）：
+- 首行 `{"meta":{skill,version,pid,interval,clk_tck,host,kernel,started,proc_root,auto,target_comm,starttime}}`
+- tick 行 `{"ts":…,"seq":N,"threads":[{"tid","comm","state","psr","utime","stime","allowed"}]}`；
+  目标不可见时 `{"ts":…,"seq":N,"absent_proc":1}`
+- run 结束 `{"end":{ts,reason,ticks}}`（reason：timeout / target_gone / signal）
+
+topology_raw.txt 分节：`=== host`（uname + os-release 两行）、`=== clk_tck`、
+`=== node_cpulist`（`node|cpulist` 每 NUMA 节点一行）、`=== l3_domains`、
+`=== npu_pci`（`bdf|numa_node`，vendor 0x19e5 + class 0x120000 双校验）、
+`=== npu_smi_info_l`、`=== target_view`（cpuset + 主线程掩码）、
+`=== target_env`（线程库环境变量白名单，路径值脱敏为 basename）。
 
 - stdout：每 50 tick 一行进度 + 结束原因 + 数据路径；stderr：诊断
   （目标丢失计数、权限错误）
@@ -124,8 +141,8 @@ tid      comm               允许核       在册区间
 | `-i <sec>` | 采样间隔（下限 0.05） | 0.5 |
 | `-T <sec>` | 时长上限，0=不限直至目标结束/信号 | 0 |
 | `--tolerate <N>` | 目标消失连续 N tick 才收尾 | 10 |
-| `--out <dir>` | 输出目录（run 模式须为空或不存在） | `af_<UTC时间>` |
-| `--init` / `--tick` | 内部子命令：只建 meta+topology / 只追加一个 tick（外部编排分步采集用） | - |
+| `--out <dir>` | 输出目录（run/init 模式须为空或不存在，防截断旧产物） | `af_<UTC时间>` |
+| `--init` / `--tick` | 内部子命令：只建 meta+topology / 只追加一个 tick（外部编排分步采集用；--tick 会校验会话 PID 与进程启动时间，防 PID 复用与已结束会话续写） | - |
 | `--proc-root <dir>` | procfs 根（测试注入用） | /proc |
 
 ## 约束
@@ -158,4 +175,6 @@ tid      comm               允许核       在册区间
 ## 参考资料
 
 - [采集操作指南](references/collection-guide.md) — 长任务模式、时机选择、跨机取回、超时纪律
-- 数据契约（samples.jsonl 行格式/topology 分节）：见 `kptools-thread-affinity-analyzer` 的 references/data-contract.md
+- 数据契约（samples.jsonl 行格式/topology 分节）：本文件"输出契约"节为
+  自足摘要；完整 schema 见 `kptools-thread-affinity-analyzer` 的
+  references/data-contract.md（MR !249，评审中）

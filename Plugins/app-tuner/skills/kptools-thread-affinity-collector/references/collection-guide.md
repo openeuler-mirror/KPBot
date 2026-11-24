@@ -18,9 +18,11 @@
 |------|------|
 | warmup 后稳态 | 主用例：掩码/线程清单已稳定，事件日志干净 |
 | 启动后立即 | 捕捉框架初始化期的线程出生与绑核动作（事件密集） |
-| 训练阶段切换 | 掩码/线程可能变化（--diff 对比） |
+| 训练阶段切换 | 掩码/线程可能变化（采两个会话目录分别分析，事件日志按时间标注天然可对比） |
 
-- 首个 tick 时全部在册线程记为新线程（事件日志语义），属预期行为
+- 首个 tick 时全部在册线程各记一行"+ 新线程"（事件日志语义），属预期行为
+- "线程退出"为推断事件：连续 3 个 tick 缺失才判退（至多晚于实际消失
+  3 个 tick；procfs 读取抖动也可能触发）——analyzer 的实例判定独立于该口径
 - 生存期短于一个采样间隔的线程采不到（统计与事件日志均提示）
 
 ## 3. 长任务模式
@@ -59,5 +61,7 @@ tail -f /tmp/af_session1/trace.log
 
 - 输出目录直接作为 analyzer 的参数：`analyze.py <输出目录>`
 - 数据契约（samples.jsonl 行格式 / topology 分节 / trace.log 事件类型）
-  见 analyzer 的 `references/data-contract.md`
-- 联合判读：内存侧分析（train-mem-affinity）同样消费 topology_raw.txt
+  见 collector SKILL.md"输出契约"节（自足摘要）与 analyzer 的
+  `references/data-contract.md`（完整 schema，MR !249 评审中）
+- 联合判读：内存侧分析（`kptools-train-mem-affinity`，MR !198 评审中）
+  同样消费 topology_raw.txt——跨机取回时把两边的拓扑快照都带上
