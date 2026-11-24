@@ -21,6 +21,7 @@ SUBSKILL_CATALOG = {
     "database-workload-analysis": "candidate-database-workload",
     "vllm-ascend-profiling": "candidate-vllm-ascend-profiling",
     "ceph-optimization": "candidate-ceph",
+    "uadk-accelerator-optimization": "candidate-uadk",
 }
 
 # vllm-ascend-profiling 的 Stage-1 环境基线在派发指令中显式下发，
@@ -201,6 +202,13 @@ CEPH_TOKENS = (
     "mon_", "mgr_", "pgmap", "objecter",
 )
 
+UADK_TOKENS = (
+    "aes", "sm4", "sm3", "sha1", "sha256", "sha512", "md5", "hmac", "des",
+    "3des", "rsa", "evp_encrypt", "evp_decrypt", "deflate", "inflate",
+    "compress", "uncompress", "gzip", "zlib", "uadk", "libwd", "hisi_sec",
+    "hisi_hpre", "hisi_zip", "wd_",
+)
+
 
 def is_network_hotspot(item):
     category = str(item.get("category", item.get("domain", ""))).lower()
@@ -234,6 +242,17 @@ GO_SYNCPOOL_TOKENS = (
     "sync.poolcleanup",
     "runtime.poolcleanup",
 )
+
+
+def is_uadk_hotspot(item):
+    category = str(item.get("category", item.get("domain", ""))).lower()
+    if category in {"crypto", "compression", "uadk"}:
+        return True
+    haystack = " ".join(
+        str(item.get(key, "")).lower()
+        for key in ("symbol", "function", "name", "dso", "module")
+    )
+    return any(token in haystack for token in UADK_TOKENS)
 
 
 def is_go_syncpool_hotspot(item):
@@ -507,6 +526,21 @@ def evidence_driven_candidates(summary, summary_path, args):
             "high",
             f"ceph/osd-related hotspot total reached {ceph_percent:.2f}%",
             "ceph_storage_hotspot",
+            summary_path,
+        )
+
+    uadk_percent = sum(
+        as_float(item.get("percent", item.get("samples_pct", item.get("overhead_pct"))))
+        for item in function_rank
+        if is_uadk_hotspot(item)
+    )
+    if uadk_percent >= args.uadk_hotspot_threshold or detected.get("crypto_compression_hotspot"):
+        add_candidate(
+            candidates,
+            "uadk-accelerator-optimization",
+            "high",
+            f"crypto/compression hotspot total reached {uadk_percent:.2f}%",
+            "crypto_compression_hotspot",
             summary_path,
         )
 
@@ -796,6 +830,7 @@ def main():
     parser.add_argument("--third-party-hotspot-threshold", type=float, default=5.0, help="Percent threshold for high hotspot third-party library")
     parser.add_argument("--network-hotspot-threshold", type=float, default=3.0, help="Percent threshold for network-related hotspot functions")
     parser.add_argument("--ceph-hotspot-threshold", type=float, default=3.0, help="Percent threshold for ceph/osd-related hotspot functions")
+    parser.add_argument("--uadk-hotspot-threshold", type=float, default=0.5, help="Percent threshold for crypto/compression hotspot functions")
     parser.add_argument("--go-syncpool-hotspot-threshold", type=float, default=3.0, help="Percent threshold for Go sync.Pool/GC hotspot functions")
     parser.add_argument("--icache-miss-threshold", type=float, default=5.0, help="Percent threshold for L1 icache miss")
     parser.add_argument("--l3-miss-threshold", type=float, default=5.0, help="Percent threshold for L3/LLC cache miss")
