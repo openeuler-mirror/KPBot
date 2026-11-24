@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-enqueue",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "两份 trace 的 host 下发耗时对比一下", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "下发到设备启动的延迟 p95 是多少", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "每步 enqueue 总耗时变多了吗", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "host 下发和设备执行重叠了多少", "should_trigger": true },
+    { "id": "EQ-05", "prompt": "哪个 host API 下发最慢", "should_trigger": true },
+    { "id": "EQ-06", "prompt": "是不是 host 侧下发阻塞导致设备等", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "排队等待时间（下发完到设备启动）专项对比", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-dequeue" },
+    { "id": "EQ-08", "prompt": "Free 时间都花在哪了", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-free" },
+    { "id": "EQ-09", "prompt": "优化前后步耗时差多少", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare" },
+    { "id": "EQ-10", "prompt": "算子种类和 shape 变化", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-opstats" },
+    { "id": "EQ-11", "prompt": "H2D 拷贝带宽变化", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-h2d-d2h" },
+    { "id": "EQ-12", "prompt": "分析单份无栈 trace 的 step 切分", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis-nostack" }
+  ]
+}
