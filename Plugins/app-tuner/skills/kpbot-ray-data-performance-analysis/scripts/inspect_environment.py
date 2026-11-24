@@ -221,6 +221,7 @@ def main():
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
     try:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
         with args.out.open("x", encoding="utf-8") as output:
             json.dump(
                 collect(),
