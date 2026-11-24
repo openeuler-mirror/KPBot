@@ -1,0 +1,19 @@
+name: collect-external-workload
+skill: sandbox-profile-evidence-collect
+tier: A
+
+entrypoint: ["bash", "cases/collect-external-workload/run.sh"]
+env_requires: ["python3-openpyxl", "python3-matplotlib", "python3-numpy"]
+env_vars: {}
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_passed
+    op: gte
+    expect: 13
