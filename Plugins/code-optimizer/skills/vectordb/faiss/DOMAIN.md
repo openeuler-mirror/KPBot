@@ -26,16 +26,17 @@ Faiss 查询路径性能优化的技能族：编排与契约、算法与候选�
 | [`faiss-rabitq-optimization`](faiss-rabitq-optimization/SKILL.md) | RaBitQ 位平面、解码归约、查询预处理与缓存 | 成研 |
 | [`faiss-turboquant-optimization`](faiss-turboquant-optimization/SKILL.md) | TurboQuant MSE 查表、QJL 校正、预筛与精排 | 成研 |
 
-### 方法（2）
+### 方法（3）
 
 | Skill | 职责 | 来源 |
 | --- | --- | --- |
 | [`faiss-simd-optimization`](faiss-simd-optimization/SKILL.md) | NEON/SVE 选型决策、实际启用证据、ARM 源码导航 | 成研 |
 | [`faiss-optimization-selection`](faiss-optimization-selection/SKILL.md) | 候选排序与收益止损：四道闸门、信号→机制选择矩阵、上界与摊销口径 | 深研 |
+| [`faiss-simd-layer-port`](faiss-simd-layer-port/SKILL.md) | 定宽 SIMD 层落地：类型层、分派与门控、单层/动态分发语义、构建与实例化 | 深研 |
 
-### 待并入（深研，9）
+### 待并入（深研，8）
 
-方法 7 个（`faiss-simd-layer-port`、`faiss-pq-accumulate-kernel`、`faiss-pq-group-scan`、`faiss-lut-layout`、`faiss-scan-loop-overhead`、`faiss-memory-latency`、`faiss-early-exit`）与执行/特征 2 个（`faiss-benchmark-run`、`faiss-feature-capture`）将随后续阶段并入本子域。
+方法 6 个（`faiss-pq-accumulate-kernel`、`faiss-pq-group-scan`、`faiss-lut-layout`、`faiss-scan-loop-overhead`、`faiss-memory-latency`、`faiss-early-exit`）与执行/特征 2 个（`faiss-benchmark-run`、`faiss-feature-capture`）将随后续阶段并入本子域。
 
 ## 路由
 
@@ -51,6 +52,7 @@ Faiss 查询路径性能优化的技能族：编排与契约、算法与候选�
 | sra_test 接入 | `faiss-sra-test` |
 | 算法调用链、参数与热点 | 对应 `faiss-ivfpq / ivfpqfs / hnsw / rabitq / turboquant-optimization` |
 | NEON/SVE 选型与启用证据 | `faiss-simd-optimization` |
+| 目标 ISA 未生效、需新增向量层级 | `faiss-simd-layer-port`（选型决策看 `faiss-simd-optimization`） |
 
 ## 登记纪律
 
