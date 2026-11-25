@@ -222,7 +222,7 @@ class EnvironmentContractTests(unittest.TestCase):
 
     def test_timeout_kills_client_and_preserves_evidence(self):
         started = time.monotonic()
-        completed = self.invoke(self.make_client("timeout"), timeout=0.2)
+        completed = self.invoke(self.make_client("timeout"), timeout=1.0)
         self.assertLess(time.monotonic() - started, 3.0)
         self.assertEqual(completed.returncode, 1)
         result = self.read_result()

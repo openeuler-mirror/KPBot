@@ -245,7 +245,7 @@ class BenchmarkContractTests(unittest.TestCase):
 
     def test_workload_timeout_is_bounded_and_preserved(self):
         started = time.monotonic()
-        completed = self.invoke(self.make_client("timeout"), timeout=0.2)
+        completed = self.invoke(self.make_client("timeout"), timeout=1.0)
         self.assertLess(time.monotonic() - started, 3.0)
         self.assertEqual(completed.returncode, 1)
         result = self.read_result()
