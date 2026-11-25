@@ -1,4 +1,4 @@
-# app-tuner
+﻿# app-tuner
 
 应用级调优插件 — 服务器应用性能优化的端到端 Agent 工作流。
 
@@ -122,6 +122,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | [`topdown-quality-diagnosis`](skills/topdown-quality-diagnosis/SKILL.md) | 鲲鹏 DevKit Top-down 采集质量审核：核对目标、窗口与事件口径，诊断异常数值和运行中断，提供有界复采方案与证据报告 |
 | [`kptools-thread-affinity-analyzer`](skills/kptools-thread-affinity-analyzer/SKILL.md) | 线程绑核分析器 — 读取 kptools-thread-affinity-collector 输出目录做离线分析：拓扑富化(NUMA/NPU 归属)、角色识别规则外置 roles.json、8 类异常判定(A1 忙线程跨 NUMA 漂移/A1u 掩码不可读/A2 NPU 主机线程错位/A3 忙实例挤核/A4 掩码震荡/A5 绑核意图未覆盖按共同在场区间/A6 观测完整性/A7 线程翻动)，输出 HTML 报告(仅看异常过滤)+ summary.json(原子写入)；跨机采样包须带 topology_raw.txt |
+| [`kptools-thread-affinity-collector`](skills/kptools-thread-affinity-collector/SKILL.md) | 运行期线程绑核采集器（只读，任意进程）— 双通道持续采样每线程 CPU 允许掩码与实际落点，产出三件套：samples.jsonl（机器格式时间序列）+ trace.log（人类可读事件日志：新线程/掩码变化/线程退出/心跳/终态名册/统计，cat 即懂）+ topology_raw.txt（拓扑快照）；支持 --auto/--tick 分步与长任务；采集与分析职责分离，目标机只装采集器、输出目录跨机取回 |
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
 | [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡数据采集：现场轮询 /metrics（单池/PD 双池）与 Prometheus 时间段回采两种方式产出统一的 dp_load_metrics CSV（30 数据列 + queue_fixed） |
 | [`kptools-dplb-report`](skills/kptools-dplb-report/SKILL.md) | vLLM DP 负载均衡分析报告：解析 dp_load_metrics CSV，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性）；数据由 kptools-dplb-profiler 采集或由用户提供 |
