@@ -188,7 +188,7 @@ pip3 show motor
 
 生成时的要点：
 
-- 后端实例**只出现在 `register.sh`**（--prefill / --decode 参数），`user_config.json` 里不写实例列表——实例是动态注册的，不是静态配置。**一个参数 = 一个实例**：同一实例的多个 DP endpoint 用逗号连接（如 `--prefill "10.0.0.11:8000,10.0.0.11:8001"`），多实例才重复传参——把同一实例的多个 endpoint 拆成多个参数会被注册成多个独立实例，分发口径就错了
+- 后端实例**只出现在 `register.sh`**（--prefill / --decode 参数），`user_config.json` 里不写实例列表——实例是动态注册的，不是静态配置。**一个参数 = 一个实例**：同一实例的多个 DP endpoint 用逗号连接（如 `--prefill "192.0.2.11:8000,192.0.2.11:8001"`），多实例才重复传参——把同一实例的多个 endpoint 拆成多个参数会被注册成多个独立实例，分发口径就错了
 - 用户没提 PD 分离时，先问清 P/D 节点划分再填 `--prefill`/`--decode`；纯 DP 部署（无 PD 分离）时两组都可能挂同批实例，以用户实际拓扑为准
 - **生成前先做端口预检**：`ss -ltn 2>/dev/null | grep -E ':(7200|7201|7202)\b' || echo PORTS_FREE`（容器内可辅以 `curl -m 3 http://127.0.0.1:<port>/` 探测，有响应即被占）。被占用时整套换端口（如 7300/7301/7302），**user_config.json 的三个端口与 register.sh 的 `--mgmt-port` 必须同步修改**，部署指南中的端口一并更新
 - **管理面鉴权（按实际 bind 地址与端口可达性判定，不按"同机部署"假设）**：模板默认 `coordinator_api_host: 127.0.0.1` + `enable_api_key: false`——管理端口仅监听回环，默认关闭鉴权是安全的。用户确需跨机访问推理端口而改绑非回环地址（实际 IP / `0.0.0.0`）时，**必须先开启管理面 API Key 再生成/执行 start_motor.sh**：生成密钥文件（`install -d -m 700 /opt/motor-coord/secrets && python3 -c "import secrets; print(secrets.token_urlsafe(32))" > /opt/motor-coord/secrets/mgmt-api-key && chmod 600 /opt/motor-coord/secrets/mgmt-api-key`），在 user_config.json 的 `motor_coordinator_config.mgmt_api_key_config` 设 `enable_api_key: true` + 非空 `api_key_file`，register.sh 命令追加 `--mgmt-api-key-file`。生成 start_motor.sh 前必须校验**绑定地址非回环 ⇒ 鉴权已开启且密钥文件存在**，不满足即中止并请用户二选一（改回 127.0.0.1 / 补齐鉴权），不得无鉴权对外部署；start_motor.sh 模板已内置同口径门禁（改脚本时不要删），启动时兜底拦截
