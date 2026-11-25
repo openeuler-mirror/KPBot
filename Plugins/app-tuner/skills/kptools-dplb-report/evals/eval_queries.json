@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-dplb-report",
+  "queries": [
+    { "id": "AQ-01", "prompt": "vLLM 推理集群各引擎忙闲不均，帮忙分析下负载均衡状况", "should_trigger": true, "note": "core scenario: DP imbalance analysis (data ready or ask user for CSV)" },
+    { "id": "AQ-02", "prompt": "模型负载不均衡，各实例请求分发差很多，看看是路由问题吗", "should_trigger": true, "note": "load imbalance diagnosis" },
+    { "id": "AQ-05", "prompt": "对比 proxy 和 coordinator 两种路由策略哪个更均衡", "should_trigger": true, "note": "A/B routing policy compare (report side)" },
+    { "id": "AQ-07", "prompt": "我有一份 dp_load_metrics CSV，帮我出分析报告", "should_trigger": true, "note": "existing CSV -> flow B" },
+    { "id": "AQ-08", "prompt": "看看各引擎的 TTFT 是不是有的快有的慢，排队是不是集中在某几个实例上", "should_trigger": true, "note": "TTFT/queue imbalance symptoms" },
+    { "id": "NQ-01", "prompt": "Java 进程 CPU 高，查一下哪个方法在烧", "should_trigger": false, "note": "routes to kptools-arthas" },
+    { "id": "NQ-02", "prompt": "分析这个 Python 进程的 GIL 竞争", "should_trigger": false, "note": "routes to kptools-py-spy" },
+    { "id": "NQ-03", "prompt": "采集系统整体 CPU 和内存利用趋势", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "NQ-04", "prompt": "看看 NPU 算子执行耗时分布", "should_trigger": false, "note": "routes to kptools-ascend-profiling" },
+    { "id": "NQ-05", "prompt": "帮我部署一个负载均衡器把请求均匀分发", "should_trigger": false, "note": "部署动作，本 skill 只做解析与报告，不部署组件" },
+    { "id": "NQ-07", "prompt": "现场采集 30 分钟 vLLM 的负载指标", "should_trigger": false, "note": "采集动作，routes to kptools-dplb-profiler（采集完成后其产物才进入本 skill）" },
+    { "id": "NQ-08", "prompt": "从 Prometheus 回采昨天的负载数据", "should_trigger": false, "note": "回采采集动作，routes to kptools-dplb-profiler" }
+  ]
+}
