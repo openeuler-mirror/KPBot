@@ -98,9 +98,10 @@ EPLB 的收益来自冗余专家副本，而副本占的是 **KV cache 的空间
 2. **是否正在换出**：`vllm:num_preemptions` 是累计计数器，单看一个快照只能知道"历史上换出过"。
    必须用两份 `/metrics` 快照做差分（`--prometheus` 与 `--prometheus-prev`），**窗口内增量 >0** 才说明
    当前仍在换出；只有累计值时脚本只给提示、不参与门控。
-3. **每个副本的成本**：官方公式
-   `NUM_MOE_LAYERS × BYTES_PER_EXPERT × (NUM_TOTAL_EXPERTS + NUM_REDUNDANT_EXPERTS) ÷ NUM_EP_RANKS`，
-   DeepSeekV3 每多一个冗余专家（每 EP rank）约 2.4 GB。用它能算出这点余量最多放几个副本。
+3. **每个副本的成本**：每个 rank 多一个专家槽位（等价全局增加 `ep_size` 个副本）的成本约
+   `NUM_MOE_LAYERS × BYTES_PER_EXPERT`（DeepSeekV3 参考值约 2.4 GB）；每 rank 增量 =
+   `(冗余数 / ep_size) × 该值`。用它粗算这点余量最多放几个副本；最终冗余数与显存预算以参数分析环节的
+   方案为准，这里只做“余量够不够”的粗门控。
 
 把这几项写进证据 JSON：
 
@@ -182,6 +183,9 @@ python3 scripts/analyze_eplb_metrics.py --evidence evidence.json --out verdict.j
 
 本技能只做诊断，输出的是**改哪个文件、加/删哪些行**，不含一键改写脚本。改之前一律先备份原模板，
 改完用 `bash -n` 校验，并确认 `--additional-config` 仍然只有一个。
+
+> 这份清单是 **advisory（建议）**：handoff 里的 N/W/S 是起点。最终参数（含整除取整、显存预算、窗口/周期）
+> 以参数分析环节的方案为准，模板写入由部署环节执行；不要把本清单当成唯一事实源。
 
 **`imbalanced`：改 P 节点 `run_dp_template.sh` 为 dynamic**
 

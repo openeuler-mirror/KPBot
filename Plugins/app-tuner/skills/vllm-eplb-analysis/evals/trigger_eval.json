@@ -1,0 +1,74 @@
+[
+  {
+    "query": "P 节点 TTFT 长尾很严重，怀疑是 MoE 专家热点，帮我判断要不要开 EPLB",
+    "should_trigger": true
+  },
+  {
+    "query": "balancedness 0.93 到底算不算负载不均衡",
+    "should_trigger": true
+  },
+  {
+    "query": "已经开了 dynamic EPLB，balancedness 一直 0.92，需要加冗余专家吗",
+    "should_trigger": true
+  },
+  {
+    "query": "EPLB 开了以后压测没变快，是不是本来就不均衡",
+    "should_trigger": true
+  },
+  {
+    "query": "怎么从 vllm metrics 看每个 rank 的排队和 TTFT 差异",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我把 prefill 日志和 /metrics 一起分析下，出个不均衡结论",
+    "should_trigger": true
+  },
+  {
+    "query": "专家并行负载不均，但不知道是不是它拖慢了 TTFT",
+    "should_trigger": true
+  },
+  {
+    "query": "上线前想确认专家摆放是不是瓶颈，有没有比直接开 EPLB 更稳的办法",
+    "should_trigger": true
+  },
+  {
+    "query": "num_requests_waiting 在 engine 之间差很多，这个是不是 EPLB 能解决的",
+    "should_trigger": true
+  },
+  {
+    "query": "只捞到两行 balancedness，能判断要不要开 EPLB 吗",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我把 run_dp_template.sh 切成 dynamic EPLB，冗余专家 16",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我造一份不均衡压测数据集，验证 EPLB 收益",
+    "should_trigger": false
+  },
+  {
+    "query": "vLLM 服务 P99 抖动，帮我抓 profiling 看算子耗时",
+    "should_trigger": false
+  },
+  {
+    "query": "模型精度掉了，对比优化前后准确率",
+    "should_trigger": false
+  },
+  {
+    "query": "allreduce 很慢，查下 RoCE 错包和网口 link",
+    "should_trigger": false
+  },
+  {
+    "query": "专家并行度设多少合适，TP=8 还是 DP=8",
+    "should_trigger": false
+  },
+  {
+    "query": "MoE 的 router 为什么总是选 top-k=8 个专家",
+    "should_trigger": false
+  },
+  {
+    "query": "vLLM 分词后端换成 fastokens，顺便开段缓存",
+    "should_trigger": false
+  }
+]
