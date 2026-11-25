@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-tpsplit-report",
+  "queries": [
+    {"id": "AQ-01", "prompt": "TP32 切成 TP8 之后跑了一轮压测，TTFT 的表格和打点日志都拿到了，帮我看看拆分到底赚了多少，收益来自哪里", "should_trigger": true, "note": "核心场景"},
+    {"id": "AQ-02", "prompt": "tpsplit 优化上线了，领导问收益多少，给我出一份前后对比报告，要能拿出证据链", "should_trigger": true, "note": "收益报告+证据链"},
+    {"id": "AQ-03", "prompt": "TP 拆分前后各采了一次数据，帮我把 TTFT 拆开看看哪个阶段降了，每个收益点要能对回原始日志", "should_trigger": true, "note": "阶段归因"},
+    {"id": "AQ-04", "prompt": "拆完 TP 之后 P99 好像好了不少，帮我确认收益点，并基于打点日志给出证据", "should_trigger": true, "note": "分位数收益"},
+    {"id": "AQ-05", "prompt": "对比这两套目录 before_tp32ray 和 after_tp8dp，出一个 TP 拆分收益归因报告，表格和日志都在里面", "should_trigger": true, "note": "目录对比"},
+    {"id": "AQ-06", "prompt": "TTFT breakdown 解析出的 TTFT 表出来了，帮我评估一下这次 tpsplit 的收益", "should_trigger": true, "note": "上游出表"},
+    {"id": "AQ-07", "prompt": "TP32 改 TP8+DP 的效果量化一下，重点看 sched_qwait 是不是真的降了，收益分析对比报告发我", "should_trigger": true, "note": "qwait 主战场"},
+    {"id": "AQ-08", "prompt": "拆分前后的 TTFT breakdown 表都在，但 after 那次压测请求长度好像偏短，这样的对比可信吗？收益到底多少", "should_trigger": true, "note": "混杂怀疑"},
+    {"id": "AQ-09", "prompt": "这次对比只有两张 TTFT 表格，原始日志没留下来，还能做收益对比吗", "should_trigger": true, "note": "降级模式"},
+    {"id": "AQ-10", "prompt": "帮我算一下 TP 拆分收益里排队下降贡献了百分之多少，前向下降贡献了百分之多少", "should_trigger": true, "note": "贡献度拆解"},
+    {"id": "NQ-01", "prompt": "TP 还能不能再切小一点？单卡显存够不够装下权重和 KV cache", "should_trigger": false, "note": "routes to 可行性测算（tpsplit-check）"},
+    {"id": "NQ-02", "prompt": "帮我把 TTFT 打点 patch 部署到 P/D 容器里并校验生效", "should_trigger": false, "note": "routes to 打点部署（tpsplit-log-trace）"},
+    {"id": "NQ-03", "prompt": "把集群从跨机 TP32 迁到单机 TP8+DP，帮我把新拓扑部署起来", "should_trigger": false, "note": "routes to 部署（tpsplit-optimization）"},
+    {"id": "NQ-04", "prompt": "把 p_engine.log 里的 [TTFT][BREAKDOWN] 行解析成每请求的表格", "should_trigger": false, "note": "出表归 log-analysis，不是收益对比"},
+    {"id": "NQ-05", "prompt": "DP 节点之间流量分发不均，帮我出一份负载均衡分析报告", "should_trigger": false, "note": "routes to 负载均衡分析（dplb-profiler）"},
+    {"id": "NQ-06", "prompt": "线上 P99 突然涨了 200ms，帮我排查是不是 TTFT 回归了", "should_trigger": false, "note": "回归排查，不是前后收益对比"},
+    {"id": "NQ-07", "prompt": "msprof 采集的算子 profiling 报告帮我解读一下瓶颈在哪", "should_trigger": false, "note": "routes to 算子级性能分析"},
+    {"id": "NQ-08", "prompt": "帮我写个压测脚本，看不同 QPS 下的 TTFT 曲线", "should_trigger": false, "note": "压测脚本编写，无对比数据"}
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "skill_name": "kptools-tpsplit-report",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "clean-gain-report",
+      "prompt": "TP 拆分前后的数据我已经解析好了：<TPSPLIT_DATA_HOME>/before_tp32ray 是拆分前（TP32 跨机 Ray），<TPSPLIT_DATA_HOME>/after_tp8dp 是拆分后（TP8 单机 + DP）。帮我出一份收益对比报告，重点说清楚 TTFT 的收益来自哪些阶段，每个收益点要有日志证据能对回去。（<TPSPLIT_DATA_HOME> 可用 scripts/synth_samples.py --scenario clean 生成：python scripts/synth_samples.py --out <TPSPLIT_DATA_HOME>）",
+      "expected_output": "生成结构化收益对比报告（md + html），包含：TTFT 分位数对比、按阶段贡献度拆解（sched_qwait 应为主收益点 ~98% 贡献）、每个收益点带三级证据链（claim / 表格分位数 / 原始日志行含文件:行号），并指出 net_lb / kv_xfer 的轻微回退。",
+      "files": [],
+      "assertions": [
+        "Produces a Markdown report containing all eight fixed sections: 结论 / 数据与运行态 / TTFT 总览对比 / 分阶段拆解对比 / 收益点与证据链 / 风险与回退点 / 分输入长度分层对比 / 假设与未测项",
+        "Report's headline TTFT numbers match the CSV ground truth within 2%: before mean ≈1086ms, after mean ≈379ms, improvement ≈65%",
+        "Identifies sched_qwait as the top benefit point and reports its contribution to total TTFT improvement as ~98%",
+        "Every benefit point in the report includes a three-level evidence chain whose L3 cites raw log lines with file:line references (e.g. p_engine.log:NNNN) and request IDs that actually exist in the input logs",
+        "Flags net_lb and kv_xfer as regressions (positive delta) in a dedicated risk/regression section",
+        "Produces an HTML report that is self-contained (no external CDN references for JS/CSS)",
+        "Report includes an input-length-stratified comparison showing the benefit holds across prompt-length buckets"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "quality-trap-flags",
+      "prompt": "对比一下这两份数据的收益：<TPSPLIT_DATA_HOME>/before_tp32ray 和 <TPSPLIT_DATA_HOME>/after_tp8dp。拆分后 TTFT 好了多少？给我出个报告。（<TPSPLIT_DATA_HOME> 可用 scripts/synth_samples.py --scenario quality-trap 生成，after 侧故意埋了守恒违例与 input_len 偏移）",
+      "expected_output": "报告应先暴露数据质量问题：after 侧守恒违例 ~8%（>5% 告警线）、两侧 input_len 分布不一致（before 均值 ~2100 vs after ~1300，原始均值差被混杂）、after 样本仅 320。结论应以分层对比为准而非原始均值差，并向用户解释告警含义；不能在质量问题上下硬结论。",
+      "files": [],
+      "assertions": [
+        "Report/response flags the after-side conservation violation rate (~8% of rows, above the 5% threshold) as a data-quality warning",
+        "Report/response flags the input_len distribution mismatch between the two sides as a confound for the raw mean comparison",
+        "The user-facing response mentions the sample-size asymmetry (2000 vs 320 requests) or the shorter collection window as a caveat",
+        "The authoritative comparison is presented as the input-length-stratified (bucketed) comparison rather than the raw mean delta of -57.6%, OR the raw delta is explicitly qualified as confounded",
+        "Report/response still identifies the genuine benefit direction (TTFT improved substantially, driven by sched_qwait) rather than refusing to conclude at all"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "tables-only-degraded",
+      "prompt": "我这里只有两张 TTFT 表格（原始日志没保存下来）：<TPSPLIT_DATA_HOME>/before_tp32ray/ttft_table.csv 和 <TPSPLIT_DATA_HOME>/after_tp8dp/ttft_table.csv。能对比一下 TP32→TP8 的收益吗？（<TPSPLIT_DATA_HOME> 可用 scripts/synth_samples.py --scenario tables-only 生成，目录里只有 csv 没有 .log）",
+      "expected_output": "在无原始日志的降级模式下仍能完成对比报告（表格层统计可用），但明确告知用户证据链止步于表格层（L3 缺失），收益结论照常给出（qwait 主导）且降级说明出现在证据链与假设部分。",
+      "files": [],
+      "assertions": [
+        "Completes the comparison despite missing raw logs and produces a usable report",
+        "Explicitly tells the user (in report or response) that log-level evidence is unavailable / evidence is limited to the table level / L3 missing",
+        "Identifies sched_qwait as the dominant benefit (~98% of TTFT improvement)",
+        "Does NOT fabricate log-line citations: no fake file:line references to raw logs are presented as evidence",
+        "Headline TTFT numbers match ground truth within 2%: before mean ≈1086ms, after mean ≈379ms, ≈65% improvement"
+      ]
+    }
+  ]
+}

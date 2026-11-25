@@ -1,0 +1,84 @@
+{
+  "skill_name": "nebula-performance-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Nebula 3.8.0，2 graphd + 2 storaged，Go1Step QPS 约 19 万；graphd 火焰图中 Thrift 队列 futex 占约 59%，storaged 处理延迟很低；业务是混合负载。请给出优化方案：先做什么、预期收益、如何验证、哪些不做。不要执行命令。",
+      "expected_output": "先判断瓶颈在 graphd 队列争用而不是 storaged/源码。优先部署杠杆：增加 graphd 实例（如 4 或 8）、降低单实例 worker（48→16/24），预期 Go1 明显提升（实测 2→4 +44%（组合配置：实例 2→4 且 worker 48→16，不能单独归因实例数）），但 storaged 会成为新瓶颈，需同步观察；混合负载先试浮动绑核而不是固定绑核。验证：同数据/配置/口径的 Go1 A/B，观察 futex 占比下降与新的热点迁移；检查所有场景不劣化。不要先做：继续加 worker、先改业务源码、全量第三方升级、无基线调参。",
+      "files": [],
+      "expectations": [
+        "识别 fanout/队列争用为部署层问题，优先部署杠杆",
+        "建议增加 graphd 实例并降低单实例 worker",
+        "给出预期量级并说明会增加 storaged 压力",
+        "混合负载优先浮动绑核/不盲目固定绑核",
+        "验证要求同口径 A/B、观察热点迁移、所有场景不劣化",
+        "明确不做：继续加 worker、先改源码、无基线调参",
+        "没有执行命令",
+        "说明 +44% 是组合配置结果（实例与 worker 同时变化），归因实例数需 worker 口径固定的对照"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "FindShortestPath 是当前主要优化场景，profile 显示 graphd 的哈希表插入、Value 字符串 setS/clearSlow、malloc/sdallocx 占比高。请设计一组源码优化（容器/拷贝/Value），说明每项的机制、预期收益、适用条件、正确性风险和回滚方式。不要执行命令。",
+      "expected_output": "优先结构性优化：Value SSO（unique_ptr<string>→内联 string，短串零堆分配）、BFS 容器 unordered_multimap→robin_hood::unordered_flat_map<Value,vector<Edge>>、Edge 真正移动/拷贝消除、删除 uniqueDst 去重容器、reserve；必要时再做哈希/NEON/TSC。每项说明：机制、影响文件、预期（SSO FSP +12.8%，BFS 组合 +15%）、适用（字符串 VID/FSP）、风险（Value 尺寸/布局、移动语义、语义等价）。正确性：FSP 已知点对逐路径比对、不可达空集、GO/MATCH/LOOKUP/写回读；回滚：git apply -R/恢复源码重编，恢复二进制。强调结构性去分配/去哈希优先于微优化。",
+      "files": [],
+      "expectations": [
+        "优先提出 Value SSO 与 BFS flat_map 等结构性优化",
+        "说明 Edge 移动/拷贝消除与删除去重容器的机制",
+        "每项给出预期收益、适用条件、影响文件/风险",
+        "强调 Value 尺寸/内存布局与移动语义的正确性风险",
+        "正确性验证包含 FSP 逐路径比对、不可达空集、其他查询与写回读",
+        "回滚方式明确（反向补丁/恢复源码重编/恢复二进制）",
+        "指出结构性优化优先于 NEON/预取等微优化",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "团队想在鲲鹏 950 上把 Nebula 3.8.0 的 third-party 全量升级到 2025 版，并加 LTO+LSE+jemalloc 5.3.1，声称能全面提升 QPS。请评估哪些该做、哪些不该做、如何分批验证与回滚。不要执行命令。",
+      "expected_output": "区分杠杆：LSE 收益明确（实测 FSP +17.4%，其他噪声内），风险低，可先做；LTO/jemalloc 需按场景验证（读场景可能受益，写场景受 RocksDB 影响）；全量第三方升级读路径净贡献≈0，且数据格式/API/ABI/周期风险高，没有明确需求不做。分批：基线 → LSE（third-party+Nebula 一致）→ LTO/jemalloc → 第三方升级（独立 build、测试环境、数据备份）。每批只改一个变量，功能门禁 + 五场景 A/B；记录 md5/commit/参数；负收益回退。F14/ABI（不要随意 +crc）、RocksDB 只向后兼容、数据备份与回滚要写清。",
+      "files": [],
+      "expectations": [
+        "区分 LSE、LTO、jemalloc、全量升级的收益与风险，不笼统承诺全面提升",
+        "指出 LSE 收益主要来自 FSP，其他场景在噪声内",
+        "指出全量第三方升级读路径收益≈0、风险高，无明确需求不做",
+        "要求分批、单变量、每批功能门禁 + 五场景 A/B",
+        "提醒 F14/ABI 约束（不要随意 +crc）与 RocksDB 数据格式不兼容",
+        "回滚包含旧 build/二进制与数据备份",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "我打了一个源码优化补丁，Go1 QPS +8%，但 Go3 下降 6%，成功率不变；FindShortestPath 持平。团队希望保留，因为“主场景是 Go1”。请判断是否保留、如何归因、下一步怎么做。不要执行命令。",
+      "expected_output": "不能仅凭 Go1 +8% 保留：Go3 -6% 是明确劣化，FSP 持平；且 8% 需要确认是否超出噪声（多轮、>5%）。先归因：补丁影响了哪条路径（Go1 与 Go3 的差异：跳数/扇出/结果集/内存），用 perf 对比两腿热点；检查两腿数据/配置/口径是否一致。下一步：缩小改动范围/加条件分支，使 Go1 收益不牺牲 Go3；或放弃补丁；若业务明确只跑 Go1 型负载且接受 Go3 劣化，也需用户书面确认并记录。正确性仍需冒烟/路径比对。",
+      "files": [],
+      "expectations": [
+        "指出 Go3 -6% 是明确劣化，不能只用 Go1 +8% 保留",
+        "要求确认 8% 是否超出噪声（多轮、口径一致）",
+        "要求按补丁影响路径归因（跳数/扇出/内存/容器）",
+        "下一步包含缩小改动/加条件分支或放弃，而不是直接合并",
+        "若业务确实只跑 Go1 型负载，需用户确认并记录风险",
+        "仍要求正确性验证",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "verify_build_opts.sh 用哪几条证据通道核对二进制是否链接 jemalloc？我按本 skill §4 参数（third-party v3.3，无 --with-jemalloc-prefix、--disable-shared 静态链接、未 strip）构建了 nebula-graphd，实测 strings 里能读到 5.3.1-0-g81034ce… 形如的 banner，但 `nm | grep -cE ' je_(malloc|free)$'` 数到 0——这是没链上 jemalloc 吗？不要执行命令。",
+      "expected_output": "三条证据通道：①版本 banner——真实 banner 无 jemalloc- 前缀（jemalloc.h:111 形如 5.3.1-0-g81034ce…，经 ctl.c/prof_log.c 引用 JEMALLOC_VERSION 进入二进制；jemalloc-5.3.1-… 只会命中 DWARF 构建目录路径）；②ldd 的 libjemalloc 条目（动态链接时）；③nm 定义符号（静态链接时）。0 命中不是没链上：无前缀构建下 jemalloc_rename.h 把 je_malloc/je_free #define 成 malloc/free，公共符号以 malloc/free 进入二进制、库内符号为 je_malloc_default/je_free_default，所以应 grep ' (T|W) (malloc|free|je_malloc|je_free|je_malloc_default|je_free_default)$'。banner 已读到 5.3.1-0-g… 即静态链接成立的归属证据；只 grep je_malloc$ 是 pattern 自身缺陷（源自检视建议原文），对任意 x.y.z 串 grep -m1 或以未定义 U 符号计数都不能作归属证据，无法确认时记未验证。",
+      "files": [
+        "scripts/verify_build_opts.sh",
+        "references/compiler-and-thirdparty.md"
+      ],
+      "expectations": [
+        "列出三条证据通道（banner/ldd/nm 定义符号）及其适用条件（动态/静态）",
+        "指出真实 banner 无 jemalloc- 前缀、能读到的 5.3.1-0-g… 即归属证据",
+        "解释无前缀构建 je_malloc→malloc 的 #define 机制与 je_malloc_default 库内符号",
+        "给出修正后的 nm pattern（含 malloc/free 与 je_* 两类符号）",
+        "说明旧 pattern 0 命中不代表未链接、不能据此刻错误结论",
+        "没有执行命令"
+      ]
+    }
+  ]
+}
