@@ -32,6 +32,13 @@
 2. 带**可复现的 benchmark 口径**（数据集、查询集如 TPC-DS 的规模因子、并发、SLA 指标）；
 3. 有环境检测与候选命令输出的分离（推荐器模式：先出 JSON 候选动作，再由主框架安全门控执行）。
 
+## 成员
+
+| 成员 | 定位 |
+|---|---|
+| [`flink-velox-env/`](flink-velox-env/DOMAIN.md) | 子域：Flink + GlutenFlink（velox 向量化栈）环境检查家族——具体项检查子 skill 各自独立安装与触发，统筹 skill 按目标（build / native）聚合并给出唯一 next_step；只扫不改，是本域安装/构建/验证类 skill 的共同前置裁决点，详见其 DOMAIN.md |
+| [`flink-velox-install/`](flink-velox-install/DOMAIN.md) | 子域：Flink + GlutenFlink 环境的安装部署家族（动作类，`plan` 默认只打印、`apply --yes` 才执行、`verify` 复查）——构建环境准备、Flink 运行时与 nexmark 安装、GlutenFlink 构建编译部署、切栈重启，成员分 PR 提交；是 `flink-velox-env` 检查家族各项修复动作的执行者，详见其 DOMAIN.md |
+
 ## 与其它域的边界
 
 - **算子 / 编译器层**（Spark 的代码生成、JVM JIT、SIMD 库）→ `code-optimizer` 侧对应 skill，不在本域；

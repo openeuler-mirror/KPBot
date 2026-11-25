@@ -1,0 +1,23 @@
+{
+  "skill_name": "nginx-baseline-setup",
+  "version": 1,
+  "notes": "Baseline discipline: tuning-loop single-variable A/B with mock tools. Split from nginx-optimization evals (id 3).",
+  "evals": [
+    {
+      "id": 3,
+      "prompt": "用 mock 压测工具做一次真实的 nginx 调优循环：先写一份默认 nginx.conf 跑 baseline；然后严格只修改一个关键配置项并复测；最后给出 before/after 对比表和保留/回退结论，写到 report.md。不要一次改多个参数，不要对真实 nginx 做任何操作。",
+      "expected_output": "先执行 baseline 并记录 Requests/sec；只改一个配置项（如 reuseport / access_log off / worker_cpu_affinity / sendfile）后复测；给出 before/after 数值对比；给出保留或回退的结论及依据（增益 <2% 回退等）；报告结构化（场景、变更、数据、结论）。",
+      "files": [],
+      "expectations": [
+        "先跑 baseline 并记录基线指标，baseline 与复测使用同一工具与参数形态",
+        "严格单变量：两轮之间只改一个配置项，并能指出改的是哪一项",
+        "给出 before/after 数值对比表",
+        "给出明确的保留或回退结论，并有效益阈值依据（如 <2% 无增益即回退）",
+        "调用的压测参数写法规范（--key=value 与 --key value 均可，但不混用导致语义不清）",
+        "报告包含场景说明、变更内容、数据、结论的结构化章节",
+        "没有对真实 nginx 或系统服务做操作（mock 工具只读模拟）",
+        "没有一次改多个参数"
+      ]
+    }
+  ]
+}

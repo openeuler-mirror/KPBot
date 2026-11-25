@@ -1,0 +1,61 @@
+# 用例：tier A —— accelerator-optimization 证据门控与 dry-run 只读性单测
+#
+# 拉取与测试方法（人类可读）：
+#   # 构建（构建上下文 = Plugins/app-tuner/，无法解析 openeuler 源时需 --network host）
+#   docker build --network host \
+#     -f skills/kpbot-app-tuner/subskills/accelerator-optimization/cases/unit-gate-and-dryrun/Dockerfile \
+#     -t kpbot/app-tuner-unit-gate-dryrun:1.0-openeuler24.03 .
+#   # 运行（tier A 无 agent 参与，不做 A/B）
+#   docker run --rm kpbot/app-tuner-unit-gate-dryrun:1.0-openeuler24.03
+#   # 也可宿主机直跑（Linux + python3）：
+#   cd skills/kpbot-app-tuner/subskills/accelerator-optimization/cases/unit-gate-and-dryrun && ./entrypoint.sh
+#
+# 说明：tier A。合成 snapshot_metadata.json 夹具 + 环境变量重定向
+# （OPENSSL_DIR/NGX_PREFIX/NGINX_CONF/ENGINE_DIR/ASF_DIR/SSL_CERT 指向临时
+# 目录），不需要 HPRE 硬件或 mock 工具。看守点：
+#   1. 证据门控退出码契约：元数据缺失/不可解析 exit 4；可解析但
+#      run_id/状态/snapshot_time 不匹配 exit 3；合法 exit 0 且落盘
+#      （SKILL.md 曾把所有失败笼统写成 exit 3，该漂移由此看守）
+#   2. unbound 模式（无 --evidence-dir）：stdout JSON、状态 unbound、exit 0
+#   3. enable 无 --execute 时严格只读：配置文件不变、无 .bak 产物、
+#      输出含 dry-run 标记与 --approved-change-id 审批门禁提示
+#   4. SKILL.md 持续记载 exit 3/exit 4/unbound 契约与真源声明（文档漂移看守）
+#   5. ssl_engine 只在 main 上下文插入/保留一条（顶层、全文件唯一），删除 http/server 内的错误位置
+#   6. quota>throughput 与非法 --quota/--requests/--pid/--url 在写盘/执行前 exit 2；
+#      脚本不含 bash -c 字符串执行、StrictHostKeyChecking=no、pgrep -f 'nginx: worker' 自匹配
+#   7. 绑定模式四项必填；缺 snapshot_time/坏时间戳 fail closed
+#   8. 证据落盘失败 exit 1 且保留旧文件（临时文件 + 原子替换）
+#   9. OpenSSL "[ unavailable ]" 不得被当成 available
+#  10. verify 归因：握手全失败不得 PASS；SQE 增量超出成功握手容差判 INSUFFICIENT
+
+name: unit-gate-and-dryrun
+skill: accelerator-optimization
+tier: A                    # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/app-tuner-unit-gate-dryrun:1.0-openeuler24.03
+model: none                # tier A 无模型参与
+auth: none
+
+ab: []                     # tier A 不做 A/B 对照
+
+build:
+  context: ../../../../../../          # 指向 Plugins/app-tuner/
+  dockerfile: skills/kpbot-app-tuner/subskills/accelerator-optimization/cases/unit-gate-and-dryrun/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires: []           # 纯标准库 + 合成夹具，无前置
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: tests_failed
+    expect: 0

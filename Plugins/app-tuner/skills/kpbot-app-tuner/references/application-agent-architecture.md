@@ -65,7 +65,8 @@ Phase 1 完成标志：
 | `memory_capacity_bottleneck` | 应用配置、OS、硬件规格分析 |
 | `memory_bandwidth_bottleneck` | CPU 亲和性、NUMA、应用配置、硬件规格分析 |
 | `cpu_bottleneck` | CPU 亲和性、应用配置、性能库、编译、BIOS、OS、Other |
-| `gpu_npu_bottleneck` | GPU/NPU 等计算卡 skill |
+| `gpu_npu_bottleneck` | NPU/GPU 通用计算卡：vLLM 推理走 `vllm-ascend-profiling`，其余走 `hardware-upgrade-analysis` / `application-config-optimization` |
+| `crypto_accelerator_bottleneck` | HPRE/KAE 密码加速卡 skill（`accelerator-optimization`，UADK/ASF 卸载） |
 | `hardware_capacity_limit` | 更换高规格硬件分析 |
 | `unknown_bottleneck` | 补充采集或输出无法识别瓶颈报告 |
 
