@@ -62,9 +62,10 @@ cpu offload 或驱动未映射；用 --pattern 调整匹配或确认 --tag 时�
 ```
 
 **这是预期行为**：`/dev/devmm_svm` 映射**只在 `pin_memory()` 被调用时
-才创建**（由 PinnedFlatPool/CpuMemoryPool 的 `_grow` 触发）。普通
-torch_npu 初始化（`set_device` + 创建张量）**不会产生** devmm 段——
-真机已验证（见"真机验证"节）。
+才创建**（fsdp 池由 `PinnedFlatPool._grow` 触发；nova 池由
+`CpuMemoryPool._grow_with_retry → _allocate_slab` 触发——CpuMemoryPool
+没有 `_grow` 方法）。普通 torch_npu 初始化（`set_device` + 创建张量）
+**不会产生** devmm 段——真机已验证（见"真机验证"节）。
 
 ### 对应的代码路径
 

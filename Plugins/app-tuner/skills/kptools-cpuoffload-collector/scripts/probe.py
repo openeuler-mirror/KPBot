@@ -568,6 +568,14 @@ def main(argv=None):
     bundle["partial"] = bool(missing)
 
     if not bundle["ranks"]:
+        # 全部 rank 失败：区分"进程没了"与"无权限读"——后者按契约退 5
+        # （部分失败退 6 的语义不变），否则跨 uid --pid 场景被引向"进程
+        # 不存在"的排障路径
+        if missing and all(m.get("reason") == "permission_denied"
+                           for m in missing):
+            out("ERROR: PROCFS_PERMISSION_DENIED（所有目标的 /proc 均无权限读"
+                "——跨 uid 需同 uid 或 root）", err=True)
+            return 5
         out("ERROR: 没有任何 rank 完成探测", err=True)
         return 3
 

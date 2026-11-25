@@ -257,6 +257,24 @@ check_eq "T13a AT_SYS_ROOT 采集 rc=0" "0" "$v"
 v=$(jq_ "d['device_node_map']" "$WORK/b13/run_meta.json")
 check_eq "T13b NPU 双校验（网卡排除）" "{'0000:8f:00.0': {'node': 1}}" "$v"
 
+# ============================================================ T17 全 rank PermissionError → 5
+# 契约对齐：跨 uid --pid 的 maps 不可读时退 5（无权限），非退 3（目标
+# 不存在）。root 下 chmod 000 无法产生 EACCES（root 无视权限位）——
+# 用例只在非 root 环境（多数 CI runner）真跑，root 下 skip 属诚实标注
+if [ "$(id -u)" = "0" ]; then
+  echo "SKIP: T17 root 下 chmod 000 不可产生 EACCES（非 root CI 环境覆盖此路径）"
+else
+  FPERM="$WORK/proc_perm"
+  mkdir -p "$FPERM/2100"
+  printf 'PATH=/usr/bin\0' > "$FPERM/2100/environ"
+  printf '%x-%x rw-p 00000000 00:05 1 /dev/devmm_svm\n' 65536 131072 \
+    > "$FPERM/2100/maps"
+  chmod 000 "$FPERM/2100/maps"
+  "$PY" "$PROBE" --pid 2100 --tag perm --out "$WORK/b17" \
+    --proc-root "$FPERM" >/dev/null 2>&1
+  check_eq "T17 全 rank maps 无权限 → 5（非 3）" "5" "$?"
+fi
+
 # ============================================================ 汇总
 echo
 echo "===== $PASS passed, $FAIL failed ====="
