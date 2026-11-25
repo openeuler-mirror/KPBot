@@ -28,7 +28,7 @@ Go 原生 `sync.Pool` 使用 per-P 本地缓存加 victim 两层缓存。每次 
 - 前提：`Pool.New != nil`；`New` 为 nil 的池不做预分配。
 - 顺序：预分配在池本地缓存对外可见之前完成，并避免在调用 `New` 时持有会影响 GC 的内部状态。
 - 与 GOMAXPROCS 的关系：`GOMAXPROCS` 变化会重新分配 per-P 数组，并再次触发预分配；容器内 `GOMAXPROCS` 与 CPU limit 不一致时要先修正。
-- 内存估算：`N × GOMAXPROCS × 单对象大小`，乘以池数量得到总量上限。
+- 内存估算：按池清单求和 `Σ(N × GOMAXPROCS × 单对象大小)`，再加安全余量决定是否进入压测；单个池低于余量不代表进程总量安全。
 - 验证：pprof `alloc_space` 首次分配量、RSS 启动峰值、GC 次数、首次 `Get` 的 `New` 调用次数。
 - 回退：`poolprealloc=0` 或移除该键并重启。
 
@@ -58,6 +58,6 @@ go tool pprof -sample_index=alloc_space <heap-profile>
 拒绝：
 
 - 池对象为长生命周期大对象。
-- 容器内存余量小于 `N × GOMAXPROCS × 单对象大小` 加安全余量。
+- 容器内存余量小于按池清单求和后的总预分配量加安全余量。
 - 无法在启动前设置 RSS 阈值或无法观察长稳。
 - 业务侧存在更直接的减分配方案。

@@ -109,7 +109,6 @@ kpbot-app-tuner 4+1 视图
 | `network-optimization` | 网络侧存在瓶颈，需要网卡/中断/协议栈调优 |
 | `application-config-optimization` | 应用层线程、连接池、缓存参数需要调整 |
 | `compiler-optimization` | 编译选项、LTO、PGO 需要评估和调整 |
-| `microservice-go-syncpool-optimization` | Go 微服务 sync.Pool 堆内存颠簸，需要给 Go runtime 打补丁并重编译 |
 | `performance-library-selection` | 替换 malloc、memcpy 等性能库 |
 | `accelerator-optimization` | GPU/NPU 等计算卡瓶颈分析 |
 | `hardware-upgrade-analysis` | 判断是否触达硬件规格上限 |
@@ -256,7 +255,6 @@ kpbot-app-tuner 4+1 视图
 | `application-config-optimization` | 线程数、队列、批量、缓存、连接池和数据库型工作负载专项 | 内置 scripts/ 推荐器模式（Spark/Flink 配置+benchmark+TM 启动） |
 | `database-workload-analysis` | 数据库内部状态分析，MySQL/InnoDB 和 AHI 判断 | 仅供 application-config 按需引用 |
 | `compiler-optimization` | 编译器版本、架构选项、LTO、PGO、AutoFDO、向量化 | 内置 scripts/ perf热点采集 + references/ 编译选项playbook |
-| `microservice-go-syncpool-optimization` | Go 微服务 sync.Pool 创建/回收、GODEBUG=poolretain/poolprealloc、Go runtime 补丁与重编译 | 内置 references/ 补丁、参数、A/B 三个分册；需要重编译授权 |
 | `performance-library-selection` | malloc、memcpy、压缩、加密、校验等性能库选型 | 内置 aarch64 全类别库检测（含 `references/optimization_kb.json` 知识库与 `scripts/` 检测脚本） |
 | `accelerator-optimization` | GPU/NPU 利用率、显存/内存、拷贝带宽和设备错误分析 | 无设备时标记 not_present |
 | `hardware-upgrade-analysis` | 判断当前规格是否达到容量边界 | 只输出硬件建议，不执行采购或变更 |
@@ -304,7 +302,6 @@ skills/kpbot-app-tuner/   # [唯一主源]
     hardware-upgrade-analysis/
     other-optimization/
     compiler-optimization/          # 含 patches/ (MySQL LSE patch)
-    microservice-go-syncpool-optimization/
     cpu-affinity-optimization/
     database-workload-analysis/
     io-optimization/
