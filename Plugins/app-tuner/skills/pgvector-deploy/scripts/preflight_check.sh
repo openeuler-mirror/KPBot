@@ -46,7 +46,7 @@ usage() {
 只读检查 pgvector 部署前置条件，不修改任何配置、不连接数据库做写操作。
 
   --version VER          pgvector 版本/ref（默认 master）
-  --git-url URL          源码仓库
+  --git-url URL          源码仓库（仅支持 http(s)://；本地源码用 --source-dir）
   --source-dir DIR       离线源码目录
   --pg-config PATH       指定 pg_config
   --build-root DIR       构建缓存根目录（默认 /var/cache/pgvector-deploy）
@@ -79,6 +79,10 @@ while [[ $# -gt 0 ]]; do
     *) die "未知参数: $1（-h 查看用法）" ;;
   esac
 done
+
+if [[ "$GIT_URL" != http://* && "$GIT_URL" != https://* ]]; then
+  die "git-url 仅支持 http(s):// URL；本地源码请使用 --source-dir（会校验 root 属主与组/其他不可写）: $GIT_URL"
+fi
 
 PASS_CNT=0
 WARN_CNT=0

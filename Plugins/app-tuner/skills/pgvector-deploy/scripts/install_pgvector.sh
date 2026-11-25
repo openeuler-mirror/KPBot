@@ -14,6 +14,7 @@
 # 安全:
 #   - 构建目录 root:root 0700，父目录属主/sticky 校验
 #   - 路径拒绝 .、..、//，realpath 归一化后做系统目录黑名单
+#   - --git-url 仅允许 http(s)://；本地源码必须走 --source-dir，避免绕过属主/写权限校验
 #   - 离线源码目录要求 root 属主且组/其他不可写，复制后再次校验
 #   - 数据库密码只从 600 文件读取，经 PGPASSWORD 环境变量传递，不进入 argv/日志
 #===============================================================
@@ -47,7 +48,8 @@ usage() {
 
 pgvector:
   --version VER          pgvector 版本/ref（默认 master；可用 v0.8.0 等 tag）
-  --git-url URL          源码仓库（默认 https://github.com/pgvector/pgvector.git）
+  --git-url URL          源码仓库，仅支持 http(s)://（默认 https://github.com/pgvector/pgvector.git）；
+                         本地源码请用 --source-dir
   --source-dir DIR       离线源码目录（要求 root 属主、组/其他不可写）
   --pg-config PATH       指定 pg_config（默认自动查找）
 
@@ -186,8 +188,8 @@ prepare_private_dir() {
 if [[ -n "$DB_HOST" ]]; then
   [[ "$DB_HOST" =~ ^[A-Za-z0-9.:-]+$ ]] || die "db-host 非法: $DB_HOST"
 fi
-if [[ "$GIT_URL" != http://* && "$GIT_URL" != https://* && "$GIT_URL" != file://* ]]; then
-  die "git-url 必须是 http(s):// 或 file:// URL: $GIT_URL"
+if [[ "$GIT_URL" != http://* && "$GIT_URL" != https://* ]]; then
+  die "git-url 仅支持 http(s):// URL；本地源码请使用 --source-dir（会校验 root 属主与组/其他不可写）: $GIT_URL"
 fi
 if [[ -n "$SOURCE_DIR" && "$PGVECTOR_VERSION" != "master" ]]; then
   die "--source-dir 使用目录自带版本，不能再指定 --version $PGVECTOR_VERSION（默认 master 即可）"

@@ -93,8 +93,8 @@ bash scripts/install_pgvector.sh --dry-run
 
 ```text
 --version VER            pgvector 版本/ref，默认 master
---git-url URL            源码仓库，默认 https://github.com/pgvector/pgvector.git
---source-dir DIR         离线源码目录（要求 root 属主、组/其他不可写）
+--git-url URL            源码仓库，仅支持 http(s)://，默认 https://github.com/pgvector/pgvector.git
+--source-dir DIR         本地/离线源码目录（要求 root 属主、组/其他不可写）
 --pg-config PATH         指定 pg_config（默认自动查找）
 
 --db-name NAME           目标数据库，默认 pgvector
@@ -118,6 +118,8 @@ bash scripts/install_pgvector.sh --dry-run
 - 路径参数必须是绝对路径，拒绝 `.`、`..`、`//` 段；有 `realpath` 时归一化符号链接，
   归一化结果命中系统目录黑名单（`/`、`/etc`、`/var` 等）直接失败。
 - `--source-dir` 要求 root 属主、组/其他不可写；复制到私有构建目录后再次校验属主与写权限。
+- `--git-url` 仅接受 http(s)://，不接受 file:// 等本地 URL；本地源码必须走 `--source-dir`，
+  以确保上述 root 属主/写权限校验生效，避免低权用户目录被 root 构建并 `make install`。
 - 数据库密码只从 `--db-password-file`（0600）读取，经 `PGPASSWORD` 环境变量传给 psql；
   不进入 argv、不写日志、不写 `deploy.env`。psql 使用 `-w`，不会交互提示密码。
 - `CREATE EXTENSION vector` 需要数据库超级用户；脚本会先检查 `rolsuper`，不满足直接失败。
@@ -188,6 +190,7 @@ SELECT id FROM t ORDER BY e <-> '[1,2,3]' LIMIT 1;"
 | 密码认证失败 | 用 `--db-password-file`（600）或配置 `.pgpass`；脚本不会交互提示 |
 | 构建根目录权限/属主被拒绝 | 用默认 `/var/cache/pgvector-deploy`，或修正为 root:root 0700 |
 | 源码目录被拒绝 | 使用 root 属主且组/其他不可写的目录；不要从用户可写目录 root 构建 |
+| `--git-url` 传入 file:// 被拒绝 | 本地源码改用 `--source-dir`（要求 root 属主且组/其他不可写）；`--git-url` 仅支持 http(s):// |
 
 ## 脚本索引
 

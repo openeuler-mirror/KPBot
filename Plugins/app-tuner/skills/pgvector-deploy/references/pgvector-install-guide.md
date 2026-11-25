@@ -86,6 +86,7 @@ bash scripts/install_pgvector.sh --version master
 ```
 
 - `git clone` 到 root 私有构建目录，checkout 指定 ref。
+- `--git-url` 仅支持 http(s)://；本地目录请用 `--source-dir`，不要用 file:// 等本地 URL 绕过属主/写权限校验。
 - 构建目录默认 `/var/cache/pgvector-deploy`，要求 root:root 0700；
   每次用 `mktemp -d` 创建独立工作目录，父目录属主与 sticky 位会被校验。
 - 构建前检查源码树不存在非 root 属主或组/其他可写的文件/目录。
@@ -175,12 +176,15 @@ SELECT id FROM pgvector_smoke ORDER BY embedding <-> '[1,2,3]' LIMIT 1;
 | 扩展版本未更新 | 检查是否执行了 `ALTER EXTENSION vector UPDATE`；查看 `pg_available_extensions` |
 | 构建根目录权限被拒绝 | 修正为 root:root 0700，或改用 root 私有路径 |
 | 源码目录被拒绝 | 使用 root 属主且组/其他不可写目录；不要从用户可写目录 root 构建 |
+| `--git-url` 传入 file:// 被拒绝 | 本地源码改用 `--source-dir`（要求 root 属主且组/其他不可写）；`--git-url` 仅支持 http(s):// |
 
 ## 9. 安全说明
 
 - 构建目录 root:root 0700，父目录必须是 root 属主；组/其他可写时必须带 sticky 位。
 - 路径参数拒绝 `.`、`..`、`//`；`realpath -m` 归一化后再次检查系统目录黑名单。
 - `--source-dir` 必须是 root 属主且组/其他不可写；复制后在私有目录再次校验。
+- `--git-url` 仅接受 http(s)://；本地源码必须走 `--source-dir` 并经过 root 属主/写权限校验，
+  禁止 file:// 等本地 URL 绕过校验。
 - `make` 以 root 在私有目录执行；不要从用户可写目录构建。
 - 数据库密码只从 0600 文件读取并经环境变量传递，不进入命令行、日志或 `deploy.env`。
 - 不自动修改内核参数；不自动删除扩展、数据库或构建目录。

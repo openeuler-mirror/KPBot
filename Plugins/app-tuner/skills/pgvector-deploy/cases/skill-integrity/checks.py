@@ -8,7 +8,7 @@ Guards the parts that are easy to break during later edits:
      exists; templates/references keep their key markers
   3. the default version stays pinned to master and the build root stays
      root-private; security markers (path validation, mktemp, source-dir copy,
-     PGPASSWORD) remain in the installer
+     PGPASSWORD) remain in the installer, and file:// git URLs stay rejected
   4. critical anchors are present in the docs (pg_config, CREATE EXTENSION,
      deploy.env, superuser, 0700, offline source, nearest-neighbor verify)
   5. evals/evals.json is well formed and has at least 5 cases
@@ -171,6 +171,17 @@ for marker in (
 ):
     if marker not in install_text:
         fail("install_pgvector.sh lost security marker: {!r}".format(marker))
+file_url_scan = (
+    ("install_pgvector.sh", install_text),
+    ("preflight_check.sh", preflight_text),
+)
+for name, body in file_url_scan:
+    if "file://" in body:
+        fail(
+            "{} must reject file:// git URLs; local sources must use --source-dir".format(
+                name
+            )
+        )
 if "resolve_pg_config" not in common_text or "check_pg_headers" not in common_text:
     fail("common.sh lost pg_config/header helpers")
 if "postgresql-setup --initdb" not in setup_text and "pg_ctlcluster" not in setup_text:
@@ -194,6 +205,7 @@ ANCHORS = [
     (r"超级用户|rolsuper", "superuser requirement is documented"),
     (r"0700", "build root permission hardening is documented"),
     (r"--source-dir", "offline source directory is documented"),
+    (r"http\(s\)://", "git URL scheme restriction is documented"),
     (r"PGPASSWORD", "database password handling is documented"),
     (r"最近邻|<->", "nearest-neighbor verification is documented"),
     (r"数据库主机", "remote database host limitation is documented"),
