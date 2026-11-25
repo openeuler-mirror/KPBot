@@ -1,0 +1,4 @@
+interface:
+  display_name: "L1/L2 预取策略分析"
+  short_description: "追踪程序的 L1/L2 预取路径，核对架构分支、编译指令与证据缺口"
+  default_prompt: "使用 $analyze-prefetch-policy 读取这个程序的 L1/L2 预取策略，比较 x86-64 与 AArch64，注明证据与未验证项。"

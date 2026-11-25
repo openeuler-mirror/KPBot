@@ -9,7 +9,8 @@
   "license": "MulanPSL-2.0",
   "skills": [
     "./skills",
-    "./skills/vectordb/faiss"
+    "./skills/vectordb/faiss",
+    "./skills/perf-engineering"
   ],
   "keywords": [
     "performance",

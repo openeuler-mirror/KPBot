@@ -15,6 +15,8 @@ description: 对单个优化点进行确认/跳过门控，设定架构和风险
 
 从 `$ARGUMENTS` 或对话上下文中获取**单个优化点**：
 
+仅需调查当前预取行为时，直接调用独立入口 `analyze-prefetch-policy`；这类请求不构成本阶段的 `optimization_point` 输入，不应为它创建虚构优化点。本阶段只对已有优化点补充证据并返回决策 JSON，不提供独立调查报告的完成分支，也不将该报告包装成 `diagnose`、`confirmed` 或 `skipped` 决策。
+
 ```json
 {
   "optimization_point": {
@@ -102,6 +104,8 @@ TaskUpdate({ taskId: validate_task_id, status: "in_progress" })
    | math-rewrite | —（v1 仅检测） | LUT/闭式/近似/阈值改写均需人工验证 |
 
    `register-pressure-analysis` 是验证/诊断 skill，不作为源码改写 strategy 参与本表。若优化点来自 SIMD、inline asm、standalone assembly 或 micro-kernel 设计，应在 plan input 中记录 `diagnostics.register_pressure_analysis_required=true`，交给 `verify-optimization` 调用。
+
+   `analyze-prefetch-policy` 也是只读诊断 skill，不作为源码改写 strategy 参与本表。若当前预取优化点缺少已有 L1/L2 策略的触发条件、目标地址、提前量或缓存层级提示证据，按技能名调用它读取现有源码、反汇编及已有材料，将报告作为该优化点的补充证据，再按本阶段原有门控输出决策 JSON。诊断报告不证明缓存实际驻留、性能瓶颈或优化收益，不能代替实验证据或据此直接确认候选；软件预取改写仍使用 `prefetch-optimization`。
 
 3. **自动跳过规则**（仅以下条件触发 skip）：
    - `optimization_point.type == "math-rewrite"` → **自动 skip**（`auto_route == false`），`skip_reason: "数学/算法改写需人工验证语义正确性，流水线 v1 不做自动路由。建议查看 detection_report 和 correctness checklist 后手动实施。"`
@@ -248,7 +252,7 @@ TaskUpdate({ taskId: plan_task_id, status: "completed" })
 
 ## 输出
 
-完成后，输出以下 JSON 契约（不要输出其他内容）：
+对有效单个优化点完成门控后，输出以下 JSON 契约（不要输出其他内容）：
 
 ```json
 {
@@ -314,6 +318,8 @@ TaskUpdate({ taskId: plan_task_id, status: "completed" })
 - asm-optimization → `asm-optimization`
 
 `register-pressure-analysis` 不在 `strategy` 取值中；它只作为 `verify-optimization` 诊断增强使用。
+
+`analyze-prefetch-policy` 不在 `strategy` 取值或 apply 子 Skill 映射中；它提供已有预取策略的只读诊断证据，软件预取改写仍映射到 `prefetch-optimization`。
 
 ## 规则
 
