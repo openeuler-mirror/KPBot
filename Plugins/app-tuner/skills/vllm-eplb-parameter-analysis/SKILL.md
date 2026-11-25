@@ -13,12 +13,13 @@ metadata:
 
 # EPLB 参数分析（vLLM MoE）
 
-本技能是 EPLB 流水线的第 2 环：消费 `vllm-eplb-analysis` 的结论与现场事实，产出一份
-**可执行、可解释、已校验**的参数方案（`eplb_parameter_plan.json`）。它**不改任何文件**。参数方案交给
-`vllm-eplb-deploy-validate` 落盘与实测；收益结论由 `vllm-eplb-benefit-analysis` 给出。
+本技能可**独立使用**：消费 `vllm-eplb-analysis` 的结论（若已有）与现场事实，产出一份
+**可执行、可解释、已校验**的参数方案（`eplb_parameter_plan.json`）。它**不改任何文件**。
+落盘可由现有 `vllm-eplb-optimization` 的 apply 脚本完成，或由人工按方案改模板；收益结论另做分析，
+本技能不依赖任何尚未合入的技能。
 
 ```
-vllm-eplb-analysis  --verdict.json-->  本技能  --eplb_parameter_plan.json-->  vllm-eplb-deploy-validate
+vllm-eplb-analysis --verdict.json--> 本技能 --eplb_parameter_plan.json-->（落盘：现有 optimization 的 apply 脚本 / 人工）
 ```
 
 ## 输入契约（来自 vllm-eplb-analysis）
@@ -107,7 +108,7 @@ python3 <skill>/scripts/recommend_redundancy.py --logical-experts 384 --ep-size 
 - dynamic 必须有显存证据（`--free-gib` + 单副本成本，或 analysis 的 `affordable_redundant`）；缺证据判 `hold`，不落未校验的副本数。
 - 冗余数取整到 EP 倍数后仍要过显存预算；`affordable_redundant` 与 `max_affordable_redundant_experts` 都会参与收敛。
 
-## 输出契约（交给 deploy-validate）
+## 输出契约（供落盘/人工使用）
 
 `eplb_parameter_plan.json`：
 
@@ -134,8 +135,8 @@ python3 <skill>/scripts/recommend_redundancy.py --logical-experts 384 --ep-size 
 
 ## 边界
 
-- **不写文件、不跑压测、不下收益结论**——这些分别是 `vllm-eplb-deploy-validate` 与
-  `vllm-eplb-benefit-analysis` 的职责。
+- **不写文件、不跑压测、不下收益结论**——落盘与实测由部署环节（现有 optimization 的 apply 脚本或人工）负责，
+  收益结论另行分析。
 - handoff 给的 N/W/S 是起点，不是结论；本技能负责按整除/显存/压测时长/分支把它变成可执行的确定值。
 - 不给证据就要 `dynamic` 的诉求，先回 `vllm-eplb-analysis` 收证据。
 
