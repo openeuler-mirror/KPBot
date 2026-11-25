@@ -1,0 +1,72 @@
+{
+  "skill_name": "redis-deploy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我在一台 openEuler 24.03 的鲲鹏服务器上部署一个 Redis 环境，没有指定版本。现在机器上没有 redis-server，要求能用 systemd 管理，部署完给我验证结果。",
+      "expected_output": "识别为 Redis 环境部署任务，先运行 preflight_check.sh 做只读前置检查；未指定版本时使用默认 Redis 7.0.15，不使用发行版仓库的 redis 版本；执行 install_redis.sh，源码构建并用内置 sha256 校验，安装到 /opt/redis-7.0.15，生成 /etc/redis/redis.conf 与 redis.service，默认 bind 127.0.0.1；启动后用 redis-cli PING 与 INFO server 验证版本、端口和 active 状态，并给出 deploy.env 路径与关键字段。",
+      "files": [],
+      "expectations": [
+        "明确采用默认版本 Redis 7.0.15，而不是 yum/apt 仓库版本",
+        "先做只读前置检查，再执行安装，不跳过端口和既有安装检查",
+        "说明源码包 sha256 校验流程，7.0.15 使用内置校验值",
+        "默认 bind 127.0.0.1 且由 systemd 托管，给出配置、数据、日志、服务名",
+        "部署后执行 PING、INFO server、端口监听与 systemctl is-active 验收",
+        "给出 deploy.env 的 DEPLOY_STATUS=ok 与关键字段，不输出任何密码"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "部署 Redis 6.2.14，装在 /data/redis-6.2.14，端口 6380，只允许本机访问。请给出实际执行的命令和校验方式。",
+      "expected_output": "按用户指定版本 6.2.14 部署，不回落默认 7.0.15；由于 checksums.txt 未收录 6.2.14，要求用户提供 --sha256 并核对官方发布值；命令使用 --version 6.2.14 --prefix /data/redis-6.2.14 --port 6380 --bind 127.0.0.1；说明源码构建、sha256 校验、systemd 单元与端口 6380 的验收方法；不得声称已使用默认 7.0.15。",
+      "files": [],
+      "expectations": [
+        "尊重用户指定的 6.2.14，不替换为默认 7.0.15",
+        "指出该版本未内置校验值，必须提供 --sha256 或用户明确接受 --allow-unverified",
+        "命令包含 --version、--prefix、--port、--bind 且取值与用户要求一致",
+        "说明非默认前缀和非默认端口对配置、数据目录、服务名的影响",
+        "给出 PING、INFO server、端口 6380 监听的验收方式"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "内网服务器完全不能上网，我已经把 redis-7.0.15.tar.gz 放在 /root 下，怎么部署？请给出离线步骤和风险点。",
+      "expected_output": "使用 --tarball /root/redis-7.0.15.tar.gz 离线部署；仍然执行 sha256 校验（7.0.15 有内置校验值），不使用下载源；依赖方面说明目标机需要 gcc/make/tar 或预配置本地源，否则用 --skip-deps 前必须先自备工具链；给出 preflight 的离线检查方式（跳过下载源检查）、部署命令、服务启动与验收命令；风险点包括源码包完整性、依赖缺失、离线机器时间/证书与 SELinux 防火墙影响。",
+      "files": [],
+      "expectations": [
+        "使用 --tarball 指向本地源码包，不依赖外网下载",
+        "离线仍执行 sha256 校验，不因离线跳过",
+        "说明 gcc/make/tar 等构建依赖的离线准备方式",
+        "给出离线部署命令与部署后的 PING/INFO/端口/服务验收命令",
+        "列出离线场景的风险点（包完整性、依赖、证书、SELinux/防火墙）"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "把 Redis 改成 bind 0.0.0.0 让其它机器访问，暂时不想设置密码，先快速跑起来。给我命令。",
+      "expected_output": "指出非回环 bind 且无密码违反脚本安全基线，install_redis.sh 会拒绝；提供两种合规方案：一是用 --password-file 指定权限 600 的密码文件并绑定 0.0.0.0，二是用户明确承担风险时使用 --allow-insecure-remote；说明 requirepass 写入配置、配置文件 0640、客户端用 REDISCLI_AUTH 认证；同时提示防火墙放行、protected-mode 行为与公网暴露风险，不应默认建议关闭保护模式。",
+      "files": [],
+      "expectations": [
+        "识别 bind 0.0.0.0 且无密码会被安全门禁拒绝",
+        "推荐使用 --password-file（权限 600）而不是明文密码参数",
+        "说明只有用户明确接受风险时才使用 --allow-insecure-remote",
+        "说明 requirepass 的写入位置、文件权限与客户端用 REDISCLI_AUTH 验证",
+        "提示防火墙、protected-mode 与暴露公网的风险，未建议关闭保护模式"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "机器上已经用这个技能部署了 Redis 7.0.15，现在要升级到 7.2.4，数据不能丢。请给出升级与回滚方案，不要执行命令。",
+      "expected_output": "先备份配置和 /var/lib/redis/redis 数据目录并停服；7.2.4 未内置校验值，需要 --sha256 核对官方发布值；用同一 instance-name/端口重新部署到 /opt/redis-7.2.4，脚本会备份旧配置与单元并重启；验收 redis_version、PING、端口、服务状态。回滚需要旧版本二进制与升级前数据快照，因为 Redis 7 的 RDB 格式不向下兼容；给出停服、恢复数据、用旧前缀启动的顺序，并说明无法保证无数据快照时回滚。",
+      "files": [],
+      "expectations": [
+        "升级前备份配置与数据目录，并先停服务",
+        "指出 7.2.4 未内置校验值，需要 --sha256 或明确降级",
+        "使用同一实例名和端口重新部署，说明配置/单元会先备份",
+        "升级后验收 redis_version、PING、端口与服务状态",
+        "回滚依赖旧版本二进制和升级前数据快照，说明 RDB 格式不向下兼容",
+        "没有实际执行命令"
+      ]
+    }
+  ]
+}
