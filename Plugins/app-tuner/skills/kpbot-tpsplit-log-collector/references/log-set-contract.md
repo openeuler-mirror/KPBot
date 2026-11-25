@@ -1,6 +1,6 @@
 # 一套 4 份：TTFT 打点日志采集产物契约（本文件为采集侧权威）
 
-kptools-tpsplit-log-collector 的交付物与校验口径。下游 kptools-tpsplit-log-analysis
+kpbot-tpsplit-log-collector 的交付物与校验口径。下游 kptools-tpsplit-log-analysis
 按本契约消费；**解析列语义/守恒式/回填口径的权威在该 skill**（其 SKILL.md 日志格式
 节 + `references/ttft_table_contract.md`），两侧互不重复定义——本文件只管「采到
 什么、怎么校验、怎么命名」。
