@@ -10,7 +10,7 @@ description: 解决 AgentENV 官方 snapshot/resume/concurrent benchmark 单项�
 | 输入 | 说明 | 缺省处理 |
 |---|---|---|
 | benchmark 名 | 9 选 1 白名单：`snapshot_creation` / `snapshot_creation_1gdisk` / `snapshot_creation_1gmem` / `snapshot_resume_cold` / `snapshot_resume` / `concurrent_resume` / `concurrent_resume_throughput` / `concurrent_snapshot_capture_throughput` / `concurrent_pause_throughput`。脚本侧有同名白名单校验，白名单之外一律拒绝 | **必须问用户**（"需要我直接帮你跑哪一项就说"） |
-| 采集范围授权 | `PERF_MODE=host`（整机 `-a`）会把共享主机上**其他用户/租户的调用栈**采入 perf.data，事后不可剔除，属敏感数据。须确认整机采集的范围、窗口与产物访问权限；仅获准分析单项负载时用 `PERF_MODE=cgroup` + `PERF_CGROUP`（或停止） | **必须确认**；未确认整机授权不得以 host 模式运行 |
+| 采集范围授权 | `PERF_MODE=host`（整机 `-a`）会把共享主机上**其他用户/租户的调用栈**采入 perf.data，事后不可剔除，属敏感数据。须确认整机采集的范围、窗口与产物访问权限；仅获准分析单项负载时用 cgroup 范围化（挂载步骤见 §4：`AENV_CGROUP` 挂基准 + `PERF_CGROUP` 采样，两脚本同名）或停止 | **必须确认**；未确认整机授权不得以 host 模式运行 |
 | 绑核范围 | 48 个连续核；内存侧 `MEMBIND`（NUMA 节点） | 核默认 `47-94`，MEMBIND 默认 `2`，均可环境变量覆盖 |
 | 计量时长 | 拉长后的 measurement 秒数 | 默认 120s（保证 60s 采样窗落在忙期内） |
 | 路径参数 | `AENV_ROOT` / `FLAME`（出图器）/ `WORK_ROOT`（产物根）/ `AENV_RUN_USER` / `AENV_HOME_PATH` / `AENV_RUNTIME_PATH` / `AENV_CONFIG_PATH` | 缺省见 §1（`$HOME` 相对）；`FLAME` 与 `AENV_CONFIG_PATH` **必填**（无缺省），启动前逐一校验，缺即停 |
@@ -55,6 +55,7 @@ AENV_HOME_PATH="${AENV_HOME_PATH:-$HOME/aenv-home}"
 AENV_RUNTIME_PATH="${AENV_RUNTIME_PATH:-$HOME/aenv-home/run}"
 AENV_CONFIG_PATH="${AENV_CONFIG_PATH:-}"
 FLAME="${FLAME:-}"
+AENV_CGROUP="${AENV_CGROUP:-}"       # 非空（如 perf:aenv-flame）时经 cgexec 把基准挂入 cgroup
 LOG="$DIR/bench-run.log"
 printf '%s\n' "$$" > "$DIR/runner.pgid"               # 本轮进程组号，供收尾按范围清理
 
@@ -82,13 +83,18 @@ echo "== bin=$BIN cores=$CORES membind=$MEMBIND samples=100 measure=${MEAS_SEC}s
 UB=$(ls /sys/class/ublk-char 2>/dev/null | wc -l)
 echo "== ublk 残留: $UB 个（预算 64）"
 
+if [ -n "$AENV_CGROUP" ]; then
+  RUNNER=(cgexec -g "$AENV_CGROUP")   # 整棵基准进程树挂入 cgroup，供 --cgroup 范围化采样
+else
+  RUNNER=()
+fi
 AENV_RUN_USER="$AENV_RUN_USER" \
 AENV_HOME_PATH="$AENV_HOME_PATH" \
 AENV_RUNTIME_PATH="$AENV_RUNTIME_PATH" \
 AENV_CONFIG_PATH="$AENV_CONFIG_PATH" \
-AENV_UBLK_DAEMON_METRICS_LISTEN_ADDR="${AENV_UBLK_DAEMON_METRICS_LISTEN_ADDR:-0.0.0.0:9113}" \
+AENV_UBLK_DAEMON_METRICS_LISTEN_ADDR="${AENV_UBLK_DAEMON_METRICS_LISTEN_ADDR:-127.0.0.1:9113}" \
 AENV_BENCH_PRINT_SAMPLES=1 \
-"$AENV_ROOT/scripts/run-with-capabilities.sh" numactl --membind="$MEMBIND" taskset -c "$CORES" \
+"${RUNNER[@]}" "$AENV_ROOT/scripts/run-with-capabilities.sh" numactl --membind="$MEMBIND" taskset -c "$CORES" \
   "$BIN" --bench "^${BENCH}$" --sample-size 100 --measurement-time "$MEAS_SEC" \
   --warm-up-time 10 --noplot 2>&1 | tee "$LOG"
 exit "${PIPESTATUS[0]}"
@@ -141,18 +147,22 @@ case "$PERF_MODE" in
   *) echo "[err] 未知 PERF_MODE: $PERF_MODE"; exit 1 ;;
 esac
 
-# 1) 等目标项进入计量期：精确 Benchmarking <BENCH> + time: 计量行；
-#    基准进程退出或 120s 超时都立即失败，不把空闲/他人样本采进本轮报告
+# 1) 等目标项进入计量期：Benchmarking <BENCH> 之后出现 "Collecting N samples"
+#    进度行——该行是 criterion 计量阶段开始的标准输出（不依赖 PRINT_SAMPLES），
+#    且在测量进行中出现；最终报告的 time: 行出现在测量结束后，不能作门禁
+#    （默认 MEAS_SEC=120 下 60x2s 轮询窗恰在其出现前耗尽，恒走失败路径）。
+#    基准进程退出或 120s 超时都立即失败，不把空闲/他人样本采进本轮报告。
 ok=0
 for i in $(seq 1 60); do
-  if grep -q "Benchmarking ${BENCH}" "$LOG" 2>/dev/null && grep -q "time:" "$LOG" 2>/dev/null; then
+  if grep -q "Benchmarking ${BENCH}" "$LOG" 2>/dev/null \
+      && grep -Eq "Collecting [0-9]+ samples" "$LOG" 2>/dev/null; then
     ok=1; break
   fi
   kill -0 "$PGID" 2>/dev/null || { echo "[err] 基准进程已退出且未见计量期"; exit 1; }
   sleep 2
 done
 [ "$ok" = 1 ] || { echo "[err] 120s 内 ${BENCH} 未进入计量阶段，放弃采样"; exit 1; }
-sleep 10   # 越过 warm-up 进入计量期
+sleep 10   # Collecting 出现即 warm-up 已完成、计量进行中，稍候落入稳态
 kill -0 "$PGID" 2>/dev/null || { echo "[err] 采样前基准已退出"; exit 1; }
 
 # 2) 采集（禁止 -C 绑核采样；范围由 PERF_MODE 决定）
@@ -177,7 +187,12 @@ mkdir -p "$DIR" && cd "$DIR"
 # 写入 bench_run.sh / capture_flame.sh 后：
 chmod +x bench_run.sh capture_flame.sh
 export FLAME=<clean_flame.sh 绝对路径> AENV_CONFIG_PATH=<对齐配置 toml>
-[ 已获整机授权 ] && export PERF_MODE=host PERF_AUTH_HOST=1 || export PERF_MODE=cgroup PERF_CGROUP=<name>
+if [ 已获整机授权 ]; then
+  export PERF_MODE=host PERF_AUTH_HOST=1
+else                                          # cgroup 范围化：先建组再挂基准，两脚本同名
+  cgcreate -g perf:aenv-flame 2>/dev/null || mkdir -p /sys/fs/cgroup/perf/aenv-flame   # cgroup v1
+  export AENV_CGROUP=perf:aenv-flame PERF_MODE=cgroup PERF_CGROUP=aenv-flame
+fi
 setsid nohup ./bench_run.sh > runner.out 2>&1 < /dev/null &   # setsid：独立进程组，号已记入 runner.pgid
 ./capture_flame.sh                                            # 前台：等计量期 + 采样 + 出图
 ```
