@@ -239,6 +239,7 @@ app-tuner/
 - [架构设计(4+1)](docs/architecture-4plus1.md) — 主 skill 编排、子 skill 关系、运行闭环
 - [使用指南](docs/usage-guide.md) — 不同平台如何加载和使用
 - [报告模板](docs/report-template.md) — 首版优化报告模板
+| [`kptools-vllm-ttft-workflow`](skills/kptools-vllm-ttft-workflow/SKILL.md) | 按已有产物选择 TTFT 阶段，协调双侧计划、人工授权和采集交接 |
 
 ## 脚本说明
 
