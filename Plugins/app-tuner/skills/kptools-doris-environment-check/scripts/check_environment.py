@@ -19,6 +19,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -102,6 +103,85 @@ def clip(text):
     return text[:EVIDENCE_LIMIT] + "\n[TRUNCATED]"
 
 
+ALLOWED_CONFIG_OPTIONS = {
+    "default-auth",
+    "enable-cleartext-plugin",
+    "get-server-public-key",
+    "password",
+    "plugin-dir",
+    "server-public-key-path",
+    "skip-ssl",
+    "ssl",
+    "ssl-ca",
+    "ssl-capath",
+    "ssl-cert",
+    "ssl-cipher",
+    "ssl-fips-mode",
+    "ssl-key",
+    "ssl-mode",
+    "ssl-verify-server-cert",
+    "tls-ciphersuites",
+    "tls-version",
+}
+BOOLEAN_CONFIG_OPTIONS = {
+    "enable-cleartext-plugin",
+    "get-server-public-key",
+    "skip-ssl",
+    "ssl",
+    "ssl-verify-server-cert",
+}
+
+
+def validated_defaults(path, destination):
+    """Copy only explicit authentication/TLS options to an ephemeral file."""
+    lines = ["[client]"]
+    passwords = []
+    section = None
+    seen = set()
+    with path.open("r", encoding="utf-8") as stream:
+        for number, original in enumerate(stream, 1):
+            stripped = original.strip()
+            if not stripped or stripped.startswith(("#", ";")):
+                continue
+            if stripped.startswith("!"):
+                raise ValueError("external configuration includes are forbidden")
+            if stripped.startswith("[") and stripped.endswith("]"):
+                section = stripped[1:-1].strip().lower()
+                if section not in {"client", "mysql"}:
+                    raise ValueError("unsupported configuration section")
+                continue
+            if section not in {"client", "mysql"}:
+                raise ValueError("option outside [client] or [mysql]")
+            if "=" in stripped:
+                key, value = stripped.split("=", 1)
+                key = key.strip().lower().replace("_", "-")
+                value = value.strip()
+            else:
+                fields = stripped.split(None, 1)
+                key = fields[0].lower().replace("_", "-")
+                value = fields[1].strip() if len(fields) == 2 else ""
+            if key in {"init-command", "init-connect"}:
+                raise ValueError("initialization SQL is forbidden")
+            if key not in ALLOWED_CONFIG_OPTIONS:
+                raise ValueError("unsupported configuration option")
+            if key in seen or (not value and key not in BOOLEAN_CONFIG_OPTIONS):
+                raise ValueError("duplicate or malformed configuration option")
+            if "\x00" in value:
+                raise ValueError("malformed configuration value")
+            seen.add(key)
+            if key == "password" and value:
+                passwords.append(value.strip("'\""))
+            lines.append(key + ("=" + value if value else ""))
+    descriptor = os.open(
+        destination,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        0o600,
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write("\n".join(lines) + "\n")
+    return passwords
+
+
 def sha256_text(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -176,6 +256,14 @@ class ProbeRunner:
             os.environ.get("MYSQL_PWD", ""),
         ]
         self.abort = False
+        self.authentication_failed = False
+        self.validated_config = None
+        self.temp_dir = tempfile.TemporaryDirectory(
+            prefix="kptools-doris-environment-"
+        )
+
+    def close(self):
+        self.temp_dir.cleanup()
 
     def add(self, name, required, status, reason, evidence=None):
         probe = {
@@ -191,7 +279,10 @@ class ProbeRunner:
     def child_env(self, include_password):
         env = {
             "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-            "HOME": os.environ.get("HOME", ""),
+            "HOME": self.temp_dir.name,
+            "MYSQL_TEST_LOGIN_FILE": str(
+                Path(self.temp_dir.name) / "no-saved-login.cnf"
+            ),
             "LANG": "C.UTF-8",
         }
         if include_password:
@@ -248,6 +339,8 @@ class ProbeRunner:
             raise
         outcome["elapsed_ns"] = time.monotonic_ns() - started_ns
         outcome["returncode"] = process.returncode
+        outcome["raw_stdout"] = stdout
+        outcome["raw_stderr"] = stderr
         outcome["stdout"] = clip(redact(stdout, self.secrets))
         outcome["stderr"] = clip(redact(stderr, self.secrets))
         return outcome
@@ -312,12 +405,30 @@ class ProbeRunner:
                 "insecure_config",
                 {"detail": str(exc)},
             )
+        try:
+            self.validated_config = Path(self.temp_dir.name) / "client.cnf"
+            self.secrets.extend(
+                validated_defaults(config, self.validated_config)
+            )
+        except (OSError, UnicodeError, ValueError) as exc:
+            self.validated_config = None
+            self.abort = True
+            return self.add(
+                "credential_source",
+                True,
+                "blocked",
+                "insecure_config",
+                {"detail": str(exc)},
+            )
         return self.add(
             "credential_source",
             True,
             "ready",
             "ok",
-            {"method": "defaults_file", "contents": "not_read_or_logged"},
+            {
+                "method": "defaults_file",
+                "contents": "validated_authentication_and_tls_only",
+            },
         )
 
     def storage_probe(self):
@@ -388,8 +499,8 @@ class ProbeRunner:
 
     def base_argv(self, sql, preserve_columns=False):
         argv = [self.args.client]
-        if self.args.config:
-            argv.append("--defaults-file=" + str(self.args.config))
+        if self.validated_config:
+            argv.append("--defaults-file=" + str(self.validated_config))
         else:
             argv.append("--no-defaults")
         argv.extend(
@@ -418,6 +529,14 @@ class ProbeRunner:
 
     def sql_probe(self, name, sql, parser, preserve_columns=False):
         if self.abort:
+            if self.authentication_failed:
+                return self.add(
+                    name,
+                    True,
+                    "skipped",
+                    "dependency_skipped",
+                    {"dependency": "query_authentication"},
+                )
             return None
         outcome = self.execute(
             self.base_argv(sql, preserve_columns),
@@ -433,10 +552,13 @@ class ProbeRunner:
         if outcome.get("error"):
             return self.add(name, True, "blocked", "runtime_error", evidence)
         if outcome["returncode"] != 0:
-            reason = classify_client_error(outcome["stderr"])
+            reason = classify_client_error(outcome.get("raw_stderr", ""))
+            if name == "query_authentication" and reason == "authentication":
+                self.authentication_failed = True
+                self.abort = True
             return self.add(name, True, "blocked", reason, evidence)
         try:
-            extra = parser(outcome["stdout"])
+            extra = parser(outcome["raw_stdout"])
         except UnsupportedVersion as exc:
             return self.add(
                 name,
@@ -558,6 +680,8 @@ def parse_backends(text):
             status = json.loads(row.get("Status", "{}") or "{}")
         except json.JSONDecodeError as exc:
             raise InconclusiveResult("BE Status is not valid JSON") from exc
+        if not isinstance(status, dict):
+            raise InconclusiveResult("BE Status JSON must be an object")
         if status.get("isQueryDisabled") is True:
             continue
         usable.append(row)
@@ -617,7 +741,7 @@ def finalize_result(result, started_ns):
         result["status"] = "ready"
     result["summary"] = {
         status: sum(item["status"] == status for item in probes)
-        for status in ("ready", "blocked", "unknown")
+        for status in ("ready", "blocked", "unknown", "skipped")
     }
     result["finished_at"] = utc_now()
     result["elapsed_ns"] = time.monotonic_ns() - started_ns
@@ -644,27 +768,30 @@ def run(args):
     started_ns = time.monotonic_ns()
     result = initial_result(args)
     runner = ProbeRunner(args)
-    runner.credential_probe()
-    runner.storage_probe()
-    runner.client_probe()
-    runner.sql_probe("query_authentication", "SELECT 1", parse_select_one)
-    runner.sql_probe(
-        "frontend_compatibility",
-        "SHOW FRONTENDS",
-        parse_frontends,
-        preserve_columns=True,
-    )
-    runner.sql_probe(
-        "backend_prerequisites",
-        "SHOW BACKENDS",
-        parse_backends,
-        preserve_columns=True,
-    )
-    runner.sql_probe(
-        "numbers_capability", CAPABILITY_SQL, parse_numbers_capability
-    )
-    result["probes"] = runner.probes
-    return finalize_result(result, started_ns)
+    try:
+        runner.credential_probe()
+        runner.storage_probe()
+        runner.client_probe()
+        runner.sql_probe("query_authentication", "SELECT 1", parse_select_one)
+        runner.sql_probe(
+            "frontend_compatibility",
+            "SHOW FRONTENDS",
+            parse_frontends,
+            preserve_columns=True,
+        )
+        runner.sql_probe(
+            "backend_prerequisites",
+            "SHOW BACKENDS",
+            parse_backends,
+            preserve_columns=True,
+        )
+        runner.sql_probe(
+            "numbers_capability", CAPABILITY_SQL, parse_numbers_capability
+        )
+        result["probes"] = runner.probes
+        return finalize_result(result, started_ns)
+    finally:
+        runner.close()
 
 
 def main(argv=None):

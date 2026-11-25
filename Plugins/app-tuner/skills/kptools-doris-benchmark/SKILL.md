@@ -48,8 +48,13 @@ python3 scripts/run_benchmark.py \
 
 `--host`、`--port`、`--user`、`--client` 支持非默认目标。`--config` 指向
 当前用户所有、非链接且无 group/other 权限的 MySQL defaults 文件；也可注入
-`DORIS_PASSWORD` 或 `MYSQL_PWD`。密码只进入客户端子进程环境，绝不进入 argv、
-日志或报告；配置和环境密码不能同时使用。无密码实例可都不提供。
+`DORIS_PASSWORD` 或 `MYSQL_PWD`。密码只进入客户端子进程环境或运行期独占临时
+认证文件，绝不进入 argv、日志或报告，临时文件在结束后清理；配置和环境密码不能
+同时使用。连接目标 `host`、`port`、`user` 仅由命令行指定；请从配置中移除这些项。
+配置可包含 `password`、`ssl-ca`、`ssl-cert`、`ssl-key` 等认证/TLS 白名单选项；
+初始化 SQL、include 和其他选项均失败关闭。
+客户端使用隔离 HOME 和登录文件路径，不读取隐式 `.mylogin.cnf`；报告只保存脱敏、
+截断的证据副本，完整 SQL 输出仅用于内存解析。无密码实例可都不提供。
 
 ## 产物和判定
 

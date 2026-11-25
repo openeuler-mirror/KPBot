@@ -14,7 +14,7 @@ FE 版本解析为 `doris-X.Y.Z...` 后，只接受 2.1.x、3.0.x、3.1.x。拒�
 
 | 名称 | 必需 | 实际动作 | ready 的必要条件 |
 | --- | --- | --- | --- |
-| `credential_source` | 是 | 只检查来源类型和本地文件元数据 | 来源无歧义；defaults 文件为当前用户所有、普通非链接文件且无 group/other 权限 |
+| `credential_source` | 是 | 检查来源、文件元数据并解析认证/TLS 白名单 | 来源无歧义；defaults 文件安全，且不含初始化 SQL、include 或无关选项 |
 | `output_storage` | 是 | `statvfs` 等价能力检查 | 报告父文件系统至少有 1 MiB 可用，仅供小报告，不是 Doris 容量检查 |
 | `client` | 是 | 有界执行 `mysql --version` 或指定 CLI | 进程成功且标识为 MySQL/MariaDB；随后 SQL 仍必须成功 |
 | `query_authentication` | 是 | 通过 TCP 执行 `SELECT 1` | 返回且只返回一行 `1` |
@@ -25,8 +25,9 @@ FE 版本解析为 `doris-X.Y.Z...` 后，只接受 2.1.x、3.0.x、3.1.x。拒�
 标量 SELECT 带 `--skip-column-names`；两个 SHOW 查询特意不带此参数，否则无法
 按名称读取所需列。契约假 CLI 遵守同样的列名抑制开关，覆盖真实 CLI 输出形状。
 
-每个子进程有独立的有限超时，并在超时后仅杀死其新建的进程组。 stdout、
-stderr 和耗时写入对应探针证据；输出超长会截断，口令会脱敏。
+每个子进程有独立的有限超时，并在超时后仅杀死其新建的进程组。解析器使用内存中的
+完整 stdout/stderr，只有写入探针证据的副本会截断和脱敏。客户端 HOME 与登录文件
+路径隔离；defaults 配置只以运行期白名单副本传入，并在结束后清理。
 
 ## 状态与失败语义
 
@@ -36,6 +37,8 @@ stderr 和耗时写入对应探针证据；输出超长会截断，口令会脱�
   `authorization`、`unreachable`、`runtime_error`、`invalid_prerequisite`。
 - **unknown**：执行成功但内容为空、结构改变或 `SELECT 1` 不符合精确结果，
   无法把异常证据解释成就绪。
+- **skipped**：`SELECT 1` 已确定认证失败后，其余依赖探针不再发起连接，避免重复
+  失败登录；总结果仍为 blocked。
 - 参数和输出冲突属于调用错误，退出 2；不会用“未知”掩盖旧报告冲突。
 
 必需探针 blocked 使总结果 blocked；任何无法确定且未被更早 blocked 覆盖的项

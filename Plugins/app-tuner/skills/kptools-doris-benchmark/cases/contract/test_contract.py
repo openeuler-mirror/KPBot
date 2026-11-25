@@ -29,6 +29,7 @@ class BenchmarkContractTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.output = self.root / "nested/run-001"
         self.calls = self.root / "calls.jsonl"
+        self.observations = self.root / "observations.jsonl"
         self.query_count = self.root / "query-count"
 
     def make_client(self, scenario="success"):
@@ -45,6 +46,18 @@ class BenchmarkContractTests(unittest.TestCase):
             scenario = {scenario!r}
             with Path({calls_path!r}).open("a", encoding="utf-8") as log:
                 log.write(json.dumps(sys.argv) + "\\n")
+            with Path({env_path!r}).open("a", encoding="utf-8") as log:
+                log.write(json.dumps({{
+                    "HOME": os.environ.get("HOME"),
+                    "MYSQL_TEST_LOGIN_FILE": os.environ.get(
+                        "MYSQL_TEST_LOGIN_FILE"
+                    ),
+                }}) + "\\n")
+            for arg in sys.argv:
+                if arg.startswith("--defaults-file="):
+                    Path({snapshot_path!r}).write_text(
+                        Path(arg.split("=", 1)[1]).read_text(encoding="utf-8")
+                    )
             if "--version" in sys.argv:
                 print("mysql Ver 8.0.36 for Linux on x86_64")
                 raise SystemExit(0)
@@ -68,7 +81,20 @@ class BenchmarkContractTests(unittest.TestCase):
             elif sql == "SHOW BACKENDS":
                 if show_headers:
                     print("BackendId\\tAlive\\tSystemDecommissioned\\tStatus")
-                print("1\\ttrue\\tfalse\\t{{\\"isQueryDisabled\\":false}}")
+                status = "{{\\"isQueryDisabled\\":false}}"
+                if scenario == "long-backends":
+                    status = (
+                        "{{\\"isQueryDisabled\\":false,\\"padding\\":\\""
+                        + "x" * 5000 + "\\"}}"
+                    )
+                    print("1\\ttrue\\tfalse\\t" + status)
+                    print("2\\ttrue\\tfalse\\t" + status)
+                    raise SystemExit(0)
+                elif scenario == "status-null":
+                    status = "null"
+                elif scenario == "status-array":
+                    status = "[]"
+                print("1\\ttrue\\tfalse\\t" + status)
             elif sql.startswith("SELECT SUM(number)"):
                 rows = int(sql.rsplit('="', 1)[1].split('")', 1)[0])
                 counter = Path({query_count_path!r})
@@ -100,6 +126,8 @@ class BenchmarkContractTests(unittest.TestCase):
             scenario=scenario,
             calls_path=str(self.calls),
             query_count_path=str(self.query_count),
+            env_path=str(self.root / "client-env.jsonl"),
+            snapshot_path=str(self.root / "sanitized.cnf"),
         )
         path.write_text(program, encoding="utf-8")
         path.chmod(0o755)
@@ -271,6 +299,16 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertFalse((self.output / "queries.jsonl").exists())
         self.assertNotIn(secret, json.dumps(result))
         self.assertNotIn(secret, completed.stdout + completed.stderr)
+        skipped = [
+            item for item in result["preflight"] if item["status"] == "skipped"
+        ]
+        self.assertEqual(len(skipped), 3)
+        self.assertTrue(
+            all(item["reason"] == "dependency_skipped" for item in skipped)
+        )
+        self.assertEqual(
+            len(self.calls.read_text(encoding="utf-8").splitlines()), 2
+        )
 
     def test_unsupported_version_fails_before_workload(self):
         completed = self.invoke(self.make_client("unsupported"))
@@ -387,7 +425,15 @@ class BenchmarkContractTests(unittest.TestCase):
             json.loads(line)
             for line in self.calls.read_text(encoding="utf-8").splitlines()
         ]
-        self.assertIn("--defaults-file=" + str(config), calls[1])
+        forwarded = next(
+            arg for arg in calls[1] if arg.startswith("--defaults-file=")
+        )
+        self.assertNotEqual(forwarded, "--defaults-file=" + str(config))
+        self.assertEqual(
+            (self.root / "sanitized.cnf").read_text(encoding="utf-8"),
+            "[client]\npassword=file-secret\n",
+        )
+        self.assertFalse(Path(forwarded.split("=", 1)[1]).exists())
         self.assertIn("doris.contract", calls[1])
         self.assertIn("19030", calls[1])
         self.assertFalse(
@@ -405,6 +451,82 @@ class BenchmarkContractTests(unittest.TestCase):
         result = self.read_result()
         self.assertEqual(result["preflight"][0]["reason"], "insecure_config")
         self.assertFalse(self.calls.exists())
+
+    def test_long_backend_output_is_parsed_before_evidence_clipping(self):
+        completed = self.invoke(self.make_client("long-backends"))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.read_result()
+        backend = next(
+            item
+            for item in result["preflight"]
+            if item["name"] == "backend_prerequisites"
+        )
+        self.assertEqual(backend["status"], "ready")
+        self.assertEqual(backend["evidence"]["backend_count"], 2)
+        self.assertEqual(backend["evidence"]["query_capable_backend_count"], 2)
+        self.assertIn("[TRUNCATED]", backend["evidence"]["stdout"])
+
+    def test_non_object_backend_status_is_reported_without_crash(self):
+        for scenario in ("status-null", "status-array"):
+            with self.subTest(scenario=scenario):
+                self.output = self.root / scenario
+                completed = self.invoke(self.make_client(scenario))
+                self.assertEqual(completed.returncode, 1, completed.stderr)
+                result = self.read_result()
+                backend = next(
+                    item
+                    for item in result["preflight"]
+                    if item["name"] == "backend_prerequisites"
+                )
+                self.assertEqual(backend["status"], "blocked")
+                self.assertEqual(backend["reason"], "invalid_prerequisite")
+                self.assertIn("JSON object", backend["evidence"]["detail"])
+                self.assertFalse((self.output / "queries.jsonl").exists())
+
+    def test_implicit_login_files_are_isolated_from_real_home(self):
+        real_home = self.root / "real-home"
+        real_home.mkdir()
+        (real_home / ".mylogin.cnf").write_text("saved-secret", encoding="utf-8")
+        completed = self.invoke(
+            self.make_client(), env={"HOME": str(real_home)}
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        environments = [
+            json.loads(line)
+            for line in (self.root / "client-env.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual(len(environments), 12)
+        for environment in environments:
+            self.assertNotEqual(environment["HOME"], str(real_home))
+            login = Path(environment["MYSQL_TEST_LOGIN_FILE"])
+            self.assertEqual(login.parent, Path(environment["HOME"]))
+            self.assertFalse(login.exists())
+
+    def test_unsafe_or_unrelated_defaults_options_fail_closed(self):
+        bodies = (
+            "[client]\ninit-command=DROP TABLE secret_table\n",
+            "[client]\n!include /tmp/other.cnf\n",
+            "[client]\n!includedir /tmp/other.d\n",
+            "[client]\nlocal-infile=1\n",
+        )
+        for index, body in enumerate(bodies):
+            with self.subTest(index=index):
+                config = self.root / ("forbidden-%d.cnf" % index)
+                config.write_text(body, encoding="utf-8")
+                config.chmod(0o600)
+                self.output = self.root / ("forbidden-%d" % index)
+                completed = self.invoke(
+                    self.make_client(), extra=("--config", str(config))
+                )
+                self.assertEqual(completed.returncode, 1)
+                result = self.read_result()
+                credential = result["preflight"][0]
+                self.assertEqual(credential["status"], "blocked")
+                self.assertIn(credential["reason"], {"invalid_config", "insecure_config"})
+                self.assertNotIn("secret_table", json.dumps(result))
+                self.assertFalse(self.calls.exists())
 
     def test_keyboard_interrupt_kills_owned_group_and_bounded_drains(self):
         events = []

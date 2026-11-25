@@ -19,7 +19,9 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
+
 
 
 SCHEMA_VERSION = "kptools.doris.benchmark.v1"
@@ -32,6 +34,29 @@ CAPABILITY_SQL = 'SELECT SUM(number), COUNT(*) FROM numbers("number"="1000")'
 CAPABILITY_RESULT = "499500\t1000"
 EVIDENCE_LIMIT = 4096
 DRAIN_TIMEOUT_SECONDS = 1.0
+DEFAULTS_VALUE_OPTIONS = {
+    "password",
+    "default-auth",
+    "server-public-key-path",
+    "ssl-ca",
+    "ssl-capath",
+    "ssl-cert",
+    "ssl-key",
+    "ssl-cipher",
+    "ssl-crl",
+    "ssl-crlpath",
+    "ssl-mode",
+    "tls-version",
+    "tls-ciphersuites",
+}
+DEFAULTS_FLAG_OPTIONS = {
+    "connect-expired-password",
+    "enable-cleartext-plugin",
+    "get-server-public-key",
+    "skip-ssl",
+    "ssl",
+    "ssl-verify-server-cert",
+}
 
 
 def expected_sum(rows):
@@ -231,11 +256,47 @@ class DorisClient:
             os.environ.get("DORIS_PASSWORD", ""),
             os.environ.get("MYSQL_PWD", ""),
         ]
+        self.defaults_file = None
+        self._config_directory = None
+        self._home_directory = tempfile.TemporaryDirectory(
+            prefix="doris-benchmark-home-"
+        )
+
+    def close(self):
+        if self._config_directory is not None:
+            self._config_directory.cleanup()
+            self._config_directory = None
+            self.defaults_file = None
+        self._home_directory.cleanup()
+
+    def prepare_credentials(self):
+        env_password = "DORIS_PASSWORD" in os.environ or "MYSQL_PWD" in os.environ
+        if self.args.config and env_password:
+            raise PrerequisiteBlocked(
+                "ambiguous_credentials: choose --config or a password environment"
+            )
+        if not self.args.config:
+            return "environment" if env_password else "none"
+        sanitized, passwords = sanitize_defaults_file(self.args.config)
+        self.secrets.extend(passwords)
+        self._config_directory = tempfile.TemporaryDirectory(
+            prefix="doris-benchmark-config-"
+        )
+        path = Path(self._config_directory.name) / "client.cnf"
+        descriptor = os.open(
+            path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(sanitized)
+        self.defaults_file = path
+        return "defaults_file"
 
     def child_env(self, include_password):
+        home = Path(self._home_directory.name)
         env = {
             "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-            "HOME": os.environ.get("HOME", ""),
+            "HOME": str(home),
+            "MYSQL_TEST_LOGIN_FILE": str(home / ".mylogin.cnf"),
             "LANG": "C.UTF-8",
         }
         if include_password:
@@ -293,8 +354,8 @@ class DorisClient:
         outcome.update(
             elapsed_ns=time.monotonic_ns() - started_ns,
             returncode=process.returncode,
-            stdout=clip(redact(stdout, self.secrets)),
-            stderr=clip(redact(stderr, self.secrets)),
+            stdout=stdout,
+            stderr=stderr,
         )
         return outcome
 
@@ -306,10 +367,10 @@ class DorisClient:
                 "elapsed_ns",
                 "timed_out",
                 "timeout_seconds",
-                "stdout",
-                "stderr",
             )
         }
+        evidence["stdout"] = clip(redact(outcome["stdout"], self.secrets))
+        evidence["stderr"] = clip(redact(outcome["stderr"], self.secrets))
         if sql is not None:
             evidence["sql"] = sql
         if outcome.get("error"):
@@ -321,8 +382,8 @@ class DorisClient:
 
     def base_argv(self, sql, preserve_columns=False):
         argv = [self.args.client]
-        if self.args.config:
-            argv.append("--defaults-file=" + str(self.args.config))
+        if self.defaults_file is not None:
+            argv.append("--defaults-file=" + str(self.defaults_file))
         else:
             argv.append("--no-defaults")
         argv.extend(
@@ -355,15 +416,8 @@ class DorisClient:
         )
 
 
-def validate_credentials(args):
-    env_password = "DORIS_PASSWORD" in os.environ or "MYSQL_PWD" in os.environ
-    if args.config and env_password:
-        raise PrerequisiteBlocked(
-            "ambiguous_credentials: choose --config or a password environment"
-        )
-    if not args.config:
-        return "environment" if env_password else "none"
-    info = args.config.lstat()
+def sanitize_defaults_file(path):
+    info = path.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
         raise PrerequisiteBlocked(
             "insecure_config: not a regular non-symlink file"
@@ -374,7 +428,77 @@ def validate_credentials(args):
         raise PrerequisiteBlocked(
             "insecure_config: group/other permissions set"
         )
-    return "defaults_file"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeError as exc:
+        raise PrerequisiteBlocked(
+            "invalid_config: file is not valid UTF-8"
+        ) from exc
+
+    options = []
+    passwords = []
+    section = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("!"):
+            raise PrerequisiteBlocked(
+                "invalid_config: include directives are not allowed"
+            )
+        if line.startswith("["):
+            if line not in {"[client]", "[mysql]"}:
+                raise PrerequisiteBlocked(
+                    "invalid_config: unsupported or malformed section"
+                )
+            section = line[1:-1]
+            continue
+        if section is None:
+            raise PrerequisiteBlocked(
+                "invalid_config: option outside client/mysql section"
+            )
+        if "=" in line:
+            name, value = (part.strip() for part in line.split("=", 1))
+            has_value = True
+        else:
+            name, value = line, None
+            has_value = False
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+            raise PrerequisiteBlocked(
+                "invalid_config: unsupported or malformed option"
+            )
+        if name == "init-command":
+            raise PrerequisiteBlocked(
+                "invalid_config: init-command is not allowed"
+            )
+        if name in DEFAULTS_VALUE_OPTIONS:
+            if not has_value or (not value and name != "password"):
+                raise PrerequisiteBlocked(
+                    "invalid_config: unsupported or malformed option"
+                )
+        elif name in DEFAULTS_FLAG_OPTIONS:
+            if has_value:
+                raise PrerequisiteBlocked(
+                    "invalid_config: unsupported or malformed option"
+                )
+        else:
+            raise PrerequisiteBlocked(
+                "invalid_config: unsupported or malformed option"
+            )
+        if value is not None and "\x00" in value:
+            raise PrerequisiteBlocked(
+                "invalid_config: unsupported or malformed option"
+            )
+        options.append((name, value))
+        if name == "password" and value:
+            passwords.append(value)
+
+    lines = ["[client]"]
+    lines.extend(
+        name if value is None else name + "=" + value
+        for name, value in options
+    )
+    return "\n".join(lines) + "\n", passwords
 
 
 def parse_select_one(text):
@@ -447,6 +571,8 @@ def parse_backends(text):
             status = json.loads(row.get("Status", "{}") or "{}")
         except json.JSONDecodeError as exc:
             raise PrerequisiteBlocked("BE Status is not valid JSON") from exc
+        if not isinstance(status, dict):
+            raise PrerequisiteBlocked("BE Status must be a JSON object")
         if status.get("isQueryDisabled") is True:
             continue
         usable.append(row)
@@ -476,7 +602,7 @@ def run_preflight(client):
         )
 
     try:
-        method = validate_credentials(client.args)
+        method = client.prepare_credentials()
         add("credential_source", "ready", "ok", {"method": method})
     except (OSError, PrerequisiteBlocked) as exc:
         message = str(exc)
@@ -506,7 +632,7 @@ def run_preflight(client):
             add("client", "blocked", "unsupported_client", evidence)
             aborted = True
         else:
-            evidence["reported_version"] = version
+            evidence["reported_version"] = clip(redact(version, client.secrets))
             add("client", "ready", "ok", evidence)
 
     checks = (
@@ -530,7 +656,7 @@ def run_preflight(client):
             False,
         ),
     )
-    for name, sql, parser, preserve_columns in checks:
+    for check_index, (name, sql, parser, preserve_columns) in enumerate(checks):
         if aborted:
             break
         outcome = client.query(sql, preserve_columns)
@@ -551,6 +677,9 @@ def run_preflight(client):
             reason = classify_client_error(outcome["stderr"])
             add(name, "blocked", reason, evidence)
             aborted = True
+            if name == "query_authentication" and reason == "authentication":
+                for skipped_name, _, _, _ in checks[check_index + 1:]:
+                    add(skipped_name, "skipped", "dependency_skipped")
             continue
         try:
             evidence.update(parser(outcome["stdout"]))
@@ -730,7 +859,7 @@ def execute_workload_query(client, rows, phase, iteration, round_number=None):
     lines = [
         line for line in outcome["stdout"].strip().splitlines() if line.strip()
     ]
-    observed = "\n".join(lines)
+    observed = clip(redact("\n".join(lines), client.secrets))
     exact = outcome["returncode"] == 0 and lines == [expected]
     if outcome["timed_out"]:
         reason = "timeout"
@@ -778,8 +907,15 @@ def set_failure(result, record):
 
 
 def run_benchmark(args, output):
-    result = initial_result(args)
     client = DorisClient(args)
+    try:
+        return run_benchmark_with_client(args, output, client)
+    finally:
+        client.close()
+
+
+def run_benchmark_with_client(args, output, client):
+    result = initial_result(args)
     result["preflight"] = run_preflight(client)
     if any(probe["status"] != "ready" for probe in result["preflight"]):
         result["error"] = {
