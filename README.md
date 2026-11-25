@@ -51,7 +51,7 @@
 | [GEMM / BRGEMM 框架集成 @ 鲲鹏](Plugins/code-optimizer/skills/brgemm-optimization/SKILL.md) | **code-optimizer**：面向 oneDNN adapter、ONNX Runtime EP 与自研 runtime，优化 PackB/PrePack、blocked layout、scratch、parallel-K、分块和 primitive cache。 |
 | [PyTorch Embedding lookup @ ARM CPU](Plugins/code-optimizer/skills/parallel-unique-pytorch/SKILL.md) | **code-optimizer**：针对 raw_id → unique → hashmap → gather 链路，使用并行排序与 OpenMP 优化 Host 侧去重，并注册兼容 `torch.compile` 的自定义算子。 |
 | [向量数据库与向量检索](Plugins/code-optimizer/skills/vector-search-optimize/SKILL.md) | **code-optimizer**：使用通用 CP0–CP7 执行环境调查、基线、候选优化与复验，并按目标路由到 Faiss 或 DiskANN 专项工作流。 |
-| [Agent 记忆系统 / 图数据库后端 @ 鲲鹏 / x86_64](Plugins/code-optimizer/skills/agent-memory-db-optimization/SKILL.md) | **code-optimizer**：以 LLM 缓存回放冻结确定性负载，把 ingest/search 耗时拆成客户端、驱动、服务端三段，再按 top-down 与缓存缺失率建模，分层实施载荷瘦身、解码下沉、读路径多副本扩展与服务端解码快路径；要求缓存 0 未命中 + 图规模校验和 + 结果等价，负结果入台账。 |
+| [Agent 记忆系统 / 图数据库后端 @ 鲲鹏 / x86_64](Plugins/code-optimizer/skills/agent-memory-optimize/SKILL.md) | **code-optimizer**：以 LLM 缓存回放冻结确定性负载，把 ingest/search 耗时拆成客户端、驱动、服务端三段，再按 top-down 与缓存缺失率建模，分层实施载荷瘦身、解码下沉、读路径多副本扩展与服务端解码快路径；要求缓存 0 未命中 + 图规模校验和 + 结果等价，负结果入台账。 |
 | [哈希表与特征 / KV 查表 @ 鲲鹏](Plugins/code-optimizer/skills/hashmap-optimization/SKILL.md) | **code-optimizer**：从查询链路与负载特征出发，区分计算、带宽和延迟瓶颈，通过数据布局与查询实现等改动优化查表热点。 |
 | [MySQL / InnoDB OLTP @ 鲲鹏](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/database-workload-analysis/SKILL.md) | **app-tuner**：结合 sysbench 与数据库内部指标，调优 NUMA/IRQ 亲和性、buffer pool、线程与表缓存、OS 参数及 PGO 编译配置。 |
 | [Spark / Flink 大数据处理 @ ARM](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/bigdata-playbook.md) | **app-tuner**：根据物理机或容器的 CPU、内存配额，调整 executor、TaskManager、并行度、内存与框架参数，并结合性能库选型优化运行环境。 |
@@ -182,8 +182,8 @@ PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能�
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含 104 个技能
-    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 2 个 claude-only skill，安装 101 个技能
+    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含其全部技能（数量随仓库演进，以安装生成的 `kpbot-manifest.json` 为准）
+    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 3 个 claude-only skill，安装其余全部技能（数量以 `kpbot-manifest.json` 为准）
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
@@ -262,7 +262,8 @@ powershell.exe -NoProfile -NonInteractive -File .\tests\test_install_platform.ps
 
 ### 可用技能列表
 
-code-optimizer 在 Claude Code 中安装 **104 个** skill，在 OpenCode 中安装 **102 个**（跳过 2 个 claude-only）。
+code-optimizer 在 Claude Code 中安装其全部 skill，在 OpenCode 中跳过 3 个 claude-only skill；
+实际数量以安装后生成的 `kpbot-manifest.json` 为准（避免随仓库新增 skill 漂移）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -292,7 +293,7 @@ code-optimizer 在 Claude Code 中安装 **104 个** skill，在 OpenCode 中安
 - `special-case-optimization` — 特例快路径
 - `compiler-flag-tuning` — 编译选项调优
 - `hashmap-optimization` — 哈希表四阶段优化流程（链路识别→瓶颈建模→仿真测试→杠杆实施）
-- `agent-memory-db-optimization` — Agent 记忆系统/图数据库后端五阶段优化（冻结确定性负载→三段归因→瓶颈建模→分层杠杆→跨架构复测）
+- `agent-memory-optimize` — Agent 记忆系统/图数据库后端优化技能族入口（20 个可独立使用的 skill：负载冻结、三段归因、瓶颈建模、7 个分层杠杆、矩阵复测、负结果）
 - `openzl-compression-tuning` — OpenZL 压缩内核调优（熵 codec 根表/位流优化、熵选型、无损逐字节门禁、归因方法论与负结果档案）
 - `openzl-bench-protocol` — OpenZL unitBench 基准协议（场景注册、KV 数据准备、多机部署复测、topdown 采集，含 3 个脚本）
 - `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
