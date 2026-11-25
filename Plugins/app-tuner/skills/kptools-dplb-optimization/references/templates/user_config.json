@@ -5,7 +5,7 @@
   },
   "motor_coordinator_config": {
     "api_config": {
-      "coordinator_api_host": "0.0.0.0",
+      "coordinator_api_host": "127.0.0.1",
       "coordinator_api_infer_port": 7200,
       "coordinator_api_mgmt_port": 7201,
       "coordinator_obs_port": 7202

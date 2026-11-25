@@ -1,13 +1,13 @@
 ---
 name: kptools-dplb-optimization
 description: >
-  连接远端机器部署 MindIE Motor 负载均衡器并对推理负载均衡进行优化。当用户提到
-  以下场景时必须使用此技能：模型负载不均衡、推理请求分发不均、需要部署/安装
-  MindIE Motor、需要生成 user_config.json / register.sh / start_motor.sh 配置、
-  vLLM 或 MindIE 多实例负载均衡优化、LB 策略配置。即使用户只说"负载不均想优化"
-  或"帮我装个负载均衡器"，只要涉及多推理实例分发，都应使用此技能。判别式：
-  要部署/安装/配置负载均衡组件（MindIE Motor）时用本技能；仅采集负载指标、出
-  均衡性分析或对比报告、不部署组件时改用 kptools-dplb-profiler。
+  连接远端机器部署 MindIE Motor 负载均衡器并对推理负载均衡进行优化。仅当用户明确
+  提出部署/安装/配置负载均衡组件的动作时使用本技能：部署/安装 MindIE Motor（自备
+  whl 或源码编译）、生成或修改 user_config.json / register.sh / start_motor.sh
+  配置三件套、调整 vLLM 或 MindIE 多实例的 LB 策略配置。用户只描述负载不均衡、
+  推理请求分发不均等现象而未提出部署/配置诉求的（如"负载不均想优化"），不要直接
+  触发本技能——先向用户确认是否需要部署负载均衡组件；仅要采集负载指标、出均衡性
+  分析或对比报告的诉求，改用 kptools-dplb-profiler。
 license: Proprietary
 compatibility: 远端 Linux（openEuler/EulerOS 等，aarch64/x86_64）；需要 SSH 访问远端机器；远端需有 Python >= 3.11 + pip（motor 3.x whl 元数据 Requires-Python >=3.11）；运行依赖按上游 requirements.txt 全量安装（whl 无 Requires-Dist，pip 不会自动安装任何依赖，见阶段 3 依赖清单）；方式 B（源码编译）还需 git、gcc/cmake、grpcio-tools（版本须与运行时 grpcio 一致）及 Rust 工具链（cargo，离线安装见 references/field-playbook-offline-build.md）
 metadata:
@@ -31,6 +31,7 @@ metadata:
 1. 用户给了远端机器 + 要求部署/优化负载均衡 → 走完整流程（阶段 1 → 5）
 2. 用户只要生成配置文件（远端已装好）→ 跳到阶段 4
 3. 用户已有配置但负载仍不均 → 先读现有 `user_config.json`（端口/策略）与 `register.sh`（后端实例列表）检查字段，再决定是否重新生成；**部署后需要量化评估均衡效果时，衔接 `kptools-dplb-profiler` 技能**（采集 dp_load_metrics 出单池/A-B 对比报告，本 skill 负责部署、profiler 负责度量）
+4. 用户只描述负载不均衡现象、未提部署/配置诉求 → 先向用户确认意图：要部署负载均衡组件（MindIE Motor）才走本 skill，只要采集指标/分析报告转 `kptools-dplb-profiler`；意图不明时不要直接生成部署配置
 
 ## 阶段 1：信息收集（缺什么问什么，不要猜）
 
@@ -41,7 +42,7 @@ metadata:
   - **方式 B：拉源码编译**——远端 clone 源码仓库后用官方入口 `bash build.sh` 编译再安装（**严禁 `pip3 wheel .`**，会产出缺 Rust 原生库的空壳 whl）。默认仓库 `https://gitcode.com/Ascend/MindIE-Motor`（分支默认 master），用户指定了其他仓库/分支/commit 时以用户为准；用户没说时先展示默认值并向用户确认，不要静默克隆
   - 用户两种都没提时，主动询问用户选哪种，不要替用户决定
 - **后端实例列表**：LB 后面挂的推理实例（vLLM 或 MindIE，均可能），每个实例形如 `ip:port[,ip:port...]`——**同一实例的多个 DP endpoint 用逗号连接**（与 kptools-dplb-profiler 的 DP endpoint 口径一致），不同实例才分开列；询问后端引擎类型（用于网络预检与验证命令，如 vLLM 的 `/v1/models` 探活路径）
-- **网络拓扑**：coordinator 与后端实例是同机、同容器网络还是跨容器/跨机——跨容器部署时，后端地址必须是 **coordinator 所在网络命名空间内可达**的地址（容器网 IP 或已发布端口），否则会出现注册显示健康、推理请求却 500 的情况
+- **网络拓扑**：coordinator 与后端实例是同机、同容器网络还是跨容器/跨机——跨容器部署时，后端地址必须是 **coordinator 所在网络命名空间内可达**的地址（容器网 IP 或已发布端口），否则会出现注册显示健康、推理请求却 500 的情况；推理客户端需要跨机访问 coordinator 时，须把 `coordinator_api_host` 改绑非回环地址（实际 IP / `0.0.0.0`），**且必须先按阶段 4 的管理面鉴权要点开启管理面 API Key**（`start_motor.sh` 内置"非回环 ⇒ 鉴权必须开启"门禁，未开启会拒绝启动）
 - **安装路径**：默认建议 `/opt/mindie-motor`，用户可指定
 - **负载均衡策略**：询问用户期望——上游 `prefill_scheduler_type` / `decode_scheduler_type` 实际支持 4 个值：`load_balance`（负载感知均衡，默认）、`round_robin`（轮询）、`kv_cache_affinity`（KV 缓存亲和，需 kv-conductor）、`dynamic_bucket`（动态分桶）；无明确要求时用模板默认值 load_balance 并在部署指南中说明
 
@@ -181,16 +182,16 @@ pip3 show motor
 
 | 文件 | 作用 | 生成方式 |
 | --- | --- | --- |
-| `user_config.json` | coordinator 配置：监听端口（默认 7200 推理 / 7201 管理 / 7202 观测）、prefill/decode 调度策略（默认 load_balance）、管理面鉴权开关、PD 分离回退开关 | 由模板填充。可调字段：`coordinator_api_host`、三个端口、`prefill_scheduler_type` / `decode_scheduler_type`（load_balance / round_robin / kv_cache_affinity / dynamic_bucket 之一，默认 load_balance）、`mgmt_api_key_config`、`endpoint_instance_score_weight`、`dp_stats_window`。版本号 `version` 与字段层级**不要动** |
+| `user_config.json` | coordinator 配置：监听端口（默认 7200 推理 / 7201 管理 / 7202 观测）、prefill/decode 调度策略（默认 load_balance）、管理面鉴权开关、PD 分离回退开关 | 由模板填充。可调字段：`coordinator_api_host`（模板默认 `127.0.0.1` 仅回环监听——推理客户端跨机访问时才改绑实际 IP / `0.0.0.0`，**改绑非回环必须同步开启管理面 API Key**，见下方"管理面鉴权"要点）、三个端口、`prefill_scheduler_type` / `decode_scheduler_type`（load_balance / round_robin / kv_cache_affinity / dynamic_bucket 之一，默认 load_balance）、`mgmt_api_key_config`、`endpoint_instance_score_weight`、`dp_stats_window`。版本号 `version` 与字段层级**不要动** |
 | `register.sh` | 向 coordinator 注册后端实例。`--prefill` 可重复多实例（PD 分离的 P 节点），`--decode` 可重复多实例（D 节点），`--model-name` 为模型名；**一个参数 = 一个实例，同一实例的多个 DP endpoint 在该参数内用逗号连接** | 由模板填充实例地址。coordinator 地址默认 `http://127.0.0.1`、mgmt 端口 7201（与 user_config.json 的 `coordinator_api_mgmt_port` 保持一致；**换端口时必须同步改 `--mgmt-port`**）；**默认仅在 coordinator 同机执行**，跨机注册时把 `--coordinator` 改为 coordinator 实际 IP，且开启了管理面 API Key 时命令需追加 `--mgmt-api-key-file <密钥文件>`。模板为**前台执行**并 `tee` 到 `./log/register.log`——首次注册要看清每个实例的返回结果，不要后台化 |
-| `start_motor.sh` | 启动 MindIE Motor coordinator | 基本照抄模板。脚本会 unset 代理变量、设 `USER_CONFIG_PATH`（上游唯一读取的配置定位环境变量）、自建 `./log` 目录、nohup 启动 `python3 -m motor.coordinator.main`，PID 落盘到 `./log/motor_coordinator.pid`（便于误启动后按 PID 清理），并 `kill -0` 校验进程存活、未存活即报失败。日志级别不要用环境变量调——由 user_config.json 的 `logging_config.log_level` 控制（DEBUG/INFO/WARNING/ERROR，模板未写该字段时用内置默认 INFO） |
+| `start_motor.sh` | 启动 MindIE Motor coordinator | 基本照抄模板。脚本会 unset 代理变量、设 `USER_CONFIG_PATH`（上游唯一读取的配置定位环境变量）、**启动前执行管理面安全门禁：`coordinator_api_host` 非回环 ⇒ `mgmt_api_key_config` 必须已开启且密钥文件存在，否则拒绝启动并给出两选一提示（改回 127.0.0.1 或补齐鉴权），改脚本时不要删该校验**、自建 `./log` 目录、nohup 启动 `python3 -m motor.coordinator.main`，PID 落盘到 `./log/motor_coordinator.pid`（便于误启动后按 PID 清理），并 `kill -0` 校验进程存活、未存活即报失败。日志级别不要用环境变量调——由 user_config.json 的 `logging_config.log_level` 控制（DEBUG/INFO/WARNING/ERROR，模板未写该字段时用内置默认 INFO） |
 
 生成时的要点：
 
 - 后端实例**只出现在 `register.sh`**（--prefill / --decode 参数），`user_config.json` 里不写实例列表——实例是动态注册的，不是静态配置。**一个参数 = 一个实例**：同一实例的多个 DP endpoint 用逗号连接（如 `--prefill "10.0.0.11:8000,10.0.0.11:8001"`），多实例才重复传参——把同一实例的多个 endpoint 拆成多个参数会被注册成多个独立实例，分发口径就错了
 - 用户没提 PD 分离时，先问清 P/D 节点划分再填 `--prefill`/`--decode`；纯 DP 部署（无 PD 分离）时两组都可能挂同批实例，以用户实际拓扑为准
 - **生成前先做端口预检**：`ss -ltn 2>/dev/null | grep -E ':(7200|7201|7202)\b' || echo PORTS_FREE`（容器内可辅以 `curl -m 3 http://127.0.0.1:<port>/` 探测，有响应即被占）。被占用时整套换端口（如 7300/7301/7302），**user_config.json 的三个端口与 register.sh 的 `--mgmt-port` 必须同步修改**，部署指南中的端口一并更新
-- **管理面鉴权（管理端口跨机可达时）**：`coordinator_api_host` 绑 `0.0.0.0` 或 mgmt 端口可被本机以外访问时，按上游 standalone.md 附录 E 开启管理面 API Key——生成密钥文件（`install -d -m 700 /opt/motor-coord/secrets && python3 -c "import secrets; print(secrets.token_urlsafe(32))" > /opt/motor-coord/secrets/mgmt-api-key && chmod 600 /opt/motor-coord/secrets/mgmt-api-key`），在 user_config.json 的 `motor_coordinator_config.mgmt_api_key_config` 设 `enable_api_key: true` + `api_key_file`，register.sh 命令追加 `--mgmt-api-key-file`。同机部署默认不开启（模板默认 `enable_api_key: false`），不影响启动/注册/推理
+- **管理面鉴权（按实际 bind 地址与端口可达性判定，不按"同机部署"假设）**：模板默认 `coordinator_api_host: 127.0.0.1` + `enable_api_key: false`——管理端口仅监听回环，默认关闭鉴权是安全的。用户确需跨机访问推理端口而改绑非回环地址（实际 IP / `0.0.0.0`）时，**必须先开启管理面 API Key 再生成/执行 start_motor.sh**：生成密钥文件（`install -d -m 700 /opt/motor-coord/secrets && python3 -c "import secrets; print(secrets.token_urlsafe(32))" > /opt/motor-coord/secrets/mgmt-api-key && chmod 600 /opt/motor-coord/secrets/mgmt-api-key`），在 user_config.json 的 `motor_coordinator_config.mgmt_api_key_config` 设 `enable_api_key: true` + 非空 `api_key_file`，register.sh 命令追加 `--mgmt-api-key-file`。生成 start_motor.sh 前必须校验**绑定地址非回环 ⇒ 鉴权已开启且密钥文件存在**，不满足即中止并请用户二选一（改回 127.0.0.1 / 补齐鉴权），不得无鉴权对外部署；start_motor.sh 模板已内置同口径门禁（改脚本时不要删），启动时兜底拦截
 - `start_motor.sh` 和 `register.sh` 都把日志写到 `./log/`，模板已内置 `mkdir -p ./log` 自动建目录，无需手动预建
 - **`start_motor.sh` 全部使用相对路径**（`./user_config.json`、`./log/`），必须在部署目录内执行（`cd /opt/mindie-motor && bash start_motor.sh`）；从其他目录 `bash /opt/mindie-motor/start_motor.sh` 会找不到配置文件
 - `register.sh` 要在 coordinator 启动**之后**执行：先 `bash start_motor.sh`，用 `curl -s http://127.0.0.1:<mgmt_port>/liveness` 与 `curl -s http://127.0.0.1:<mgmt_port>/readiness` 确认管理端口就绪，再**前台**执行 `bash register.sh` 看清每个实例的注册输出
@@ -201,7 +202,7 @@ pip3 show motor
 
 在用户指定目录（或安装路径）生成 `MindIE_Motor_部署指南.md`，包含：
 
-1. 本次部署的信息摘要（机器、安装方式 A/B、coordinator 端口、prefill/decode 实例列表、模型名、调度策略）
+1. 本次部署的信息摘要（机器、安装方式 A/B、coordinator 绑定地址与三个端口、prefill/decode 实例列表、模型名、调度策略）；**跨机部署必检项：管理面 API Key 已启用**（`mgmt_api_key_config.enable_api_key: true`、密钥文件存在且权限 600、register 命令带 `--mgmt-api-key-file`）——绑定地址非回环而未开启鉴权时 start_motor.sh 门禁会直接拒绝启动；同机回环部署（127.0.0.1）标注"仅本机监听，管理面未对外暴露"
 2. **部署形态说明**：MindIE Motor 为独立部署的 coordinator，不管理 vLLM/MindIE 实例的拉起——后端实例需由用户按原有方式先行启动，再通过 register.sh 注册
 3. 启动步骤：执行 `bash start_motor.sh`（脚本内置 `mkdir -p ./log` 与 PID 落盘），通过 `tail -f ./log/motor_coordinator.log` 与 `curl -s http://127.0.0.1:<mgmt_port>/liveness`、`curl -s http://127.0.0.1:<mgmt_port>/readiness` 确认管理端口就绪
 4. 后端网络预检：在 coordinator 所在机器/容器内 `curl -m 5 http://<backend_ip>:<port>/v1/models` 逐个确认后端可达——这是端到端推理的前置条件，宿主机可达不代表 coordinator 容器内可达
@@ -212,7 +213,7 @@ pip3 show motor
    - **端口占用**：`ss -ltn | grep -E ':(<三个端口>)\b'` 检查；被占用则整套换端口（如 7300/7301/7302），并同步 user_config.json 与 register.sh 的 `--mgmt-port`
    - **误启动占用 1025/1026/1027**（如误用 `--help`）：`ps -ef | grep motor.coordinator.main` 找到 PID 后 `kill <PID>`，勿用 `pkill -f`（会误杀当前 shell）
    - **离线依赖缺失**：`ModuleNotFoundError`（fastapi/pydantic/zmq/msgspec/OpenSSL/watchdog 等任意模块）→ whl 不带依赖声明，按上游 `requirements.txt` 全量补装（离线走 standalone.md 附录 A 的 pip download 方式），**不要只补报错的那一个模块**
-   - **管理端口裸暴露**：`coordinator_api_host` 绑 `0.0.0.0` 或 mgmt 端口可被本机以外访问而未开启管理面 API Key 时，任何可达主体都能操作管理接口——按上游 standalone.md 附录 E 配置 `mgmt_api_key_config`（生成密钥文件 + `enable_api_key: true` + `api_key_file`），register 命令追加 `--mgmt-api-key-file`
+   - **管理端口裸暴露**：`coordinator_api_host` 绑非回环地址（实际 IP / `0.0.0.0`）或 mgmt 端口可被本机以外访问而未开启管理面 API Key 时，任何可达主体都能操作管理接口（注册自有后端劫持推理流量 / 注销真实后端致推理 500）。模板默认绑 `127.0.0.1` 规避此问题；确需跨机时按上游 standalone.md 附录 E 配置 `mgmt_api_key_config`（生成密钥文件 + `enable_api_key: true` + `api_key_file`，权限 600/目录 700），register 命令追加 `--mgmt-api-key-file`。start_motor.sh 已内置"非回环 ⇒ 鉴权必须开启"门禁：若手动改绑后未开鉴权，启动被拒绝并给出二选一提示（改回 127.0.0.1 / 补齐鉴权），按提示处理后重试
    - **coordinator 启动报找不到 `libmindie_workload_shm.so` / 装的是 1.2MB 左右的小 whl**：装到了 `pip3 wheel .` 产出的空壳包（未含 Rust 原生库，coordinator 无 Python 兜底）。处理：`pip3 show motor` 确认后卸载，改用 `bash build.sh` 重新编译（含第 5 步原生库断言），重新安装；远端无 cargo 时按"cargo 离线安装"或预编译产物直通处理
    - **`import motor` 成功但路径指向源码目录**：在源码目录内执行 import 会命中源码而非 site-packages，验证安装结果必须 `cd` 到源码目录之外再执行
    - **readiness 返回 `{"status":"ok","ready":false}`**：coordinator 已存活但还没有后端注册——启动后、register.sh 执行前的**正常状态**，不是故障（liveness ok + readiness not ready = 等 register）；注册成功后才应变为 `"ready":true`

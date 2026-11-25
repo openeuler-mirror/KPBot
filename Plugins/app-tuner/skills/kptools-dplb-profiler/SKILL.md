@@ -1,6 +1,6 @@
 ---
 name: kptools-dplb-profiler
-description: 采集 vLLM DP 节点负载指标并生成负载均衡分析 HTML 报告（单份分析 / A vs B 对比，如 proxy_new vs coordinator 两种路由策略对比）。当用户提到以下场景时使用本 skill，即使没有明说"负载均衡报告"：负载均衡分析或对比、DP 节点流量/请求分发不均、引擎间负载倾斜、主机内端口级失衡、extract_metric 采集脚本、dp_load_metrics CSV 解析、proxy/coordinator 路由策略均衡性、采集节点 metrics 指标出均衡性报告、TTFT 与负载的相关性分析、PD 分离集群 P 节点与 D 节点双池同时采集或两池各自均衡分析、从 Prometheus 按时间段回采历史负载数据（Grafana 代理或直连、指定起止时间、导出 dp_load_metrics CSV）等。支持 SSH 远端现场采集（上传脚本→执行→下载 CSV；PD 双池一次运行产出两份 CSV）、Prometheus 时间段回采（任意历史时间窗，产出同构 CSV）和本地已有 CSV 直接解析三种模式。
+description: 采集 vLLM DP 节点负载指标并生成负载均衡分析 HTML 报告（单份分析 / A vs B 对比，如 proxy_new vs coordinator 两种路由策略对比）。当用户提到以下场景时使用本 skill，即使没有明说"负载均衡报告"：负载均衡分析或对比、DP 节点流量/请求分发不均、引擎间负载倾斜、主机内端口级失衡、extract_metric 采集脚本、dp_load_metrics CSV 解析、proxy/coordinator 路由策略均衡性、采集节点 metrics 指标出均衡性报告、TTFT 与负载的相关性分析、PD 分离集群 P 节点与 D 节点双池同时采集或两池各自均衡分析、从 Prometheus 按时间段回采历史负载数据（Grafana 代理或直连、指定起止时间、导出 dp_load_metrics CSV）等。支持 SSH 远端现场采集（上传脚本→执行→下载 CSV；PD 双池一次运行产出两份 CSV）、Prometheus 时间段回采（任意历史时间窗，产出同构 CSV）和本地已有 CSV 直接解析三种模式。需要部署/安装 MindIE Motor 负载均衡组件，或生成 user_config.json / register.sh / start_motor.sh 配置三件套时，改用 kptools-dplb-optimization（本 skill 只做采集与分析，不部署组件）。
 ---
 
 # kptools-dplb-profiler：DP 节点负载均衡采集与分析报告

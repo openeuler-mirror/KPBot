@@ -6,7 +6,7 @@
     { "id": "AQ-03", "prompt": "远端已经 pip 装好 motor 了，帮我生成 user_config.json、register.sh 和 start_motor.sh", "should_trigger": true, "note": "config-only generation (stage 4 entry)" },
     { "id": "AQ-04", "prompt": "我有 motor 编译好的 whl 包，帮我装到远端并把负载均衡配好", "should_trigger": true, "note": "install method A: user-provided whl" },
     { "id": "AQ-05", "prompt": "内网容器没法访问外网，从源码编译安装 MindIE Motor 做负载均衡", "should_trigger": true, "note": "install method B: offline source build" },
-    { "id": "AQ-06", "prompt": "模型负载不均衡想优化，多实例的请求分发怎么弄均匀", "should_trigger": true, "note": "vague trigger wording from description" },
+    { "id": "AQ-06", "prompt": "模型负载不均衡想优化，多实例的请求分发怎么弄均匀", "should_trigger": false, "note": "symptom-only wording, no deploy intent: do not auto-trigger; confirm with user first (deploy -> this skill, analysis -> kptools-dplb-profiler, same query family as profiler AQ-01/AQ-02)" },
     { "id": "AQ-07", "prompt": "PD 分离的 prefill 和 decode 实例怎么注册到 coordinator", "should_trigger": true, "note": "PD registration with --prefill/--decode" },
     { "id": "AQ-08", "prompt": "coordinator 默认端口被占了，怎么换端口重新配", "should_trigger": true, "note": "port conflict handling, config regeneration" },
     { "id": "NQ-01", "prompt": "各引擎忙闲不均，现场采集 30 分钟负载指标出个均衡性报告", "should_trigger": false, "note": "routes to kptools-dplb-profiler（量化度量，不部署组件）" },
