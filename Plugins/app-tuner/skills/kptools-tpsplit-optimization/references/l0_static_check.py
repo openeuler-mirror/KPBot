@@ -5,22 +5,30 @@
 对生成的 TP 拓扑部署脚本做拉起前静态验证，不依赖 NPU 环境（现场实测方法论固化）：
 
   1. 实例脚本清点与识别（含 vllm serve 且挂 --kv-transfer-config 的 .sh）
-  2. KV_TRANSFER_CONFIG 抽取 + json.loads 校验
-  3. 守恒自检：prefill.dp_size == 实例总数（--expect-dp 指定期望值则按期望值核对）
-  4. TP / 后端 / DP 旗标核验（TP 值；无 --distributed-executor-backend；DP 组网四旗标）
-  5. KV 旧字段保留核验（engine_id / kv_port / lookup_rpc_port / decode 段按 legacy 基线；
-     现场基线不同时 --no-keep-legacy 关闭，以现场旧脚本实际值为准）
-  6. 同机卡互斥（ASCEND_RT_VISIBLE_DEVICES）与 http 端口错开
-  7. 实例间 diff：剥离注释并遮蔽实例级差异（rank/卡/http 端口）与组级差异
-     （DP 组大小/主节点 IP）后，各实例应完全一致；混合分组（如 4+4+2）用
-     --group-size 4,2 声明合法组大小
+  2. 变量解析：脚本正文 + source/. 引用的 env 文件（SKILL.md 要求保留的 env
+     文件传参形态可直接校验：env 文件放脚本同目录自动解析，或 --env-file 显式指定）；
+     仍解析不到的变量（$VAR / <ARG:var>）对应检查项降级为 SKIP，不判 FAIL
+  3. KV_TRANSFER_CONFIG 抽取 + json.loads 校验
+  4. dp_size 守恒自检（两种执行口径）：--expect-dp <全局实例数> 核对全局守恒
+     （全量目录执行）；缺省只核各实例 prefill.dp_size 一致、不与本机实例数比较
+     （按主机分目录执行）
+  5. TP 核验：--tp <目标TP> 显式核对；缺省按脚本实际 --tensor-parallel-size 做
+     组内一致性检查，不写死默认值
+  6. KV 旧字段核验：期望值取自 --legacy-baseline <现场旧脚本>（engine_id /
+     kv_port / lookup_rpc_port / decode 段），不内置写死基线；未提供基线时该项 SKIP
+  7. 同机卡互斥与 http 端口错开：主机分组显式化——子目录/文件名 host<N>/node<N>
+     模式、--instances-per-host N、--hosts h1=N1,h2=N2 任选其一；都无法判定时按
+     单文件独立分组并输出告警（不再按"文件名首个数字 //2"猜每机 2 实例）
+  8. 实例间 diff：遮蔽实例级差异（rank/卡/http 端口）与组级差异（DP 组大小/
+     主节点 IP）后应完全一致；混合分组（如 4+4+2）用 --group-size 4,2 声明
 
 用法：
-  python l0_static_check.py <脚本目录> [--expect-dp 20] [--tp 8] [--group-size 4] [--rpc-port 16600]
+  python l0_static_check.py <脚本目录> [--expect-dp 20] [--tp 8] [--group-size 4]
+      [--rpc-port 16600] [--legacy-baseline <现场旧脚本>] [--env-file <env文件>]...
+      [--instances-per-host 2 | --hosts h1=2,h2=2]
 
-退出码 0 = 全部通过；非 0 = 存在失败项（逐项打印 PASS/FAIL 与证据）。
-现场另一种等价形态：stub 掉 vllm 可执行文件捕获实际命令行（无需 NPU 拉起），
-再按本脚本同样口径检查；两种形态的检查项一致。
+退出码 0 = 全部通过（SKIP 不计失败）；非 0 = 存在失败项（逐项打印 PASS/FAIL/SKIP
+与证据）。单个脚本解析异常只记一条 FAIL，不影响其余脚本逐项结果输出。
 """
 import argparse
 import json
@@ -60,18 +68,52 @@ def resolve(s: str, v: dict) -> str:
                   lambda m: v.get(m.group(1) or m.group(2), m.group(0)), s)
 
 
+def is_unresolved(s) -> bool:
+    """值仍含 $VAR / <ARG:var> 占位 → 变量未解析（env 文件缺失等），对应检查项应 SKIP。"""
+    return s is None or ('$' in s) or ('<ARG:' in s)
+
+
+def parse_env_sources(text: str, script_dir: str, v: dict):
+    """解析脚本内 source/. 引用的 env 文件，返回 (变量表, 本地未找到的 source 目标)。
+    相对路径相对脚本目录解析；脚本正文定义优先于 env 文件（由调用方合并）。"""
+    merged = {}
+    missing = []
+    for m in re.finditer(r'^\s*(?:source|\.)\s+([^\s#]+)', text, re.M):
+        t = m.group(1).strip('\'"')
+        t = resolve(t, v)
+        if is_unresolved(t):
+            missing.append(t)
+            continue
+        cand = t if os.path.isabs(t) else os.path.join(script_dir, t)
+        if not os.path.isfile(cand):
+            missing.append(t)
+            continue
+        try:
+            et = open(cand, encoding='utf-8', errors='replace').read()
+        except OSError:
+            missing.append(t)
+            continue
+        merged.update(parse_vars(strip_comments(et)))
+    return merged, missing
+
+
 def extract_kvs(text: str, v: dict) -> list:
-    """抽取 KV_TRANSFER_CONFIG。先在全文替换 bash '\"$VAR\"' 拼接习语再抽取，
-    避免习语内引号截断匹配。函数形参占位为 <ARG:var>（由调用点人工核对）。"""
+    """抽取 KV_TRANSFER_CONFIG。先在全文替换 bash '"$VAR"' 拼接习语再抽取，避免
+    习语内引号截断匹配。变量未解析时记 <ARG:var> 并标 __unresolved__，由调用方
+    降级为 SKIP 而不是 json.loads 失败。"""
     text = re.sub(r"'\"\$(\w+)\"'",
                   lambda mm: v.get(mm.group(1), '<ARG:%s>' % mm.group(1)), text)
     out = []
     for m in re.finditer(r"KV_TRANSFER_CONFIG\s*=\s*'(.*?)'", text, re.S):
         kv = resolve(m.group(1), v)
+        if '<ARG:' in kv or re.search(r'\$\w', kv):
+            out.append({'__unresolved__': sorted(set(
+                re.findall(r'<ARG:(\w+)>', kv) or re.findall(r'\$(\w+)', kv)))})
+            continue
         try:
             out.append(json.loads(kv))
         except Exception as e:
-            out.append({"__parse_error__": str(e)})
+            out.append({'__parse_error__': str(e)})
     return out
 
 
@@ -105,7 +147,8 @@ def expand_devices(dev: str):
     return out or None
 
 
-def host_key(path: str, outdir: str) -> str:
+def host_key(path: str, outdir: str):
+    """子目录/文件名中的 host<N>/node<N> 模式 → 主机键；无模式返回 None。"""
     rel = os.path.relpath(path, outdir)
     parts = re.split(r'[\\/]+', rel)
     for part in parts[:-1]:
@@ -116,10 +159,54 @@ def host_key(path: str, outdir: str) -> str:
     m = re.search(r'(?:host|node)[-_]?(\d+)', fn, re.I)
     if m:
         return 'host-%s' % m.group(1)
-    m = re.search(r'(\d+)', fn)
-    if m:
-        return 'host-%d' % (int(m.group(1)) // 2)
-    return 'host-?'
+    return None
+
+
+def natural_key(p: str):
+    return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', p)]
+
+
+def assign_host_keys(paths, outdir: str, args, warn: list) -> dict:
+    """主机分组：--hosts h1=N1,... > --instances-per-host N > host<N> 模式；
+    都没有 → 单文件独立分组并告警（不猜"每机 2 实例"）。"""
+    ordered = sorted(paths, key=natural_key)
+    keys = {}
+    if args.hosts:
+        spec = []
+        for part in str(args.hosts).split(','):
+            if '=' not in part:
+                warn.append('--hosts 条目 %r 缺少 =count' % part)
+                continue
+            h, n = part.split('=', 1)
+            try:
+                spec.extend([h.strip()] * int(n))
+            except ValueError:
+                warn.append('--hosts 条目 %r 数量非数字' % part)
+        if len(spec) != len(ordered):
+            warn.append('--hosts 实例总数 %d != 脚本数 %d，多余条目忽略、不足按单文件分组'
+                        % (len(spec), len(ordered)))
+        it = iter(spec)
+        for p in ordered:
+            keys[p] = next(it, 'file:%s' % os.path.relpath(p, outdir))
+    elif args.instances_per_host:
+        n = args.instances_per_host if args.instances_per_host >= 1 else 1
+        for i, p in enumerate(ordered):
+            keys[p] = 'host-%d' % (i // n)
+        if len(ordered) % n:
+            warn.append('脚本数 %d 不是 --instances-per-host %d 的整数倍，最后一组不满'
+                        % (len(ordered), n))
+    else:
+        for p in ordered:
+            k = host_key(p, outdir)
+            if k is None:
+                rel = os.path.relpath(p, outdir)
+                keys[p] = 'file:%s' % rel
+                warn.append('%s 主机归属无法判定（目录/文件名无 host<N> 模式）：按单文件独立'
+                            '分组，同机卡互斥/端口检查未覆盖；请用 --instances-per-host N、'
+                            '--hosts h1=N1,... 或每主机一个子目录明确分组' % rel)
+            else:
+                keys[p] = k
+    return keys
 
 
 def instance_scripts(outdir: str) -> list:
@@ -154,114 +241,244 @@ def mask_varying(text: str, v: dict) -> str:
     return text
 
 
+def legacy_expect(baseline_path: str):
+    """从现场旧脚本解析 KV 旧字段期望值（engine_id/kv_port/lookup_rpc_port/decode dp/tp）。"""
+    try:
+        raw = open(baseline_path, encoding='utf-8', errors='replace').read()
+    except OSError as e:
+        return None, '无法读取 --legacy-baseline: %s' % e
+    t = strip_comments(raw)
+    v = parse_vars(t)
+    env_vars, _ = parse_env_sources(t, os.path.dirname(os.path.abspath(baseline_path)) or '.', v)
+    v = {**env_vars, **v}
+    kvs = [k for k in extract_kvs(t, v)
+           if isinstance(k, dict) and '__unresolved__' not in k and '__parse_error__' not in k]
+    if not kvs:
+        return None, '--legacy-baseline 中未解析出有效 KV_TRANSFER_CONFIG'
+    kv = kvs[0]
+    try:
+        conns = kv['kv_connector_extra_config']['connectors']
+        mc = [c for c in conns if c.get('kv_connector') == 'MooncakeConnectorV1'][0]
+        asc = [c for c in conns if c.get('kv_connector') == 'AscendStoreConnector']
+        lp = str(asc[0]['kv_connector_extra_config'].get('lookup_rpc_port')) if asc else None
+        dec = mc['kv_connector_extra_config']['decode']
+        return {
+            'engine_id': str(kv.get('engine_id')),
+            'kv_port': str(mc.get('kv_port')),
+            'lookup': lp,
+            'decode_dp': str(dec['dp_size']),
+            'decode_tp': str(dec['tp_size']),
+        }, None
+    except Exception as e:
+        return None, '--legacy-baseline KV 结构不完整: %s' % e
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('dir', help='部署脚本目录（递归扫描）')
     ap.add_argument('--expect-dp', type=int, default=None,
-                    help='期望的 Mooncake prefill dp_size（缺省=按实例总数守恒核对）')
-    ap.add_argument('--tp', type=int, default=8, help='期望 TP size（默认 8）')
+                    help='期望的 Mooncake prefill dp_size（全局实例总数）：全量目录执行时核对'
+                         '全局守恒；按主机分目录执行时不要给，缺省只核各实例 dp_size 一致')
+    ap.add_argument('--tp', type=int, default=None,
+                    help='期望 TP size（显式核对）；缺省按脚本实际 --tensor-parallel-size '
+                         '做组内一致性检查，不写死默认值')
     ap.add_argument('--group-size', default='4',
                     help='期望 DP 组大小，单值或多值逗号分隔（如 "4" 或 "4,2" 支持混合分组，默认 4）')
     ap.add_argument('--rpc-port', type=int, default=16600, help='期望 DP rpc 端口（默认 16600）')
     ap.add_argument('--keep-legacy', action=argparse.BooleanOptionalAction, default=True,
-                    help='核验 KV 旧字段保留（engine_id=0/kv_port=30000/lookup=10001/decode 64-1，'
-                         '按 legacy 基线核验；现场基线不同时用 --no-keep-legacy 关闭，'
-                         '以现场旧脚本实际值为准）')
+                    help='核验 KV 旧字段保留：期望值来自 --legacy-baseline 现场旧脚本，不内置'
+                         '写死基线；未提供基线时该项 SKIP；--no-keep-legacy 显式关闭')
+    ap.add_argument('--legacy-baseline', default=None,
+                    help='现场旧启动脚本路径：engine_id/kv_port/lookup_rpc_port/decode 段期望值'
+                         '从该脚本解析')
+    ap.add_argument('--env-file', action='append', default=[],
+                    help='env 文件路径（可重复）：脚本 source 的 env 文件不在脚本目录时显式补充')
+    ap.add_argument('--instances-per-host', type=int, default=None,
+                    help='每机实例数：脚本按自然排序后每 N 个归同一主机')
+    ap.add_argument('--hosts', default=None,
+                    help='显式主机分组，如 "h1=2,h2=2"（按自然排序顺序分配，支持混合布局）')
     args = ap.parse_args()
     allowed_sizes = {int(x) for x in str(args.group_size).split(',')}
 
     outdir = os.path.abspath(args.dir)
     scripts = instance_scripts(outdir)
-    results = []          # (name, check, passed, evidence)
+    results = []
 
     def record(name, check, passed, evidence):
         results.append((name, check, passed, evidence))
+
+    # 全局 env 文件（--env-file）：最低优先级，随后被脚本 source 的 env 文件与脚本正文覆盖
+    global_env = {}
+    for ef in args.env_file:
+        if os.path.isfile(ef):
+            try:
+                global_env.update(parse_vars(strip_comments(
+                    open(ef, encoding='utf-8', errors='replace').read())))
+            except OSError as e:
+                record('(global)', 'env-file', False, '读取失败 %s: %s' % (ef, e))
+        else:
+            record('(global)', 'env-file', False, 'not found: %s' % ef)
+
+    # 主机分组（显式优先；无模式则单文件独立分组并告警）
+    group_warn = []
+    keys = assign_host_keys([p for p, _ in scripts], outdir, args, group_warn)
+    record('(global)', 'host-grouping', True, '; '.join(group_warn) if group_warn else 'ok')
+
+    # legacy 期望值（来自现场旧脚本，不写死）
+    baseline = None
+    if args.keep_legacy:
+        if not args.legacy_baseline:
+            record('(global)', 'kv-legacy-fields', True,
+                   'SKIP: 未提供 --legacy-baseline（期望值应取自现场旧脚本，不写死基线）；'
+                   '关闭该项用 --no-keep-legacy')
+        else:
+            baseline, err = legacy_expect(args.legacy_baseline)
+            if err:
+                record('(global)', 'legacy-baseline', False, err)
 
     n_inst = 0
     per_host = {}
     masked_bodies = []
     dp_collected = []
+    tp_collected = []
     for p, raw in scripts:
         name = os.path.basename(p)
-        t = strip_comments(raw)
-        v = parse_vars(t)
-        host = host_key(p, outdir)
+        try:
+            t = strip_comments(raw)
+            v0 = parse_vars(t)
+            env_vars, missing_sources = parse_env_sources(t, os.path.dirname(p), v0)
+            v = {**global_env, **env_vars, **v0}
+            if missing_sources:
+                record(name, 'env-sources', True,
+                       'SKIP: source 文件本地未找到 %s（把 env 文件放脚本同目录或用 --env-file '
+                       '指定；相关变量将按未解析降级为 SKIP）' % sorted(set(missing_sources)))
+            host = keys.get(p, 'file:%s' % name)
 
-        # TP 值
-        tp = flag_value(t, 'tensor-parallel-size', v)
-        record(name, 'TP=%d' % args.tp, tp == str(args.tp), 'got %r' % tp)
+            # TP 值：--tp 显式核对；缺省收集做组内一致性
+            tp = flag_value(t, 'tensor-parallel-size', v)
+            if tp is None:
+                record(name, 'TP flag', False, 'no --tensor-parallel-size found')
+            elif is_unresolved(tp):
+                record(name, 'TP check', True,
+                       'SKIP: %r 变量未解析（env 文件缺失？放同目录或 --env-file）' % tp)
+            elif args.tp is not None:
+                record(name, 'TP=%d' % args.tp, tp == str(args.tp), 'got %r' % tp)
+                tp_collected.append(tp)
+            else:
+                tp_collected.append(tp)
 
-        # 后端旗标：新方案不写 --distributed-executor-backend
-        record(name, 'no-executor-backend',
-               not has_flag(t, 'distributed-executor-backend'),
-               'ray backend' if has_flag(t, 'distributed-executor-backend') else 'ok')
+            # 后端旗标：新方案不写 --distributed-executor-backend
+            record(name, 'no-executor-backend',
+                   not has_flag(t, 'distributed-executor-backend'),
+                   'ray backend' if has_flag(t, 'distributed-executor-backend') else 'ok')
 
-        # DP 组网四旗标
-        dps = flag_value(t, 'data-parallel-size', v)
-        dpp = flag_value(t, 'data-parallel-rpc-port', v)
-        dp_ok = (dps is not None and int(dps) in allowed_sizes
-                 and dpp == str(args.rpc_port)
-                 and has_flag(t, 'data-parallel-rank') and has_flag(t, 'data-parallel-address'))
-        record(name, 'dp-flags(size=%s,rpc=%d,rank,addr)' % (args.group_size, args.rpc_port),
-               dp_ok, 'size=%s rpc=%s rank=%s addr=%s' % (
-                   dps, dpp, has_flag(t, 'data-parallel-rank'), has_flag(t, 'data-parallel-address')))
+            # DP 组网四旗标（未解析变量降级 SKIP，非数字按 FAIL 记证据不抛异常）
+            dps = flag_value(t, 'data-parallel-size', v)
+            dpp = flag_value(t, 'data-parallel-rpc-port', v)
+            has_rank = has_flag(t, 'data-parallel-rank')
+            has_addr = has_flag(t, 'data-parallel-address')
+            if (dps is not None and is_unresolved(dps)) or (dpp is not None and is_unresolved(dpp)):
+                record(name, 'dp-flags(size=%s,rpc=%d,rank,addr)' % (args.group_size, args.rpc_port),
+                       True, 'SKIP: size=%r rpc=%r 变量未解析（env 文件缺失？--env-file）；'
+                       'rank=%s addr=%s' % (dps, dpp, has_rank, has_addr))
+            else:
+                size_ok = False
+                if dps is not None:
+                    try:
+                        size_ok = int(dps) in allowed_sizes
+                    except ValueError:
+                        size_ok = False
+                dp_ok = (size_ok and dpp == str(args.rpc_port) and has_rank and has_addr)
+                ev = 'size=%s rpc=%s rank=%s addr=%s' % (dps, dpp, has_rank, has_addr)
+                if dps is not None and not dps.lstrip('-').isdigit():
+                    ev += '（size 非数字，按 FAIL 记录）'
+                record(name, 'dp-flags(size=%s,rpc=%d,rank,addr)' % (args.group_size, args.rpc_port),
+                       dp_ok, ev)
 
-        # KV 校验
-        kvs = extract_kvs(t, v)
-        if not kvs:
-            record(name, 'kv-extract', False, 'no KV config parsed')
-        for kv in kvs:
-            n_inst += 1
-            if not isinstance(kv, dict) or '__parse_error__' in kv:
-                record(name, 'kv-json', False, str(kv.get('__parse_error__') if isinstance(kv, dict) else kv)[:80])
-                continue
-            record(name, 'kv-json', True, 'json.loads ok')
-            try:
-                conns = kv['kv_connector_extra_config']['connectors']
-                mc = [c for c in conns if c.get('kv_connector') == 'MooncakeConnectorV1'][0]
-                pre = mc['kv_connector_extra_config']['prefill']
-                dec = mc['kv_connector_extra_config']['decode']
-                pdp, ptp = str(pre['dp_size']), str(pre['tp_size'])
-                dp_collected.append(pdp)
-                record(name, 'kv-prefill-tp', ptp == str(args.tp), 'tp=%s' % ptp)
-                if args.keep_legacy:
-                    asc = [c for c in conns if c.get('kv_connector') == 'AscendStoreConnector']
-                    lp = str(asc[0]['kv_connector_extra_config'].get('lookup_rpc_port')) if asc else None
-                    legacy_ok = (str(kv.get('engine_id')) == '0' and str(mc.get('kv_port')) == '30000'
-                                 and (lp is None or lp == '10001')
-                                 and str(dec['dp_size']) == '64' and str(dec['tp_size']) == '1')
-                    # 注：decode 64/1 与 engine_id/kv_port 旧值按 legacy 基线核验，
-                    # 现场基线不同时以 --no-keep-legacy 关闭并以现场旧脚本为准
-                    record(name, 'kv-legacy-fields', legacy_ok,
-                           'engine_id=%s kv_port=%s lookup=%s decode=%s/%s' % (
-                               kv.get('engine_id'), mc.get('kv_port'), lp, dec['dp_size'], dec['tp_size']))
-            except Exception as e:
-                record(name, 'kv-structure', False, str(e)[:80])
+            # KV 校验（未解析变量降级 SKIP）
+            kvs = extract_kvs(t, v)
+            if not kvs:
+                record(name, 'kv-extract', False, 'no KV config parsed')
+            for kv in kvs:
+                if isinstance(kv, dict) and '__unresolved__' in kv:
+                    n_inst += 1
+                    record(name, 'kv-json', True,
+                           'SKIP: 含未解析变量 %s（env 文件未随脚本提供？放同目录或 --env-file），'
+                           'JSON 校验跳过' % kv['__unresolved__'])
+                    continue
+                if not isinstance(kv, dict) or '__parse_error__' in kv:
+                    record(name, 'kv-json', False,
+                           str(kv.get('__parse_error__') if isinstance(kv, dict) else kv)[:80])
+                    continue
+                n_inst += 1
+                record(name, 'kv-json', True, 'json.loads ok')
+                try:
+                    conns = kv['kv_connector_extra_config']['connectors']
+                    mc = [c for c in conns if c.get('kv_connector') == 'MooncakeConnectorV1'][0]
+                    pre = mc['kv_connector_extra_config']['prefill']
+                    dec = mc['kv_connector_extra_config']['decode']
+                    pdp, ptp = str(pre['dp_size']), str(pre['tp_size'])
+                    dp_collected.append(pdp)
+                    if is_unresolved(ptp):
+                        record(name, 'kv-prefill-tp', True, 'SKIP: %r 变量未解析' % ptp)
+                    elif args.tp is not None:
+                        record(name, 'kv-prefill-tp', ptp == str(args.tp), 'tp=%s' % ptp)
+                        tp_collected.append(ptp)
+                    else:
+                        tp_collected.append(ptp)
+                    if args.keep_legacy and baseline:
+                        asc = [c for c in conns if c.get('kv_connector') == 'AscendStoreConnector']
+                        lp = str(asc[0]['kv_connector_extra_config'].get('lookup_rpc_port')) if asc else None
+                        legacy_ok = (str(kv.get('engine_id')) == baseline['engine_id']
+                                      and str(mc.get('kv_port')) == baseline['kv_port']
+                                      and (lp is None or baseline['lookup'] is None
+                                           or lp == baseline['lookup'])
+                                      and str(dec['dp_size']) == baseline['decode_dp']
+                                      and str(dec['tp_size']) == baseline['decode_tp'])
+                        record(name, 'kv-legacy-fields', legacy_ok,
+                               'engine_id=%s kv_port=%s lookup=%s decode=%s/%s（基线 %s/%s/%s/%s/%s）' % (
+                                   kv.get('engine_id'), mc.get('kv_port'), lp, dec['dp_size'], dec['tp_size'],
+                                   baseline['engine_id'], baseline['kv_port'], baseline['lookup'],
+                                   baseline['decode_dp'], baseline['decode_tp']))
+                except Exception as e:
+                    record(name, 'kv-structure', False, str(e)[:80])
 
-        # 卡 / 端口
-        calls = re.findall(r'launch_instance\s+(\S+)\s+(\S+)\s+"([^"]+)"\s+(\S+)\s+(\S+)\s+(\S+)', t)
-        if calls:
-            for c in calls:
-                per_host.setdefault(host, []).append(
-                    {'file': name, 'dev': c[2], 'port': c[3]})
-        else:
-            dm = re.search(r'ASCEND_RT_VISIBLE_DEVICES=(\S+)', t)
-            dev = resolve(dm.group(1).strip('"'), v) if dm else None
-            port = flag_value(t, 'port', v)
-            per_host.setdefault(host, []).append({'file': name, 'dev': dev, 'port': port})
+            # 卡 / 端口
+            calls = re.findall(r'launch_instance\s+(\S+)\s+(\S+)\s+"([^"]+)"\s+(\S+)\s+(\S+)\s+(\S+)', t)
+            if calls:
+                for c in calls:
+                    per_host.setdefault(host, []).append(
+                        {'file': name, 'dev': c[2], 'port': c[3]})
+            else:
+                dm = re.search(r'ASCEND_RT_VISIBLE_DEVICES=(\S+)', t)
+                dev = resolve(dm.group(1).strip('"'), v) if dm else None
+                port = flag_value(t, 'port', v)
+                per_host.setdefault(host, []).append({'file': name, 'dev': dev, 'port': port})
 
-        masked_bodies.append(mask_varying(t, v))
+            masked_bodies.append(mask_varying(t, v))
+        except Exception as e:
+            record(name, 'script-check', False, 'exception: %r' % e)
 
-    # 守恒自检：所有实例 prefill.dp_size 一致；未指定期望值时还须等于实例总数
+    # 守恒自检：--expect-dp 核对全局守恒；缺省只核各实例 dp_size 一致（不与本机实例数比较）
     if args.expect_dp is not None:
         record('(global)', 'kv-prefill-dp==%d' % args.expect_dp,
                set(dp_collected) == {str(args.expect_dp)},
                'dp values=%s' % sorted(set(dp_collected)))
     else:
-        record('(global)', 'kv-dp-conservation(dp==n_inst)',
-               set(dp_collected) == {str(n_inst)},
-               'dp values=%s, instances=%d' % (sorted(set(dp_collected)), n_inst))
+        hint = ''
+        if dp_collected and set(dp_collected) and dp_collected[0] != str(n_inst):
+            hint = ('（目录内实例数与 dp_size 不等：按主机分目录执行属正常——全局守恒请用 '
+                    '--expect-dp <全局实例数>；全量目录执行请核对布局表全局实例数）')
+        record('(global)', 'kv-dp-consistent', len(set(dp_collected)) <= 1,
+               'dp values=%s, instances=%d%s' % (sorted(set(dp_collected)), n_inst, hint))
     record('(global)', 'instance-count=%d' % n_inst, n_inst > 0, 'found %d instances' % n_inst)
+
+    # TP 组内一致性（--tp 未显式给出时）
+    if args.tp is None:
+        tp_set = sorted({x for x in tp_collected if x is not None and not is_unresolved(x)})
+        record('(global)', 'tp-group-consistent', len(tp_set) <= 1,
+               'tp values=%s（--tp 未指定：按脚本实际值做组内一致性核对；显式核对用 --tp <目标TP>）'
+               % tp_set)
 
     # 同机卡互斥 / 端口错开
     for h, inst in sorted(per_host.items()):
