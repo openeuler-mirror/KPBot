@@ -55,7 +55,7 @@ python3 scripts/benchmark.py --output results/cluster-smoke-001 \
 
 ## 失败、清理与退出码
 
-父进程创建独占输出目录和 0600 日志，子进程位于自有进程组。超时只终止该组；本地 Ray 在正常异常路径由 `finally` 关闭，自有 session 目录只清理本轮创建项。Ray 的 AF_UNIX socket 需要足够短的系统临时目录；可通过本次进程的 `TMPDIR` 指定短路径，失败时保留证据而不删除他人 socket。已有输出永不删除或覆盖。
+父进程创建独占输出目录和 0600 日志，子进程位于自有进程组。supervisor 在创建进程前构造独立的环境白名单，仅保留运行所需的系统路径/语言/临时目录、Python 导入与编码、TLS、Python/原生线程设置和 明确列出的 Ray TLS/认证与运行配置（不按前缀整体放行），以及内部 child 标记；任意其他凭据或 Secret 不进入 child 及其派生的 Ray worker，且不修改父进程 `os.environ`。超时只终止该组；本地 Ray 在正常异常路径由 `finally` 关闭，自有 session 目录只清理本轮创建项。Ray 的 AF_UNIX socket 需要足够短的系统临时目录；可通过本次进程的 `TMPDIR` 指定短路径，失败时保留证据而不删除他人 socket。已有输出永不删除或覆盖。
 
 - `0`：全部前置、预热、计时轮和父侧语义校验通过；
 - `1`：前置、认证、运行时、正确性或结果契约失败，保留失败结果/日志；

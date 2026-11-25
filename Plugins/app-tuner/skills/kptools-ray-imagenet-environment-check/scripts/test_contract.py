@@ -113,6 +113,45 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(result["reason"], "timeout")
         self.assertLess(time.monotonic() - started, 3)
 
+    def test_worker_filters_secrets_and_preserves_runtime_settings(self):
+        names = [
+            "UNRELATED_SYNTHETIC_SECRET",
+            "RAY_UNRELATED_SYNTHETIC_SECRET",
+            "PATH",
+            "PYTHONPATH",
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "RAY_TLS_CA_CERT",
+        ]
+        injected = {
+            "UNRELATED_SYNTHETIC_SECRET": "must-not-reach-child",
+            "RAY_UNRELATED_SYNTHETIC_SECRET": "must-not-reach-child",
+            "PATH": os.environ["PATH"],
+            "PYTHONPATH": "synthetic-runtime-path",
+            "OMP_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "RAY_TLS_CA_CERT": "synthetic-ca-path",
+        }
+        code = (
+            "import json, os; "
+            "print(json.dumps("
+            f"{{name: os.environ.get(name) for name in {names!r}}}"
+            "))"
+        )
+        with mock.patch.dict(os.environ, injected):
+            parent_environment = dict(os.environ)
+            outcome = check.run_process([sys.executable, "-c", code], 5)
+            self.assertEqual(dict(os.environ), parent_environment)
+        self.assertTrue(outcome["ok"], outcome)
+        observed = json.loads(outcome["stdout"])
+        self.assertIsNone(observed["UNRELATED_SYNTHETIC_SECRET"])
+        self.assertIsNone(observed["RAY_UNRELATED_SYNTHETIC_SECRET"])
+        self.assertEqual(observed["PATH"], injected["PATH"])
+        self.assertEqual(observed["PYTHONPATH"], "synthetic-runtime-path")
+        self.assertEqual(observed["OMP_NUM_THREADS"], "1")
+        self.assertEqual(observed["MKL_NUM_THREADS"], "1")
+        self.assertEqual(observed["RAY_TLS_CA_CERT"], "synthetic-ca-path")
+
     def test_existing_cluster_auth_failure_is_blocked(self):
         cluster = {
             "probes": [

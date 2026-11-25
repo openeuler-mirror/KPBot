@@ -39,6 +39,54 @@ SECRET_ENV_NAMES = (
     "RAY_AUTH_TOKEN",
     "KPBOT_RAY_AUTH_TOKEN",
 )
+CHILD_ENV_NAMES = frozenset(
+    {
+        "RAY_USE_TLS",
+        "RAY_TLS_SERVER_CERT",
+        "RAY_TLS_SERVER_KEY",
+        "RAY_TLS_CA_CERT",
+        "RAY_AUTH_TOKEN",
+        "RAY_CLIENT_AUTH_TOKEN",
+        "RAY_TMPDIR",
+        "RAY_USAGE_STATS_ENABLED",
+        "RAY_DEDUP_LOGS",
+        "HOME",
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TMPDIR",
+        "LD_LIBRARY_PATH",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONIOENCODING",
+        "PYTHONUTF8",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONUNBUFFERED",
+        "PYTHONHASHSEED",
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "BLIS_NUM_THREADS",
+    }
+)
+
+
+def child_environment(extra=None):
+    """Build a fresh runtime-only environment without mutating os.environ."""
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name in CHILD_ENV_NAMES
+    }
+    if extra:
+        environment.update(extra)
+    return environment
 
 
 def probe(name, mandatory, status, reason, evidence=None):
@@ -146,6 +194,7 @@ def run_process(command, timeout):
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
+            env=child_environment(),
         )
     except (FileNotFoundError, PermissionError, OSError) as exc:
         return {
@@ -245,10 +294,13 @@ def run_local_runtime(python_executable, timeout):
 
 def run_cluster_probe(python_executable, address, timeout, cpus):
     """Connect to an explicitly named existing Ray service."""
-    env = dict(os.environ)
-    env["KPBOT_RAY_PROBE_ADDRESS"] = address
-    env["KPBOT_RAY_PROBE_TIMEOUT"] = str(timeout)
-    env["KPBOT_RAY_PROBE_CPUS"] = str(cpus)
+    env = child_environment(
+        {
+            "KPBOT_RAY_PROBE_ADDRESS": address,
+            "KPBOT_RAY_PROBE_TIMEOUT": str(timeout),
+            "KPBOT_RAY_PROBE_CPUS": str(cpus),
+        }
+    )
     command = [
         python_executable,
         str(Path(__file__).resolve()),

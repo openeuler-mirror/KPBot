@@ -52,7 +52,7 @@ python3 scripts/check_environment.py \
   --address ray://ray-head.example.com:10001
 ```
 
-TLS/认证使用目标 Ray 版本支持的安全文件或相应 `RAY_*` 环境配置。密码和令牌不得放入 argv、地址 userinfo、日志或报告；脚本只读取声明的认证变量用于脱敏，不打印变量值。`ray.shutdown()` 在现有服务模式仅断开本次 driver，不停止服务。
+TLS/认证使用目标 Ray 版本支持的安全文件或相应 `RAY_*` 环境配置。密码和令牌不得放入 argv、地址 userinfo、日志或报告；脚本只读取声明的认证变量用于脱敏，不打印变量值。本地和现有集群 worker 均在创建前获得独立的环境白名单，仅保留运行所需的系统路径/语言/临时目录、Python 导入与编码、TLS、Python/原生线程设置、明确列出的 Ray TLS/认证与运行配置（不按前缀整体放行）及内部探针参数；任意其他凭据或 Secret 不会继承，父进程 `os.environ` 不变。`ray.shutdown()` 在现有服务模式仅断开本次 driver，不停止服务。
 
 ## 结果与退出码
 
