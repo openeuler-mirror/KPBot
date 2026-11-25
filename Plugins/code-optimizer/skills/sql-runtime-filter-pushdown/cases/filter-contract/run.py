@@ -9,6 +9,11 @@ from pathlib import Path
 LOWER, UPPER = -(2**31), 2**31 - 1
 
 
+def check(condition, message):
+    if not condition:
+        raise AssertionError(message)
+
+
 @dataclass(frozen=True)
 class Projection:
     source_channel: int
@@ -37,12 +42,15 @@ class Bloom:
         return value is not None and self.slot(value, self.width_bytes) in self.slots
 
 
-def resolve_filter(projections, probe_channel, kind, payload, *, join_kind="inner", projection_errors_safe=True):
+def resolve_filter(projections, probe_channel, kind, payload, *, join_kind="inner",
+                   projection_errors_safe=True, build_complete=True):
     """Use one mapping for capability checks and installation decisions."""
     if join_kind != "inner":
         return None, None, "preserved-probe-side"
     if not projection_errors_safe:
         return None, None, "projection-error-semantics"
+    if not build_complete:
+        return None, None, "incomplete-build"
     projection = projections[probe_channel]
     if projection.source_bits != projection.output_bits and (
         projection.source_bits, projection.output_bits
@@ -81,34 +89,47 @@ def projection_and_bloom_checks():
 
     baseline = matches(rows)
     filtered, channel, applications, reason = filter_scan(rows, projection, 1, "values", dates)
-    assert reason == "installed-values" and channel == 0 and applications == len(rows)
-    assert [row[2] for row in filtered] == [2, 3, 4]
-    assert matches(filtered) == baseline
+    check(reason == "installed-values" and channel == 0 and applications == len(rows),
+          "invalid value-filter mapping or application count")
+    check([row[2] for row in filtered] == [2, 3, 4],
+          "unexpected projected row IDs")
+    check(matches(filtered) == baseline,
+          "value filtering changed join multiplicity")
     # A wrong-channel implementation must be detectable by this fixture.
     wrong_column = [row for row in rows if row[1] in dates]
-    assert matches(wrong_column) != baseline
-    assert resolve_filter(projection, 1, "values", dates)[0] == channel
+    check(matches(wrong_column) != baseline,
+          "fixture failed to distinguish a wrong scan column")
+    check(resolve_filter(projection, 1, "values", dates)[0] == channel,
+          "planner mapping differs from install mapping")
 
     wide_bloom = Bloom.build(dates, 8)
     narrow_bloom = Bloom.build(dates, 4)
-    assert all(wide_bloom.allows(key) for key in dates)
-    assert any(narrow_bloom.slot(key, 4) not in wide_bloom.slots for key in dates)
+    check(all(wide_bloom.allows(key) for key in dates),
+          "built Bloom filter lost a build key")
+    check(any(narrow_bloom.slot(key, 4) not in wide_bloom.slots for key in dates),
+          "fixture failed to distinguish key encodings")
     # Incompatible source encoding must leave the scan unchanged and install
     # no predicate; the ordinary join still verifies membership and duplicates.
     fallback, fallback_channel, incompatible_apps, fallback_reason = filter_scan(
         rows, projection, 1, "bloom", wide_bloom
     )
-    assert fallback_reason == "incompatible-bloom-representation"
-    assert fallback_channel is None and incompatible_apps == 0
-    assert fallback == rows and matches(fallback) == baseline
+    check(fallback_reason == "incompatible-bloom-representation",
+          "unexpected incompatible Bloom decision")
+    check(fallback_channel is None and incompatible_apps == 0,
+          "incompatible Bloom reached the scan")
+    check(fallback == rows and matches(fallback) == baseline,
+          "Bloom fallback changed rows or matches")
 
     same_type_projection = [Projection(1, 32, 32), Projection(0, 32, 32)]
     compatible, compatible_channel, compatible_apps, compatible_reason = filter_scan(
         rows, same_type_projection, 1, "bloom", narrow_bloom
     )
-    assert compatible_reason == "installed-bloom" and compatible_channel == 0
-    assert compatible_apps == len(rows) and matches(compatible) == baseline
-    assert len(compatible) < len(rows)
+    check(compatible_reason == "installed-bloom" and compatible_channel == 0,
+          "compatible Bloom missed its input column")
+    check(compatible_apps == len(rows) and matches(compatible) == baseline,
+          "compatible Bloom changed join results or skipped rows")
+    check(len(compatible) < len(rows),
+          "compatible Bloom did not prune the fixture")
     return {
         "projection_source_channel": channel,
         "projection_scan_outputs": len(filtered),
@@ -128,11 +149,15 @@ def anti_and_projection_error_checks():
     scanned, channel, anti_apps, reason = filter_scan(
         rows, projection, 0, "values", build, join_kind="anti"
     )
-    assert scanned == rows and channel is None and anti_apps == 0
-    assert reason == "preserved-probe-side"
+    check(scanned == rows and channel is None and anti_apps == 0,
+          "anti join filtered its preserved probe side")
+    check(reason == "preserved-probe-side",
+          "wrong anti join fallback reason")
     anti_output = [row for row in scanned if row[0] is None or not build.get(row[0])]
-    assert anti_output == [(2,)]
-    assert [row for row in rows if row[0] in build] == []  # Unsafe positive filter.
+    check(anti_output == [(2,)],
+          "anti join lost its unmatched row")
+    check([row for row in rows if row[0] in build] == [],
+          "fixture failed to expose unsafe positive filtering")
 
     # This engine model eagerly evaluates the whole projection before joining.
     # The key widening is safe, but a different expression can throw on a row
@@ -141,8 +166,10 @@ def anti_and_projection_error_checks():
     preserved, _, error_apps, error_reason = filter_scan(
         error_rows, projection, 0, "values", build, projection_errors_safe=False
     )
-    assert preserved == error_rows and error_apps == 0
-    assert error_reason == "projection-error-semantics"
+    check(preserved == error_rows and error_apps == 0,
+          "projection error path lost rows")
+    check(error_reason == "projection-error-semantics",
+          "wrong projection fallback reason")
 
     def evaluate(scan_rows):
         try:
@@ -152,10 +179,12 @@ def anti_and_projection_error_checks():
         return "ok", [row for row in projected if row[0] in build]
 
     original_error = evaluate(error_rows)
-    assert original_error[0] == "error" and evaluate(preserved) == original_error
+    check(original_error[0] == "error" and evaluate(preserved) == original_error,
+          "candidate projection changed the original error")
     # Prove the fixture detects the tempting key-only rewrite hiding the error.
     unsafe_rows, _, unsafe_apps, _ = filter_scan(error_rows, projection, 0, "values", build)
-    assert unsafe_apps == 2 and evaluate(unsafe_rows) == ("ok", [(1, 7)])
+    check(unsafe_apps == 2 and evaluate(unsafe_rows) == ("ok", [(1, 7)]),
+          "fixture failed to expose masked conversion error")
     return {
         "anti_unmatched_output_rows": len(anti_output),
         "anti_filter_applications": anti_apps,
@@ -173,6 +202,34 @@ def join(sales, dates, preserve_probe=False):
         elif preserve_probe:
             result.append((sale, None))
     return result
+
+
+def late_filter_checks():
+    projection = [Projection(1, 32, 64)]
+    partial = {101: ("May 1",)}
+    complete = {**partial, 102: ("May 2", "May 2")}
+    before = [(1, 102), (2, 99)]
+    after = [(3, 99), (4, 101), (5, 102)]
+
+    early, channel, early_apps, reason = filter_scan(
+        before, projection, 0, "values", partial, build_complete=False
+    )
+    check(reason == "incomplete-build" and channel is None, "partial build installed a filter")
+    check(early == before and early_apps == 0, "early batch changed before filter readiness")
+    late, channel, late_apps, reason = filter_scan(
+        after, projection, 0, "values", complete, build_complete=True
+    )
+    check(channel == 1 and reason == "installed-values", "complete filter missed its scan column")
+    check(late == after[1:] and late_apps == len(after), "late batch did not filter key 99")
+
+    expected = Counter(join(before + after, complete))
+    actual = Counter(join(early + late, complete))
+    check(actual == expected and actual[(1, "May 2")] == 2, "late build lost an early match")
+    return {
+        "partial_build_filter_applications": early_apps,
+        "complete_build_filter_applications": late_apps,
+        "early_match_multiplicity": actual[(1, "May 2")],
+    }
 
 
 def candidates(sales, dates, preserve_probe=False):
@@ -197,20 +254,26 @@ def main():
         original_matches = Counter(join(sales, dates))
         filtered_matches = Counter(join(filtered, dates))
         false_negatives += sum((original_matches - filtered_matches).values())
-        assert original_matches == filtered_matches
+        check(original_matches == filtered_matches,
+              "integer widening changed joined rows")
         counts.append(len(filtered))
-    assert counts == [3, 2, 0]
+    check(counts == [3, 2, 0],
+          "unexpected scan output counts")
     outer_input = candidates(sales, date_sets[0], preserve_probe=True)
-    assert outer_input == sales
+    check(outer_input == sales,
+          "outer join filtered its preserved input")
     outer_result = Counter(join(outer_input, date_sets[0], preserve_probe=True))
-    assert outer_result[(1, None)] == 1 and outer_result[(5, None)] == 1
-    assert outer_result[(2, "May 1")] == 2
+    check(outer_result[(1, None)] == 1 and outer_result[(5, None)] == 1,
+          "outer join lost an unmatched or null-key row")
+    check(outer_result[(2, "May 1")] == 2,
+          "outer join lost duplicate matches")
     result = {
         "success": True, "false_negatives": false_negatives,
         "scan_outputs": counts, "outer_preserved_rows": len(outer_input),
     }
     result.update(projection_and_bloom_checks())
     result.update(anti_and_projection_error_checks())
+    result.update(late_filter_checks())
     out = Path(__file__).resolve().parent / "results/result.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(result) + "\n", encoding="utf-8")

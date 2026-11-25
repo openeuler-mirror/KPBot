@@ -10,10 +10,13 @@ def write_string(destination, offset, value):
         raise ValueError("output region outside buffer")
     view = memoryview(destination)
     if 16 <= len(value) <= 32:
-        view[offset:offset+16] = value[:16]
-        view[end-16:end] = value[-16:]
+        # Both loads must observe the source before either store aliases it.
+        head = bytes(value[:16])
+        tail = bytes(value[-16:])
+        view[offset:offset+16] = head
+        view[end-16:end] = tail
         return "fixed"
-    view[offset:end] = value
+    view[offset:end] = bytes(value)
     return "generic"
 
 
@@ -91,7 +94,21 @@ def main():
                     exact_capacity_cases += suffix==0
                     nonzero_offset_cases += source_offset>0 and target_offset>0
     check((boundary_cases,exact_capacity_cases,nonzero_offset_cases)==(88,44,22), "boundary-counts")
+    shared_buffer_cases = 0
+    for size in (15, 16, 17, 20, 31, 32, 33):
+        source_offset = size + 1
+        for shift in (-size, -1, 0, 1, size):
+            target_offset = source_offset + shift
+            buffer = bytearray(range(3 * size + 2))
+            before = bytes(buffer)
+            source = memoryview(buffer)[source_offset:source_offset + size]
+            write_string(buffer, target_offset, source)
+            expected = (before[:target_offset] + before[source_offset:source_offset + size]
+                        + before[target_offset + size:])
+            check(bytes(buffer) == expected, "shared-buffer-copy", length=size, shift=shift)
+            shared_buffer_cases += 1
     result = {"success":not failures,"tested_lengths":tested_lengths,
+              "shared_buffer_cases":shared_buffer_cases,
               "fixed_copy_lengths":fixed_copy_lengths,"rejected_writes":rejected_writes,
               "boundary_cases":boundary_cases,"exact_capacity_cases":exact_capacity_cases,
               "nonzero_offset_cases":nonzero_offset_cases,"outside_regions_unchanged":outside_unchanged,

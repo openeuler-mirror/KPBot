@@ -61,3 +61,15 @@ assert:
     file: results/result.json
     field: projection_error_filter_applications
     expect: 0
+  - type: json_field
+    file: results/result.json
+    field: partial_build_filter_applications
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: complete_build_filter_applications
+    expect: 3
+  - type: json_field
+    file: results/result.json
+    field: early_match_multiplicity
+    expect: 2
