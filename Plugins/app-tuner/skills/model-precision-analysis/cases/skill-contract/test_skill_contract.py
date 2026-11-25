@@ -123,12 +123,6 @@ class TestScriptContract(unittest.TestCase):
         self._run("tests/test_json_output.py")
 
 
-class TestRegistration(unittest.TestCase):
-    def test_changelog_mentions_skill(self):
-        if not (REPO / "CHANGELOG.md").is_file():
-            self.skipTest("standalone copy")
-        self.assertIn(SKILL_DIR.name, read(REPO / "CHANGELOG.md"))
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

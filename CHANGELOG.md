@@ -4,9 +4,6 @@
 
 ## [Unreleased]
 
-### Changed
-- app-tuner 标准化 `model-precision-analysis`：补回 `license`/`metadata`；新增 `--json`/`--out` 结构化精度结果（accuracy、status_flip、regressions、verdict、exit_code，供 CI 与 validation_plan 消费，退出码 0/1/2 语义不变）；`evals/evals.json` 统一为 `eval_name`+`assertions`，补标准触发评估集 `evals/trigger_eval.json` 与 tier-A 契约用例 `cases/skill-contract`（抽取 31 + 端到端 12 + JSON 输出 8）。
-
 ### Added
 - app-tuner 新增 `vllm-eplb-optimization` skill：vLLM P/D 分离部署的 MoE 专家负载均衡(EPLB)配置与收益验证。`off`/`dynamic`/`force` 三态确定性切换（拒绝 D 节点模板、合并既有 `--additional-config` JSON 不新增第二个 flag、幂等、时间戳备份、同目录原子写入、写后 `bash -n` 与目标态逐项校验、`--dry-run` 只打 diff 不落盘）；`--mode check` 只读诊断；冗余专家比例分析（比例、每 rank 增量、显存占用与可负担上限，`--strict` 可做部署前门控）；可消费 `vllm-eplb-analysis` 的 handoff 参数，没有不均衡证据时不默认开 dynamic；验证侧给出「不均衡长前缀数据集 + off/dynamic/force 三组对照 + 4 轮剔首轮」口径；附机制参考 `references/eplb-algorithm.md`、tier-A 用例 `cases/skill-contract`（契约 12 项 + 脚本行为 38 项）与触发评估集 `evals/`
 - app-tuner 新增 `kptools-tpsplit-check` skill：TP→DP 扩容可行性测算（单卡显存约束）。按「全卡复制 / TP 切分 / EP 切分 / 额外」四桶拆解权重（MTP 层与普通层同规则），扫描候选 TP 做单卡容量校验与 DP 扩容收益测算，输出 9 段固定结构报告（md+json，数字全部带来源标记）；可用口径优先级 日志 Desired > 日志权重+KV+Total 反推开销 > 总显存×util−保留，KV/token 优先日志实测反推；EP 组按实例 TP×DP 推断（缺 DP 标未知并告警）；「当前 DP」一律用 facts 实测 DP_SIZE（不拿集群容量反推冒充实测）；参数 diff 的 `--data-parallel-size` 填组内 DP 并单列集群布局（多组×组内 DP）；PP>1 按最重流水线阶段核算每卡权重；缺 max_model_len / 分片不完整 / 缺层数 / 缺可用口径一律降级为 unknown+「缺关键输入」告警而非给出 ok 建议或误报「不可行」；采集端只读（命令行白名单脱敏 `--api-key`、数值从指标短语后提取防时间戳污染、并发数保留小数、输出与卡号无关的 NPU 别名键与 EP_GROUP_SIZE、docker exec 参数独立传递防注入、赋值与参数值剥成对单/双引号，facts 值带引号不再当缺失）；附 `scripts/collect_env.sh` + `scripts/analyze_feasibility.py`（--selftest 42 项回归，报告写临时目录不弄脏工作区）、tier-A 契约用例 `cases/skill-contract`（断言自测全绿与工作区干净，产物不入库）与触发评估集 `evals/`（负例含对 kptools-tpsplit-log-analysis 的互路由）
