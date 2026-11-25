@@ -49,7 +49,7 @@
       "id": "q-not-env-check",
       "prompt": "看看这台机器环境齐不齐，能不能跑 nexmark",
       "should_trigger": false,
-      "note": "环境裁决 → flink-velox-env-check 统筹"
+      "note": "环境裁决 → 规划中的统筹检查 skill（未合入）"
     }
   ]
 }

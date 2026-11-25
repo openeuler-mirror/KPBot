@@ -10,9 +10,12 @@ The fixed calibre (only numbers taken at the same calibre compare):
   1e8 events, 5e7 tps, blackhole sink (the queries bring their own DDL) and a warmup
   pass, defined once in conf/nexmark-bench.yaml. The file is swapped in as
   $NEXMARK_HOME/conf/nexmark.yaml for the duration of a run and the original is
-  restored afterwards — also on failure or interrupt. parallelism.default and
-  pipeline.object-reuse are set per cell in the config file Flink actually reads
-  (flink-conf.yaml when both exist, else config.yaml) and restored the same way.
+  restored afterwards — also on failure or interrupt. A backup is published atomically
+  (completed in a same-directory temporary, then renamed in), a lock file beside each
+  conf keeps a concurrent run off the same pair, and a restore only counts when the
+  conf reads back byte-identical. parallelism.default and pipeline.object-reuse are
+  set per cell in the config file Flink actually reads (flink-conf.yaml when both
+  exist, else config.yaml) and restored the same way.
   Total slots (workers x taskmanager.numberOfTaskSlots) must cover the largest
   requested parallelism, or the run is refused before anything is touched.
 
@@ -31,15 +34,26 @@ Usage:
 Evidence lands in <project>/e2e/perf/native/ by default (the working directory is the
 project root): qNN.p<P>.r0.out (the metrics table, object-reuse=false),
 qNN.p<P>.r1.out (object-reuse=true, only with --object-reuse) and *.submit.log
-beside each — the evidence tree is refreshed in place across runs. Only data, no
-verdicts: rows whose events count differs from the requested calibre are marked not
-comparable; the interpretation stays with the reader.
+beside each — the evidence tree is refreshed in place across runs. Every evidence
+path carries the --out rule at write time: one that already exists as a symlink or a
+non-regular file (a fifo would block the write after a whole cell's benchmark) fails
+the cell instead of being written through. A cell whose runner times out leaves
+whatever it printed until then as its *.submit.log and has its cluster job cancelled
+best-effort over REST (the jobs still RUNNING since the cell started; the outcome is
+recorded either way); one whose runner never started leaves none. Failed and not-run
+cells keep the full runs[] key set (runner_exit / metrics / comparable as None /
+None / false). Only data, no verdicts: rows whose events count differs from the
+requested calibre, or whose time / throughput is missing, are marked not comparable;
+the interpretation stays with the reader.
 
 Exit codes: plan 0 / 2 refused (a blocked prerequisite, a bad --out, bad options);
 run 0 every cell done, 1 a cell failed (the report says which; rerun after fixing,
-the matrix resumes), 2 refused; 2 on a tool abort (the confs are still restored).
+the matrix resumes), 2 refused (a blocked prerequisite, a bad --out — or a live run
+lock on the same confs); 2 on a tool abort (confs_restored then reports what was
+actually verified).
 """
 import argparse
+import contextlib
 import datetime
 import glob
 import http.client
@@ -69,6 +83,7 @@ CONF_FILES = ('flink-conf.yaml', 'config.yaml')  # Flink 1.19 reads flink-conf.y
 GLUTEN_JARS = ('gluten', 'velox')  # a jar whose name carries one of these means not the native side
 REST_KEYS = ('rest.address', 'rest.port')
 BACKUP_SUFFIX = '.flink-velox-perf.bak'
+LOCK_SUFFIX = '.flink-velox-perf.lock'
 RESULTS_BANNER = 'Nexmark Results'
 DEFAULT_PARALLELISM = (1, 4, 8, 16)
 DEFAULT_TIMEOUT = 3600  # one cell: warmup plus 1e8 events; a stuck cell must not hang the matrix
@@ -83,8 +98,8 @@ def now():
 def load_flink_conf(conf_path):
     """Flatten the one conf file Flink reads — config.yaml (nested maps) or
     flink-conf.yaml (flat dotted keys) — without a YAML dependency. Scalar leaves
-    only. Flink 1.19 ships config.yaml nested ('rest:' / 'port: 8159'); the older
-    flink-conf.yaml form is flat ('rest.port: 8159'); both flatten to dotted keys."""
+    only. Flink 1.19 ships config.yaml nested ('rest:' / 'port: 8081'); the older
+    flink-conf.yaml form is flat ('rest.port: 8081'); both flatten to dotted keys."""
     conf = {}
     if not conf_path or not os.path.isfile(conf_path):
         return conf
@@ -183,6 +198,56 @@ def rest_alive(address, port, timeout=3):
                 pass
 
 
+def rest_call(conn, method, path):
+    """One request on an open connection: (status, the parsed JSON body or None)."""
+    conn.request(method, path)
+    resp = conn.getresponse()
+    body = resp.read()
+    try:
+        return resp.status, json.loads(body.decode('utf-8', errors='replace'))
+    except ValueError:
+        return resp.status, None
+
+
+def cancel_running_jobs(address, port, since_ms, timeout=5):
+    """Best-effort cancel of the cluster jobs a timed-out cell left behind: every job
+    still RUNNING that started after a point in time (the cell's start, with a little
+    skew allowance) is PATCHed to /jobs/<jid>/cancel over the derived REST endpoint.
+    Returns (cancelled, problem): the cancelled jobs as '<jid> (<name>)' and why the
+    cancelling failed when it did. A REST that is unreachable or refuses is reported
+    as-is, never fatal — the cell has already failed on the timeout."""
+    conn = None
+    cancelled, problem = [], None
+    try:
+        conn = http.client.HTTPConnection(address, port, timeout=timeout)
+        status, overview = rest_call(conn, 'GET', '/jobs/overview')
+        if not 200 <= status < 300 or not isinstance(overview, dict):
+            return [], 'REST /jobs/overview answered %s' % status
+        for job in overview.get('jobs') or []:
+            if job.get('state') != 'RUNNING':
+                continue
+            try:
+                if int(job.get('start-time')) < since_ms:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            jid = str(job.get('jid') or '')
+            status, _ = rest_call(conn, 'PATCH', '/jobs/%s/cancel' % jid)
+            if 200 <= status < 300:
+                cancelled.append('%s (%s)' % (jid, job.get('name') or '?'))
+            else:
+                problem = problem or 'REST answered %s for %s' % (status, jid)
+    except (OSError, http.client.HTTPException) as exc:
+        return cancelled, problem or 'REST %s:%s: %s' % (address, port, exc)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return cancelled, problem
+
+
 def fixed_conf_text(address, port):
     """The fixed benchmark conf with the cluster's own REST endpoint in it."""
     with open(FIXED_CONF, encoding='utf-8') as fh:
@@ -214,11 +279,13 @@ def parse_list(value, pattern, what):
     return items
 
 
-def command_line(opts, sub, yes=False, sudo=False):
+def command_line(opts, sub, yes=False):
     """The command for the options that were actually reviewed, ready to copy: interpreter and
-    the path of this script included (it is neither on PATH nor in the working directory)."""
-    parts = ['sudo'] if sudo else []
-    parts += ['python3', shlex.quote(SCRIPT), sub] + (['--yes'] if yes else [])
+    the path of this script included (it is neither on PATH nor in the working directory).
+    Root is never suggested: who may write the confs is the user's to arrange (the installing
+    owner, or an admin adjusting owner/permissions), and a privileged rerun would need its own
+    plan -> consent round anyway — no --yes is ever pre-filled for another identity."""
+    parts = ['python3', shlex.quote(SCRIPT), sub] + (['--yes'] if yes else [])
     for flag in ('flink-home', 'nexmark-home', 'queries', 'parallelism', 'timeout', 'evidence-dir'):
         key = flag.replace('-', '_')
         if key in opts['explicit']:
@@ -252,6 +319,9 @@ def probe(opts):
     if not os.path.isfile(conf):
         findings.append(blocked('no config file under %s/conf (flink-conf.yaml / config.yaml)' % flink_home,
                                 'install Flink or point --flink-home elsewhere'))
+    conf_link = link_problem(conf)  # a conf and its backup path must both be regular files
+    if conf_link:
+        findings.append(blocked(*conf_link))
     foreign = foreign_jars(flink_home)
     if foreign:
         findings.append(blocked(
@@ -263,8 +333,8 @@ def probe(opts):
     if os.path.isfile(conf):
         if not os.access(conf, os.W_OK):
             findings.append(blocked('cannot write %s' % conf,
-                                    'run as a user who can, or: %s'
-                                    % command_line(opts, 'run', yes=True, sudo=True)))
+                                    'run as a user who can write it (e.g. the installing owner), '
+                                    'or have an admin adjust the conf owner/permissions, then rerun'))
         address, port = rest_endpoint(conf)
         state['rest'] = {'address': address, 'port': port}
         tms, per_tm, total = slot_count(flink_home, conf)
@@ -285,13 +355,16 @@ def probe(opts):
                                 'or point --nexmark-home at it'))
     else:
         nexmark_conf = os.path.join(nexmark_home, 'conf', 'nexmark.yaml')
+        nexmark_link = link_problem(nexmark_conf)
         if not os.path.isfile(nexmark_conf):
             findings.append(blocked('no conf/nexmark.yaml under %s' % nexmark_home,
                                     'complete the nexmark tree first'))
+        elif nexmark_link:
+            findings.append(blocked(*nexmark_link))
         elif not os.access(nexmark_conf, os.W_OK):
             findings.append(blocked('cannot write %s' % nexmark_conf,
-                                    'run as a user who can, or: %s'
-                                    % command_line(opts, 'run', yes=True, sudo=True)))
+                                    'run as a user who can write it (e.g. the installing owner), '
+                                    'or have an admin adjust the conf owner/permissions, then rerun'))
         elif leftover_state(nexmark_conf) == 'gone':
             findings.append(blocked(
                 '%s holds this skill\'s benchmark conf and the original backup is gone '
@@ -337,6 +410,93 @@ def backup_path(path):
     return path + BACKUP_SUFFIX
 
 
+def lock_path(path):
+    return path + LOCK_SUFFIX
+
+
+def pid_alive(pid):
+    return os.path.isdir('/proc/%d' % pid)
+
+
+def lock_holder(lock):
+    """The pid a lock file names, or None when it carries nothing readable (a live
+    holder always writes its pid; an unreadable lock is a crashed writer's)."""
+    try:
+        with open(lock, encoding='utf-8', errors='replace') as fh:
+            lines = fh.read().splitlines()
+        return int(lines[0].split()[0]) if lines and lines[0].split() else None
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def take_lock(path, changes):
+    """The run lock beside a conf, taken for the whole leftover-repair + swap +
+    restore window: a second run on the same installation must not mistake the
+    first one's live backups for crash leftovers and restore them mid-flight.
+    O_CREAT|O_EXCL — when the lock exists, its holder decides: a live pid refuses
+    the run (exit 2), a dead one is a crashed run's leftover, replaced and recorded
+    (unlink first, so a lock that is itself a link is removed, never written
+    through). plan never locks: it only reads."""
+    lock = lock_path(path)
+    text = '%d %s\n' % (os.getpid(), now())
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            holder = lock_holder(lock)
+            if holder is not None and pid_alive(holder):
+                return None, ('another run (pid %d) holds the lock: %s' % (holder, lock),
+                              'wait for it to finish and restore the confs, then rerun')
+            os.unlink(lock)
+            changes.append({'action': 'stale lock replaced',
+                           'detail': '%s (holder pid %s not alive)' % (lock, holder)})
+            continue
+        try:
+            os.write(fd, text.encode('utf-8'))
+        finally:
+            os.close(fd)
+        return lock, None
+
+
+@contextlib.contextmanager
+def _no_interrupts():
+    """A critical section for undoing or restoring the confs: SIGINT/SIGTERM are
+    held off until it completes, so a second interrupt cannot land between the two
+    files and turn a true 'restored' into a guess. A signal that arrives here is
+    dropped in favour of finishing the restore."""
+    held = {}
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            held[sig] = signal.signal(sig, signal.SIG_IGN)
+        except (OSError, ValueError):
+            pass
+    try:
+        yield
+    finally:
+        for sig, handler in held.items():
+            try:
+                signal.signal(sig, handler)
+            except (OSError, ValueError):
+                pass
+
+
+def link_problem(path):
+    """Why nothing may be swapped at this conf path, or None. A conf that is a symbolic link
+    is never written through: the swap would edit the link's target and the restore would
+    replace the link itself, leaving the target modified and the link destroyed. A backup
+    path that is a link is never renamed into place either: the conf path would become a
+    link to an arbitrary file. Such states are refused for the user to sort out by hand."""
+    if os.path.islink(path):
+        return ('%s is a symbolic link; this skill swaps and restores the conf itself, '
+                'never through a link' % path,
+                'use a regular file, or have the conf owner swap it by hand, then rerun plan')
+    bak = backup_path(path)
+    if os.path.islink(bak):
+        return ('%s is a symbolic link; it is never renamed into place' % bak,
+                'check the link by hand and remove it, then rerun plan')
+    return None
+
+
 def leftover_state(path):
     """The state a conf is in after a crashed run: 'gone' (the file holds our conf and
     the backup is lost — not recoverable, refuse), 'backup' (the original is in the
@@ -351,9 +511,11 @@ def leftover_state(path):
 
 def repair_leftover(path):
     """Put the original back when a previous run left its backup behind. Probing never
-    calls this: plan touches nothing, the repair happens in run before anything else."""
+    calls this: plan touches nothing, the repair happens in run before anything else.
+    A backup that is a symbolic link is never renamed — run_all refuses such a state
+    before the repair loop; this guard keeps the rename safe on its own."""
     bak = backup_path(path)
-    if os.path.isfile(bak):
+    if os.path.isfile(bak) and not os.path.islink(bak):
         os.replace(bak, path)
         return True
     return False
@@ -370,12 +532,28 @@ def file_matches_skill_conf(path):
 
 
 def backup_file(path, bak):
-    """Copy a conf to its backup with an exclusive create: a directory at the backup
-    path, or a backup that somehow already exists, is an error and not a silent copy
-    into that directory (shutil.copy2 would happily do that and the restore would
-    then quietly skip — the user's conf would be the one lost)."""
-    with open(path, 'rb') as src, open(bak, 'xb') as dst:
-        dst.write(src.read())
+    """Copy a conf to its backup, atomically: the copy is completed in a
+    same-directory temporary (<bak>.tmp-<pid>), flushed to disk and only then renamed
+    into place — an interrupt or a full disk mid-copy can never leave a half backup
+    behind that the next run would restore over the good conf. A backup that
+    somehow already exists (a directory included) is still an error and not a
+    silent replacement (shutil.copy2 would happily copy into a directory there and
+    the restore would then quietly skip — the user's conf would be the one lost)."""
+    if os.path.lexists(bak):
+        raise FileExistsError('backup already exists: %s' % bak)
+    tmp = '%s.tmp-%d' % (bak, os.getpid())
+    try:
+        with open(path, 'rb') as src, open(tmp, 'xb') as dst:
+            shutil.copyfileobj(src, dst)
+            dst.flush()
+            os.fsync(dst.fileno())
+        os.replace(tmp, bak)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     shutil.copystat(path, bak)
 
 
@@ -413,14 +591,18 @@ def set_conf_key_lines(lines, key, value):
 
 
 class ConfSwap:
-    """Swap the two confs for the duration of a run and restore them afterwards, whatever happens.
-    Leftovers of a previous crashed run are repaired first (the backups are restored on enter)."""
+    """Swap the two confs for the duration of a run and restore them afterwards,
+    whatever happens. Leftovers of a previous crashed run are repaired first by
+    run_all (under the run lock, before entering). A restore only counts when the
+    conf reads back byte-identical to its backup; anything else lands in
+    not_restored and the receipt says so."""
 
     def __init__(self, flink_conf, nexmark_conf, address, port, changes):
         self.flink_conf, self.nexmark_conf = flink_conf, nexmark_conf
         self.text = fixed_conf_text(address, port)
         self.changes = changes
         self.entered = False
+        self.not_restored = []
 
     def __enter__(self):
         backed_up = []
@@ -432,9 +614,11 @@ class ConfSwap:
                                      'detail': '%s -> %s' % (path, backup_path(path))})
             with open(self.nexmark_conf, 'w', encoding='utf-8') as fh:
                 fh.write(self.text)
-        except Exception:  # a crash half-way in: undo the backups already taken, report nothing swapped
-            for path in backed_up:
-                os.replace(backup_path(path), path)
+        except BaseException:  # a crash half-way in: undo the backups already taken
+            # (nothing has been swapped yet), the undo itself uninterruptible
+            with _no_interrupts():
+                for path in backed_up:
+                    self._put_back(path, record=False)
             raise
         self.changes.append({'action': 'swapped in',
                              'detail': 'the fixed benchmark conf -> %s' % self.nexmark_conf})
@@ -452,14 +636,36 @@ class ConfSwap:
         with open(self.flink_conf, 'w', encoding='utf-8') as fh:
             fh.writelines(lines)
 
+    def _put_back(self, path, record=True):
+        """One restore step, verified: read the backup, move it into place, read the
+        conf back — only a byte-identical conf counts as restored. A missing backup
+        (consumed by something else) or a failed verify leaves the conf swapped and
+        named in not_restored."""
+        bak = backup_path(path)
+        if not os.path.isfile(bak):
+            self.not_restored.append(path)
+            return
+        try:
+            with open(bak, 'rb') as fh:
+                original = fh.read()
+            os.replace(bak, path)
+            with open(path, 'rb') as fh:
+                back = fh.read()
+        except OSError:
+            self.not_restored.append(path)
+            return
+        if back != original:
+            self.not_restored.append(path)
+            return
+        if record:
+            self.changes.append({'action': 'restored', 'detail': '%s -> %s' % (bak, path)})
+
     def __exit__(self, *exc):
         if not self.entered:
             return False
-        for path in (self.flink_conf, self.nexmark_conf):
-            bak = backup_path(path)
-            if os.path.isfile(bak):
-                os.replace(bak, path)
-                self.changes.append({'action': 'restored', 'detail': '%s -> %s' % (bak, path)})
+        with _no_interrupts():  # the restore, once started, runs to the end
+            for path in (self.flink_conf, self.nexmark_conf):
+                self._put_back(path)
         return False
 
 
@@ -509,21 +715,63 @@ def evidence_paths(evidence_dir, query, par, reuse):
             os.path.join(evidence_dir, tag + '.submit.log'))
 
 
-def run_cell(record, opts, swap):
+def evidence_problem(path):
+    """Why an evidence file may not be written, or None — the --out rule, per file
+    and at write time: a symlink is never written through (an arbitrary file beyond
+    it would receive the whole table), a non-regular file is never opened (a fifo
+    would block the write after a whole cell's benchmark, hanging the matrix)."""
+    if os.path.lexists(path):
+        if os.path.islink(path):
+            return '%s is a symbolic link; evidence is never written through a link' % path
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return '%s exists and is not a regular file (a fifo would block the write)' % path
+    return None
+
+
+def run_cell(record, opts, swap, rest):
     """Submit one cell to the cluster and capture its table. Returns True when the cell is done."""
     query, par, reuse = record['query'], record['parallelism'], record['object_reuse']
     table_path, log_path = evidence_paths(opts['evidence_dir'], query, par, reuse)
     record.update(table=table_path, submit_log=log_path)
+    problems = [p for p in (evidence_problem(table_path), evidence_problem(log_path)) if p]
+    if problems:  # never write through a link, never open a fifo: the cell fails before the runner
+        record.update(status='failed',
+                      detail='; '.join(problems)
+                      + ' — replace it with a regular file (or remove it), then rerun')
+        return False
     swap.set_flink(par, reuse)
     record['flink'] = {'parallelism.default': par, 'pipeline.object-reuse': reuse}
     runner = os.path.join(opts['nexmark_home'], 'bin', 'run_query.sh')
     started = time.monotonic()
+    started_wall = time.time()
     try:
         proc = subprocess.run([runner, 'oa', query], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               timeout=opts['timeout'], env=dict(os.environ, FLINK_HOME=opts['flink_home']))
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        # the runner is dead but its output so far is evidence too: drop it as this cell's
+        # submit.log (partial is better than nothing) and point the detail at what landed;
+        # the job it submitted may live on — cancel what is still RUNNING since this
+        # cell started, and say how that went either way
+        detail = 'the runner did not finish within %ss' % opts['timeout']
+        if exc.output:
+            os.makedirs(opts['evidence_dir'], exist_ok=True)
+            with open(log_path, 'wb') as fh:
+                fh.write(exc.output)
+            detail = '%s — see %s' % (detail, log_path)
+        else:
+            detail = '%s (no runner output captured before the timeout)' % detail
+        cancelled, problem = cancel_running_jobs(rest['address'], rest['port'],
+                                                 int((started_wall - 2) * 1000))
+        if problem:
+            detail = ('%s; the cluster job could not be cancelled over REST (%s) — it may '
+                      'still be running, cancel it by hand (the web UI or "flink cancel")'
+                      % (detail, problem))
+        elif cancelled:
+            detail = '%s; cancelled the cluster job(s) over REST: %s' % (detail, ', '.join(cancelled))
+        else:
+            detail = '%s; no RUNNING cluster job found since this cell started' % detail
         record.update(status='failed', duration_s=round(time.monotonic() - started, 1),
-                      detail='the runner did not finish within %ss' % opts['timeout'])
+                      detail=detail)
         return False
     except KeyboardInterrupt:  # SIGINT / SIGTERM: this cell is interrupted, the confs still restore
         record.update(status='failed', duration_s=round(time.monotonic() - started, 1),
@@ -558,12 +806,19 @@ def run_cell(record, opts, swap):
         return False
     row = mine[0]
     record['metrics'] = row
-    record['comparable'] = row['events_num'] == CALIBRE_EVENTS
-    record['status'] = 'done'
+    missing = []
+    if row['events_num'] != CALIBRE_EVENTS:
+        missing.append('events differ from the calibre')
+    if not row['time_s'] or row['time_s'] <= 0:
+        missing.append('time is not a positive number')
+    if row['throughput'] is None:
+        missing.append('throughput missing from the table')
+    record['comparable'] = not missing  # a row off the calibre or without its key
+    record['status'] = 'done'           # metrics is not a comparable measurement
     record['detail'] = ('%d events in %ss, %s events/s'
                         % (row['events_num'], row['time_s'], row['throughput'])
                         + ('' if record['comparable']
-                           else ' — events differ from the calibre, not comparable'))
+                           else ' — %s, not comparable' % ', '.join(missing)))
     return True
 
 
@@ -619,30 +874,64 @@ def run_all(opts, yes):
                                 '--yes is the record of their consent)', 'plan first, then add --yes')]), 2
 
     matrix = cells(opts)
-    runs = [{'query': q, 'parallelism': p, 'object_reuse': ru, 'status': 'pending'}
+    # every run entry carries the full runs[] key set from the start (bench-table.md §6):
+    # a failed or never-attempted cell reports runner_exit=None / metrics=None /
+    # comparable=False instead of dropping the keys a consumer expects
+    runs = [{'query': q, 'parallelism': p, 'object_reuse': ru, 'status': 'pending',
+             'runner_exit': None, 'metrics': None, 'comparable': False}
             for q, p, ru in matrix]
     changes = []
     rest = state['rest']
     nexmark_conf = os.path.join(opts['nexmark_home'], 'conf', 'nexmark.yaml')
+    # probe and run can be a blink apart: re-check the conf and backup paths before anything
+    # is touched, so a conf turned into a link in the meantime is still refused untampered
     for path in (state['effective_conf'], nexmark_conf):
-        if repair_leftover(path):
-            changes.append({'action': 'restored',
-                            'detail': '%s -> %s (leftover from a crashed run)' % (backup_path(path), path)})
-    interrupted = [None]
-
-    try:
-        with ConfSwap(state['effective_conf'], nexmark_conf, rest['address'], rest['port'], changes) as swap:
+        problem = link_problem(path)
+        if problem:
+            return refused('run', opts, state, [blocked(*problem)]), 2
+    # the leftover repair and the whole swap window run under a lock beside each conf:
+    # a concurrent run must not restore this run's in-flight backups as leftovers
+    locks, lock_refusal = [], None
+    for path in (state['effective_conf'], nexmark_conf):
+        lock, refusal = take_lock(path, changes)
+        if lock:
+            locks.append(lock)
+        if refusal:
+            lock_refusal = blocked(*refusal)
+            break
+    if lock_refusal:
+        for lock in locks:
             try:
-                for record in runs:
-                    if not run_cell(record, opts, swap):
-                        break
-            except KeyboardInterrupt:
-                interrupted[0] = 'a cell was interrupted (SIGINT / SIGTERM)'
-                for record in runs:
-                    if record['status'] == 'pending' and 'detail' not in record:
-                        record['detail'] = interrupted[0]
-    except KeyboardInterrupt:
-        interrupted[0] = interrupted[0] or 'interrupted before the confs were swapped in'
+                os.unlink(lock)
+            except OSError:
+                pass
+        return refused('run', opts, state, [lock_refusal]), 2
+    interrupted = [None]
+    swap = ConfSwap(state['effective_conf'], nexmark_conf, rest['address'], rest['port'], changes)
+    try:
+        for path in (state['effective_conf'], nexmark_conf):
+            if repair_leftover(path):
+                changes.append({'action': 'restored',
+                                'detail': '%s -> %s (leftover from a crashed run)' % (backup_path(path), path)})
+        try:
+            with swap:
+                try:
+                    for record in runs:
+                        if not run_cell(record, opts, swap, rest):
+                            break
+                except KeyboardInterrupt:
+                    interrupted[0] = 'a cell was interrupted (SIGINT / SIGTERM)'
+                    for record in runs:
+                        if record['status'] == 'pending' and 'detail' not in record:
+                            record['detail'] = interrupted[0]
+        except KeyboardInterrupt:
+            interrupted[0] = interrupted[0] or 'interrupted before the confs were swapped in'
+    finally:
+        for lock in locks:  # held until the restore is done and verified
+            try:
+                os.unlink(lock)
+            except OSError:
+                pass
 
     for record in runs:
         if record['status'] == 'pending' and not record.get('detail'):
@@ -656,9 +945,16 @@ def run_all(opts, yes):
         error = '%s p=%d failed' % (failed[0]['query'], failed[0]['parallelism'])
     elif not_run:
         error = '%d cell(s) not run' % len(not_run)
-    result = base_result('run', opts, state, runs, changes, not failed and not not_run and not interrupted[0],
-                         error, next_step_for('run', [], matrix, opts, runs), True)
-    return result, 1 if (failed or interrupted[0] or not_run) else 0
+    confs_restored = not swap.not_restored  # per the verified state, not the happy path
+    if swap.not_restored:
+        error = ('%s; ' % error if error else '') + 'confs NOT restored: %s' % ', '.join(swap.not_restored)
+    next_step = next_step_for('run', [], matrix, opts, runs)
+    if swap.not_restored:
+        next_step = 'restore the conf(s) named in the error by hand, then rerun plan'
+    result = base_result('run', opts, state, runs, changes,
+                         not failed and not not_run and not interrupted[0] and confs_restored,
+                         error, next_step, confs_restored)
+    return result, 1 if (failed or interrupted[0] or not_run or not confs_restored) else 0
 
 
 def aborted(exc, command, opts):
