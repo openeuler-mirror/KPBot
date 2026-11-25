@@ -1,0 +1,21 @@
+{
+  "skill_name": "kptools-tpsplit-check",
+  "queries": [
+    {"id": "SQ-01", "query": "TP32 能不能切小成 TP8 多开 DP 实例，单卡显存够不够", "should_trigger": true},
+    {"id": "SQ-02", "query": "160 张卡怎么分配，扩容前先测算一下显存预算", "should_trigger": true},
+    {"id": "SQ-03", "query": "帮我出一份 TP 拆分的可行性分析报告，先别动集群", "should_trigger": true},
+    {"id": "SQ-04", "query": "单卡 KV cache 还能放多少 token，权重按 TP/EP 怎么分片", "should_trigger": true},
+    {"id": "SQ-05", "query": "MTP 和激活各占多少显存，做下单卡显存归因", "should_trigger": true},
+    {"id": "SQ-14", "query": "TP16 和 TP8 哪个更合适？把两个候选都测算一遍再决定", "should_trigger": true},
+    {"id": "SQ-15", "query": "这个集群还能再扩几个 DP 实例？先算算单卡显存预算", "should_trigger": true},
+    {"id": "SQ-16", "query": "切 TP 前帮我确认 EP 组整除关系和 MTP 层的显存占用", "should_trigger": true},
+    {"id": "SQ-06", "query": "按上次可行性报告的结论，把集群直接改成 TP8 部署拉起来", "should_trigger": false, "route_to": "kpbot-app-tuner"},
+    {"id": "SQ-07", "query": "查一下 NPU 健康状态和 HBM 使用率，跑压测前确认设备没问题", "should_trigger": false, "route_to": "kptools-ascend-smi"},
+    {"id": "SQ-08", "query": "采集 profiling 看下算子瓶颈在哪", "should_trigger": false, "route_to": "kptools-ascend-profiling"},
+    {"id": "SQ-09", "query": "专家负载不均衡，做下 EPLB 分析", "should_trigger": false, "route_to": "vllm-eplb-analysis"},
+    {"id": "SQ-10", "query": "跨机集合通信很慢，查一下网络链路", "should_trigger": false, "route_to": "kptools-network-collector"},
+    {"id": "SQ-11", "query": "把压测日志里的 [TTFT][BREAKDOWN] 行解析成 TTFT 拆解表，看 queue_wait/step_other 各占多少", "should_trigger": false, "route_to": "kptools-tpsplit-log-analysis"},
+    {"id": "SQ-12", "query": "TTFT breakdown 里的 save_kv/load_kv 恒 0，帮我解析打点日志回填真实值", "should_trigger": false, "route_to": "kptools-tpsplit-log-analysis"},
+    {"id": "SQ-13", "query": "切分之后的收益复盘：从 KVXFER/SHM_DEQUEUE 日志统计各阶段耗时出表", "should_trigger": false, "route_to": "kptools-tpsplit-log-analysis"}
+  ]
+}

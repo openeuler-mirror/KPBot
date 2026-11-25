@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "code-optimizer",
-      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel）、VSAG HGraph RaBitQ 并发查询批处理优化、PyTorch embedding lookup 流水线的并行 unique 自定义算子优化（__gnu_parallel::sort + OpenMP、TORCH_LIBRARY）、OpenZL 压缩框架调优（熵 codec 根表/位流优化、熵选型、无损逐字节验证 + unitBench 基准协议）、分配路径优化、DPDK 数据面热路径代码优化（瓶颈建模 + 杠杆库 + 交错 A/B 验证）、热点路径机制开销消除和算子微内核、调优器与代码生成（SME 小 M GEMM 读取融合、退化轴诊断、生成期语义分支、多线程接入、参数贯通、硬件能力守卫），覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构、Agent 记忆系统与图数据库后端优化（以 Graphiti + Neo4j 为标定案例：三段归因、解码与水合下沉、载荷瘦身、读路径扩展；方法可迁移到 Zep/Mem0 等记忆框架与 pgvector/Qdrant 等后端，杠杆按客户端运行时分档）",
+      "description": "鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，支持向量化、汇编优化、预取、分支消除、循环展开、访存优化、编译选项调优，以及 TensorFlow 纯 CPU 推理优化（图优化 + 自定义 fused kernel）、VSAG HGraph RaBitQ 并发查询批处理优化、PyTorch embedding lookup 流水线的并行 unique 自定义算子优化（__gnu_parallel::sort + OpenMP、TORCH_LIBRARY）、OpenZL 压缩框架调优（熵 codec 根表/位流优化、熵选型、无损逐字节验证 + unitBench 基准协议）、分配路径优化、DPDK 数据面热路径代码优化（瓶颈建模 + 杠杆库 + 交错 A/B 验证）、热点路径机制开销消除和算子微内核、调优器与代码生成（SME 小 M GEMM 读取融合、退化轴诊断、生成期语义分支、多线程接入、参数贯通、硬件能力守卫），覆盖 Kunpeng-0xd01/0xd03/0xd06 微架构、Agent 记忆系统与图数据库后端优化技能族（20 个可独立使用的 skill：负载冻结与缓存回放、三段归因、瓶颈建模、7 个分层杠杆、矩阵复测与负结果；以 Graphiti + Neo4j 为标定案例，可迁移到其他记忆框架与图/向量后端）",
       "author": {
         "name": "Kunpeng Acceleration Team"
       },

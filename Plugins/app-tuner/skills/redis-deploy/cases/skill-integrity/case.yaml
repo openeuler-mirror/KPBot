@@ -1,0 +1,68 @@
+# 用例：tier A — redis-deploy skill 的完整性契约
+#
+# 覆盖（checks.py）：
+#   1. SKILL.md frontmatter：name 与目录一致、description 非空、长度/字符合法
+#   2. SKILL.md / references 中引用的 references/*.md、scripts/*、assets/* 均存在
+#   3. 默认版本固定为 7.0.15，且 assets/checksums.txt 保留官方 sha256
+#   4. 配置/单元模板保留占位符；安装脚本用 REDISCLI_AUTH 而非 redis-cli -a
+#   5. 关键安全纪律锚点仍在语料中：
+#      默认 7.0.15、sha256 校验、密码文件、非回环 bind 门禁、loopback 默认、
+#      protected-mode、deploy.env 契约、只读前置检查、回滚、离线 tarball、
+#      危险操作警告、构建目录 0700；文档不得出现强制递归删除命令，
+#      预检不得使用 bash TCP 伪设备探测；安装脚本必须保留路径归一化、
+#      mktemp 构建目录与 --no-same-owner 解压校验
+#   6. evals/evals.json 结构完整且至少 4 条用例
+#   7. 敏感内容扫描（私网 IP、凭据字面量、个人 home 路径）
+#
+# 运行（在 skill 根目录下）：
+#   bash cases/skill-integrity/run.sh
+#   # 产物 cases/skill-integrity/results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A，仅依赖 python3 标准库；不需要真实 Redis 环境。
+
+name: skill-integrity
+skill: redis-deploy
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: links_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: scripts_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: assets_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: anchors_found
+    op: gte
+    expect: 10
+  - type: json_field
+    file: results/result.json
+    field: evals_checked
+    op: gte
+    expect: 4
+  - type: json_field
+    file: results/result.json
+    field: sensitive_findings
+    expect: 0

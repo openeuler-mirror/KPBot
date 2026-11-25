@@ -1,0 +1,80 @@
+{
+  "skill_name": "nebula-test-verification",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我刚给 Nebula 3.8.0 打了一个 BFS 容器优化补丁，重新编译了 graphd/storaged。请设计一套验证方案：先证明功能没坏，再证明性能真的提升。数据是 LDBC SF100，部署为 1 metad + 4 graphd + 4 storaged。不要执行命令。",
+      "expected_output": "先做构建验证（产物/符号/md5/commit）；功能侧跑 ctest、TCK（如可用）、nGQL 冒烟（GO1/2/3、MATCH、LOOKUP、FETCH、GET SUBGRAPH、INSERT 回读、FSP 已知点对逐路径比对、不可达点对空结果）、数据计数对账；性能侧先重置到同一备份并预热，用 k6/NebulaGraph-Bench 五场景同口径跑基线（旧二进制）和候选（新二进制），每轮≥3 次，记录 QPS/成功率/p50/p99/CPU/客户端状态；A/B 只改二进制变量，差异<5%视为无显著变化；功能失败直接否决；报告记录身份、口径、结果、判定与回滚命令。",
+      "files": [],
+      "expectations": [
+        "先验证构建产物身份（md5/commit/符号）",
+        "功能验证覆盖 ctest/TCK 与 nGQL 冒烟",
+        "FSP 要逐路径比对，并验证不可达点对返回空集",
+        "写入验证在隔离 Space 做 INSERT→回读→UPDATE→DELETE",
+        "性能对比前重置同一备份并预热，两腿只改二进制",
+        "每场景≥3 轮，报告 QPS/成功率/p50/p99/CPU，而非只报一个 QPS",
+        "明确功能失败直接否决，不以性能放行",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我要在单机 1 metad + 8 graphd + 4 storaged 上跑 LDBC SF100 五场景压测。客户端有 192 个逻辑核可用，服务端用 0-191。请给出 k6 部署方式、场景参数、绑核、指标采集和结果判读方法。不要执行命令。",
+      "expected_output": "用多个 k6 进程（如 8 个）一一对应直连 8 个 graphd，避免单 k6 + 全局 pool 单例或 LB 单点；k6 绑 192-383（每个 24 核左右），服务端绑 0-191；场景按 Go1/Go2/Go3/FSP/Insert 给 VU 与时长建议（Go1 100-200、Go2 100-400、Go3 16-100、FSP 50-100、Insert 50-200，60-120s），Go2/Go3 可加 LIMIT 100 避免客户端解码瓶颈；采集 iterations/s、checks、latency、responseTime、p50/p99、服务端/客户端 CPU、连接数、磁盘；结果按场景分列，多 k6 QPS 相加、成功率取最小、p99 取最差；每轮前重置数据，记录环境与二进制身份。",
+      "files": [],
+      "expectations": [
+        "使用多个 k6 进程各连一个 graphd，解释单 k6/LB 的问题",
+        "k6 与服务端分 NUMA/分核绑核",
+        "给出五场景的 VU/时长参考而非一个统一值",
+        "指出 Go2/Go3 返回行数大时客户端可能先瓶颈，可用 LIMIT 并注明口径",
+        "指标包含 QPS、成功率、latency/responseTime、分位数、服务端/客户端 CPU",
+        "多 k6 结果如何汇总（QPS 相加、成功率取最小、p99 取最差）",
+        "要求每轮重置数据并记录二进制/环境身份",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "压测 Go2Step 时 QPS 只有 6K 左右，k6 进程 CPU 接近绑核上限，但服务端 graphd/storaged CPU 不高。加 VU 也没用。请判断瓶颈并给出排查/修正方案。",
+      "expected_output": "判断为客户端瓶颈：k6 CPU 打满、iteration_duration 远大于 responseTime、Go2 返回行数大导致 CSV/JS 解码成本超过服务端。修正：增加 k6 进程/核、减少返回列、在语句后加 LIMIT（保持服务端遍历扇出）或改用聚合查询；确认服务端连接数和 CPU 是否真的低；对比加 LIMIT 前后的 QPS/延迟并注明口径。不要通过继续加 VU 解决。",
+      "files": [],
+      "expectations": [
+        "判断是客户端先瓶颈，而不是服务端",
+        "依据是 k6 CPU 打满、iteration_duration vs responseTime、服务端 CPU 不高",
+        "给出加 k6 进程/核、减少返回列、加 LIMIT 或聚合查询等方案",
+        "说明 LIMIT 不改变服务端遍历扇出但降低客户端解码",
+        "指出继续加 VU 无效，可能只增加排队",
+        "要求改口径后重新对比并记录是否 LIMIT"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "两次压测结果：基线 QPS 189,679，候选 191,245，p99 从 2,621us 到 2,650us，成功率都 100%。另一场景候选 QPS 下降 8%。团队有人建议合并提交。请判断是否可以认定整体有效，并说明下一步。",
+      "expected_output": "不能整体认定有效：Go1 场景提升约 0.8%，在 5% 噪声带内，应视为无显著差异；p99 略升；另一个场景下降 8% 是明确劣化。需要分场景判定：Go1 无效/持平，下降 8% 的场景劣化，必须回滚或定位原因；检查两腿口径/数据/环境是否一致，重测确认；只有在所有目标场景不劣化且至少一个场景显著提升时才可保留。不能用一个场景的微小提升掩盖另一个场景的回退。",
+      "files": [],
+      "expectations": [
+        "指出 0.8% 提升在噪声带内，不能算显著",
+        "指出另一场景 -8% 是劣化，必须处理",
+        "要求分场景判定，而不是只看总和/单场景",
+        "要求核对两腿口径、数据、环境并重测确认",
+        "结论：不能直接合并；劣化场景回滚或定位后再评估",
+        "强调不能用一个场景的微小提升掩盖另一个场景的回退"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "smoke_test.sh 的负例用例（桩 console 驱动，不连真实集群）：1) LOOKUP_VALUE 含纯换行（值=$'Tim\\nDROP SPACE ldbc_bench#'，拆出的两行都不含引号/反斜杠/分号）；2) NEBULA_VID_TYPE=INT（大写非精确值）+ EXPECT_PERSON=9.33。两个输入分别以 NEBULA_CONSOLE_WRAPPER 指向桩 console（记录 argv 与收到的语句）执行，预期行为分别是什么？",
+      "expected_output": "两个输入都在校验阶段 exit 2，不执行任何查询，桩 console 不会被调用（argv/语句记录为空）。1) 纯换行值被 lit_dq 的整串白名单拒绝：grep -z 不按行切分、[:space:] 覆盖换行，错误消息为 LOOKUP_VALUE 含引号/反斜杠/任意空白（含换行/回车）/分号——修复前 grep 按行匹配会放行该值，模板在换行处断成两条语句，console 第二行收到 DROP SPACE；2) NEBULA_VID_TYPE 大小写敏感枚举仅认 int|string，INT 走 BAD_INPUT 分支 exit 2——修复前 vid_ok/vid_lit 互补口径让 INT 放行 9.33 且不加引号，非法 VID 被发往 console。",
+      "files": [
+        "scripts/smoke_test.sh"
+      ],
+      "expectations": [
+        "指出两例均应 exit 2 且不发出任何查询（校验先于执行）",
+        "解释纯换行注入的原理与整串匹配（grep -z/[:space:] 含换行）的拦截方式",
+        "指出 NEBULA_VID_TYPE 枚举仅 int|string、大小写敏感",
+        "说明修复前的两个漏网路径（按行 grep 放行换行值；vid_ok/vid_lit 互补反）",
+        "没有真实执行破坏性语句"
+      ]
+    }
+  ]
+}
