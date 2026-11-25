@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # extract_metric_pd.sh - vLLM PD split cluster dual-pool (P/D) simultaneous load metrics collection (v2, 30 data-column spec)
 # One run simultaneously samples all nodes in both P and D pools in the same round, producing two v2-spec CSVs with aligned timestamps
 # Usage: ./extract_metric_pd.sh <sampling duration (seconds)> <p_urls file> <d_urls file>

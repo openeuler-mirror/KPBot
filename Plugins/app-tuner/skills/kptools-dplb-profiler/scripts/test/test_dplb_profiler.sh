@@ -60,6 +60,13 @@ echo "== 0. 语法检查 =="
 for s in extract_metric_v2.sh extract_metric_pd.sh extract_metric_single.sh lbprof_common.sh; do
     if "$BASH_BIN" -n "$SCRIPTS/$s" 2>/dev/null; then pass "$s syntax"; else fail "$s syntax"; fi
 done
+
+# 首字节断言：所有可执行脚本必须以 "#!" 开头（无 UTF-8 BOM / 无前导空白）。
+# 部署侧按 SKILL.md 以 ./xxx.sh / nohup ./xxx.sh 方式执行（走 shebang）；首字节若是
+# BOM（EF BB BF）则 execve 报 ENOEXEC，nohup 直接 Exec format error，PD 采集整链断掉。
+for s in extract_metric_v2.sh extract_metric_pd.sh extract_metric_single.sh lbprof_common.sh extract_metric_prom.py; do
+    check "$s 首两字节为 #!（无 BOM）" "$(head -c 2 "$SCRIPTS/$s")" "#!"
+done
 if awk -f "$SCRIPTS/lbprof_common.awk" </dev/null 2>/dev/null; then pass "lbprof_common.awk syntax"; else fail "lbprof_common.awk syntax"; fi
 for p in extract_metric_prom.py; do
     if "$PY_BIN" -c "import ast,sys; ast.parse(open(sys.argv[1],encoding='utf-8').read())" "$SCRIPTS/$p" 2>/dev/null; then
@@ -165,7 +172,10 @@ echo "== 2. pd.sh：P/D 数组分离 + 空池校验 =="
 cd "$TMP" || exit 1
 printf 'http://127.0.0.1:59991/metrics\nhttp://127.0.0.1:59992/metrics\n' > p_urls.txt
 printf 'http://127.0.0.1:59993/metrics\nhttp://127.0.0.1:59994/metrics\nhttp://127.0.0.1:59995/metrics\n' > d_urls.txt
-"$BASH_BIN" "$SCRIPTS/extract_metric_pd.sh" 2 p_urls.txt d_urls.txt > pd_run.log 2>&1
+# 冒烟直接执行（chmod +x 后经 shebang 而非 bash <script>）：shebang 失效（如 BOM）时
+# 本用例即刻暴露，不再被显式指定解释器的调用方式绕过
+chmod +x "$SCRIPTS/extract_metric_pd.sh"
+"$SCRIPTS/extract_metric_pd.sh" 2 p_urls.txt d_urls.txt > pd_run.log 2>&1
 P_CSV=$(ls dp_load_metrics_P_*.csv 2>/dev/null | head -1)
 D_CSV=$(ls dp_load_metrics_D_*.csv 2>/dev/null | head -1)
 if [ -n "$P_CSV" ] && [ -n "$D_CSV" ]; then
@@ -197,6 +207,26 @@ check "pd-inject: 注入 payload 未执行（无 pwned 文件）" "$(ls "$TMP/pw
 printf 'http://x";$(id);"\n' > d_inject2.txt
 "$BASH_BIN" "$SCRIPTS/extract_metric_pd.sh" 1 p_ok.txt d_inject2.txt > inject2.log 2>&1
 check "pd-inject: 命令替换形态同样拒绝" "$?" "1"
+
+echo "== 2c. v2/single：节点不可达时回退行与表头列数一致（33/22，评审修复回归） =="
+# 历史缺陷：公共库把「总列数」当「回退行 -1 个数」，回退行比表头多 2 列（35/24）。
+# 以不可达端口端到端跑一轮，断言 CSV 每行（表头 + 回退行）NF 与表头列数一致。
+printf 'http://127.0.0.1:59991/metrics\n' > "$TMP/dead_urls.txt"
+mkdir -p "$TMP/v2_dead" "$TMP/single_dead"
+(cd "$TMP/v2_dead" && "$BASH_BIN" "$SCRIPTS/extract_metric_v2.sh" 1 "$TMP/dead_urls.txt" > v2_dead.log 2>&1)
+V2_DEAD_CSV=$(cd "$TMP/v2_dead" && ls dp_load_metrics_*.csv 2>/dev/null | head -1)
+if [ -n "$V2_DEAD_CSV" ]; then
+    check "v2: 不可达回退行与表头同为 33 列" "$(awk -F, '{print NF}' "$TMP/v2_dead/$V2_DEAD_CSV" | sort -u | tr '\n' ' ')" "33 "
+else
+    fail "v2: 不可达场景未产出 CSV（见 $TMP/v2_dead/v2_dead.log）"
+fi
+(cd "$TMP/single_dead" && "$BASH_BIN" "$SCRIPTS/extract_metric_single.sh" 1 "$TMP/dead_urls.txt" > single_dead.log 2>&1)
+SINGLE_DEAD_CSV=$(cd "$TMP/single_dead" && ls dp_load_metrics_*.csv 2>/dev/null | head -1)
+if [ -n "$SINGLE_DEAD_CSV" ]; then
+    check "single: 不可达回退行与表头同为 22 列" "$(awk -F, '{print NF}' "$TMP/single_dead/$SINGLE_DEAD_CSV" | sort -u | tr '\n' ' ')" "22 "
+else
+    fail "single: 不可达场景未产出 CSV（见 $TMP/single_dead/single_dead.log）"
+fi
 
 echo "== 3. single.sh：TPOT 新指标名 + 负 queue 修正（avg 口径，公共库 lbprof_parse_row_legacy） =="
 sed -n '/^lbprof_parse_row_legacy()/,/^}$/p' "$SCRIPTS/lbprof_common.sh" > "$TMP/parse_row_single.sh"

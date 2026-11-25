@@ -83,15 +83,18 @@ lbprof_check_args_single() {
 }
 
 # 单池采样循环（v2 / single 共用的唯一实现）：
-#   $1=采样时长秒  $2=采样间隔秒  $3=输出文件  $4=回退行数据列数（v2=33 / single=22）
+#   $1=采样时长秒  $2=采样间隔秒  $3=输出文件  $4=CSV 总列数（v2=33 / single=22，含
+#   timestamp、ip_port 两列，与调用方写出的表头列数一致；库内统一减 2 换算成回退
+#   行的 -1 个数，调用方不再自行换算，避免把总列数当数据列数多拼 2 个 -1）
 #   $5=单行解析函数名  $6=完成消息后缀（可空）
 # 依赖全局：URLS/TAGS（lbprof_load_urls 加载）、CURL_TIMEOUT。
 # 时序语义：每轮以 ROUND_TS（轮询发起时刻）为 timestamp——见 SKILL.md「采集产物契约」。
 lbprof_poll_loop() {
   local duration="$1" interval="$2" out="$3" ncols="$4" parser="$5" done_msg="$6"
   local start now elapsed left rounds=0 round_ts body last i fallback
+  # 回退行 = timestamp,ip_port + (ncols-2) 个 -1，列数与表头一致
   fallback=""
-  for ((i = 0; i < ncols; i++)); do fallback="${fallback},-1"; done
+  for ((i = 0; i < ncols - 2; i++)); do fallback="${fallback},-1"; done
   start=$(date +%s)
   while :; do
     now=$(date +%s)
