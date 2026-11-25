@@ -1,0 +1,27 @@
+# llvm-mca-visualize 安全护栏：输出覆盖、cflags 注入、CPU 身份、parse 失败
+#
+# 运行（在 skill 根目录）：
+#   bash cases/safety-guards/run.sh
+# 不需要 patched llvm-mca（全部在预检/编译/解析前失败）。
+
+name: safety-guards
+skill: llvm-mca-visualize
+tier: A
+image: host-runtime
+
+entrypoint: ["bash", "cases/safety-guards/run.sh"]
+
+env_requires:
+  - python3（标准库）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0

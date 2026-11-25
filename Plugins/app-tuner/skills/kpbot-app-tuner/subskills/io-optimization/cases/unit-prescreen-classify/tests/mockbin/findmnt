@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# mock findmnt — 供 collect_io_evidence.sh 消费（脚本内已过滤 /dev/ 前缀）。
+echo "/dev/mapper/openeuler-root ext4 rw,relatime,seclabel,stripe=32 /"
+echo "/dev/nvme0n1p1 vfat rw,relatime /boot/efi"
+echo "tmpfs tmpfs rw,nosuid /dev/shm"
+echo "nsfs[net:[4027031429]] nsfs rw /run/netns/ns-8047"

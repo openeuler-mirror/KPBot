@@ -8,12 +8,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "Plugins/app-tuner/skills/kpbot-app-tuner"
 
 # These subskills are intentionally not part of the coverage pass:
-# - io-memory-network-bottleneck-analysis is a pre-screen
+# - io-optimization is a pre-screen
 # - database-workload-analysis is nested under application-config-optimization
 # - vllm-ascend-profiling is nested under accelerator-optimization
 # - ceph-optimization hands OS-layer findings to os-optimization
 NON_COVERAGE_SUBSKILLS = {
-    "io-memory-network-bottleneck-analysis",
+    "io-optimization",
     "database-workload-analysis",
     "vllm-ascend-profiling",
     "ceph-optimization",

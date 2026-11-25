@@ -13,14 +13,14 @@ SUBSKILL_CATALOG = {
     "bios-optimization": "candidate-bios",
     "os-optimization": "candidate-os",
     "compiler-optimization": "candidate-compiler",
-    "microservice-go-syncpool-optimization": "candidate-microservice-go-syncpool",
     "accelerator-optimization": "candidate-accelerator",
     "hardware-upgrade-analysis": "candidate-hardware-upgrade",
     "other-optimization": "candidate-other",
-    "io-memory-network-bottleneck-analysis": "candidate-bottleneck-prescreen",
+    "io-optimization": "candidate-bottleneck-prescreen",
     "database-workload-analysis": "candidate-database-workload",
     "vllm-ascend-profiling": "candidate-vllm-ascend-profiling",
     "ceph-optimization": "candidate-ceph",
+    "uadk-accelerator-optimization": "candidate-uadk",
 }
 
 # vllm-ascend-profiling 的 Stage-1 环境基线在派发指令中显式下发，
@@ -41,7 +41,6 @@ MAIN_OPTIMIZATION_SUBSKILLS = [
     "cpu-affinity-optimization",
     "network-optimization",
     "compiler-optimization",
-    "microservice-go-syncpool-optimization",
     "os-optimization",
     "bios-optimization",
     "accelerator-optimization",
@@ -201,6 +200,13 @@ CEPH_TOKENS = (
     "mon_", "mgr_", "pgmap", "objecter",
 )
 
+UADK_TOKENS = (
+    "aes", "sm4", "sm3", "sha1", "sha256", "sha512", "md5", "hmac", "des",
+    "3des", "rsa", "evp_encrypt", "evp_decrypt", "deflate", "inflate",
+    "compress", "uncompress", "gzip", "zlib", "uadk", "libwd", "hisi_sec",
+    "hisi_hpre", "hisi_zip", "wd_",
+)
+
 
 def is_network_hotspot(item):
     category = str(item.get("category", item.get("domain", ""))).lower()
@@ -224,27 +230,15 @@ def is_ceph_hotspot(item):
     return any(token in haystack for token in CEPH_TOKENS)
 
 
-GO_SYNCPOOL_TOKENS = (
-    "runtime.mallocgc",
-    "runtime.gcdrain",
-    "sync.(*pool).getslow",
-    "sync.(*pool).pin",
-    "sync.(*pool).get",
-    "sync.(*pool).put",
-    "sync.poolcleanup",
-    "runtime.poolcleanup",
-)
-
-
-def is_go_syncpool_hotspot(item):
+def is_uadk_hotspot(item):
     category = str(item.get("category", item.get("domain", ""))).lower()
-    if category in {"go_runtime", "go_syncpool", "gc"}:
+    if category in {"crypto", "compression", "uadk"}:
         return True
     haystack = " ".join(
         str(item.get(key, "")).lower()
         for key in ("symbol", "function", "name", "dso", "module")
     )
-    return any(token in haystack for token in GO_SYNCPOOL_TOKENS)
+    return any(token in haystack for token in UADK_TOKENS)
 
 
 def add_candidate(candidates, subskill_name, priority, reason, source_signal, evidence_path):
@@ -510,36 +504,21 @@ def evidence_driven_candidates(summary, summary_path, args):
             summary_path,
         )
 
-    go_pool_percent = sum(
+    uadk_percent = sum(
         as_float(item.get("percent", item.get("samples_pct", item.get("overhead_pct"))))
         for item in function_rank
-        if is_go_syncpool_hotspot(item)
+        if is_uadk_hotspot(item)
     )
-    heap = summary.get("heap", summary.get("heap_summary", {}))
-    if not isinstance(heap, dict):
-        heap = {}
-    alloc_space = as_float(heap.get("alloc_space", heap.get("alloc_space_bytes")))
-    inuse_space = as_float(heap.get("inuse_space", heap.get("inuse_space_bytes")))
-    heap_churn = bool(
-        heap.get("alloc_space_high")
-        or heap.get("inuse_space_low")
-        or (alloc_space > 0 and inuse_space > 0 and alloc_space >= inuse_space * 2)
-    )
-    go_pool_threshold = getattr(args, "go_syncpool_hotspot_threshold", 3.0)
-    if (
-        go_pool_percent >= go_pool_threshold
-        or detected.get("go_syncpool_signal")
-        or detected.get("go_gc_pool_signal")
-        or (heap_churn and go_pool_percent > 0)
-    ):
+    if uadk_percent >= args.uadk_hotspot_threshold or detected.get("crypto_compression_hotspot"):
         add_candidate(
             candidates,
-            "microservice-go-syncpool-optimization",
+            "uadk-accelerator-optimization",
             "high",
-            f"Go sync.Pool/GC hotspot total {go_pool_percent:.2f}% (heap_churn={heap_churn})",
-            "go_syncpool_gc_hotspot",
+            f"crypto/compression hotspot total reached {uadk_percent:.2f}%",
+            "crypto_compression_hotspot",
             summary_path,
         )
+
     icache_miss_pct = as_float(topdown.get("l1_icache_miss_pct", topdown.get("icache_miss_pct")))
     icache_high = bool(topdown.get("icache_miss_high") or topdown.get("l1_icache_miss_high") or detected.get("l1_icache_miss_high"))
     if icache_miss_pct >= args.icache_miss_threshold or icache_high:
@@ -796,7 +775,7 @@ def main():
     parser.add_argument("--third-party-hotspot-threshold", type=float, default=5.0, help="Percent threshold for high hotspot third-party library")
     parser.add_argument("--network-hotspot-threshold", type=float, default=3.0, help="Percent threshold for network-related hotspot functions")
     parser.add_argument("--ceph-hotspot-threshold", type=float, default=3.0, help="Percent threshold for ceph/osd-related hotspot functions")
-    parser.add_argument("--go-syncpool-hotspot-threshold", type=float, default=3.0, help="Percent threshold for Go sync.Pool/GC hotspot functions")
+    parser.add_argument("--uadk-hotspot-threshold", type=float, default=0.5, help="Percent threshold for crypto/compression hotspot functions")
     parser.add_argument("--icache-miss-threshold", type=float, default=5.0, help="Percent threshold for L1 icache miss")
     parser.add_argument("--l3-miss-threshold", type=float, default=5.0, help="Percent threshold for L3/LLC cache miss")
     parser.add_argument("--context-switch-threshold", type=float, default=1000.0, help="Context-switches per second threshold")

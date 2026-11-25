@@ -3,9 +3,9 @@
 大数据**框架层**的性能调优：Spark / Flink 在 ARM（鲲鹏）上的参数推荐、资源计算与基准执行协议；
 后续可扩展到 Hive / ClickHouse / Doris / Kafka 等组件。
 
-## 现状：知识存在，但没有独立 skill
+## 现状：知识存在，独立 skill 起步
 
-本域目前**没有可独立安装的 skill**，大数据相关内容全部寄生在 `kpbot-app-tuner` 主框架的子技能里，
+除下方成员表中的子域外，大数据相关内容全部寄生在 `kpbot-app-tuner` 主框架的子技能里，
 不随 `install.sh` 安装（`subskills/` 不单独安装），也没有独立的 review 归属：
 
 | 位置 | 内容 |
@@ -24,6 +24,13 @@
    不是单机 OS 层（OS/BIOS/绑核 → app-tuner 其他域）也不是业务 SQL 改写；
 2. 带**可复现的 benchmark 口径**（数据集、查询集如 TPC-DS 的规模因子、并发、SLA 指标）；
 3. 有环境检测与候选命令输出的分离（推荐器模式：先出 JSON 候选动作，再由主框架安全门控执行）。
+
+## 成员
+
+| 成员 | 定位 |
+|---|---|
+| [`flink-velox-env/`](flink-velox-env/DOMAIN.md) | 子域：Flink + GlutenFlink（velox 向量化栈）环境检查家族——具体项检查子 skill 各自独立安装与触发，统筹 skill 按目标（build / native）聚合并给出唯一 next_step；只扫不改，是本域安装/构建/验证类 skill 的共同前置裁决点，详见其 DOMAIN.md |
+| [`flink-velox-install/`](flink-velox-install/DOMAIN.md) | 子域：Flink + GlutenFlink 环境的安装部署家族（动作类，`plan` 默认只打印、`apply --yes` 才执行、`verify` 复查）——构建环境准备、Flink 运行时与 nexmark 安装、GlutenFlink 构建编译部署、切栈重启，成员分 PR 提交；是 `flink-velox-env` 检查家族各项修复动作的执行者，详见其 DOMAIN.md |
 
 ## 与其它域的边界
 

@@ -1,0 +1,4 @@
+# Redis 源码包 sha256 清单（版本 <空格> sha256）
+# 来源: https://github.com/redis/redis-hashes
+# 新增版本时先核对官方发布页，再按 "版本 sha256" 追加一行。
+7.0.15 98066f5363504b26c34dd20fbcc3c957990d764cdf42576c836fc021073f4341

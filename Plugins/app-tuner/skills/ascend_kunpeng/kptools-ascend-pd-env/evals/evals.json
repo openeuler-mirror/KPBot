@@ -14,6 +14,12 @@
       "files": []
     },
     {
+      "id": 6,
+      "prompt": "同一台机器上的 vllm-p 是 P，vllm-d 是 D。两侧环境分别留档，不要对比。",
+      "expected_output": "从父 skill 打开 subskills/collect-environment/SKILL.md。确认本地 Docker 端点后分别为 P 和 D 调用 collect_role.sh，使用不同输出目录；不把两个容器传给默认命令，不生成对比报告。",
+      "files": []
+    },
+    {
       "id": 3,
       "prompt": "这是上周那台机器的采集包，和现在这台比一下 CANN 和 torch_npu 版本。",
       "expected_output": "把历史包路径和当前容器名一起传给 collect.sh，从 对比结果.json 或报告里取 CANN版本、驱动版本、torch_npu 包版本三项的两侧取值并说明是否一致；包读取失败时报告退出码 1 并说明哪个包没读进来。",
@@ -24,6 +30,12 @@
       "prompt": "容器里 HCCL 的环境变量两边是不是设得不一样？",
       "expected_output": "运行采集后在 进程环境变量 和 Docker配置环境变量 两个分类里找 HCCL_* / ASCEND_* 项，列出仅单侧存在或取值不同的变量；单边存在要算作差异而不是忽略；不编造变量名和取值。",
       "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "只剩旧 P 和新 P 的对比结果（subskills/summarize-environment-findings/evals/fixtures/p-history.json），原包已经清理，其他组没跑。把已有结果汇总到报告里。",
+      "expected_output": "选择汇总子 skill，引用现有结果并保留 CANN 版本变化；其他组标为未执行，不再查原始包或运行比较器。",
+      "files": ["subskills/summarize-environment-findings/evals/fixtures/p-history.json"]
     }
   ]
 }

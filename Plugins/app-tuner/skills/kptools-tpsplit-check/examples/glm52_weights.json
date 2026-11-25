@@ -1,0 +1,10 @@
+{
+  "model": "GLM-5.2-W4A8",
+  "mla": true,
+  "num_hidden_layers": 78,
+  "replicated_gib": 3.98,
+  "tp_gib": 9.60,
+  "ep_gib": 362.35,
+  "extra_gib": 6.40,
+  "note": "GLM5.2 W4A8 参考分桶（引自用户提供的估算）。rep=norm/router/MLA降维投影；tp=attention主干+embedding/lm_head+dense MLP；ep=路由专家(W4A8打包字节)；extra=未归类复制量(手工估算的MTP等残余/量化scale，按每卡复制保守处理；自动分桶时 MTP 层走正常 tp/ep 规则，不进此桶)。TP32: 3.98+9.60/32+362.35/32+6.40=22.00 GiB/卡；TP8: 22.90 GiB/卡（+0.9，不是x4）"
+}

@@ -1,0 +1,51 @@
+name: shuffle-contract
+skill: sql-shuffle-string-codec
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: tested_lengths
+    expect: 65
+  - type: json_field
+    file: results/result.json
+    field: rejected_writes
+    expect: 2
+  - type: json_field
+    file: results/result.json
+    field: fixed_copy_lengths
+    expect: 17
+  - type: json_field
+    file: results/result.json
+    field: boundary_cases
+    expect: 88
+  - type: json_field
+    file: results/result.json
+    field: exact_capacity_cases
+    expect: 44
+  - type: json_field
+    file: results/result.json
+    field: nonzero_offset_cases
+    expect: 22
+  - type: json_field
+    file: results/result.json
+    field: outside_regions_unchanged
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: source_regions_unchanged
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failure_count
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: []

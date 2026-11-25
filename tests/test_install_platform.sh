@@ -18,6 +18,12 @@ INSTALLER="$ROOT/install.sh"
 TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/kpbot-install-test.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 
+# Python launcher: prefer python3, fall back to python (Windows Git Bash has no python3 alias)
+PY3="python3"
+if ! "$PY3" -c 'import sys; sys.exit(0)' >/dev/null 2>&1; then
+    PY3="python"
+fi
+
 pass=0
 fail=0
 
@@ -79,7 +85,7 @@ check_agentenv_package() {
         check "$name functional validation guide resolves" \
             '[ -r "$skills/$name/references/functional-validation.md" ]'
         check "$name benchmark checker works" \
-            'python3 "$skills/$name/scripts/check_benchmark_output.py" --help >/dev/null'
+            '"$PY3" "$skills/$name/scripts/check_benchmark_output.py" --help >/dev/null'
         check "$name case supervisor resolves" \
             '[ -r "$skills/$name/scripts/agent_case_supervisor.py" ]'
         if [ "$name" = "agentenv-cluster-tlbi" ]; then
@@ -94,22 +100,85 @@ check_agentenv_package() {
         '! bash "$skills/kptools-agentenv-tuning/scripts/collect_environment.sh" --output "$TMPROOT" >/dev/null 2>&1'
 }
 
+check_pdenv_package() {
+    local skills="$1"
+    local source="$ROOT/Plugins/app-tuner/skills/ascend_kunpeng/kptools-ascend-pd-env"
+    local parent="$skills/kptools-ascend-pd-env"
+    local source_skill name
+    check "installs P/D environment entry at skill root" '[ -f "$parent/SKILL.md" ]'
+    check "installs P/D summary subskill" \
+        '[ -r "$parent/subskills/summarize-environment-findings/SKILL.md" ]'
+    for source_skill in "$source"/subskills/*/SKILL.md; do
+        [ -f "$source_skill" ] || continue
+        name="$(basename "$(dirname "$source_skill")")"
+        check "keeps P/D $name inside the parent skill" \
+            'cmp -s "$source_skill" "$parent/subskills/$name/SKILL.md" && [ ! -e "$skills/$name" ]'
+    done
+}
+
+check_cubesandbox_split() {
+    local skills="$1"
+    local skill
+    for skill in \
+        cubesandbox-bench-preflight cubesandbox-bench-prepare \
+        cubesandbox-template-create-bench cubesandbox-density-bench \
+        cubesandbox-snapshot-bench cubesandbox-dirty-page-bench \
+        cubesandbox-snapshot-create-bench cubesandbox-rollback-bench \
+        cubesandbox-clone-bench cubesandbox-pause-resume-bench; do
+        check "installs $skill with executable entry" \
+            '[ -f "$skills/$skill/SKILL.md" ] && [ -x "$skills/$skill/scripts/run.sh" ]'
+    done
+    check "installs shared CubeSandbox focused executor" \
+        '[ -f "$skills/cubesandbox-lifecycle-bench/scripts/cubesandbox_skill.py" ]'
+    check "installed focused entry expands its fixed section" \
+        '"$skills/cubesandbox-density-bench/scripts/run.sh" --repo /mock/CubeSandbox --dry-run 2>&1 | grep -Fq "[density / batch4]"'
+    check "installed focused entry rejects section escape" \
+        '! "$skills/cubesandbox-density-bench/scripts/run.sh" --repo /mock/CubeSandbox --dry-run --sections all >/dev/null 2>&1'
+    check "installed prepare entry can render prepare-only approval" \
+        '"$skills/cubesandbox-bench-prepare/scripts/run.sh" --show-plan --repo /mock/CubeSandbox --template-id tpl-confirmed --numa-node 0 --tap-evidence aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2>&1 | grep -q "operation.*prepare"'
+}
+
+check_sandbox_profile_install() {
+    local skills="$1"
+    local spec skill case_name
+    check "installs sandbox profile workflow" '[ -f "$skills/sandbox-timeline-profile/SKILL.md" ]'
+    check "sandbox workflow entry resolves after flattening" 'bash "$skills/sandbox-timeline-profile/scripts/run_profile_workflow.sh" --help >/dev/null'
+    check "sandbox interpretation reference survives install" '[ -r "$skills/sandbox-timeline-profile/references/interpretation.md" ]'
+    check "stage-analysis interpretation link resolves after flattening" \
+        'grep -Fq "(../sandbox-timeline-profile/references/interpretation.md)" "$skills/sandbox-stage-latency-analyze/SKILL.md" && [ -r "$skills/sandbox-stage-latency-analyze/../sandbox-timeline-profile/references/interpretation.md" ]'
+    for spec in \
+        sandbox-profile-evidence-collect:collect-external-workload \
+        sandbox-stage-latency-analyze:analyze-and-reject-bad-logs \
+        sandbox-timeline-svg-render:render-json-csv \
+        sandbox-profile-report:reuse-analysis; do
+        skill=${spec%%:*}
+        case_name=${spec#*:}
+        check "installs $skill" '[ -f "$skills/$skill/SKILL.md" ]'
+        check "installs $skill independent tier-A case" '[ -f "$skills/$skill/cases/$case_name/run.sh" ]'
+        check "$skill entry resolves shared implementation" 'bash "$skills/$skill/scripts/run.sh" --help >/dev/null'
+    done
+}
+
 echo "== claude mode =="
 run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
 check "installs code-optimizer skills"        '[ -d "$CLAUDE_SKILLS/kpbot-code-optimizer" ]'
 check "installs app-tuner skills"             '[ -d "$CLAUDE_SKILLS/kpbot-app-tuner" ]'
 check "installs prompt capture runtime"       '[ -f "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capture_runtime.py" ]'
-check "prompt capture controller loads"       'python3 "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capturectl.py" --help >/dev/null'
-check "prompt capture report assets load"     'python3 "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/session_view.py" --help >/dev/null'
+check "prompt capture controller loads"       '"$PY3" "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capturectl.py" --help >/dev/null'
+check "prompt capture report assets load"     '"$PY3" "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/session_view.py" --help >/dev/null'
 check "excludes OpenCode-only knowledge skill" '[ ! -e "$CLAUDE_SKILLS/kunpeng-knowledge" ]'
 check "keeps claude-only drive skill"         '[ -d "$CLAUDE_SKILLS/drive-claude-optimize-pipeline" ]'
 check "keeps claude-only batch skill"         '[ -d "$CLAUDE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "keeps claude-only media skill"         '[ -d "$CLAUDE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
+check_pdenv_package "$CLAUDE_SKILLS"
+check_cubesandbox_split "$CLAUDE_SKILLS"
+check_sandbox_profile_install "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
@@ -119,13 +188,14 @@ check "installs code-optimizer skills"        '[ -d "$OPENCODE_SKILLS/kpbot-code
 check "installs app-tuner skills"             '[ -d "$OPENCODE_SKILLS/kpbot-app-tuner" ]'
 check "installs prompt capture entry"         '[ -f "$OPENCODE_SKILLS/kptools-prompt-capture/SKILL.md" ]'
 check "prompt capture assets survive install" '[ -f "$OPENCODE_SKILLS/kptools-prompt-capture/assets/session.json" ]'
-check "prompt capture analysis loads"         'python3 "$OPENCODE_SKILLS/kptools-prompt-capture/scripts/analyze.py" --help >/dev/null'
+check "prompt capture analysis loads"         '"$PY3" "$OPENCODE_SKILLS/kptools-prompt-capture/scripts/analyze.py" --help >/dev/null'
 check "installs knowledge skill"              '[ -f "$OPENCODE_SKILLS/kunpeng-knowledge/SKILL.md" ]'
 check "includes knowledge connection guide"    '[ -f "$OPENCODE_SKILLS/kunpeng-knowledge/references/connection.md" ]'
 check "excludes claude-only drive skill"      '[ ! -e "$OPENCODE_SKILLS/drive-claude-optimize-pipeline" ]'
 check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
 check "opencode overlay keeps base references" '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/references/experiment-contract.md" ]'
 check "opencode overlay keeps base scripts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/scripts/experiment_feedback.py" ]'
@@ -136,6 +206,9 @@ for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
 check_agentenv_package "$OPENCODE_SKILLS"
+check_pdenv_package "$OPENCODE_SKILLS"
+check_cubesandbox_split "$OPENCODE_SKILLS"
+check_sandbox_profile_install "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo "== preview count vs installed count =="

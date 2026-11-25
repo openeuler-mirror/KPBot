@@ -1,0 +1,64 @@
+{
+  "skill_name": "nebula-hotspot-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Nebula 3.8.0，2 graphd + 2 storaged，压测 Go1Step 时总 QPS 约 19 万，graphd CPU 约 73%，storaged 约 45%，p99 2.6ms。graphd 火焰图里 try_dequeue / waitOnTask / ThreadManager::add 占比很高。请判断瓶颈机制、为什么加 worker 可能无效，并给出验证与优化方向。不要执行命令。",
+      "expected_output": "判断为 graphd 的 Thrift 优先级队列 futex 争用：轻查询高 QPS，所有 worker 共享一个队列，入队/出队/唤醒产生大量 futex；worker 越多单队列争用越强，所以加 worker 可能无效甚至更差。验证：看 futex children 聚合、off-CPU、对比减少 worker/增加 graphd 实例后的 QPS 与热点迁移；也可看每查询 RPC 数与 storaged 处理延迟排除 storaged 瓶颈。方向：增加 graphd 实例、降低单实例 worker、减少每查询队列操作；根因在第三方 Thrift 队列，改造成本高。提示 CPU 高不等于计算重。",
+      "files": [],
+      "expectations": [
+        "识别为 Thrift 优先级队列 futex 争用，而不是业务计算",
+        "解释轻查询高 QPS 下入队/出队/唤醒成本被放大",
+        "指出 worker 越多单队列争用越强，加 worker 可能无效",
+        "给出验证方式（热点 children 聚合、减少 worker/增加实例对照、off-CPU）",
+        "用 storaged 处理延迟/RPC 数排除 storaged 瓶颈",
+        "优化方向包含增加 graphd 实例/降低单实例 worker",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "压测 InsertPerson 时 graphd CPU 只有 11%，storaged 26%，但 p99 约 60ms，QPS 不高。火焰图里 storaged 有 LZ4_compress、WriteThread::AwaitState、内核态 fsync 之类的热点，graphd 有 GraphScanner::yylex/GraphParser::parse。请分析瓶颈性质、需要补充哪些证据，以及优化方向。不要执行命令。",
+      "expected_output": "判断为 I/O/解析型瓶颈，不是 CPU 算力：graphd 侧 nGQL 解析占比高，storaged 侧 WAL fsync、RocksDB WriteThread 等待与 compaction 占主导。证据：磁盘 await/%util、iostat、pidstat 的 %system、storaged 日志、compaction 指标、WAL 配置、批量大小；确认是否 CPU 饱和（没有）。优化：预编译/减少解析、批量写入、WAL/compaction 调优、磁盘/文件系统、降低写放大；不要盲目加 worker/CPU。",
+      "files": [],
+      "expectations": [
+        "判断为 I/O/解析型瓶颈而非 CPU 算力不足",
+        "指出 graphd 的 nGQL 解析和 storaged 的 WAL fsync/WriteThread/compaction 分别对应什么",
+        "要求补充磁盘 await/%util、iostat、pidstat %system、compaction/WAL 配置等证据",
+        "优化方向包含批量写入、解析优化、WAL/compaction/磁盘",
+        "明确不要用加 worker/CPU 解决",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "FindShortestPath 场景 graphd CPU 约 58%，storaged 约 38%，火焰图里 Value::clearSlow/setS、std::_Hashtable::_M_insert_multi_node、malloc/sdallocx 占比较高。请给出归因、如何验证，以及可能有效的优化方向。不要执行命令。",
+      "expected_output": "归因为 graphd 的 BFS 数据结构与 Value 字符串：BFS visited/路径容器使用哈希表，频繁插入/析构；VID 字符串在 Value 中反复 setS/clearSlow，产生分配/释放；malloc/sdallocx 是伴生开销。验证：对照不同容器实现（flat_map vs unordered_multimap）、减少 Edge 拷贝/去重容器、逐路径比对正确性；看 storaged 的 RocksDB 占比排除存储瓶颈。方向：BFS 容器改造、拷贝消除、减少 Value 字符串分配、预分配/reserve；注意语义保持（路径集合一致、不可达返回空）。",
+      "files": [],
+      "expectations": [
+        "归因到 graphd 的 BFS 哈希容器与 Value 字符串操作",
+        "解释哈希表插入/析构和字符串分配/释放的伴生 malloc/sdallocx",
+        "给出验证方式（容器/拷贝对照、FSP 路径逐条比对、排除 storaged）",
+        "优化方向包含 flat_map/减少拷贝/删除去重容器/减少字符串分配",
+        "强调语义保持与正确性验证（路径集合、不可达空集）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "我要给团队建立 Nebula 五场景的热点基线。请给出采集计划：采哪些进程/线程、用什么工具、采样窗口、需要同步记录哪些指标、如何归档证据，以及如何避免把客户端瓶颈误判成服务端瓶颈。不要执行命令。",
+      "expected_output": "固定场景（Go1/2/3/FSP/Insert、VU/时长、是否 LIMIT、部署/线程/绑核/数据/二进制身份）；分别采 graphd 与 storaged（多实例选代表或全部），按线程名区分 graphd netio/worker 与 storaged IOThreadPool/executor-pri3/reader-pool（storaged 无小写 io/storage-worker 线程）；工具用 perf record -g（on-CPU）、offcputime（off-CPU 首选，累计离核时长；perf sched:sched_switch 为无 bcc 时次选）、FlameGraph、Topdown/devkit、HTTP /stats，配合 mpstat/pidstat/iostat/ss；先预热再采稳态窗口（20–60s，重查询更长）；同步记录 QPS/成功率/p50/p99/各进程 CPU/连接数/磁盘；归档 env、perf.data、folded、svg、stats、pidstat、k6 结果、notes；客户端瓶颈用 k6 CPU、iteration_duration vs responseTime、加 k6 进程/加 LIMIT 对照排除。",
+      "files": [],
+      "expectations": [
+        "固定场景与身份（场景、VU/时长、LIMIT、部署、线程、绑核、数据、二进制）",
+        "分进程分线程采集，区分 graphd netio/worker 与 storaged IOThreadPool/executor-pri3/reader-pool",
+        "工具覆盖 perf on-CPU、off-CPU、FlameGraph、Topdown、HTTP stats、系统对照",
+        "先预热再采稳态，窗口按场景调整",
+        "同步记录 QPS/成功率/分位数/CPU/连接/磁盘",
+        "归档原始 perf、折叠栈、火焰图、stats、系统指标、k6 结果与说明",
+        "给出排除客户端瓶颈的方法（k6 CPU、duration vs responseTime、加进程/加 LIMIT）",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

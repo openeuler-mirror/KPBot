@@ -94,7 +94,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/code-optimizer
 | 领域 | 目录 | 范围 | 当前成员 |
 |---|---|---|---|
 | 搜推（SRA） | [`skills/sra/`](skills/sra/DOMAIN.md) | 搜推 DAG 全栈优化方法总表 | `sra-dag-tuning` |
-| 向量数据库 / 检索 | [`skills/vectordb/`](skills/vectordb/DOMAIN.md) | ANN 索引与向量库（Faiss / DiskANN 子域陆续并入） | `vsag-rabitq-optimization` |
+| 向量数据库 / 检索 | [`skills/vectordb/`](skills/vectordb/DOMAIN.md) | ANN 索引与向量库（Faiss 子域已并入，DiskANN 陆续并入） | `vsag-rabitq-optimization`、`faiss/`（子域） |
 | Agentic Infra | [`skills/agentic-infra/`](skills/agentic-infra/DOMAIN.md) | microVM 沙箱与 AgentENV 的创建路径 | `cubesandbox-create-optimize` |
 | 微服务 | [`skills/microservice/`](skills/microservice/DOMAIN.md) | 服务进程性能（改实现侧；配置调优在 app-tuner 同名域） | `go-pprof-analysis` |
 | 存储 | [`skills/storage/`](skills/storage/DOMAIN.md) | 块层 / 文件系统 / NVMe / 分布式存储（占位，0 成员） | — |
@@ -153,7 +153,7 @@ TF 历史报告中的绝对路径仅用于追溯原实验，不是 KPBot 的运�
 
 #### Faiss
 
-Faiss 专项由 [`faiss-optimize`](skills/faiss-optimize/SKILL.md) 编排。
+Faiss 专项由 [`faiss-optimize`](skills/vectordb/faiss/faiss-optimize/SKILL.md) 编排。
 
 | 技能 | 职责 |
 |------|------|
@@ -167,6 +167,8 @@ Faiss 专项由 [`faiss-optimize`](skills/faiss-optimize/SKILL.md) 编排。
 | `vector-experiment-methodology` / `vector-ut-st-validation` | 交错性能对照、正确性验证与报告契约 |
 
 安装沿用现有 `install.sh`，同时注册五个 Faiss 角色。运行产物保存在独立目录；算法、版本、数据和资源限制由当前任务决定。
+
+Faiss 技能族收在 [`skills/vectordb/faiss/`](skills/vectordb/faiss/DOMAIN.md) 子域下；完整成员清单与路由见该子域的 `DOMAIN.md`，此处不逐项重复。
 
 #### DiskANN
 
@@ -200,7 +202,26 @@ pgvector 专项由 [`pgvector-optimize`](skills/pgvector-optimize/SKILL.md) 编�
 ### Agent 记忆系统与图数据库 (Memory / Graph DB)
 | 技能 | 描述 |
 |------|------|
-| [`agent-memory-db-optimization`](skills/agent-memory-db-optimization/SKILL.md) | Agent 记忆系统/图数据库后端（Graphiti、Neo4j、Zep/Mem0）五阶段优化：冻结确定性 LLM/embedding 负载 → 客户端/驱动/服务端三段归因 → top-down 与缓存缺失率瓶颈建模 → 分层杠杆（载荷瘦身、PackStream 解码下沉、时序水合下沉、读路径多副本扩展、服务端解码快路径）→ 矩阵复测与跨架构对照；门禁为 0 缓存未命中 + 图规模校验和 + 结果逐字节等价。 |
+| [`agent-memory-optimize`](skills/agent-memory-optimize/SKILL.md) | 编排入口：五阶段流程、职责边界与客户端运行时适配 |
+| [`agent-memory-workload-freeze`](skills/agent-memory-workload-freeze/SKILL.md) | 负载口径固化（写入/查询集、绑核、清库、预热、波动门限） |
+| [`llm-call-replay-cache`](skills/llm-call-replay-cache/SKILL.md) | 模型调用录制-回放缓存（record/replay/auto，含脚本与自测） |
+| [`llm-cache-canonicalization`](skills/llm-cache-canonicalization/SKILL.md) | 缓存 md5 定版、合并、漂移判定与跨机一致性 |
+| [`agent-memory-bench-gate`](skills/agent-memory-bench-gate/SKILL.md) | 门禁：0 miss + 图规模校验和 + 结果指纹等价 |
+| [`agent-memory-cost-attribution`](skills/agent-memory-cost-attribution/SKILL.md) | 框架/驱动/服务端三段归因与封闭轴声明 |
+| [`agent-memory-read-scale-curve`](skills/agent-memory-read-scale-curve/SKILL.md) | 读路径扩展曲线与容量模型（副本数 ↔ 核预算） |
+| [`agent-memory-topdown-analysis`](skills/agent-memory-topdown-analysis/SKILL.md) | 客户端 top-down（L1/L2/L3）与四象限判读 |
+| [`agent-memory-cache-miss-analysis`](skills/agent-memory-cache-miss-analysis/SKILL.md) | 跨级与指令侧缓存缺失率（含平台口径差异） |
+| [`graph-server-flamegraph`](skills/graph-server-flamegraph/SKILL.md) | 服务端火焰图（JVM/Go/C++/Python）与三类热点占比 |
+| [`agent-memory-bottleneck-classification`](skills/agent-memory-bottleneck-classification/SKILL.md) | 瓶颈判定树、证据链与常见误判 |
+| [`agent-memory-payload-slimming`](skills/agent-memory-payload-slimming/SKILL.md) | L1 载荷瘦身：查询投影去掉不回传的大字段 |
+| [`bolt-decode-offload`](skills/bolt-decode-offload/SKILL.md) | L2 解码下沉：官方原生扩展替换纯 Python 反序列化 |
+| [`temporal-hydration-offload`](skills/temporal-hydration-offload/SKILL.md) | L3 水合下沉：类型转换挪到原生扩展并可控开关 |
+| [`agent-memory-read-scaling`](skills/agent-memory-read-scaling/SKILL.md) | L4 读路径多进程扩展与写入串行约束 |
+| [`graph-store-readpath-patch`](skills/graph-store-readpath-patch/SKILL.md) | L5 服务端读路径补丁（累积版本 + 产物 md5） |
+| [`agent-memory-runtime-config`](skills/agent-memory-runtime-config/SKILL.md) | L6 运行配置：绑核、连接池、JDK、预热 |
+| [`agent-memory-retrieval-recipe`](skills/agent-memory-retrieval-recipe/SKILL.md) | L7 检索配方：候选倍数、多路召回、rerank |
+| [`agent-memory-bench-matrix`](skills/agent-memory-bench-matrix/SKILL.md) | 8 组矩阵复测、phase 判据与有效批次规则 |
+| [`agent-memory-negative-results`](skills/agent-memory-negative-results/SKILL.md) | 负结果台账：结构性无效、反转与测量陷阱 |
 
 服务端优化对象是 Neo4j 等图数据库的读路径与存储解码，不是向量索引库内部算法：索引库（Faiss/DiskANN/VSAG）内部优化仍走上面的向量检索入口。
 

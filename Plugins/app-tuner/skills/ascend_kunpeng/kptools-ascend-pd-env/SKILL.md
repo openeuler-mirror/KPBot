@@ -3,10 +3,11 @@ name: kptools-ascend-pd-env
 description: >
   采集并对比 vLLM-Ascend P/D 容器环境：系统内核、cgroup 配额、CPU/NUMA 拓扑、
   CANN 与驱动版本、npu-smi 快照、进程命令行与环境变量、Python 包清单。一个容器
-  出单环境报告，多个容器或搭配已有采集包则自动对比并标差异。当用户需要排查
+  出单环境报告；多个环境默认对比，按 P/D 角色只留档时不对比。当用户需要排查
   P/D 两侧环境不一致、CANN/驱动/torch_npu/vLLM 版本漂移、HCCL 或 ASCEND 变量
   不同、cpuset/cgroup 配额不同、升级前后或跨机跨时间比环境快照、容器环境存档
-  时触发；实时监测、进程级与算子级分析、网络诊断不在范围内。
+  时触发；也可按需单侧分析、做指定配对或汇总已有结果。实时监测、进程级与算子级
+  分析、网络诊断不在范围内。
 license: MulanPSL-2.0
 compatibility: Linux host with docker; Ascend 相关采集项需要昇腾机器，非昇腾环境上这些项标记为跳过而不报错
 metadata:
@@ -18,17 +19,42 @@ metadata:
 
 # kptools-ascend-pd-env — vLLM-Ascend P/D 环境采集与对比
 
+只为指定容器按 P/D 角色留档时，先读 [P/D 环境采集](subskills/collect-environment/SKILL.md)。
+同机或跨机都按容器单独采，角色不明确就先确认，不执行下文的默认对比流程。
+
 P/D 分离部署里，P 侧和 D 侧跑在不同容器甚至不同机器上，环境一旦漂移（CANN 版本、
 torch_npu 版本、HCCL 环境变量、cpuset、启动参数），表现出来的往往是吞吐掉点或
 偶发超时，而不是明确的报错。本 skill 把两侧环境拉平到同一张表上对比。
 
-对外只有一个入口，不分「采集」和「对比」两步：传入的每个对象都会被采集，
-凑够两个环境即自动对比。
+对外仍是一个入口。默认用现有命令：容器现场采、采集包直接读，凑够两个环境
+即自动对比。只做指定步骤或比较指定的一组快照时，走下表，不把多包通用对比
+当成指定配对。
+
+## 按需选择子 skill
+
+命中下表的专项时，先打开对应的 `SKILL.md`，再按其中的流程执行；下节的默认命令
+只用于通用请求。需要多个步骤时，按实际输入逐步选择。若对应文件不存在，报告该专项
+不可用；只有用户明确接受通用任务时才继续，不用多包对比代替指定配对。
+
+| 用户要做什么 | 子 skill 文件 |
+|-------------|---------------|
+| 按 P/D 角色单独留档，或需要标角色但尚未确认 | `subskills/collect-environment/SKILL.md` |
+| 分析指定 P 或 D 的一份环境快照 | `subskills/analyze-environment/SKILL.md` |
+| 以旧 P 为基线对比新 P | `subskills/compare-p-over-time/SKILL.md` |
+| 以旧 D 为基线对比新 D | `subskills/compare-d-over-time/SKILL.md` |
+| 比较指定的 P 和 D | `subskills/compare-p-and-d/SKILL.md` |
+| 汇总已有的分析和对比结果 | `subskills/summarize-environment-findings/SKILL.md` |
+
+子 skill 中的 `scripts/` 相对本 skill 根目录。指定配对需要现场快照时，先按角色采
+用户指定的容器，再选择对应的对比。只有现场采集才检查 Docker；已有快照的对比、
+分析和汇总不连接容器。
 
 ## 工作流程
 
-1. 检查环境：`bash scripts/discover.sh`
-2. 采集并分析：`bash scripts/collect.sh <对象> [更多对象...]`
+1. 输入中有现场容器时，才运行 `bash scripts/discover.sh`。只有已有采集包时跳过
+   Docker 自检，直接进入下一步。
+2. 通用采集或只读对比：`bash scripts/collect.sh <对象> [更多对象...]`。仅做
+   不区分角色的存档时，每次只传一个容器，不触发自动对比。
 3. 打开输出目录里的 HTML 报告；要定位具体差异看 `对比/对比结果.json` 或 `对比摘要.md`
 4. 字段含义、跳过原因、故障排查见 `references/pd-env-guide.md`
 

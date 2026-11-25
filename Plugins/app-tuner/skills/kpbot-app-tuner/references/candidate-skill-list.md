@@ -39,9 +39,9 @@
 | 采集信号 | 判定方式 | 加入候选 skill |
 |---|---|---|
 | 高热点第三方库 | `hotspot_dso_rank` 中第三方 `.so` 占比达到阈值，或热点函数落在 malloc/memcpy/压缩/加密/CRC 等外部库 | `performance-library-selection` |
+| 密码学/压缩算法热点 | `hotspot_function_rank` 中 AES/SM4/DES/SM3/SHA/MD5/HMAC/RSA/DH/deflate/inflate 等符号聚合占比达到阈值 | `uadk-accelerator-optimization`，与 `performance-library-selection` 的 crypto/compression 候选互斥竞争，按互斥方案全量验证选优 |
 | 网络相关热点高 | `hotspot_function_rank` 中 TCP/UDP/socket/epoll/softirq/NAPI/SKB/netfilter/NIC driver 等符号占比达到阈值 | `network-optimization` |
 | L1 icache miss 高 | topdown 或 perf stat 中 L1 icache miss 比例达到阈值 | `compiler-optimization`，重点分析 PGO/LTO、布局、内联、代码尺寸和目标架构选项 |
-| Go 微服务 GC/sync.Pool 颠簸 | pprof 热点含 `runtime.mallocgc`、`runtime.gcDrain`、`sync.(*Pool).Get`/`Put`；`alloc_space` 高而 `inuse_space` 低；GC 次数偏高；允许重编译 Go runtime | `microservice-go-syncpool-optimization`，按 Go 基线应用补丁并验证 `poolretain`/`poolprealloc` |
 | 线程切换高且 L3/LLC cache miss 高 | `context_switch_rate_per_sec` 高，且 L3/LLC miss 比例达到阈值 | `cpu-affinity-optimization`，重点分析绑核、NUMA、线程迁移和 IRQ 隔离 |
 | 数据库/应用内部状态解释瓶颈 | 连接池、队列、buffer/cache、锁等待、数据库状态可解释瓶颈 | `application-config-optimization` |
 | Ceph 存储场景 | 场景为 Ceph 存储集群（RBD/RGW/CephFS），或瓶颈/热点证据落在 OSD、MON、存储网络、PG 分布 | `ceph-optimization`，按需 `network-optimization`、`cpu-affinity-optimization`、`bios-optimization` |
@@ -51,6 +51,7 @@
 默认阈值可由脚本参数覆盖：
 
 - 第三方库热点：单个 DSO 或聚合占比 `>= 5%`。
+- 密码学/压缩算法热点：相关符号聚合占比 `>= 0.5%`。
 - 网络热点：网络相关符号聚合占比 `>= 3%`。
 - L1 icache miss：`L1-icache-load-misses / L1-icache-loads >= 5%`，或 topdown 前端/取指指标明确为 high。
 - L3/LLC miss：`LLC-load-misses / LLC-loads >= 5%`。
@@ -168,14 +169,13 @@ Step 0 产出的物理拓扑:
 - `cpu-affinity-optimization`
 - `network-optimization`
 - `compiler-optimization`
-- `microservice-go-syncpool-optimization`
 - `os-optimization`
 - `bios-optimization`
 - `accelerator-optimization`
 - `hardware-upgrade-analysis`
 - `other-optimization`
 
-`io-memory-network-bottleneck-analysis` 是前置瓶颈预筛，不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 默认由 `accelerator-optimization` 按需引用（NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling 采集），证据命中下表信号时不进入主覆盖集合，在 `accelerator-optimization` 的执行序列内追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进 `accelerator-optimization` 任务包（证据已单独点名时不重复下发）。
+`io-optimization` 承担前置瓶颈预筛与磁盘/内存专项证据采集（系统参数动作由 os-optimization 唯一产出），预筛阶段不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 默认由 `accelerator-optimization` 按需引用（NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling 采集），证据命中下表信号时不进入主覆盖集合，在 `accelerator-optimization` 的执行序列内追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进 `accelerator-optimization` 任务包（证据已单独点名时不重复下发）。
 
 ## 停止规则
 

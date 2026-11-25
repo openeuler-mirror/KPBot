@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: prepare-fastokens-candidate
+expected_outcome: |
+  复用已有候选目录，以服务 Python 和指定目标版本离线执行加载验证。
+  在单独目录保存 probe.json，根据 load_candidate 的后端、版本和缓存统计接口判定，不以命令退出码代替。
+  不向原环境安装包，也不运行分词回放。
