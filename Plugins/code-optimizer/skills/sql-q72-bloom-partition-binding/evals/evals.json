@@ -44,6 +44,17 @@
         "持有原常量与上下文",
         "避免每 split 重编译"
       ]
+    },
+    {
+      "id": 4,
+      "eval_name": "descriptor-already-bound",
+      "prompt": "已经拿到有效的原生分区绑定，某个 split 的文本值越界，应该重新提取 Bloom 吗？",
+      "expected_output": "由 sql-q72-parquet-split-pruning 处理原类型解析并回退提交，不重新放宽表达式提取。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

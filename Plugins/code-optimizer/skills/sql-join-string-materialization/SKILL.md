@@ -9,6 +9,12 @@ description: 优化 Velox 等列式引擎连接输出中的字符串物化。适
 
 聚焦连接输出到字符串向量的物化边界：可内联字符串直接写目标槽位，需要独立拥有的长串复制到输出缓冲区。Shuffle 的序列化拷贝、读端重建和压缩分别处理；本 skill 可在没有 Shuffle 的连接输出上独立使用。
 
+## 与总入口及其他技能的分工
+
+本 skill 是 [sql-shuffle-string-codec 总入口](../sql-shuffle-string-codec/SKILL.md) 登记的连接输出物化实施单元，负责 RowContainer 到输出向量的内联/长串表示及拥有方。总入口只负责热点定位、选择实施单元和组合验收，不再维护另一套物化步骤。
+
+输出进入序列化缓冲后的字节搬运由 [写端固定拷贝](../sql-shuffle-fixed-width-copy/SKILL.md) 负责；解压后创建视图由 [读端重建](../sql-shuffle-string-reconstruction/SKILL.md) 负责。三处可以分别涉及所有权，但证据必须绑定各自的输入、输出和销毁点，不能拿连接输出寿命证明 reader 缓冲寿命。
+
 ## 输入
 
 | 输入 | 核对内容 |

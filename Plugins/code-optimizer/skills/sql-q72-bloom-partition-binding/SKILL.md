@@ -9,6 +9,12 @@ description: 从 Gluten/Velox 扫描剩余过滤提取可独立否决 split 的�
 
 本 skill 输出已验证的 Bloom 绑定描述符，不读取 split，也不决定跳过文件。描述符可交给 split 提交前剪枝实现；缺少资格证据时输出不适用及原因。
 
+## 与相邻技能的分工
+
+本 skill 是 [split 提交前剪枝](../sql-q72-parquet-split-pruning/SKILL.md) 的绑定生产者，只交付经过验证的原表达式、分区列和扫描/执行上下文；不读取分区值或跳过 split。消费者解析元数据并决定提交或拒绝，不能反过来放宽本 skill 的必要条件准入。
+
+[运行时过滤下推](../sql-runtime-filter-pushdown/SKILL.md) 负责追踪过滤如何到达扫描原列；这里从已进入扫描剩余过滤的原生 Bloom 开始。缺少扫描过滤时先追踪下推，不能根据 SQL 模板虚构 Bloom 或绑定。
+
 ## 输入
 
 | 输入 | 核对内容 |

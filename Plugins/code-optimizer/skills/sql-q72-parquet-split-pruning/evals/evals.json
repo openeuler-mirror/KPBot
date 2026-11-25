@@ -66,6 +66,17 @@
         "验证原生结束与资源协议",
         "区分本地模型与引擎证据"
       ]
+    },
+    {
+      "id": 6,
+      "eval_name": "missing-safe-binding",
+      "prompt": "只有 OR 内的 Bloom 且没有合法绑定，能在提交 split 时顺便提取并拒绝吗？",
+      "expected_output": "由 sql-q72-bloom-partition-binding 判断必要条件；OR 内候选不合法，当前按原提交。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

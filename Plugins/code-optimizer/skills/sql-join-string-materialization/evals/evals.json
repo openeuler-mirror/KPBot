@@ -33,6 +33,17 @@
         "区分存储复用与输出去重",
         "验证映射和生命周期"
       ]
+    },
+    {
+      "id": 3,
+      "eval_name": "writer-only-boundary",
+      "prompt": "热点只在已序列化字节的固定拷贝，连接输出拥有方已证明，应继续改物化吗？",
+      "expected_output": "转到 sql-shuffle-fixed-width-copy，保留已验证的物化边界。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

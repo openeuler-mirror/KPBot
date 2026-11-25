@@ -9,6 +9,12 @@ description: 优化原生 Shuffle 序列化热路径中的短字符串拷贝。�
 
 聚焦已取得有效字符串字节视图后的序列化搬运。宽度 W=16 且 16≤n≤32 时，头尾各复制 16 字节；20 字节的两次范围分别为 1–16 和 5–20。内联布局和读端构造不在此处改动。
 
+## 与总入口及其他技能的分工
+
+本 skill 是 [sql-shuffle-string-codec 总入口](../sql-shuffle-string-codec/SKILL.md) 登记的序列化写端实施单元，只改变已获得有效字节视图后的搬运。总入口承担调用链诊断和组合验收；[连接物化](../sql-join-string-materialization/SKILL.md) 负责输出字符串拥有方，[读端重建](../sql-shuffle-string-reconstruction/SKILL.md) 负责接收端布局与宽读边界。仅写端拷贝热点可直接使用本 skill。
+
+65 个长度和 88 组边界矩阵继承自旧入口的 shuffle-contract，并增加源目标别名回退验证。旧用例保留为兼容基线；相同矩阵属于迁移的同一份证据，不计作两份独立的原生安全或性能证明。
+
 ## 输入
 
 | 输入 | 核对内容 |

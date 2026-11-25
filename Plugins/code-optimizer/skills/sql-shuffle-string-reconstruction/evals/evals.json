@@ -33,6 +33,17 @@
         "识别引用寿命",
         "提供可执行验证"
       ]
+    },
+    {
+      "id": 3,
+      "eval_name": "writer-proof-is-not-reader-proof",
+      "prompt": "writer 已通过精确容量测试，所以 reader 无填充尾部也可宽读吧？",
+      "expected_output": "分别核对 reader 实际可读范围与布局；writer 的证明属于 sql-shuffle-fixed-width-copy，不能代替读端证明。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

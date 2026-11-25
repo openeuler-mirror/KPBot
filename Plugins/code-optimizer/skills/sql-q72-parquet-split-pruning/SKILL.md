@@ -9,6 +9,12 @@ description: 消费已验证的分区 Bloom 绑定，在 Gluten 提交普通 Hiv
 
 输入是经过必要条件、列类型和原生函数验证的绑定描述符。本 skill 负责 split 资格、原类型解析、原求值器调用和提交/跳过决策；不从任意布尔表达式重新提取条件。
 
+## 与相邻技能的分工
+
+本 skill 消费 [Bloom 必要条件与分区绑定](../sql-q72-bloom-partition-binding/SKILL.md) 的结果，负责原类型解析、原探针求值及 split 提交协议，不重复提取表达式。没有有效绑定时保留原提交；绑定生产者不能凭 Bloom 子句存在就代替此处的 split 判断。
+
+这是打开文件前的任务剪枝，与 [运行时过滤下推](../sql-runtime-filter-pushdown/SKILL.md) 的扫描列安装、[连接数量预筛](../sql-q72-join-quantity-pruning/SKILL.md) 的探测行淘汰分别计数。跳过 split 不能直接换算成少做多少次哈希探测或实际读取字节。
+
 ## 输入
 
 | 输入 | 核对内容 |

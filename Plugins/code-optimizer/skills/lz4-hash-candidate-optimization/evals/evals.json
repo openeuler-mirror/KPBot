@@ -34,6 +34,17 @@
         "失败不冒充通过",
         "报告未覆盖证据"
       ]
+    },
+    {
+      "id": 3,
+      "eval_name": "reader-is-not-codec",
+      "prompt": "LZ4 四向解码通过，但 reader 的长串在缓冲复用后损坏，继续改哈希吗？",
+      "expected_output": "进入 sql-shuffle-string-reconstruction 检查 reader 引用寿命，不能用 codec 通过替代行值和拥有方验证。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

@@ -33,6 +33,17 @@
         "保留等容量合法路径",
         "逐字节验证边界"
       ]
+    },
+    {
+      "id": 3,
+      "eval_name": "chain-not-yet-located",
+      "prompt": "只知道字符串与压缩总耗时高，尚无 writer 热点证据，是否直接套固定拷贝？",
+      "expected_output": "先使用 sql-shuffle-string-codec 定位阶段，再决定是否进入写端实施。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

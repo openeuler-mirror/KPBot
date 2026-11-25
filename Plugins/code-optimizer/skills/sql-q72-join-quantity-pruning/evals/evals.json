@@ -66,6 +66,17 @@
         "上界跟随哈希表实例重算",
         "验证实际筛选及完整配对"
       ]
+    },
+    {
+      "id": 6,
+      "eval_name": "already-evaluated-filter",
+      "prompt": "过滤布尔位图已有，热点是逐个搬运行号，应该再加数量预筛吗？",
+      "expected_output": "直接评估 sql-q72-join-filter-bitmask 的双映射压缩；不把后处理问题改成另一阶段预筛。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }

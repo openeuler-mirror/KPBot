@@ -9,6 +9,12 @@ description: 为 Spark、Gluten、Velox 的内哈希连接评估整数数量上�
 
 SQL72 按商品键连接 `catalog_sales` 和 `inventory`，再检查 `inv_quantity_on_hand < cs_quantity`。如果销售建表侧最大的有效销售量是 `10`，库存探测侧数量为 `10` 或 `11` 的行与任何建表行配对都无法通过。把这些行从探测选择集删掉，可以省去哈希探测和重复键配对。库存量低于 `10` 的行仍须按商品查表，并对每个配对执行原条件。[实施细节](references/implementation.md)
 
+## 与相邻技能的分工
+
+本 skill 在常规哈希探测之前应用数量上界，只淘汰不可能通过严格比较的探测行。[过滤位图压缩](../sql-q72-join-filter-bitmask/SKILL.md) 在原探测和谓词求值之后搬运行映射；本 skill 必须保留这些后续精确步骤，不能将预筛当作最终匹配。
+
+[split 提交前剪枝](../sql-q72-parquet-split-pruning/SKILL.md) 依据分区 Bloom 淘汰读取任务，与这里依赖完整哈希表的数值上界不同。分别计量跳过 split、减少探测行及减少候选配对，再通过单项开关归因。
+
 ## 输入
 
 | 输入 | 核对内容 |

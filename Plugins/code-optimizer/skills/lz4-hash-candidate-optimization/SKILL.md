@@ -9,6 +9,10 @@ description: 优化 LZ4 压缩热点中的候选哈希定位。适用于 AArch64
 
 仅调整压缩器找到候选的位置，保留真正的匹配验证、编码格式和解码语义。先确认热点来自实际 LZ4；输入文件是 Snappy Parquet，并不排除中间 Shuffle 使用 LZ4 Frame。
 
+## 与总入口及其他技能的分工
+
+本 skill 是 [sql-shuffle-string-codec 总入口](../sql-shuffle-string-codec/SKILL.md) 登记的压缩器实施单元，负责实际加载的 LZ4 候选查找、匹配校验和四向真实编解码验收。总入口区分文件 codec 与 Shuffle codec，并组合各阶段证据；这里不重写 [写端字符串拷贝](../sql-shuffle-fixed-width-copy/SKILL.md) 或 [读端字符串重建](../sql-shuffle-string-reconstruction/SKILL.md)。压缩缓冲解码正确不等于 reader 构造的行值和寿命已验证。
+
 ## 输入
 
 | 输入 | 核对内容 |

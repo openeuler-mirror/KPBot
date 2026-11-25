@@ -9,6 +9,10 @@ description: 优化原生 Shuffle 解压后逐条字符串视图重建。适用�
 
 从解压后缓冲区重建字符串输出列，单独处理实际可读范围、内联布局、ISA 分派及输出引用寿命。序列化写入和 LZ4 压缩算法保持现有契约。
 
+## 与总入口及其他技能的分工
+
+本 skill 是 [sql-shuffle-string-codec 总入口](../sql-shuffle-string-codec/SKILL.md) 登记的接收端实施单元，只处理解压后字符串视图重建及所引用缓冲的寿命。总入口选择优化阶段并组织组合验收。[写端固定拷贝](../sql-shuffle-fixed-width-copy/SKILL.md) 的可写容量证明不能代替 reader 的实际可读范围；[LZ4 候选查找](../lz4-hash-candidate-optimization/SKILL.md) 负责压缩器内部改动和真实编解码兼容矩阵。
+
 ## 输入
 
 | 输入 | 核对内容 |

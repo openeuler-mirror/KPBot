@@ -44,6 +44,17 @@
         "区分探测、求值和压缩",
         "不由本地用例推断原生性能"
       ]
+    },
+    {
+      "id": 4,
+      "eval_name": "before-probe-vs-after-filter",
+      "prompt": "想减少哈希查表次数，可以仅靠过滤完成后的位图压缩吗？",
+      "expected_output": "不能；数量条件满足时另评估 sql-q72-join-quantity-pruning，位图单元只搬运过滤后的映射。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
     }
   ]
 }
