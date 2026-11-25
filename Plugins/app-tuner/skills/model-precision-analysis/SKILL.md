@@ -131,7 +131,7 @@ box 里混着多个不相关数字、或模型用的单位与 gold 不同但数�
 ## 与 kpbot-app-tuner 流程的衔接
 
 本技能是**验证类skill**，不参与候选优化列表，也不修改环境。典型用法是在
-`accelerator-optimization`（NPU/GPU 推理优化）、`application-config-optimization`（batch/量化配置）
+`vllm-ascend-profiling`（NPU/GPU 推理优化）、`application-config-optimization`（batch/量化配置）
 或 `compiler-optimization`（重编译、混合精度）完成一轮真实变更、并做完性能 A/B 之后调用：
 用同一批题目跑基线版与优化版，确认优化没有把原本正确的题弄坏，再把结论回填该轮结果的
 `validation_plan` / review 章节。性能收益为正但出现回归时，结论是回退或改用更保守的精度策略，

@@ -13,7 +13,6 @@ SUBSKILL_CATALOG = {
     "bios-optimization": "candidate-bios",
     "os-optimization": "candidate-os",
     "compiler-optimization": "candidate-compiler",
-    "microservice-go-syncpool-optimization": "candidate-microservice-go-syncpool",
     "accelerator-optimization": "candidate-accelerator",
     "hardware-upgrade-analysis": "candidate-hardware-upgrade",
     "other-optimization": "candidate-other",
@@ -42,7 +41,6 @@ MAIN_OPTIMIZATION_SUBSKILLS = [
     "cpu-affinity-optimization",
     "network-optimization",
     "compiler-optimization",
-    "microservice-go-syncpool-optimization",
     "os-optimization",
     "bios-optimization",
     "accelerator-optimization",
@@ -232,18 +230,6 @@ def is_ceph_hotspot(item):
     return any(token in haystack for token in CEPH_TOKENS)
 
 
-GO_SYNCPOOL_TOKENS = (
-    "runtime.mallocgc",
-    "runtime.gcdrain",
-    "sync.(*pool).getslow",
-    "sync.(*pool).pin",
-    "sync.(*pool).get",
-    "sync.(*pool).put",
-    "sync.poolcleanup",
-    "runtime.poolcleanup",
-)
-
-
 def is_uadk_hotspot(item):
     category = str(item.get("category", item.get("domain", ""))).lower()
     if category in {"crypto", "compression", "uadk"}:
@@ -253,17 +239,6 @@ def is_uadk_hotspot(item):
         for key in ("symbol", "function", "name", "dso", "module")
     )
     return any(token in haystack for token in UADK_TOKENS)
-
-
-def is_go_syncpool_hotspot(item):
-    category = str(item.get("category", item.get("domain", ""))).lower()
-    if category in {"go_runtime", "go_syncpool", "gc"}:
-        return True
-    haystack = " ".join(
-        str(item.get(key, "")).lower()
-        for key in ("symbol", "function", "name", "dso", "module")
-    )
-    return any(token in haystack for token in GO_SYNCPOOL_TOKENS)
 
 
 def add_candidate(candidates, subskill_name, priority, reason, source_signal, evidence_path):
@@ -285,8 +260,69 @@ def add_candidate(candidates, subskill_name, priority, reason, source_signal, ev
         existing.setdefault("required_evidence", []).append(evidence_path)
 
 
+CRYPTO_EVIDENCE_MARKERS = ("hisi_hpre", "/sys/class/uacce/hisi_hpre", "/dev/hisi_hpre")
+
+
+def _find_crypto_accelerator_evidence(evidence_dir, current_run_id="", max_bytes=512 * 1024):
+    """Return (evidence_path, present) for this run's HPRE/KAE evidence.
+
+    Prefer the structured ``hpre_offload_evidence.json`` produced by
+    collect_hpre_evidence.sh and trust only positive device facts
+    (crypto_accelerator_present / hpre_pci / hpre_uacce_devices / dev_nodes).
+    A generic NPU log that merely contains the word ``uacce_mode`` must not
+    route to accelerator-optimization.
+    """
+    root = Path(evidence_dir)
+    if not root.is_dir():
+        return "", False
+    structured_seen = False
+    for path in sorted(root.rglob("hpre_offload_evidence.json")):
+        structured_seen = True
+        try:
+            data = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("current_evidence_status") != "current":
+            continue
+        if current_run_id and data.get("current_run_id") != current_run_id:
+            continue
+        device = data.get("device") if isinstance(data.get("device"), dict) else {}
+        verdict = data.get("verdict") if isinstance(data.get("verdict"), dict) else {}
+        present = bool(verdict.get("crypto_accelerator_present"))
+        if device.get("hpre_pci") or device.get("hpre_uacce_devices") or device.get("dev_nodes"):
+            present = True
+        uacce = device.get("uacce_devices")
+        if isinstance(uacce, str) and "hisi_hpre" in uacce:
+            present = True
+        if present:
+            return str(path), True
+
+    # A structured evidence file is authoritative even when it says "absent";
+    # do not let a marker in its fallback_notes turn that into a false positive.
+    if structured_seen:
+        return "", False
+
+    # Fallback for text-only evidence: require an explicit HPRE device marker,
+    # not a generic uacce field/word.
+    allowed_suffixes = {".json", ".log", ".txt", ".md", ".yaml", ".yml"}
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in allowed_suffixes:
+            continue
+        try:
+            if path.stat().st_size > max_bytes:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if any(marker in text for marker in CRYPTO_EVIDENCE_MARKERS):
+            return str(path), True
+    return "", False
+
+
 def parse_npu_signals(evidence_dir):
-    """解析 NPU 采集信号，生成 accelerator 候选所需的信号摘要。
+    """解析 NPU 采集信号，生成 NPU/GPU 瓶颈归因与候选 skill 所需的信号摘要。
 
     解析 evidence_dir 下的 NPU 采集产物：
       - npu_utilization.log: npu-smi info -t usages 周期性采样
@@ -544,36 +580,6 @@ def evidence_driven_candidates(summary, summary_path, args):
             summary_path,
         )
 
-    go_pool_percent = sum(
-        as_float(item.get("percent", item.get("samples_pct", item.get("overhead_pct"))))
-        for item in function_rank
-        if is_go_syncpool_hotspot(item)
-    )
-    heap = summary.get("heap", summary.get("heap_summary", {}))
-    if not isinstance(heap, dict):
-        heap = {}
-    alloc_space = as_float(heap.get("alloc_space", heap.get("alloc_space_bytes")))
-    inuse_space = as_float(heap.get("inuse_space", heap.get("inuse_space_bytes")))
-    heap_churn = bool(
-        heap.get("alloc_space_high")
-        or heap.get("inuse_space_low")
-        or (alloc_space > 0 and inuse_space > 0 and alloc_space >= inuse_space * 2)
-    )
-    go_pool_threshold = getattr(args, "go_syncpool_hotspot_threshold", 3.0)
-    if (
-        go_pool_percent >= go_pool_threshold
-        or detected.get("go_syncpool_signal")
-        or detected.get("go_gc_pool_signal")
-        or (heap_churn and go_pool_percent > 0)
-    ):
-        add_candidate(
-            candidates,
-            "microservice-go-syncpool-optimization",
-            "high",
-            f"Go sync.Pool/GC hotspot total {go_pool_percent:.2f}% (heap_churn={heap_churn})",
-            "go_syncpool_gc_hotspot",
-            summary_path,
-        )
     icache_miss_pct = as_float(topdown.get("l1_icache_miss_pct", topdown.get("icache_miss_pct")))
     icache_high = bool(topdown.get("icache_miss_high") or topdown.get("l1_icache_miss_high") or detected.get("l1_icache_miss_high"))
     if icache_miss_pct >= args.icache_miss_threshold or icache_high:
@@ -615,28 +621,25 @@ def evidence_driven_candidates(summary, summary_path, args):
     if detected.get("other_signal"):
         add_candidate(candidates, "other-optimization", "low", "unclassified optimization signal detected", "other_signal", summary_path)
 
-    # NPU 信号路由：解析 evidence_dir 下的 NPU 采集产物
+    # HPRE/KAE 证据独立于 NPU 采集：只有 HPRE 的 TLS 主机也必须能派发。
     evidence_dir = getattr(args, "evidence_dir", "")
+    crypto_evidence, crypto_present = _find_crypto_accelerator_evidence(
+        evidence_dir, getattr(args, "current_run_id", "") or ""
+    )
+    if crypto_present:
+        add_candidate(
+            candidates,
+            "accelerator-optimization",
+            "high",
+            "HPRE/KAE crypto accelerator evidence present; run UADK/ASF offload gate",
+            "crypto_accelerator_signal",
+            crypto_evidence or summary_path,
+        )
+
+    # NPU 信号路由：解析 evidence_dir 下的 NPU 采集产物
     if evidence_dir:
         npu_signals = parse_npu_signals(evidence_dir)
         if npu_signals.get("npu_count") > 0 or npu_signals.get("raw_evidence"):
-            accelerator_reason = []
-            if npu_signals.get("cpu_feed_bottleneck"):
-                accelerator_reason.append("NPU utilization low (cpu_feed_bottleneck suspected)")
-            if npu_signals.get("npu_compute_bottleneck"):
-                accelerator_reason.append("NPU utilization saturated (npu_compute_bottleneck)")
-            if npu_signals.get("hbm_pressure"):
-                accelerator_reason.append("HBM usage high (hbm_pressure)")
-            if not accelerator_reason:
-                accelerator_reason.append("NPU device present; verify accelerator subskill for topology/throughput")
-            add_candidate(
-                candidates,
-                "accelerator-optimization",
-                "high",
-                "; ".join(accelerator_reason),
-                "npu_signal",
-                npu_signals["raw_evidence"][0] if npu_signals["raw_evidence"] else summary_path,
-            )
             # 多卡 TP 场景提示应用层重新配置并行度
             if npu_signals.get("tensor_parallel_size", 0) > 1:
                 add_candidate(
@@ -685,8 +688,16 @@ def default_subskills_for_route(bottleneck, workload_type, database_workload):
         return ["application-config-optimization", "os-optimization", "hardware-upgrade-analysis"]
     if normalized == "memory_bandwidth_bottleneck":
         return ["cpu-affinity-optimization", "application-config-optimization", "hardware-upgrade-analysis"]
-    if normalized == "gpu_npu_bottleneck":
+    if normalized == "crypto_accelerator_bottleneck":
         return ["accelerator-optimization", "application-config-optimization", "hardware-upgrade-analysis"]
+    if normalized == "cpu_feed_bottleneck":
+        # host 侧数据准备/调度不足，不属于加速卡专项
+        return ["application-config-optimization", "cpu-affinity-optimization", "hardware-upgrade-analysis"]
+    if normalized in {"gpu_npu_bottleneck", "npu_compute_bottleneck", "npu_other"}:
+        # accelerator-optimization 收窄为 HPRE/KAE 密码卸载；NPU/GPU 通用
+        # 计算卡先做 vLLM profiling（非 vLLM 时该 skill 自身会拒绝）并保留
+        # 硬件规格/应用配置兜底，避免把常见加速卡场景送进自我声明不受理的 skill。
+        return ["vllm-ascend-profiling", "application-config-optimization", "hardware-upgrade-analysis"]
     if normalized == "hardware_capacity_limit":
         return ["hardware-upgrade-analysis"]
     if normalized in {"unknown_bottleneck", "no_active_bottleneck"}:
@@ -831,7 +842,6 @@ def main():
     parser.add_argument("--network-hotspot-threshold", type=float, default=3.0, help="Percent threshold for network-related hotspot functions")
     parser.add_argument("--ceph-hotspot-threshold", type=float, default=3.0, help="Percent threshold for ceph/osd-related hotspot functions")
     parser.add_argument("--uadk-hotspot-threshold", type=float, default=0.5, help="Percent threshold for crypto/compression hotspot functions")
-    parser.add_argument("--go-syncpool-hotspot-threshold", type=float, default=3.0, help="Percent threshold for Go sync.Pool/GC hotspot functions")
     parser.add_argument("--icache-miss-threshold", type=float, default=5.0, help="Percent threshold for L1 icache miss")
     parser.add_argument("--l3-miss-threshold", type=float, default=5.0, help="Percent threshold for L3/LLC cache miss")
     parser.add_argument("--context-switch-threshold", type=float, default=1000.0, help="Context-switches per second threshold")
@@ -870,9 +880,15 @@ def main():
 
     current_run_started_at = args.current_run_started_at or evidence_metadata.get("current_run_started_at", "")
     snapshot_time = evidence_metadata.get("snapshot_time", "")
+    if not current_run_started_at:
+        raise SystemExit("current_run_started_at is required before routing")
+    if not snapshot_time:
+        raise SystemExit("snapshot_metadata.json is missing snapshot_time before routing")
     started_at_dt = parse_iso_timestamp(current_run_started_at, "current_run_started_at")
     snapshot_time_dt = parse_iso_timestamp(snapshot_time, "snapshot_time")
-    if started_at_dt and snapshot_time_dt and snapshot_time_dt < started_at_dt:
+    if started_at_dt is None or snapshot_time_dt is None:
+        raise SystemExit("current_run_started_at and snapshot_time must both be valid timestamps")
+    if snapshot_time_dt < started_at_dt:
         raise SystemExit(
             "evidence snapshot_time is earlier than current_run_started_at; "
             f"snapshot_time={snapshot_time!r}, current_run_started_at={current_run_started_at!r}"
@@ -885,7 +901,11 @@ def main():
     current_run_manifest = load_optional_json(args.current_run_manifest)
     target_identity = load_optional_json(args.target_identity_path)
     metadata_target_identity = evidence_metadata.get("target_identity") or {}
-    if target_identity and metadata_target_identity and target_identity != metadata_target_identity:
+    if not target_identity:
+        raise SystemExit("target identity JSON is required before routing")
+    if not isinstance(metadata_target_identity, dict) or not metadata_target_identity:
+        raise SystemExit("snapshot_metadata.json is missing target_identity before routing")
+    if target_identity != metadata_target_identity:
         raise SystemExit("target identity JSON does not match snapshot metadata target_identity")
 
     performance_summary, performance_summary_path = load_performance_summary(args.evidence_dir, args.performance_summary)
