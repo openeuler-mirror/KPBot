@@ -170,7 +170,7 @@ pip3 show motor
 - 克隆/编译失败常见原因是网络不通（内网源）或缺编译依赖，失败时把完整日志贴给用户分析，不要盲目重试
 - **流程中任何一步因无法访问外网而失败**（clone 超时、pip 下载依赖失败等），都要立即反馈用户并说明是网络原因，附上错误日志关键行，然后让用户决定后续方案（换内网源/上传离线包/换机器），不要静默重试或自作主张改方案
 - 源码编译出的 whl 同样**不带依赖声明**（`install_requires=[]`），依赖按源码树自带的 `requirements.txt` 安装：**编译前先 `pip3 install -r requirements.txt`**（proto 生成等构建步骤与运行时都依赖它；离线按上游 standalone.md 附录 A 全量下载后上传安装），安装后按方式 A 第 2、5 步的探测/验证命令复核
-- **升级/重装前先停旧 coordinator**：`kill "$(cat ./log/motor_coordinator.pid)"`——`--force-reinstall` 只覆盖磁盘文件，**不会重启已运行的进程**：旧代码继续服务、端口仍被占用，装完再启动会报端口冲突，用户看到的"升级没生效"多半是旧进程没停
+- **升级/重装前先停旧 coordinator（先核对进程身份，匹配才 kill，等退出再重装）**：PID 文件 `./log/motor_coordinator.pid` 里的 PID 可能已退出并被系统复用，直接 `kill "$(cat ./log/motor_coordinator.pid)"` 会误停无关服务。正确顺序：① 读出 PID 后核对 `ps -p <PID> -o args=`，命令行确为 `python3 -m motor.coordinator.main`（且归属本部署实例）才 `kill <PID>`；不匹配则不要 kill，改用 `ps -ef | grep motor.coordinator.main` 找到真实进程再处理；② kill 后等待该进程真正退出再继续重装（`while kill -0 <PID> 2>/dev/null; do sleep 1; done`，长时间不退则人工介入）。`--force-reinstall` 只覆盖磁盘文件，**不会重启已运行的进程**：旧代码继续服务、端口仍被占用，装完再启动会报端口冲突，用户看到的"升级没生效"多半是旧进程没停
 - **coordinator 重启后已注册实例清空**（注册表是内存态）：每次 start_motor.sh 之后都要重新执行 register.sh，否则推理请求报 `No instance available`——重启不是幂等的，"注册"必须跟在每次启动后面
 - **解释器一致性**：pip3 装进哪个 Python（系统 / venv / 容器内自编译解释器），start_motor.sh 里的 `python3` 就必须解析到**同一个**——venv 安装 + 系统 python3 启动会 `ModuleNotFoundError: motor`；部署前 `which python3` 与 `pip3 show motor`（Location 字段）核对两者指向一致
 
@@ -194,9 +194,9 @@ pip3 show motor
 - **管理面鉴权（按实际 bind 地址与端口可达性判定，不按"同机部署"假设）**：模板默认 `coordinator_api_host: 127.0.0.1` + `enable_api_key: false`——管理端口仅监听回环，默认关闭鉴权是安全的。用户确需跨机访问推理端口而改绑非回环地址（实际 IP / `0.0.0.0`）时，**必须先开启管理面 API Key 再生成/执行 start_motor.sh**：生成密钥文件（`install -d -m 700 /opt/motor-coord/secrets && python3 -c "import secrets; print(secrets.token_urlsafe(32))" > /opt/motor-coord/secrets/mgmt-api-key && chmod 600 /opt/motor-coord/secrets/mgmt-api-key`），在 user_config.json 的 `motor_coordinator_config.mgmt_api_key_config` 设 `enable_api_key: true` + 非空 `api_key_file`，register.sh 命令追加 `--mgmt-api-key-file`。生成 start_motor.sh 前必须校验**绑定地址非回环 ⇒ 鉴权已开启且密钥文件存在**，不满足即中止并请用户二选一（改回 127.0.0.1 / 补齐鉴权），不得无鉴权对外部署；start_motor.sh 模板已内置同口径门禁（改脚本时不要删），启动时兜底拦截
 - `start_motor.sh` 和 `register.sh` 都把日志写到 `./log/`，模板已内置 `mkdir -p ./log` 自动建目录，无需手动预建
 - **`start_motor.sh` 全部使用相对路径**（`./user_config.json`、`./log/`），必须在部署目录内执行（`cd /opt/mindie-motor && bash start_motor.sh`）；从其他目录 `bash /opt/mindie-motor/start_motor.sh` 会找不到配置文件
-- `register.sh` 要在 coordinator 启动**之后**执行：先 `bash start_motor.sh`，用 `curl -s http://127.0.0.1:<mgmt_port>/liveness` 与 `curl -s http://127.0.0.1:<mgmt_port>/readiness` 确认管理端口就绪，再**前台**执行 `bash register.sh` 看清每个实例的注册输出
+- `register.sh` 要在 coordinator 启动**之后**执行：先 `bash start_motor.sh`，探活与注册命令都按**实际绑定地址**生成——从 user_config.json 读 `coordinator_api_host`（配置只绑实际网卡 IP 时 `127.0.0.1` 不可达，同机探活也会失败），用 `curl -s http://<coordinator_api_host>:<coordinator_api_mgmt_port>/liveness` 与 `curl -s http://<coordinator_api_host>:<coordinator_api_mgmt_port>/readiness` 确认管理端口就绪，register.sh 的 `--coordinator` 与 `--mgmt-port` 同步取该地址与配置中的管理端口，再**前台**执行 `bash register.sh` 看清每个实例的注册输出
 - **注册前做后端网络预检（必须在 coordinator 所在机器/容器内执行，不是宿主机）**：`curl -m 5 http://<backend_ip>:<port>/v1/models` 逐个确认可达。register.sh 的健康检查通过**不代表** coordinator 进程可达后端——register 与 coordinator 可能处于不同网络命名空间，宿主机可达 ≠ coordinator 容器内可达；跨容器端口未互通时，注册显示 healthy 但推理请求会 500
-- 生成后必须在远端做语法级自检（`python3 -m json.tool user_config.json`、`bash -n *.sh`），通过后再进入阶段 5
+- 生成后必须在远端做语法级自检：`python3 -m json.tool user_config.json` + **逐个脚本** `bash -n register.sh`、`bash -n start_motor.sh`——不能用 `bash -n *.sh`（通配符展开后只检查第一个脚本，其余文件名成为该脚本的参数），任一失败即停止部署，全部通过后再进入阶段 5
 
 ## 阶段 5：输出部署指南
 
@@ -204,7 +204,7 @@ pip3 show motor
 
 1. 本次部署的信息摘要（机器、安装方式 A/B、coordinator 绑定地址与三个端口、prefill/decode 实例列表、模型名、调度策略）；**跨机部署必检项：管理面 API Key 已启用**（`mgmt_api_key_config.enable_api_key: true`、密钥文件存在且权限 600、register 命令带 `--mgmt-api-key-file`）——绑定地址非回环而未开启鉴权时 start_motor.sh 门禁会直接拒绝启动；同机回环部署（127.0.0.1）标注"仅本机监听，管理面未对外暴露"
 2. **部署形态说明**：MindIE Motor 为独立部署的 coordinator，不管理 vLLM/MindIE 实例的拉起——后端实例需由用户按原有方式先行启动，再通过 register.sh 注册
-3. 启动步骤：执行 `bash start_motor.sh`（脚本内置 `mkdir -p ./log` 与 PID 落盘），通过 `tail -f ./log/motor_coordinator.log` 与 `curl -s http://127.0.0.1:<mgmt_port>/liveness`、`curl -s http://127.0.0.1:<mgmt_port>/readiness` 确认管理端口就绪
+3. 启动步骤：执行 `bash start_motor.sh`（脚本内置 `mkdir -p ./log` 与 PID 落盘），通过 `tail -f ./log/motor_coordinator.log` 与 `curl -s http://<coordinator_api_host>:<coordinator_api_mgmt_port>/liveness`、`curl -s http://<coordinator_api_host>:<coordinator_api_mgmt_port>/readiness` 确认管理端口就绪——地址与端口取 user_config.json 实际配置（绑实际网卡 IP 时用该 IP，不要写死 127.0.0.1）
 4. 后端网络预检：在 coordinator 所在机器/容器内 `curl -m 5 http://<backend_ip>:<port>/v1/models` 逐个确认后端可达——这是端到端推理的前置条件，宿主机可达不代表 coordinator 容器内可达
 5. 后端注册：前台执行 `bash register.sh`（输出同时 `tee` 到 `./log/register.log`），确认每个实例注册成功、`readiness` 返回 `"ready":true`——同一实例的多个 DP endpoint 在一个 `--prefill`/`--decode` 内逗号连接，多实例才重复传参；开启管理面 API Key 时命令需带 `--mgmt-api-key-file`
 6. 验证方法：向 `http://<coordinator_ip>:<infer_port>`（推理端口）发一条测试请求（如 `/v1/chat/completions`）确认端到端连通；若返回 `No instance available`，按常见问题第 1 条排查

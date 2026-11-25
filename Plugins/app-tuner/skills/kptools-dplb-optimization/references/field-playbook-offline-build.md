@@ -28,22 +28,41 @@ sha256 = 703b190f0d723ae68985797f3bb5f62f01b1723f138464c6f30f32b766eb0abf
 
 ## 2. 分片上传到远端
 
-MCP 单次 upload 300s 超时，实测一次最多传约 285MB（首次 345MB 只传到 284,753,920 字节）。按剩余字节分片（实测 3 片：20MB/20MB/17MB）上传后远端追加。
+MCP 单次 upload 300s 超时，实测一次最多传约 285MB（首次 345MB 只传到 284,753,920 字节后超时）。
 
-本机切分命令（跨平台，无 split 依赖，按 20MB 一片）：
+**续传口径（关键）**：超时后远端残包保留了前 `N` 字节（`N` 以远端 `stat -c %s` / `wc -c` 实测为准，不要拿本地的切分断点想当然）。**不能把"从本地第 0 字节切出的分片"直接追加到残包**——那会重复文件开头，长度和 SHA256 都不可能通过。两种正确做法（任选其一，完成后都必须先核对总字节长度、再核对摘要）：
+
+做法一：按远端已确认的长度切分剩余内容（本机跳过已传前缀，续传省流量）
 
 ```bash
+# 本机：N 换成远端实测保留字节数，从偏移 N 起把剩余内容切成 20MB/片
+python3 -c "import sys; d=open(sys.argv[1],'rb').read(); N=int(sys.argv[2]); r=d[N:]; [open('rust.part%d'%(i+1),'wb').write(r[o:o+20*1024*1024]) for i,o in enumerate(range(0,len(r),20*1024*1024))]" rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz <N>
+```
+
+```bash
+# 远端：按 part1..partN 顺序追加，随后先验长度再验摘要
+cat /tmp/rust.part1 >> /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz
+# ……有几片追加几片，严格按序
+wc -c /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz      # 必须等于源文件字节数（344628055）
+sha256sum /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz   # 必须与下载页一致
+```
+
+做法二：从空文件按序重组全部分片（不依赖残包前缀可信，残包异常时首选）
+
+```bash
+# 本机：从第 0 字节起全量切分（跨平台，无 split 依赖，按 20MB 一片）
 python3 -c "import sys; d=open(sys.argv[1],'rb').read(); [open('rust.part%d'%(i+1),'wb').write(d[o:o+20*1024*1024]) for i,o in enumerate(range(0,len(d),20*1024*1024))]" rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz
 ```
 
-远端追加与校验：
-
 ```bash
-cat /tmp/rust.part1 >> /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz
-cat /tmp/rust.part2 >> /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz
-cat /tmp/rust.part3 >> /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz
+# 远端：丢弃残包，从空文件按序重组，再验证长度和摘要
+rm -f /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz
+cat /tmp/rust.part1 /tmp/rust.part2 /tmp/rust.part3 > /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz   # 有几片列几片
+wc -c /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz      # 必须等于源文件字节数（344628055）
 sha256sum /tmp/rust-1.99.1-aarch64-unknown-linux-gnu.tar.gz   # 必须与下载页一致
 ```
+
+任一做法完成且长度与 SHA256 双验证通过后，才继续第 3 节的安装步骤。
 
 ## 3. 容器内安装 Rust（无需外网）
 

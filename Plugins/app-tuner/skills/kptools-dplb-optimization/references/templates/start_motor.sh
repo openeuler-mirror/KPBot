@@ -37,14 +37,31 @@ if host not in ('127.0.0.1', '::1', 'localhost'):
                  '请先生成密钥文件（权限 600、目录 700）再启动。'.format(key_file))
 EOF
 
-nohup python3 -m motor.coordinator.main > ./log/motor_coordinator.log 2>&1 &
-echo $! > ./log/motor_coordinator.pid
+# 已有实例识别（必须在打开/截断日志之前）：PID 文件里的旧实例仍在运行时拒绝启动。
+# 防止：新进程因端口冲突退出后，旧服务仍在运行，PID 文件却被新进程覆盖、
+# 原日志又被截断——旧服务失去停服入口，无从排障与回滚。
+if [ -f ./log/motor_coordinator.pid ]; then
+    old_pid="$(cat ./log/motor_coordinator.pid 2>/dev/null)"
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null \
+       && ps -p "$old_pid" -o args= 2>/dev/null | grep -q 'motor\.coordinator\.main'; then
+        echo "拒绝启动：已有 coordinator 实例在运行 (pid: $old_pid)。请先核对其归属并停服后重试：" >&2
+        echo "  ps -p $old_pid -o args=   # 确认为 python3 -m motor.coordinator.main" >&2
+        echo "  kill $old_pid             # 确认后停旧实例" >&2
+        exit 1
+    fi
+fi
 
-# 存活校验：启动 2 秒后确认进程还在，避免"秒退仍报成功"的假成功信号。
+nohup python3 -m motor.coordinator.main > ./log/motor_coordinator.log 2>&1 &
+new_pid=$!
+
+# 存活校验：启动 2 秒后确认进程还在，避免"秒退仍报成功"的假成功信号；
+# 校验通过后才写 PID 文件——防止新实例因端口冲突退出时覆盖旧 PID 文件，
+# 导致仍在运行的旧服务失去停服入口。
 sleep 2
-if kill -0 "$(cat ./log/motor_coordinator.pid)" 2>/dev/null; then
-  echo "motor coordinator started (pid: $(cat ./log/motor_coordinator.pid), log: ./log/motor_coordinator.log)"
+if kill -0 "$new_pid" 2>/dev/null; then
+    echo "$new_pid" > ./log/motor_coordinator.pid
+    echo "motor coordinator started (pid: $new_pid, log: ./log/motor_coordinator.log)"
 else
-  echo "motor coordinator 启动失败，查看日志定位：tail -50 ./log/motor_coordinator.log" >&2
-  exit 1
+    echo "motor coordinator 启动失败，查看日志定位：tail -50 ./log/motor_coordinator.log" >&2
+    exit 1
 fi
