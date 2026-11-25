@@ -23,11 +23,11 @@
 锁住全栈基线，再用 `opt-bottleneck-mining` 定位到某个 C++ 内核后，把该内核交给 `kpbot-code-optimizer` 的
 `analyze-hotspot` / `apply-vectorization` 做函数级优化。
 
-### 与 agent-memory-db-optimization（顶层枢纽）的关系
+### 与 agent-memory-optimize（顶层枢纽）的关系
 
 本域与该枢纽是**方法论 vs 单案例落地**的关系，互补且互指，不重叠：
 
-- `agent-memory-db-optimization` = **记忆/图+向量后端**单案例的诊断方法（冻结确定性负载 → 三段归因 →
+- `agent-memory-optimize` = **记忆/图+向量后端**单案例的诊断方法（冻结确定性负载 → 三段归因 →
   瓶颈建模 → 分层杠杆，标定 Graphiti+Neo4j 与 mem0+Milvus）。
 - 本域 = **测量纪律的跨产品泛化**：把"缓存回放冻结模型调用、请求计数防假提速、负结果记账、相位门控采集"
   这些枢纽案例里出现的纪律，抽成不绑定具体后端的原子阶段/横切 skill。

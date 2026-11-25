@@ -1,0 +1,31 @@
+# llvm-mca-visualize 失败路径：llvm-mca 未打 IssueTraceView 补丁时必须拒绝出图
+#
+# 运行（在 skill 根目录）：
+#   bash cases/missing-issue-trace/run.sh
+# 用 mock llvm-mca（--help 不含 issue-trace）验证：
+#   1) 退出码非 0
+#   2) 输出 success=false 且提示 -issue-trace
+#   3) 不产生 HTML 产物
+# 断言结果写入 cases/missing-issue-trace/results/result.json。
+
+name: missing-issue-trace
+skill: llvm-mca-visualize
+tier: A
+image: host-runtime
+
+entrypoint: ["bash", "cases/missing-issue-trace/run.sh"]
+
+env_requires:
+  - python3（标准库；不需要真实 llvm-mca，本用例使用 mock；显式 --uarch hip12，不依赖宿主 CPU）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0

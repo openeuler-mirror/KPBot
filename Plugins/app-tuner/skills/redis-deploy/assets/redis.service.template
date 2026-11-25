@@ -1,0 +1,20 @@
+[Unit]
+Description=Redis in-memory data store (instance @NAME@)
+Documentation=man:redis-server(1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+ExecStart=@PREFIX@/bin/redis-server @CONF@
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=60
+LimitNOFILE=1000000
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=multi-user.target

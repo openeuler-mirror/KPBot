@@ -1,4 +1,5 @@
 ---
+name: executor
 description: universal execution verification subagent
 mode: subagent
 hidden: true

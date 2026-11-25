@@ -202,7 +202,26 @@ pgvector 专项由 [`pgvector-optimize`](skills/pgvector-optimize/SKILL.md) 编�
 ### Agent 记忆系统与图数据库 (Memory / Graph DB)
 | 技能 | 描述 |
 |------|------|
-| [`agent-memory-db-optimization`](skills/agent-memory-db-optimization/SKILL.md) | Agent 记忆系统/图数据库后端（Graphiti、Neo4j、Zep/Mem0）五阶段优化：冻结确定性 LLM/embedding 负载 → 客户端/驱动/服务端三段归因 → top-down 与缓存缺失率瓶颈建模 → 分层杠杆（载荷瘦身、PackStream 解码下沉、时序水合下沉、读路径多副本扩展、服务端解码快路径）→ 矩阵复测与跨架构对照；门禁为 0 缓存未命中 + 图规模校验和 + 结果逐字节等价。 |
+| [`agent-memory-optimize`](skills/agent-memory-optimize/SKILL.md) | 编排入口：五阶段流程、职责边界与客户端运行时适配 |
+| [`agent-memory-workload-freeze`](skills/agent-memory-workload-freeze/SKILL.md) | 负载口径固化（写入/查询集、绑核、清库、预热、波动门限） |
+| [`llm-call-replay-cache`](skills/llm-call-replay-cache/SKILL.md) | 模型调用录制-回放缓存（record/replay/auto，含脚本与自测） |
+| [`llm-cache-canonicalization`](skills/llm-cache-canonicalization/SKILL.md) | 缓存 md5 定版、合并、漂移判定与跨机一致性 |
+| [`agent-memory-bench-gate`](skills/agent-memory-bench-gate/SKILL.md) | 门禁：0 miss + 图规模校验和 + 结果指纹等价 |
+| [`agent-memory-cost-attribution`](skills/agent-memory-cost-attribution/SKILL.md) | 框架/驱动/服务端三段归因与封闭轴声明 |
+| [`agent-memory-read-scale-curve`](skills/agent-memory-read-scale-curve/SKILL.md) | 读路径扩展曲线与容量模型（副本数 ↔ 核预算） |
+| [`agent-memory-topdown-analysis`](skills/agent-memory-topdown-analysis/SKILL.md) | 客户端 top-down（L1/L2/L3）与四象限判读 |
+| [`agent-memory-cache-miss-analysis`](skills/agent-memory-cache-miss-analysis/SKILL.md) | 跨级与指令侧缓存缺失率（含平台口径差异） |
+| [`graph-server-flamegraph`](skills/graph-server-flamegraph/SKILL.md) | 服务端火焰图（JVM/Go/C++/Python）与三类热点占比 |
+| [`agent-memory-bottleneck-classification`](skills/agent-memory-bottleneck-classification/SKILL.md) | 瓶颈判定树、证据链与常见误判 |
+| [`agent-memory-payload-slimming`](skills/agent-memory-payload-slimming/SKILL.md) | L1 载荷瘦身：查询投影去掉不回传的大字段 |
+| [`bolt-decode-offload`](skills/bolt-decode-offload/SKILL.md) | L2 解码下沉：官方原生扩展替换纯 Python 反序列化 |
+| [`temporal-hydration-offload`](skills/temporal-hydration-offload/SKILL.md) | L3 水合下沉：类型转换挪到原生扩展并可控开关 |
+| [`agent-memory-read-scaling`](skills/agent-memory-read-scaling/SKILL.md) | L4 读路径多进程扩展与写入串行约束 |
+| [`graph-store-readpath-patch`](skills/graph-store-readpath-patch/SKILL.md) | L5 服务端读路径补丁（累积版本 + 产物 md5） |
+| [`agent-memory-runtime-config`](skills/agent-memory-runtime-config/SKILL.md) | L6 运行配置：绑核、连接池、JDK、预热 |
+| [`agent-memory-retrieval-recipe`](skills/agent-memory-retrieval-recipe/SKILL.md) | L7 检索配方：候选倍数、多路召回、rerank |
+| [`agent-memory-bench-matrix`](skills/agent-memory-bench-matrix/SKILL.md) | 8 组矩阵复测、phase 判据与有效批次规则 |
+| [`agent-memory-negative-results`](skills/agent-memory-negative-results/SKILL.md) | 负结果台账：结构性无效、反转与测量陷阱 |
 
 服务端优化对象是 Neo4j 等图数据库的读路径与存储解码，不是向量索引库内部算法：索引库（Faiss/DiskANN/VSAG）内部优化仍走上面的向量检索入口。
 
