@@ -279,6 +279,11 @@ v=$(jq_ "[f for f in d['findings'] if '骤降' in f]" "$WORK/b13_report/summary.
 check_eq "T13a rank1 消失不误报'骤降/驱逐'" "[]" "$v"
 v=$(jq_ "len([f for f in d['findings'] if 'rank 集合变化' in f])" "$WORK/b13_report/summary.json")
 check_eq "T13b 集合变化单独披露" "1" "$v"
+# T13c 总量表增量列对齐：rank 集合不同 → n/a（不能把探测缺口显示成骤降）
+"$PY" "$ANALYZE" "$B13" 2>/dev/null | grep -A1 "^| a |" > "$WORK/t13c.md"
+check_in "T13c 总量增量列显示 n/a（集合变化，非 -1.00）" "n/a（rank 集合变化）" "$(cat "$WORK/t13c.md")"
+v=$(jq_ "d['timeline'][0]['rank_count'], d['timeline'][1]['rank_count']" "$WORK/b13_report/summary.json")
+check_eq "T13d timeline 携带 rank 数（2 → 1）" "(2, 1)" "$v"
 
 # ============================================================ T14 显式零值 → 无法验证
 B14="$WORK/b14"; mkdir -p "$B14"

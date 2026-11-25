@@ -250,14 +250,21 @@ def analyze_alloc_pools(alloc):
 
 # ---------------------------------------------------------------- 分析
 def analyze_timeline(probes):
-    """时间演化（总量口径：全 rank 求和）。"""
+    """时间演化（总量口径：全 rank 求和；增量列按**共同 rank 对齐**——
+    相邻快照 rank 集合不同时显示 n/a，与 analyze_nova_rebuild 的判定
+    口径一致，避免把探测缺口读成内存骤降）。"""
+    def _key(e):
+        rk = e.get("rank")
+        return str(rk) if rk is not None else "pid:%s" % e.get("pid")
     entries = []
     for p in probes:
         tag = p.get("_tag", "?")
         total_kb = sum(e.get("total_present_kb") or 0
                        for e in p.get("ranks", []))
+        keys = sorted(_key(e) for e in p.get("ranks", []))
         entries.append({"tag": tag, "total_gib": total_kb / GIB,
-                        "ts": p.get("ts")})
+                        "ts": p.get("ts"),
+                        "rank_keys": keys, "rank_count": len(keys)})
     return entries
 
 
@@ -369,15 +376,21 @@ def render_markdown(bundle_dir, probes, alloc, marks, stats, checks, skipped,
     L.append("")
 
     # 总量
-    L.append("## 总量（时间演化，全 rank 求和）")
+    L.append("## 总量（时间演化，全 rank 求和；增量按共同 rank 对齐）")
     L.append("")
-    L.append("| 快照 | pinned present (GiB) | 增量 |")
-    L.append("|------|---------------------|------|")
-    prev = None
+    L.append("| 快照 | pinned present (GiB) | rank 数 | 增量（共同 rank） |")
+    L.append("|------|---------------------|---------|------------------|")
+    prev_e = None
     for e in summary["timeline"]:
-        delta = "" if prev is None else "%+.2f" % (e["total_gib"] - prev)
-        L.append("| %s | %.2f | %s |" % (e["tag"], e["total_gib"], delta))
-        prev = e["total_gib"]
+        if prev_e is None:
+            delta = ""
+        elif prev_e["rank_keys"] != e["rank_keys"]:
+            delta = "n/a（rank 集合变化）"
+        else:
+            delta = "%+.2f" % (e["total_gib"] - prev_e["total_gib"])
+        L.append("| %s | %.2f | %d | %s |" % (e["tag"], e["total_gib"],
+                                              e["rank_count"], delta))
+        prev_e = e
     L.append("")
 
     # 每 rank 分布（带快照列；node 分布 KB → GiB）
