@@ -1,0 +1,22 @@
+{
+  "id": "kptools-kernel-switch",
+  "capability": "agentenv.kernel.switch",
+  "contract": "agentenv-kernel-switch/v1",
+  "inputs": {
+    "request": "本轮 ID、Host 或 Guest 及目标标识、要交付的阶段、来源和基线、候选差异、功能探针、允许的动作与恢复目标。",
+    "receipt": "复核已有结果时，提供本轮 switch-result.json 及其相对路径指向的证据。"
+  },
+  "outputs": {
+    "source": "源码路径的 source.json，含固定提交、补丁摘要与已应用的树。",
+    "result": "switch-result.json，含实际阶段、目标、决定、可核验的证据路径及缺项。",
+    "verification": "verify_handoff.py 的 JSON，报告 completed、blocked 或 invalid。"
+  },
+  "resources": ["SKILL.md", "references", "scripts", "cases"],
+  "steps": ["baseline", "prepare", "stage", "activate", "verify", "handoff"],
+  "supervisor": {
+    "action": "read",
+    "inputs": {"request": "agentenv-kernel-switch-request/v1", "receipt": "agentenv-kernel-switch/v1"},
+    "when": {"receipt": {"contract": "agentenv-kernel-switch/v1"}},
+    "outputs": {"verification": "agentenv-kernel-switch-verification/v1"}
+  }
+}
