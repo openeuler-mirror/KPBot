@@ -1,0 +1,70 @@
+# 用例：tier A — vectordbbench-deploy skill 的完整性契约
+#
+# 覆盖（checks.py）：
+#   1. SKILL.md frontmatter：name 与目录一致、description 非空、无 XML 标签
+#   2. SKILL.md / references 中引用的 references/*.md、scripts/*、assets/* 均存在
+#   3. 默认版本固定为内置 tag 并校验 commit（master/main 需显式 --allow-moving-branch），
+#      构建根固定 /var/cache/vectordbbench-deploy；安装脚本保留 find_python、路径归一化、
+#      mktemp、PIP_INDEX_URL、--pip-index-url-file、--no-build-isolation、extras、
+#      deploy.env、stat -L 等标记
+#   4. 关键锚点仍在语料中：
+#      固定版本/移动分支 opt-in、Python 3.11+、venv、extras、离线 wheelhouse、
+#      commit/包版本、current 链接、deploy.env、构建目录 0700、
+#      pip 索引文件/凭据处理、危险操作警告、路径 .. 拒绝
+#   5. evals/evals.json 结构完整且至少 5 条用例
+#   6. 敏感内容扫描（私网 IP、凭据字面量、个人 home 路径）
+#   7. references 不得出现强制递归删除命令，preflight 不得使用 bash TCP 伪设备，
+#      文档/脚本不得出现 curl 管道 shell
+#
+# 运行（在 skill 根目录下）：
+#   bash cases/skill-integrity/run.sh
+#   # 产物 cases/skill-integrity/results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A，仅依赖 python3 标准库；不访问网络、不需要 venv/数据库。
+
+name: skill-integrity
+skill: vectordbbench-deploy
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: links_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: scripts_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: assets_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: anchors_found
+    op: gte
+    expect: 10
+  - type: json_field
+    file: results/result.json
+    field: evals_checked
+    op: gte
+    expect: 5
+  - type: json_field
+    file: results/result.json
+    field: sensitive_findings
+    expect: 0

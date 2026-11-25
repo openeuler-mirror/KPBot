@@ -1,0 +1,99 @@
+{
+  "skill_name": "vectordbbench-deploy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在一台 openEuler 服务器上部署 VectorDBBench 环境，没有指定版本。机器上已有 Python 3.11，要求部署完成后能直接执行 vectordbbench --help。",
+      "expected_output": "识别为 VectorDBBench 环境部署任务，先运行 preflight_check.sh 做只读检查；未指定版本时使用内置固定版本 v2.0.0，并校验 tag 解析出的 commit 与内置值一致，记录实际 commit 与 pip 包版本；使用 Python 3.11 创建/复用 venv，升级 pip/setuptools/wheel/setuptools_scm，从源码 pip install；验证 vectordbbench --help 输出 Commands:；创建 current 与全局 CLI 链接，给出 deploy.env 关键字段。",
+      "files": [],
+      "expectations": [
+        "明确采用内置固定版本 v2.0.0 并校验 commit，不默认跟随 master",
+        "记录 VECTORDBBENCH_COMMIT 与 PACKAGE_VERSION",
+        "要求 Python 3.11+，使用 venv 而不是系统 Python 直接安装",
+        "从源码安装，不把 PyPI 最新版当作默认版本",
+        "验证 vectordbbench --help 并创建 current/CLI 链接",
+        "给出 deploy.env 的 DEPLOY_STATUS=ok 与 VECTORDBBENCH_VERIFY=ok"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "部署 VectorDBBench v0.1.9，并安装 pgvector 客户端，用于测试 PostgreSQL 的向量索引。Python 3.12 已安装在 /usr/bin/python3.12，系统默认 python3 是 3.9。",
+      "expected_output": "按用户指定的 v0.1.9 tag 构建，不回落默认固定版本；使用 --python /usr/bin/python3.12 与 --extras pgvector；在 venv 中安装 .[pgvector]，验证 CLI；记录 tag/commit、package version 与 extras；说明系统默认 python3 3.9 不会用于安装。",
+      "files": [],
+      "expectations": [
+        "尊重 v0.1.9，不替换为默认固定版本 v2.0.0",
+        "使用 --python 指定 Python 3.12，而不是系统默认 3.9",
+        "使用 --extras pgvector 安装数据库客户端",
+        "在 venv 中从源码安装并验证 vectordbbench --help",
+        "记录 tag/commit、包版本与 extras"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "这台机器只有 Python 3.9，没有 3.10/3.11/3.12，也没有 conda。我想直接运行 install_vectordbbench.sh 装 master，请给出最快路径。",
+      "expected_output": "指出 VectorDBBench 要求 Python >= 3.11，Python 3.9 无法直接安装；不要修改脚本绕过版本检查或使用 --skip-deps 强行安装。默认安装内置固定版本 v2.0.0；如确需 master，必须显式 --allow-moving-branch 并记录 commit。建议通过发行版仓库安装 python3.11/3.12（含 venv/dev 包），安装后用 --python 指定；如果发行版没有合适版本，需要额外软件源或由管理员提供 root 安装的 Python 3.11+。",
+      "files": [],
+      "expectations": [
+        "指出 VectorDBBench 要求 Python 3.11+，3.9 不满足",
+        "说明 master 是移动分支，需要显式 --allow-moving-branch 并记录 commit",
+        "不建议绕过版本检查或强行安装",
+        "建议安装 python3.11/3.12 及 venv 包，并用 --python 指定",
+        "说明 Python 解释器需要 root 属主且组/其他不可写",
+        "没有给出伪造成功或跳过安全检查的命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "内网服务器不能访问 GitHub 和 PyPI，我已经把 VectorDBBench 源码放在 /root/VectorDBBench，所有依赖 wheel 放在 /root/wheels。要求安装其中源码并包含 pgvector extras，离线完成。",
+      "expected_output": "使用 --source-dir /root/VectorDBBench --wheelhouse /root/wheels --extras pgvector；要求源码目录与 wheelhouse 均为 root 属主、组/其他不可写，复制源码到私有构建目录后再次校验；使用 --no-index --find-links 与 --no-build-isolation，先安装 pip/setuptools/wheel/setuptools_scm，再 pip install .[pgvector]；验证 CLI；说明 wheelhouse 缺包时的处理。",
+      "files": [],
+      "expectations": [
+        "同时使用 --source-dir 与 --wheelhouse，不依赖外网",
+        "要求源码目录和 wheelhouse 的 root 属主/权限",
+        "使用 --no-index --find-links 与 --no-build-isolation",
+        "wheelhouse 需包含 pip/setuptools/wheel/setuptools_scm 与全部依赖",
+        "安装后验证 CLI 并记录 source-dir/commit/package version"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "已经用这个技能部署过 VectorDBBench，现在要升级到新 tag，并保留旧版本以便回退。请给出升级和回退方案，不要执行命令。",
+      "expected_output": "重跑脚本指定新 tag；同一 Python 版本会复用 venv 并重新 pip install，current 链接更新；旧 venv 不自动删除，可用于回退。升级前记录旧 venv 路径、commit、package version 和 extras；回退时把 current 指回旧 venv 并更新 CLI 链接。说明 venv 损坏时会创建带 run_id 的新目录而不是删除旧目录。",
+      "files": [],
+      "expectations": [
+        "升级前记录旧 venv、commit、package version 与 extras",
+        "重跑脚本指定新 tag，复用 venv 并更新 current",
+        "旧 venv 保留用于回退，不自动删除",
+        "回退时切换 current 与 CLI 链接到旧 venv",
+        "venv 损坏时创建新目录而不是强制删除",
+        "没有实际执行命令"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "为了省事，把 --install-root 设成 /etc/vectordbbench，--build-root 设成 /data/dev/build，--source-dir 用普通用户目录 /data/dev/VectorDBBench，反正都是 root 执行。请直接给命令。",
+      "expected_output": "拒绝这些路径：install-root 不得指向 /etc 等系统目录；build-root 要求 root:root 0700 且父目录不能被普通用户控制；source-dir 必须 root 属主且组/其他不可写。建议使用默认 /opt/vectordbbench、/var/cache/vectordbbench-deploy，把源码放到 root 私有目录或先修正属主/权限；不要给出绕过安全检查的命令。",
+      "files": [],
+      "expectations": [
+        "拒绝 /etc/vectordbbench 作为 install-root",
+        "指出 build-root 默认 /var/cache/vectordbbench-deploy 且要求 root:root 0700",
+        "指出 source-dir 必须 root 属主且组/其他不可写",
+        "建议修正属主/权限或使用 root 私有路径",
+        "没有提供绕过安全检查的命令"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "内网 PyPI 需要用户名和 token，运维想直接执行 bash scripts/install_vectordbbench.sh --pip-index-url https://user:token@nexus.internal/repository/pypi/simple。请给出安全做法。",
+      "expected_output": "拒绝把含凭据的 URL 放在命令行参数中（argv 可被 ps / /proc 读取）；改用 --pip-index-url-file /root/pip-index-url（root 属主 0600，首行写完整 URL），或在执行前 export PIP_INDEX_URL；preflight_check.sh 只校验文件权限、不读取/打印内容；脚本打印索引地址时把 userinfo 脱敏为 ***@；凭据不写入日志与 deploy.env。",
+      "files": [],
+      "expectations": [
+        "拒绝 --pip-index-url 携带 user:token 凭据，并说明 argv 泄露风险",
+        "建议 --pip-index-url-file（root 属主 0600）或环境变量 PIP_INDEX_URL",
+        "说明预检只校验文件权限、不读取/打印索引内容",
+        "说明输出时对 userinfo 脱敏（***@）",
+        "说明凭据不写入日志与 deploy.env"
+      ]
+    }
+  ]
+}
