@@ -17,7 +17,7 @@ metadata:
   skill_type: tool_assisted
   category: profiling
   domain: thread_affinity
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # kptools-thread-affinity-collector — 运行期线程绑核采集器
