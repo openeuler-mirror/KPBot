@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Offline contract regressions for the ClickHouse environment probes."""
 
+from contextlib import redirect_stderr
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -140,6 +142,25 @@ class EnvironmentContractTests(unittest.TestCase):
         if not path.exists():
             return []
         return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_help_lists_series_exit_codes(self):
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "--help"],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        for fragment in (
+            "0=ready",
+            "1=blocked",
+            "2=argument/output error or collision",
+            "3=unknown",
+        ):
+            self.assertIn(fragment, completed.stdout)
 
     def test_ready_checks_live_interface_and_exact_aggregate(self):
         self.fake_client()
@@ -324,7 +345,7 @@ class EnvironmentContractTests(unittest.TestCase):
         self.fake_client(server_version="unparseable")
         output = self.root / "unknown"
         completed = self.invoke(output)
-        self.assertEqual(completed.returncode, 4)
+        self.assertEqual(completed.returncode, 3)
         self.assertEqual(self.result(output)["status"], "unknown")
 
     def test_missing_required_interface_is_wrong_version(self):
@@ -346,7 +367,9 @@ class EnvironmentContractTests(unittest.TestCase):
         )
 
     def test_tls_password_example_cleans_up_on_success_and_failure(self):
-        skill_text = (SCRIPT.parents[1] / "SKILL.md").read_text(encoding="utf-8")
+        skill_text = (SCRIPT.parents[1] / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
         example = next(
             block.split("```", 1)[0]
             for block in skill_text.split("```bash\n")[1:]
@@ -357,7 +380,9 @@ class EnvironmentContractTests(unittest.TestCase):
         fake_bin.mkdir()
         fake_python = fake_bin / "python3"
         fake_python.write_text(
-            "#!" + sys.executable + "\n"
+            "#!"
+            + sys.executable
+            + "\n"
             + """import json
 import os
 from pathlib import Path
@@ -381,9 +406,9 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
                 wrapper = (
                     "export CLICKHOUSE_PASSWORD=parent-marker\n"
                     + example
-                    + "\nexample_status=$?\n"
-                    + '[ "$example_status" -eq "$EXPECTED_STATUS" ] || exit 90\n'
-                    + '[ "$CLICKHOUSE_PASSWORD" = "parent-marker" ] || exit 91\n'
+                    + "\nexample_rc=$?\n"
+                    + '[ "$example_rc" -eq "$EXPECTED_STATUS" ] || exit 90\n'
+                    + '[ "$CLICKHOUSE_PASSWORD" = parent-marker ] || exit 91\n'
                 )
                 env = dict(
                     self.env,
@@ -469,8 +494,29 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         sentinel = output / "result.json"
         sentinel.write_text("keep me", encoding="utf-8")
         completed = self.invoke(output)
-        self.assertEqual(completed.returncode, 3)
+        self.assertEqual(completed.returncode, 2)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep me")
+        self.assertEqual(self.calls(), [])
+
+    def test_result_write_failure_uses_output_exit_code(self):
+        output = self.root / "write-failure"
+        with (
+            mock.patch.object(
+                ENVIRONMENT_MODULE,
+                "run_checks",
+                return_value={"status": "ready"},
+            ),
+            mock.patch.object(
+                ENVIRONMENT_MODULE,
+                "private_write",
+                side_effect=OSError("simulated result write failure"),
+            ),
+        ):
+            with redirect_stderr(io.StringIO()) as stderr:
+                exit_code = ENVIRONMENT_MODULE.main(["--output", str(output)])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("simulated result write failure", stderr.getvalue())
+        self.assertFalse((output / "result.json").exists())
         self.assertEqual(self.calls(), [])
 
 
@@ -490,7 +536,7 @@ if __name__ == "__main__":
         "errors": len(test_result.errors),
         "requires_live_service": False,
         "semantic_checks": [
-            "ready/blocked/unknown",
+            "ready/blocked/unknown and series exit codes in help/output",
             "wrong_version/missing_tool/auth/timeout/correctness",
             "secret redaction and nondefault endpoints",
             "password-example session cleanup on success and failure",

@@ -20,6 +20,7 @@
 - 没有 blocked、但至少一个必需探针因版本格式或前置依赖而为 `unknown` → 总体 `unknown`。
 - 所有必需探针 ready → 总体 `ready`。可选系列提示不会单独阻断真实接口已经验证的目标。
 - 子进程 `FileNotFoundError` → `missing_tool`；有限超时 → `timeout`；认证错误标记 → `auth`；低于下限或缺接口 → `wrong_version`；其他非零退出 → `error`。
+- 退出码遵循系列契约：`0=ready`，`1=blocked`，`2=参数或输出错误/冲突`，`3=unknown`。
 
 不会用 socket-open、Python 包可导入或版本字符串本身代替上述检查。远程账号只需要执行这两个 SELECT 的权限；脚本不读取集群表，也不据此推断集群健康。
 

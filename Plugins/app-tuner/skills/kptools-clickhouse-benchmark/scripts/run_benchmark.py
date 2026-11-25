@@ -109,7 +109,15 @@ def secure_config(value):
 
 def build_parser():
     """Build a bounded interface without arbitrary SQL or passwords."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "exit codes: 0=success; 1=preflight/workload failure; "
+            "2=argument/output error or collision; 3=unknown (reserved); "
+            "130=interrupted"
+        ),
+    )
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=network_port, default=9000)
     parser.add_argument("--user", default="default")
@@ -688,7 +696,7 @@ def main(argv=None):
         args.output.mkdir(mode=0o700, exist_ok=False)
     except OSError as exc:
         print(f"cannot create fresh output directory: {exc}", file=sys.stderr)
-        return 3
+        return 2
 
     result = initial_result(args)
     exit_code = 1
@@ -744,7 +752,7 @@ def main(argv=None):
         )
     except OSError as exc:
         print(f"cannot write result: {exc}", file=sys.stderr)
-        return 3
+        return 2
     print(json.dumps(public, ensure_ascii=False))
     return exit_code
 

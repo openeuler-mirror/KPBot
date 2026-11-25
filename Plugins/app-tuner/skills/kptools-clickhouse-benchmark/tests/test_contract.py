@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Offline contract regressions for the bounded ClickHouse benchmark."""
 
+from contextlib import redirect_stderr
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -220,6 +222,26 @@ class BenchmarkContractTests(unittest.TestCase):
             return []
         return [json.loads(line) for line in path.read_text().splitlines()]
 
+    def test_help_lists_series_exit_codes(self):
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "--help"],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        for fragment in (
+            "0=success",
+            "1=preflight/workload failure",
+            "2=argument/output error or collision",
+            "3=unknown (reserved)",
+            "130=interrupted",
+        ):
+            self.assertIn(fragment, completed.stdout)
+
     def test_exact_clickhouse_268_native_output(self):
         metrics = BENCHMARK_MODULE.parse_native_metrics(
             REAL_NATIVE_OUTPUT, expected_queries=3
@@ -269,7 +291,9 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertIn("not TPC-H", result["scope"])
 
     def test_tls_password_example_cleans_up_on_success_and_failure(self):
-        skill_text = (SCRIPT.parents[1] / "SKILL.md").read_text(encoding="utf-8")
+        skill_text = (SCRIPT.parents[1] / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
         example = next(
             block.split("```", 1)[0]
             for block in skill_text.split("```bash\n")[1:]
@@ -280,7 +304,9 @@ class BenchmarkContractTests(unittest.TestCase):
         fake_bin.mkdir()
         fake_python = fake_bin / "python3"
         fake_python.write_text(
-            "#!" + sys.executable + "\n"
+            "#!"
+            + sys.executable
+            + "\n"
             + """import json
 import os
 from pathlib import Path
@@ -304,9 +330,9 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
                 wrapper = (
                     "export CLICKHOUSE_PASSWORD=parent-marker\n"
                     + example
-                    + "\nexample_status=$?\n"
-                    + '[ "$example_status" -eq "$EXPECTED_STATUS" ] || exit 90\n'
-                    + '[ "$CLICKHOUSE_PASSWORD" = "parent-marker" ] || exit 91\n'
+                    + "\nexample_rc=$?\n"
+                    + '[ "$example_rc" -eq "$EXPECTED_STATUS" ] || exit 90\n'
+                    + '[ "$CLICKHOUSE_PASSWORD" = parent-marker ] || exit 91\n'
                 )
                 env = dict(
                     self.env,
@@ -557,11 +583,50 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         sentinel = output / "result.json"
         sentinel.write_text("previous result", encoding="utf-8")
         completed = self.invoke(output)
-        self.assertEqual(completed.returncode, 3)
+        self.assertEqual(completed.returncode, 2)
         self.assertEqual(
             sentinel.read_text(encoding="utf-8"), "previous result"
         )
         self.assertEqual(self.calls(), [])
+
+    def test_result_write_failure_uses_output_exit_code(self):
+        self.fake_client()
+        output = self.root / "write-failure"
+        real_private_write = BENCHMARK_MODULE.private_write
+
+        def fail_result_write(path, content):
+            if Path(path).name == "result.json":
+                raise OSError("simulated result write failure")
+            return real_private_write(path, content)
+
+        with mock.patch.object(
+            BENCHMARK_MODULE, "private_write", side_effect=fail_result_write
+        ):
+            with redirect_stderr(io.StringIO()) as stderr:
+                exit_code = BENCHMARK_MODULE.main(
+                    [
+                        "--client",
+                        str(self.client),
+                        "--benchmark",
+                        str(self.benchmark),
+                        "--timeout",
+                        "0.2",
+                        "--rows",
+                        "1000",
+                        "--iterations",
+                        "3",
+                        "--warmup-iterations",
+                        "2",
+                        "--rounds",
+                        "3",
+                        "--output",
+                        str(output),
+                    ]
+                )
+        self.assertEqual(exit_code, 2)
+        self.assertIn("simulated result write failure", stderr.getvalue())
+        self.assertFalse((output / "result.json").exists())
+        self.assertTrue(any("--iterations" in call for call in self.calls()))
 
     def test_unbounded_or_excessive_arguments_are_rejected_before_output(self):
         invalid = (
@@ -619,6 +684,7 @@ if __name__ == "__main__":
             "warmup exclusion and native units/counts",
             "exact per-phase correctness",
             "wrong_version/missing_tool/auth/timeout/runtime/metric failures",
+            "series exit codes for success/failure/arguments/output/help",
             "secret redaction, bounded arguments, exclusive output",
             "password-example session cleanup on success and failure",
             "single-binary independence",

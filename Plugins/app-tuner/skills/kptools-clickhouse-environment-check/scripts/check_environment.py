@@ -66,7 +66,14 @@ def secure_config(value):
 
 def build_parser():
     """Build the command-line parser; no password argument is provided."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "exit codes: 0=ready; 1=blocked; "
+            "2=argument/output error or collision; 3=unknown"
+        ),
+    )
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=network_port, default=9000)
     parser.add_argument("--user", default="default")
@@ -508,7 +515,7 @@ def main(argv=None):
         args.output.mkdir(mode=0o700, exist_ok=False)
     except OSError as exc:
         print(f"cannot create fresh output directory: {exc}", file=sys.stderr)
-        return 3
+        return 2
     result = run_checks(args)
     try:
         private_write(
@@ -517,11 +524,11 @@ def main(argv=None):
         )
     except OSError as exc:
         print(f"cannot write result: {exc}", file=sys.stderr)
-        return 3
+        return 2
     print(json.dumps(result, ensure_ascii=False))
     if result["status"] == "ready":
         return 0
-    return 1 if result["status"] == "blocked" else 4
+    return 1 if result["status"] == "blocked" else 3
 
 
 if __name__ == "__main__":

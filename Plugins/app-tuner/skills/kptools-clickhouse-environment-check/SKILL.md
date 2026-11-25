@@ -66,7 +66,7 @@ python3 scripts/check_environment.py \
 - `blocked`：存在必需探针失败，原因区分 `missing_tool`、`wrong_version`、`timeout`、`auth`、`correctness`、`resource` 或 `error`。
 - `unknown`：没有已阻断项，但版本或依赖证据不足，不能判为就绪。
 
-退出码：`0=ready`，`1=blocked`，`2=参数错误`，`3=输出目录/写入失败（含冲突）`，`4=unknown`。失败时仍保留已完成的探针证据；参数或输出冲突在启动客户端前失败。
+退出码：`0=ready`，`1=blocked`，`2=参数错误或输出目录/写入失败（含冲突）`，`3=unknown`。失败时仍保留已完成的探针证据；参数或输出冲突在启动客户端前失败。
 
 ## 契约回归
 
