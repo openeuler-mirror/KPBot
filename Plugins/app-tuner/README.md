@@ -110,7 +110,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `performance-library-selection` | 性能库选型(malloc/memcpy/压缩/加密) |
 | `compiler-optimization` | 编译优化(版本/架构参数/LTO/PGO/向量化) |
 | `application-config-optimization` | 应用配置(线程/队列/批量/缓存/连接) |
-| `accelerator-optimization` | GPU/NPU 加速卡利用率分析 |
+| `accelerator-optimization` | 密码加速卡优化: HPRE/KAE 密码卸载(UADK/ASF) |
 | `hardware-upgrade-analysis` | 硬件规格升级建议 |
 | `io-optimization` | 非 CPU 瓶颈预筛 + 磁盘/内存专项证据采集 |
 | `database-workload-analysis` | 数据库专项分析(MySQL/InnoDB) |
@@ -134,6 +134,8 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键 Workflow/路由与共享执行器(保留计划哈希、预检、准备、29 档全矩阵、冒烟、差集清理与证据归档) |
 | [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
+| [`kptools-cpuoffload-analyzer`](skills/kptools-cpuoffload-analyzer/SKILL.md) | torchtitan-npu CPU offload 内存分析器(bundle 离线三自检：node 映射自洽/L1 存活配对交叉核对/采样放大；nova 重建与骤降按共同 rank 对齐判定；bundle 只读，报告写 bundle 同级目录) |
+| [`kptools-cpuoffload-collector`](skills/kptools-cpuoffload-collector/SKILL.md) | torchtitan-npu CPU offload pinned 内存采集器(L0 pagemap 快照：devmm_svm 段定位/present 页计数/NUMA node 归属/多时间锚点序列；可选 L1 sitecustomize 埋点；判读归姊妹 analyzer) |
 
 #### CubeSandbox 单项基准入口（10 个）
 
@@ -174,6 +176,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 
 | 技能 | 描述 |
 |------|------|
+| [`kptools-torchtitan-deploy`](skills/kptools-torchtitan-deploy/SKILL.md) | torchtitan-npu 部署手册与踩坑指导 — 版本配套表(以上游 installation.md 为准的快照)、昇腾软件栈六件套安装(NNAL source 顺序)、三步源码安装与 torchao-npu、新配置系统(--module/--config，弃用 TOML)、run_train.sh 单机/多机环境变量逐项、单卡 debugmodel 冒烟、affinity 扩展配置(MR 1100 已合入 master)；踩坑实录 A 组以仓内补丁为可溯源证据(附真实路径)，B 组为实战环境坑(配置系统重构/版本错位/910B3 sync-start 地板/CPU_AFFINITY_CONF 主线程静默失效) |
 | `rocksdb-perf-diagnostics` | RocksDB 性能诊断与优化 — 用 LOG / properties / Statistics / perf_context / EventListener 定位写停顿、compaction 积压、读写/空间放大,并在授权下执行单变量复测 |
 
 ## 目录结构
