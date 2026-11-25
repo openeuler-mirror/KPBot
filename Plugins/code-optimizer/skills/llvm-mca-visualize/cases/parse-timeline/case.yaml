@@ -1,0 +1,27 @@
+# llvm-mca-visualize 解析回归：eor 不能被当成执行周期
+#
+# 运行（在 skill 根目录）：
+#   bash cases/parse-timeline/run.sh
+# 纯 --parse，不需要 llvm-mca。
+
+name: parse-timeline
+skill: llvm-mca-visualize
+tier: A
+image: host-runtime
+
+entrypoint: ["bash", "cases/parse-timeline/run.sh"]
+
+env_requires:
+  - python3（标准库）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0

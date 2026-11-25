@@ -1,0 +1,3 @@
+# 本目录脚本须保持 LF 行尾
+* text=auto eol=lf
+*.png binary
