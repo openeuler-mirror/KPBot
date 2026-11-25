@@ -5,7 +5,7 @@ description: 'Kafka 压测、Kafka 性能基准、producer 吞吐与延迟测量
   '
 license: MulanPSL-2.0
 metadata:
-  compatibility: Linux/Bash，Python 3.10+；仅 Apache Kafka CLI 4.0.x/4.1.x 已实现参数面，Java 17+
+  compatibility: Linux/Bash，Python 3.10+；仅 Apache Kafka CLI 4.4.x 已实现参数面，Java 17+；4.0.x/4.1.x 因官方已公告未修复 CVE 而 fail closed
   skill_type: tool_assisted
   category: benchmark
   domain: kafka
@@ -113,9 +113,10 @@ timeout、运行失败、输出冲突、预热排除、精确内容/计数/offse
 
 ## 官方依据
 
-- [Apache Kafka 4.1 Quick Start](https://kafka.apache.org/41/getting-started/quickstart/)
-- [ProducerPerformance 4.1.0 源码与单位实现](https://github.com/apache/kafka/blob/4.1.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)
-- [Apache Kafka 4.1 Configuration](https://kafka.apache.org/41/configuration/)
+- [Apache Kafka 4.4 Quick Start](https://kafka.apache.org/44/getting-started/quickstart/)
+- [ProducerPerformance 4.4.0 源码与单位实现](https://github.com/apache/kafka/blob/4.4.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)
+- [Apache Kafka 4.4 Configuration](https://kafka.apache.org/44/configuration/)
+- [Apache Kafka CVE List](https://kafka.apache.org/community/cve-list/) 与 [Downloads](https://kafka.apache.org/community/downloads/)：4.1.x/4.0.x 已归档且存在未修复公告，本 skill 只接受实测 4.4.x 参数面
 
 
 ## 镜像维护

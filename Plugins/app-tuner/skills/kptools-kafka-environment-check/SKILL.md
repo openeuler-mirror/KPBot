@@ -5,7 +5,7 @@ description: 'Kafka 环境检查、压测前置检查、已有 Kafka 服务只�
   '
 license: MulanPSL-2.0
 metadata:
-  compatibility: Linux/Bash，Python 3.10+；仅 Apache Kafka CLI 4.0.x/4.1.x 已实现参数面，Java 17+
+  compatibility: Linux/Bash，Python 3.10+；仅 Apache Kafka CLI 4.4.x 已实现参数面，Java 17+；4.0.x/4.1.x 因官方已公告未修复 CVE 而 fail closed
   skill_type: tool_assisted
   category: environment_check
   domain: kafka
@@ -93,8 +93,9 @@ bash cases/contract/run.sh
 
 ## 官方依据
 
-- [Apache Kafka 4.1 Quick Start](https://kafka.apache.org/41/getting-started/quickstart/)
-- [Apache Kafka 4.1 Security](https://kafka.apache.org/41/security/)
-- [Apache Kafka 4.1 Configuration](https://kafka.apache.org/41/configuration/)
+- [Apache Kafka 4.4 Quick Start](https://kafka.apache.org/44/getting-started/quickstart/)
+- [Apache Kafka 4.4 Security](https://kafka.apache.org/44/security/)
+- [Apache Kafka 4.4 Configuration](https://kafka.apache.org/44/configuration/)
+- [Apache Kafka CVE List](https://kafka.apache.org/community/cve-list/) 与 [Downloads](https://kafka.apache.org/community/downloads/)：4.1.x/4.0.x 已归档且存在未修复公告，本 skill 只接受实测 4.4.x 参数面
 
 CLI 子进程仅透传 Java、PATH、HOME、locale、临时目录及明确列出的 Kerberos 配置/缓存位置；不会继承其他凭据或 `KAFKA_OPTS` 等任意 JVM 注入设置。认证参数使用本技能校验的客户端配置文件。

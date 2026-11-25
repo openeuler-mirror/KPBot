@@ -32,4 +32,4 @@ monotonic `payload` 与 `throughput_records_per_second`。预热不计入计时�
 通行证。实际原生 records/s、MiB/s、latency、offset 和 wall timing 的定义属于
 压测执行结果，本检查不伪造这些字段。
 
-官方术语与配置依据：[Apache Kafka 4.1 Configuration](https://kafka.apache.org/41/configuration/)。
+官方术语与配置依据：[Apache Kafka 4.4 Configuration](https://kafka.apache.org/44/configuration/)。

@@ -7,8 +7,9 @@
 1. 校验输出目录独占创建和安全配置；配置无效时不发网络请求。
 2. 检查 `kafka-topics.sh`、`kafka-get-offsets.sh`、console producer/consumer、
    consumer-groups 和 producer-perf 六个脚本及 Java 17+。
-3. 只接受 Kafka CLI 4.0.x/4.1.x 已实现参数面，保存实际三项版本与 JDK 完整
-   版本；其他版本不是“兼容”，而是 `wrong_version`。
+3. 只接受 Kafka CLI 4.4.x 已实现参数面，保存实际三项版本与 JDK 完整
+   版本；4.0.x/4.1.x 官方已归档并有未修复 CVE 公告，其他版本也不是“兼容”，
+   一律 `wrong_version`。
    JVM 与官方启动脚本一致，优先使用 `JAVA_HOME/bin/java`，未设置时再用 PATH。
 4. 真实执行 metadata `--list`，分别识别 `absent`、`auth`、`timeout`、`error`。
    不用 socket-open、包导入或历史成功替代它。
@@ -56,6 +57,6 @@ group 才登记到 `consumer_groups_started` 并在 finally 中逐个按精确�
 `group.id` 和负载覆盖项。报告只存 SHA-256、权限、键名，命令和原生日志对配置值
 及常见 password/secret/token 赋值脱敏。
 
-实现参考：[Kafka 4.1 Security](https://kafka.apache.org/41/security/) 与
-[Kafka 4.1 Operations](https://kafka.apache.org/41/operations/)。Java properties
+实现参考：[Kafka 4.4 Security](https://kafka.apache.org/44/security/) 与
+[Kafka 4.4 Operations](https://kafka.apache.org/44/operations/)。Java properties
 解析适配自本次请求随附的用户参考辅助代码，已完整内嵌，无外部源码依赖。

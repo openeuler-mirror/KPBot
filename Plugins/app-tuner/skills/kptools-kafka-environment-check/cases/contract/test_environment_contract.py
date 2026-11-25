@@ -72,7 +72,11 @@ class EnvironmentContractTests(unittest.TestCase):
             }
         parameters = argv[2:]
         if "--version" in parameters:
-            version = "3.9.1" if self.mode == "old-kafka" else "4.1.0"
+            version = {
+                "old-kafka": "3.9.1",
+                "unsupported-41": "4.1.2",
+                "unsupported-40": "4.0.2",
+            }.get(self.mode, "4.4.0")
             return {"returncode": 0, "stdout": version + " (Commit: test)\n"}
         if "--list" in parameters:
             if self.mode == "auth":
@@ -165,7 +169,7 @@ class EnvironmentContractTests(unittest.TestCase):
         )
         self.assertEqual(
             self.probe(result, "cli_version")["evidence"]["version"],
-            "4.1.0",
+            "4.4.0",
         )
         forbidden = ("--create", "--delete", "--produce")
         self.assertFalse(
@@ -202,6 +206,27 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(
             self.probe(result, "cli_version")["category"], "wrong_version"
         )
+
+    def test_archived_4x_families_with_known_advisories_are_blocked(self):
+        for mode, expected in (
+            ("unsupported-41", "4.1.2"),
+            ("unsupported-40", "4.0.2"),
+        ):
+            with self.subTest(mode=mode):
+                self.mode = mode
+                self.output = self.root / f"blocked-{mode}"
+                arguments = self.arguments()
+                arguments[arguments.index("--output") + 1] = str(self.output)
+                code, result, _, _ = self.invoke(arguments)
+                self.assertEqual(code, 1)
+                self.assertEqual(result["status"], "blocked")
+                probe = self.probe(result, "cli_version")
+                self.assertEqual(probe["category"], "wrong_version")
+                self.assertEqual(probe["evidence"]["version"], expected)
+                self.assertEqual(
+                    probe["evidence"]["supported_interface_profiles"],
+                    ["4.4.x"],
+                )
 
     def test_unsupported_java_version_is_blocked(self):
         self.mode = "old-java"

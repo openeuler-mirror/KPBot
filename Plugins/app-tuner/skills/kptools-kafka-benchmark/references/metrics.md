@@ -14,7 +14,7 @@ records/s 是受计划约束的观察值，不得写成 broker 最大吞吐。
 - `requested_records`：本轮请求消息数；`exit_code` 和 `timed_out` 是实际进程结果。
 - `native.records_sent`：官方最终汇总中成功回调计数，不从退出码推断。
 - `native.records_per_second`：官方整个进程测量窗口的 records/s。
-- `native.megabytes_per_second`：官方字段名为 `MB/sec`，但 4.1.0 实现除以
+- `native.megabytes_per_second`：官方字段名为 `MB/sec`，但 4.4.0 实现除以
   `1024 × 1024`；JSON 聚合字段因此明确命名为 `mebibytes_per_second_median`。
 - `native.average_latency_ms`、`max_latency_ms`、`p50/p95/p99/p99_9_latency_ms`：
   官方从 send 到成功回调的毫秒统计。分位数使用其实现的采样数组，不是应用
@@ -56,5 +56,5 @@ producer 计时窗外，但所需本地日志空间按累计读取量显式检�
 开始时间、wall ms、退出码和原生日志。对比实验必须另固定 broker 拓扑、ISR、
 客户端位置、CPU/内存/磁盘/网络和其他写入者；本脚本不把不同条件的数字合并。
 
-权威实现：[Apache Kafka ProducerPerformance 4.1.0](https://github.com/apache/kafka/blob/4.1.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)，
+权威实现：[Apache Kafka ProducerPerformance 4.4.0](https://github.com/apache/kafka/blob/4.4.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)，
 尤其 `printTotal()` 的 `1000.0` 与 `1024.0 * 1024.0` 计算及成功回调计数。

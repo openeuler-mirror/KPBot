@@ -16,7 +16,7 @@ import subprocess
 import time
 
 
-SUPPORTED_VERSIONS = ((4, 0), (4, 1))
+SUPPORTED_VERSIONS = ((4, 4),)
 MINIMUM_JAVA_MAJOR = 17
 ALLOWED_CONFIG_KEYS = {
     "client.dns.lookup",
@@ -325,6 +325,31 @@ def redact(text, secrets=()):
         r"(?i)((?:password|secret|token)\s*[=:]\s*)([^\s,;]+)"
     )
     return pattern.sub(r"\1<redacted>", safe)
+
+
+CONSUMER_STDOUT_BANNERS = frozenset(
+    (
+        "Option --consumer.config is deprecated and will be removed in a "
+        "future version. Use --command-config instead.",
+        "Option --consumer-property is deprecated and will be removed in "
+        "a future version. Use --command-property instead.",
+    )
+)
+
+
+def consumed_payload_lines(text):
+    """Return only consumed payload lines, not exact CLI deprecation banners.
+
+    Kafka 4.4 console consumer prints deprecation notices for supported
+    options on stdout. Dropping only those exact banner lines keeps the
+    downstream exact-payload comparison strict; any other line still
+    counts as consumed output.
+    """
+    return [
+        line
+        for line in (text or "").splitlines()
+        if line not in CONSUMER_STDOUT_BANNERS
+    ]
 
 
 def utc_now():

@@ -731,7 +731,7 @@ class BenchmarkRun:
             "--consumer.config",
         )
         self.require_success(consumer, "exact correctness consume")
-        actual = consumer["stdout"].splitlines()
+        actual = support.consumed_payload_lines(consumer["stdout"])
         exact = len(actual) == 3 and sorted(actual) == sorted(messages)
         self.result["correctness"].update(
             {
@@ -783,7 +783,8 @@ class BenchmarkRun:
         )
         self.require_success(command, stem + " identity consumption")
         validation = compare_identities(
-            command["stdout"].splitlines(), self.expected_identities
+            support.consumed_payload_lines(command["stdout"]),
+            self.expected_identities,
         )
         validation["consumer_group"] = group
         validation["consumer_command_id"] = stem + "-consume-identities"

@@ -98,7 +98,11 @@ class BenchmarkContractTests(unittest.TestCase):
             return parameters[parameters.index(flag) + 1]
 
         if tool == "kafka-topics.sh" and "--version" in parameters:
-            version = "3.9.1" if self.mode == "old-kafka" else "4.1.0"
+            version = {
+                "old-kafka": "3.9.1",
+                "unsupported-41": "4.1.2",
+                "unsupported-40": "4.0.2",
+            }.get(self.mode, "4.4.0")
             return {"returncode": 0, "stdout": version + " (Commit: test)\n"}
         if tool == "kafka-topics.sh" and "--list" in parameters:
             if self.mode == "auth":
@@ -151,7 +155,11 @@ class BenchmarkContractTests(unittest.TestCase):
                 consumed = ["wrong-message"]
             elif self.mode == "identity-mismatch" and self.perf_count == 2:
                 consumed[-1] = "unexpected-identity"
-            output = "\n".join(consumed) + "\n" if consumed else ""
+            banners = []
+            if self.mode == "cli-banners":
+                banners = sorted(support.CONSUMER_STDOUT_BANNERS)
+            lines = banners + consumed
+            output = "\n".join(lines) + "\n" if lines else ""
             return {"returncode": 0, "stdout": output}
         if tool == "kafka-consumer-groups.sh":
             group = value("--group")
@@ -347,6 +355,32 @@ class BenchmarkContractTests(unittest.TestCase):
         )
         self.assertEqual(probe["category"], "wrong_version")
 
+    def test_archived_4x_families_with_known_advisories_block(self):
+        for mode, expected in (
+            ("unsupported-41", "4.1.2"),
+            ("unsupported-40", "4.0.2"),
+        ):
+            with self.subTest(mode=mode):
+                self.mode = mode
+                self.output = self.root / f"blocked-{mode}"
+                arguments = self.arguments()
+                arguments[arguments.index("--output") + 1] = str(self.output)
+                code, result, _, _ = self.invoke(arguments)
+                self.assertEqual(code, 2)
+                self.assertEqual(self.created_topics, [])
+                self.assertEqual(self.perf_calls(), [])
+                probe = next(
+                    item
+                    for item in result["preflight"]
+                    if item["name"] == "cli_version"
+                )
+                self.assertEqual(probe["category"], "wrong_version")
+                self.assertEqual(probe["evidence"]["version"], expected)
+                self.assertEqual(
+                    probe["evidence"]["supported_interface_profiles"],
+                    ["4.4.x"],
+                )
+
     def test_unsupported_java_version_blocks_before_create(self):
         self.mode = "old-java"
         code, result, _, _ = self.invoke()
@@ -426,6 +460,16 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertEqual(result["warmup"]["exit_code"], 42)
         self.assertEqual(result["rounds"], [])
         self.assertEqual(len(self.perf_calls()), 1)
+
+    def test_cli_deprecation_banners_do_not_corrupt_exact_comparison(self):
+        self.mode = "cli-banners"
+        code, result, _, _ = self.invoke()
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "passed")
+        self.assertTrue(result["correctness"]["exact_message_round_trip"])
+        self.assertEqual(len(result["rounds"]), 3)
+        for item in result["rounds"]:
+            self.assertTrue(item["identity_validation"]["exact"])
 
     def test_exact_message_mismatch_fails_before_warmup(self):
         self.mode = "bad-messages"
