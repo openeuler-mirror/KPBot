@@ -155,6 +155,16 @@ backup_host_file() {  # $1=原文件路径
     fi
 }
 
+# 解析宿主机最终目标文件路径：目标为已存在目录时按 cp 落地语义指向目录内同名文件，
+# 备份与回读校验均按该最终路径进行（防止目录目标被登记为 NEW 后，目录内同名原件被覆盖且无备份可回滚）
+resolve_host_tgt() {  # $1=目标路径 $2=源文件相对路径
+    if [ -d "$1" ]; then
+        printf '%s/%s\n' "$1" "$(basename "$2")"
+    else
+        printf '%s\n' "$1"
+    fi
+}
+
 log "目标容器: $CONTAINER  SRC: $SRC  KVXFER: $KVXFER"
 log "工作目录: $WORK   备份目录: $BAK"
 docker inspect "$CONTAINER" >/dev/null 2>&1 || die "容器不存在: $CONTAINER"
@@ -277,7 +287,8 @@ if [ "$KVXFER_MISSING" -eq 0 ]; then
     done
 fi
 if [ -n "${PROXY_TGT:-}" ]; then
-    backup_host_file "$PROXY_TGT"
+    # 先解析最终目标文件（PROXY_TGT 为已存在目录时指向目录内同名文件），备份与校验均按该路径
+    backup_host_file "$(resolve_host_tgt "$PROXY_TGT" "proxy/load_balance_proxy_server_example.py")"
 fi
 if [ -n "${BENCH_TGT:-}" ]; then
     backup_host_file "$BENCH_TGT/backend_request_func.py"
@@ -344,8 +355,9 @@ if [ "$KVXFER_MISSING" -eq 0 ]; then
     done
 fi
 if [ "${#UNKNOWN_LIST[@]}" -gt 0 ]; then
-    if [ -n "${ALLOW_UNKNOWN_DIGEST:-}" ]; then
-        log "  [WARN] ALLOW_UNKNOWN_DIGEST 已设置，以下未知摘要按人工确认放行："
+    # 仅接受字面值 1（显式 0/false/其他值一律保持停止，防误设放行未知摘要）
+    if [ "${ALLOW_UNKNOWN_DIGEST:-}" = "1" ]; then
+        log "  [WARN] ALLOW_UNKNOWN_DIGEST=1（字面值），以下未知摘要按人工确认放行："
         printf '    %s\n' "${UNKNOWN_LIST[@]}"
     else
         echo "[FATAL] 以下现役文件摘要未知（可能含现场定制），未经人工确认禁止覆盖："
@@ -415,14 +427,15 @@ fi
 # proxy / 压测端（宿主机进程，可选）：逐个复制，回读 md5 比对 + known-good 指纹核对，失败即停
 if [ -n "${PROXY_TGT:-}" ]; then
     hf="proxy/load_balance_proxy_server_example.py"
-    cp -f "$SRC/$hf" "$PROXY_TGT" \
-        || die "proxy patch 复制失败 -> $PROXY_TGT"
-    got="$(md5sum "$PROXY_TGT" | awk '{print $1}')"
+    ptgt="$(resolve_host_tgt "$PROXY_TGT" "$hf")"
+    cp -f "$SRC/$hf" "$ptgt" \
+        || die "proxy patch 复制失败 -> $ptgt"
+    got="$(md5sum "$ptgt" | awk '{print $1}')"
     want="$(md5sum "$SRC/$hf" | awk '{print $1}')"
-    [ "$got" = "$want" ] || die "proxy patch 回读 md5 不一致: $PROXY_TGT got=${got:0:8} want=${want:0:8}"
+    [ "$got" = "$want" ] || die "proxy patch 回读 md5 不一致: $ptgt got=${got:0:8} want=${want:0:8}"
     [[ "$got" = "${HOST_FP[$hf]}"* ]] \
         || die "known-good 指纹不符(部署后): $hf got=${got:0:8} want=${HOST_FP[$hf]} —— 禁止携带未验证版本"
-    log "  proxy patch -> $PROXY_TGT (md5=${got:0:8})（记得重启宿主机 proxy 进程）"
+    log "  proxy patch -> $ptgt (md5=${got:0:8})（记得重启宿主机 proxy 进程）"
 fi
 if [ -n "${BENCH_TGT:-}" ]; then
     for bf in backend_request_func.py benchmark_serving.py; do
