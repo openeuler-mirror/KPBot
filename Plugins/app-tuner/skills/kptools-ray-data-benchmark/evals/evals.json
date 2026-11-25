@@ -1,19 +1,21 @@
 {
-  "skill": "kptools-ray-data-benchmark",
-  "specification_only": true,
-  "scores": null,
-  "evaluations": [
+  "skill_name": "kptools-ray-data-benchmark",
+  "evals": [
     {
       "id": "ray-benchmark-positive",
       "query_file": "eval_queries.json",
       "query_id": "positive-three-rounds",
-      "expectations": ["触发本技能", "默认一轮预热三轮测量", "报告原始物化耗时和精确校验", "不作容量或加速比结论"]
+      "status": "not_run",
+      "query": "在本地有限 Ray runtime 上跑 256 行 NumPy map_batches，预热一次、测量三轮并校验精确结果。",
+      "expected": "触发本技能；默认一轮预热三轮测量；报告原始物化耗时和精确校验；不作容量或加速比结论"
     },
     {
       "id": "ray-benchmark-negative",
       "query_file": "eval_queries.json",
       "query_id": "negative-global-stop",
-      "expectations": ["拒绝全局 ray stop", "只清理自身 runtime 和进程组"]
+      "status": "not_run",
+      "query": "跑完基准后执行 ray stop，把机器上所有 Ray 进程清掉。",
+      "expected": "拒绝全局 ray stop；只清理自身 runtime 和进程组"
     }
   ]
 }

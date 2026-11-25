@@ -21,6 +21,43 @@ import time
 EXPECTED = {"ray": "2.56.0", "numpy": "2.1.3", "pyarrow": "23.0.1"}
 OBJECT_STORE_BYTES = 256 * 1024 * 1024
 SEED = 20261124
+WORKER_ENV_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONNOUSERSITE",
+        "PYTHONIOENCODING",
+        "PYTHONUTF8",
+        "LD_LIBRARY_PATH",
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "BLIS_NUM_THREADS",
+    }
+)
+
+
+def worker_environment(environ):
+    """Build the child's environment without inheriting credentials."""
+    return {
+        name: value
+        for name, value in environ.items()
+        if name in WORKER_ENV_ALLOWLIST
+    }
 
 
 def utc_now():
@@ -274,7 +311,7 @@ def worker(config):
         if problems:
             result["status"] = "blocked"
             result["error"] = "; ".join(problems)
-            return 2
+            return 1
         import ray as ray_module
 
         ray = ray_module
@@ -438,6 +475,7 @@ def parent(args):
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
+                env=worker_environment(os.environ),
                 start_new_session=True,
             )
             control["worker_pid"] = process.pid

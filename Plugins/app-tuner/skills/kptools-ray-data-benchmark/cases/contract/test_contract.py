@@ -140,6 +140,9 @@ class BenchmarkContract(unittest.TestCase):
             ray = FakeRay()
             with (
                 mock.patch.dict(sys.modules, {"ray": ray}),
+                mock.patch.dict(
+                    MODULE.os.environ, {"RAY_ADDRESS": "unreachable.invalid"}
+                ),
                 mock.patch.object(
                     MODULE, "preflight", return_value=([], {"mock": True})
                 ),
@@ -155,6 +158,7 @@ class BenchmarkContract(unittest.TestCase):
             self.assertTrue(result["summary"]["warmup_excluded"])
             self.assertEqual(ray.shutdown_count, 1)
             self.assertTrue(result["own_runtime_shutdown"])
+            self.assertEqual(ray.init_options["address"], "local")
             self.assertEqual(ray.init_options["num_cpus"], 2)
             self.assertEqual(
                 ray.init_options["object_store_memory"],
@@ -167,7 +171,7 @@ class BenchmarkContract(unittest.TestCase):
                 MODULE, "preflight", return_value=(["small shm"], {})
             ):
                 self.assertEqual(
-                    MODULE.worker(self.config(Path(directory))), 2
+                    MODULE.worker(self.config(Path(directory))), 1
                 )
             result = json.loads(
                 (Path(directory) / "result.json").read_text(encoding="utf-8")
@@ -197,13 +201,57 @@ class BenchmarkContract(unittest.TestCase):
                     (output / "result.json").read_text(encoding="utf-8")
                 )
                 self.assertEqual(result["status"], status)
-                self.assertEqual(returncode, 0 if not problems else 2)
-                expected = {"python": MODULE.platform.python_version(), **actual}
+                self.assertEqual(returncode, 0 if not problems else 1)
+                expected = {
+                    "python": MODULE.platform.python_version(),
+                    **actual,
+                }
                 self.assertEqual(result["versions"], expected)
                 self.assertNotEqual(
                     result["versions"],
-                    {"python": MODULE.platform.python_version(), **MODULE.EXPECTED},
+                    {
+                        "python": MODULE.platform.python_version(),
+                        **MODULE.EXPECTED,
+                    },
                 )
+
+    def test_parent_spawns_worker_with_allowlisted_environment(self):
+        inherited = {
+            "PATH": "/runtime/bin",
+            "PYTHONPATH": "/runtime/python",
+            "LD_LIBRARY_PATH": "/runtime/native",
+            "OMP_NUM_THREADS": "1",
+            "LD_PRELOAD": "must-not-reach-child",
+            "RAY_ADDRESS": "unreachable.invalid",
+            "UNRELATED_SECRET": "must-not-reach-child",
+            "AWS_SECRET_ACCESS_KEY": "must-not-reach-child",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            args = MODULE.parse_args(
+                ["--output-dir", str(Path(directory) / "result")]
+            )
+            with (
+                mock.patch.dict(MODULE.os.environ, inherited, clear=True),
+                mock.patch.object(MODULE.subprocess, "Popen") as popen,
+                mock.patch.object(MODULE, "terminate_owned_group"),
+            ):
+                popen.return_value.pid = 123
+                popen.return_value.wait.return_value = 0
+                self.assertEqual(MODULE.parent(args), 0)
+            child_environment = popen.call_args.kwargs["env"]
+            self.assertEqual(
+                child_environment,
+                {
+                    "PATH": "/runtime/bin",
+                    "PYTHONPATH": "/runtime/python",
+                    "LD_LIBRARY_PATH": "/runtime/native",
+                    "OMP_NUM_THREADS": "1",
+                },
+            )
+            self.assertIsNot(child_environment, MODULE.os.environ)
+            self.assertNotIn("UNRELATED_SECRET", child_environment)
+            self.assertNotIn("RAY_ADDRESS", child_environment)
+            self.assertNotIn("LD_PRELOAD", child_environment)
 
     def test_signal_only_owned_group(self):
         process = mock.Mock(pid=321)
@@ -226,12 +274,19 @@ class BenchmarkContract(unittest.TestCase):
             (args.rows, args.rounds, args.warmup_rounds), (256, 3, 1)
         )
         self.assertEqual((args.batch_size, args.parallelism), (32, 4))
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit) as invalid_rows:
             MODULE.parse_args(["--output-dir", "new", "--rows", "0"])
-        with self.assertRaises(SystemExit):
+        self.assertEqual(invalid_rows.exception.code, 2)
+        with self.assertRaises(SystemExit) as invalid_batch:
             MODULE.parse_args(
                 ["--output-dir", "new", "--rows", "2", "--batch-size", "3"]
             )
+        self.assertEqual(invalid_batch.exception.code, 2)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "existing"
+            output.mkdir()
+            args = MODULE.parse_args(["--output-dir", str(output)])
+            self.assertEqual(MODULE.parent(args), 2)
 
     def test_source_has_no_global_cleanup_or_capacity_claim(self):
         source = (ROOT / "scripts/benchmark.py").read_text(encoding="utf-8")
@@ -247,7 +302,30 @@ class BenchmarkContract(unittest.TestCase):
         evaluations = json.loads(
             (ROOT / "evals/evals.json").read_text(encoding="utf-8")
         )
-        self.assertIsNone(evaluations["scores"])
+        self.assertEqual(
+            evaluations["skill_name"], "kptools-ray-data-benchmark"
+        )
+        self.assertEqual(len(evaluations["evals"]), 2)
+        self.assertTrue(
+            all(item["status"] == "not_run" for item in evaluations["evals"])
+        )
+        queries = json.loads(
+            (ROOT / "evals/eval_queries.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(queries["skill_name"], evaluations["skill_name"])
+        self.assertEqual(len(queries["queries"]), 3)
+        self.assertTrue(
+            all(
+                item["prompt"] and isinstance(item["should_trigger"], bool)
+                for item in queries["queries"]
+            )
+        )
+        self.assertTrue(
+            all(
+                item["query"] and item["expected"]
+                for item in evaluations["evals"]
+            )
+        )
 
 
 if __name__ == "__main__":

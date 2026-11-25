@@ -135,7 +135,30 @@ class EnvironmentContract(unittest.TestCase):
         evaluations = json.loads(
             (ROOT / "evals/evals.json").read_text(encoding="utf-8")
         )
-        self.assertIsNone(evaluations["scores"])
+        self.assertEqual(
+            evaluations["skill_name"], "kptools-ray-data-environment-check"
+        )
+        self.assertEqual(len(evaluations["evals"]), 2)
+        self.assertTrue(
+            all(item["status"] == "not_run" for item in evaluations["evals"])
+        )
+        queries = json.loads(
+            (ROOT / "evals/eval_queries.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(queries["skill_name"], evaluations["skill_name"])
+        self.assertEqual(len(queries["queries"]), 3)
+        self.assertTrue(
+            all(
+                item["prompt"] and isinstance(item["should_trigger"], bool)
+                for item in queries["queries"]
+            )
+        )
+        self.assertTrue(
+            all(
+                item["query"] and item["expected"]
+                for item in evaluations["evals"]
+            )
+        )
 
 
 if __name__ == "__main__":

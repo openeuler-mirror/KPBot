@@ -18,6 +18,8 @@ python3 scripts/benchmark.py --output-dir results/run-001
 
 默认 256 行、batch 32、4 blocks、1 次 warmup、3 次测量、2 个 Ray CPU、256 MiB object store、120 秒硬墙超时。可用 `--rows`、`--batch-size`、`--parallelism`、`--rounds`、`--warmup-rounds`、`--timeout` 调整有界参数。输出目录必须全新，父目录自动创建，失败也保留 JSON 和日志。
 
+退出码契约：`0=completed（测量及精确校验成功）`、`1=failed/blocked（前置条件阻断、运行时或校验失败）`、`2=参数或输出目录创建错误`、`124=硬墙超时`、`130=键盘中断`。其他父进程异常返回 `1`；脚本会尽量保留 `result.json`、`benchmark.log` 和 `runtime_control.json` 作为证据。父进程仅向 worker 传递 Python、原生库和本地运行所需的显式环境白名单，不继承任意密钥或凭据；已有 `RAY_ADDRESS` 不会用于连接集群，初始化始终使用本地 runtime。
+
 ## 测量契约
 
 技能独立复查版本、CPU、有限内存、共享内存、输出空间、原生运算和 API；随后只启动自己的本地 Ray runtime。每阶段是确定性的 `range → map_batches(id*2+1)`，计时仅覆盖一次 `materialize()`；之后精确校验 ID、值、count、sum，并用 UDF 调用计数证明读取未触发第二次执行。原始阶段墙钟和 rows/s 全量保留，summary 排除 warmup。
