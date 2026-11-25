@@ -313,7 +313,19 @@ def check(args):
             ],
             config_flag="--consumer.config",
         )
-        if actual.splitlines() != messages:
+        # Kafka 4.4 CLI prints deprecation banners for still-supported
+        # options on stdout; drop only those exact banner lines so real
+        # payload comparison stays strict.
+        banner_lines = {
+            "Option --consumer.config is deprecated and will be removed "
+            "in a future version. Use --command-config instead.",
+            "Option --consumer-property is deprecated and will be "
+            "removed in a future version. Use --command-property instead.",
+        }
+        payload = [
+            line for line in actual.splitlines() if line not in banner_lines
+        ]
+        if payload != messages:
             raise ValueError("consumed messages differ from sent messages")
         result["status"] = "passed"
     except ConfigError as exc:

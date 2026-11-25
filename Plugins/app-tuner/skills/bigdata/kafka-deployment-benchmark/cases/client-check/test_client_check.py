@@ -1,6 +1,7 @@
 """Offline tests of the native Kafka produce/consume validation flow."""
 
 import base64
+import hashlib
 import contextlib
 import importlib.util
 import io
@@ -74,8 +75,7 @@ JAVA_PROPERTIES_FIXTURES = {
     "unicode-key": "\\u0067roup.id=business\n",
     "continued-value": "group.id=busi\\\n    ness\n",
     "crlf": (
-        "group.id=business\r\nmy.group.id=other\r"
-        "security.protocol=PLAINTEXT\n"
+        "group.id=business\r\nmy.group.id=other\rsecurity.protocol=PLAINTEXT\n"
     ),
     "continued-comment-marker": "key=value\\\n#not-a-comment\n",
     "double-comment-backslash": "# first\\\n! second\\\ngroup.id=business\n",
@@ -220,6 +220,43 @@ class KafkaCheckTests(unittest.TestCase):
     def test_wrong_messages_fail_despite_zero_exit(self):
         self.bad_messages = True
         self.assertEqual(self.run_check()["status"], "failed")
+
+    def test_cli_deprecation_banners_do_not_corrupt_comparison(self):
+        banners = (
+            "Option --consumer-property is deprecated and will be removed "
+            "in a future version. Use --command-property instead.\n"
+            "Option --consumer.config is deprecated and will be removed in "
+            "a future version. Use --command-config instead.\n"
+        )
+        original = self.process
+
+        def with_banners(argv, **kwargs):
+            process = original(argv, **kwargs)
+            communicate = process.communicate
+
+            def wrapped(input=None, timeout=None):
+                stdout, stderr = communicate(input=input, timeout=timeout)
+                if "kafka-console-consumer.sh" in argv[1]:
+                    stdout = banners + stdout
+                return stdout, stderr
+
+            process.communicate = wrapped
+            return process
+
+        with (
+            patch.object(module.subprocess, "Popen", side_effect=with_banners),
+            patch.object(module.os, "killpg", create=True),
+        ):
+            result = module.check(self.args)
+        self.assertEqual(result["status"], "passed")
+        # A wrong payload still fails even with banners present.
+        self.bad_messages = True
+        self.args.output = Path(self.temp.name) / "banner-wrong"
+        with (
+            patch.object(module.subprocess, "Popen", side_effect=with_banners),
+            patch.object(module.os, "killpg", create=True),
+        ):
+            self.assertEqual(module.check(self.args)["status"], "failed")
 
     def test_timeout_stops_and_retains_logs(self):
         self.timeout_at = 0
@@ -451,7 +488,8 @@ fi
             if block_exit_log:
                 script = script.replace(
                     "# 预热：少量消息，单独文件",
-                    'mkdir "$EXP/exit-codes.log"\n\n# 预热：少量消息，单独文件',
+                    'mkdir "$EXP/exit-codes.log"\n\n'
+                    "# 预热：少量消息，单独文件",
                 )
             completed = subprocess.run(
                 [BASH, "-e", "-s"],
@@ -493,9 +531,7 @@ fi
                     f"{name} exit_code={42 if index + 1 == fail_at else 0}\n"
                     for index, name in enumerate(rounds[:attempted])
                 )
-                self.assertEqual(
-                    logs["exit-codes.log"], expected_exit_codes
-                )
+                self.assertEqual(logs["exit-codes.log"], expected_exit_codes)
                 self.assertEqual(
                     set(logs),
                     {"exit-codes.log"}
@@ -621,6 +657,65 @@ cat "$STATE/messages"
         self.assertEqual(result["checks"], [])
         self.assertEqual(result["cleanup"], "no topic created")
         self.assertEqual(list(self.state.iterdir()), [])
+
+
+@unittest.skipUnless(
+    BASH and shutil.which("sha512sum"), "Bash and sha512sum required"
+)
+class InstallChecksumGuideTests(unittest.TestCase):
+    def test_documented_gate_accepts_valid_and_rejects_bad_checksums(self):
+        example = (
+            GUIDE.read_text(encoding="utf-8")
+            .split("```bash\n", 1)[1]
+            .split("```", 1)[0]
+        )
+        self.assertLess(
+            example.index("actual_sha512="), example.index("tar -tzf")
+        )
+        gate = example[
+            example.index("expected_sha512=") : example.index("tar -tzf")
+        ]
+        data = b"deterministic-release-fixture\n"
+        digest = hashlib.sha512(data).hexdigest().upper()
+        for mode in ("valid", "mismatch", "malformed"):
+            with (
+                self.subTest(mode=mode),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                (root / "kafka.tgz").write_bytes(data)
+                selected = digest
+                if mode == "mismatch":
+                    selected = ("0" if digest[0] != "0" else "1") + digest[1:]
+                groups = [
+                    selected[index : index + 8] for index in range(0, 128, 8)
+                ]
+                sidecar = (
+                    "kafka_2.13-4.4.0.tgz: "
+                    + " \n  ".join(
+                        " ".join(groups[index : index + 4])
+                        for index in range(0, 16, 4)
+                    )
+                    + "\n"
+                )
+                if mode == "malformed":
+                    sidecar = "not-a-checksum\n"
+                (root / "kafka.tgz.sha512").write_text(
+                    sidecar, encoding="utf-8"
+                )
+                completed = subprocess.run(
+                    [BASH, "-c", gate],
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                self.assertEqual(
+                    completed.returncode == 0,
+                    mode == "valid",
+                    completed.stderr,
+                )
 
 
 if __name__ == "__main__":

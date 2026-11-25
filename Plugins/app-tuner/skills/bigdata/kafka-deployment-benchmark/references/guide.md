@@ -2,20 +2,36 @@
 
 ## 部署与版本
 
-先确认 broker/client 版本、JDK、CPU 架构、节点、端口和磁盘。已有集群直接验证；新建隔离实例按 [官方 Quick Start](https://kafka.apache.org/41/getting-started/quickstart/) 选择目标版本。在 KRaft 模式按该版本文档生成 cluster ID 并初始化新的日志目录，随后启动 broker。存量数据目录不重复 format。Kafka 4.0 起已移除 ZooKeeper，本文 4.1.x 新建实例只使用 KRaft，参见[官方 4.0 升级说明](https://kafka.apache.org/40/getting-started/upgrade/)。存量 3.x ZooKeeper 集群须按其对应版本文档验证，不使用 4.x 发行包启动 ZooKeeper。
+先确认 broker/client 版本、JDK、CPU 架构、节点、端口和磁盘。已有集群直接验证；新建隔离实例按 [官方 Quick Start](https://kafka.apache.org/44/getting-started/quickstart/) 选择目标版本。在 KRaft 模式按该版本文档生成 cluster ID 并初始化新的日志目录，随后启动 broker。存量数据目录不重复 format。Kafka 4.0 起已移除 ZooKeeper，本文 4.4.x 新建实例只使用 KRaft，参见[官方 4.0 升级说明](https://kafka.apache.org/40/getting-started/upgrade/)。存量 3.x ZooKeeper 集群须按其对应版本文档验证，不使用 4.x 发行包启动 ZooKeeper。
+
+## 版本选择（每次新建前必做）
+
+在新建部署当天核对官方页面，不要凭记忆沿用旧版本：
+
+1. 查 [官方 Downloads](https://kafka.apache.org/community/downloads/) 的 **Supported releases** 列表；本指南 2026-11-25 核对的受支持线为 4.4.0 / 4.3.2 / 4.2.2。4.1.x（含 4.1.2）与 4.0.x 已归档且不再修复问题，不用于新部署。
+2. 查 [官方 CVE List](https://kafka.apache.org/community/cve-list/) 中影响目标版本的未修复公告。2026-10-28 发布的多项公告将修复基线列为 4.2.2 / 4.3.2 / 4.4.0，具体受影响组件和配置条件以各公告为准；CVE-2026-33557（OAUTHBEARER JWT 验证缺失）与 CVE-2026-35554（producer 消息错路由）影响 4.1.0/4.1.1，CVE-2026-110952（issuer/audience 默认不校验）仅 4.4.0 修复。
+3. 确认所选 JDK 厂商公告；例如官方 2026-11-19 发布的 [Java4Shell (CVE-2026-114938) 缓解指导](https://kafka.apache.org/blog/2026/11/19/mitigating-cve-2026-114938-java4shell-in-apache-kafka-deployments/) 要求按所用 JDK 厂商建议处置。任何 Kafka 版本、JDK 或容器镜像都不能声称"无 CVE"，只记录核对日期与当时结论。
+4. 记录核对日期、目标版本、SHA-512 与证据来源，写入实验记录模板。
 
 listeners 是监听地址，advertised.listeners 必须能从实际客户端访问。保存 broker 配置、集群模式与节点 ID。下面命令在 Kafka 发行包根目录执行，bootstrap-server 替换成目标地址；认证配置通过对应工具的配置文件参数传入。
 
-示例使用 Linux/Bash 与 Kafka 4.1.x CLI；该系列需要 Java 17+。Kafka 的 `_2.13` 表示 Scala 版本，不是 CPU 架构；JDK 需选择目标架构。可从 [Apache 版本归档](https://archive.apache.org/dist/kafka/4.1.0/) 获取固定例子及 .sha512：
+示例使用 Linux/Bash 与 Kafka 4.4.x CLI；该系列需要 Java 17+。Kafka 的 `_2.13` 表示 Scala 版本，不是 CPU 架构；JDK 需选择目标架构。下面例子固定到实测的 4.4.0：先从 [官方 Downloads](https://kafka.apache.org/community/downloads/) 页取得二进制包与同页链接的 .sha512，**先校验和解压后才运行**；校验失败或文件不完整时重新获取包及官方校验文件，不得跳过校验直接解压执行：
 
 ```bash
-curl -fL -o kafka.tgz https://archive.apache.org/dist/kafka/4.1.0/kafka_2.13-4.1.0.tgz
+curl -fL -o kafka.tgz https://dlcdn.apache.org/kafka/4.4.0/kafka_2.13-4.4.0.tgz
+curl -fL -o kafka.tgz.sha512 https://dlcdn.apache.org/kafka/4.4.0/kafka_2.13-4.4.0.tgz.sha512
+# 官方 .sha512 为冒号分隔格式；提取散列并与本地值比对
+expected_sha512=$(sed 's/^[^:]*://' kafka.tgz.sha512 | tr -d '[:space:]' | tr 'A-F' 'a-f')
+[[ "$expected_sha512" =~ ^[0-9a-f]{128}$ ]] || { echo "官方摘要格式无效" >&2; exit 1; }
+actual_sha512=$(sha512sum kafka.tgz | awk '{print $1}')
+[ "$expected_sha512" = "$actual_sha512" ] || { echo "SHA-512 校验失败，停止部署" >&2; exit 1; }
 tar -tzf kafka.tgz
 tar -xzf kafka.tgz
-mv kafka_2.13-4.1.0 kafka
+mv kafka_2.13-4.4.0 kafka
+cd kafka
 ```
 
-以上在新的实验父目录执行，目标 kafka 目录应尚不存在；解压后 kafka/bin 下才有下面的脚本。先从归档页下载同名 .sha512 文件并与本地 SHA-512 比对，通过后再运行。服务端选择其他版本时使用其发行包和同版本说明，不用源码压缩包代替二进制发行包。
+以上在新的实验父目录执行，目标 kafka 目录应尚不存在；解压后 kafka/bin 下才有下面的脚本。服务端选择其他受支持版本时使用其发行包和同版本说明，并重新完成上面的版本/CVE 核对与校验，不用源码压缩包代替二进制发行包。
 
 ## 完整消息验证
 
@@ -42,7 +58,7 @@ bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic kpbot-ben
 bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic kpbot-bench-001
 ```
 
-topic 名需随实验更换；不要将副本数设置得超过可用 broker 数量。使用发行包自带的 [producer performance 工具](https://github.com/apache/kafka/blob/4.1.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)，在同版本工具帮助中核对参数。每次实验使用新的结果目录；目录已存在时 `mkdir` 直接失败，不覆盖也不追加旧日志。预热与每个测量轮次分别写入独立文件：
+topic 名需随实验更换；不要将副本数设置得超过可用 broker 数量。使用发行包自带的 [producer performance 工具](https://github.com/apache/kafka/blob/4.4.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)，在同版本工具帮助中核对参数。每次实验使用新的结果目录；目录已存在时 `mkdir` 直接失败，不覆盖也不追加旧日志。预热与每个测量轮次分别写入独立文件：
 
 ```bash
 mkdir -p results
