@@ -176,6 +176,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 
 | 技能 | 描述 |
 |------|------|
+| [`kptools-torchtitan-deploy`](skills/kptools-torchtitan-deploy/SKILL.md) | torchtitan-npu 部署手册与踩坑指导 — 版本配套表(以上游 installation.md 为准的快照)、昇腾软件栈六件套安装(NNAL source 顺序)、三步源码安装与 torchao-npu、新配置系统(--module/--config，弃用 TOML)、run_train.sh 单机/多机环境变量逐项、单卡 debugmodel 冒烟、affinity 扩展配置(MR 1100 已合入 master)；踩坑实录 A 组以仓内补丁为可溯源证据(附真实路径)，B 组为实战环境坑(配置系统重构/版本错位/910B3 sync-start 地板/CPU_AFFINITY_CONF 主线程静默失效) |
 | `rocksdb-perf-diagnostics` | RocksDB 性能诊断与优化 — 用 LOG / properties / Statistics / perf_context / EventListener 定位写停顿、compaction 积压、读写/空间放大,并在授权下执行单变量复测 |
 
 ## 目录结构
