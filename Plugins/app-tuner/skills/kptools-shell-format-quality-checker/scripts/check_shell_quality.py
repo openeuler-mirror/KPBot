@@ -75,12 +75,13 @@ def check_style(path, text, add):
         add(None, 'warning', 'filename', 'Expected a .sh filename without whitespace')
     if not text:
         return
-    if not text.endswith('\n'):
+    has_final_newline = text.endswith('\n')
+    if not has_final_newline:
         add(None, 'warning', 'missing-final-newline', 'File does not end in LF')
     lines = text.replace('\r\n', '\n').split('\n')
     indents = {}
     for number, line in enumerate(lines, 1):
-        if number < len(lines) and CONTINUATION.search(line):
+        if (number < len(lines) or not has_final_newline) and CONTINUATION.search(line):
             add(number, 'warning', 'continuation-space',
                 'Unpaired backslash before trailing blanks; check whether it was meant to continue a command')
         elif line.endswith((' ', '\t')):

@@ -62,6 +62,13 @@ class QualityContract(unittest.TestCase):
             (3, 'continuation-space'), (5, 'trailing-whitespace'), (6, 'trailing-whitespace'),
         ])
 
+    def test_final_line_checks_without_final_newline(self):
+        self.write('last-line.sh', b'#!/bin/bash\necho test \\ ')
+        report = self.run_check('last-line.sh', code=2)
+        self.assertEqual([(row['line'], row['check']) for row in report['findings']], [
+            (None, 'missing-final-newline'), (2, 'continuation-space'),
+        ])
+
     def test_sourced_fragment_uses_explicit_interpreter(self):
         self.write('env.sh', b'export MODEL=demo')
         report = self.run_check('env.sh', code=2)
