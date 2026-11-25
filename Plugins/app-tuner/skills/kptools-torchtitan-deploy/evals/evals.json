@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-torchtitan-deploy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "torchtitan-npu 在我的昇腾环境上跑不起来，帮我排查。",
+      "expected_output": "先核对版本配套表（torch/torch_npu/CANN/python 四者是否同表配套），再查配置系统用法是否为旧 TOML 方式（--job.config_file 已弃用），再按安装详解检查软件栈六件套与 NNAL source 顺序，最后单卡 debugmodel 冒烟定位到具体环节；引用真实报错输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "帮我启动一个 8 卡的 torchtitan-npu 训练。",
+      "expected_output": "按启动参考：NGPU=8 bash scripts/run_train.sh --module/--config + CLI 覆盖，或直接用 examples/deepseek_v4/debug 的 8 卡成品脚本；说明 LOG_RANK 排障开关与 HCCL 超时是防御值；启动后用训练指标工具看 step/loss/tps 验证；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "编译报 DT_INT64 not supported，全图编译中止了。",
+      "expected_output": "按 pitfalls A-1：此为 torch_npu gather 融合路径对 int64 的 AscendC 推断支持问题；仓内未见对应补丁（master 全树无 gather_lowering 相关文件），第一嫌疑是版本配套错位导致行为漂移——先核版本表与 torch_npu 配套，不要先改模型代码；引用真实输出，不编造。",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "skill_name": "vllm-eplb-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "enable-force-eplb-clean-template",
+      "prompt": "我们在做 DeepSeek V4.1 P/D 分离部署的性能对比，现在想试一下 force EPLB。prefill 节点的 vllm 启动模板在 /tmp/opencode/eplb-eval-1/run_dp_template.sh，帮我改成开启 force EPLB 的配置。注意别把模板里原有的其他配置弄丢。",
+      "expected_output": "模板被正确修改为 force EPLB 状态：VLLM_USE_V2_MODEL_RUNNER=0、unset DYNAMIC_EPLB、enable_force_eplb:true 合并进现有 --additional-config JSON（原有键保留、仍只有一个 --additional-config）、无 --enable-eplb/--eplb-config 参数。修改前有时间戳备份。bash -n 通过。",
+      "files": [
+        "evals/fixtures/run_dp_template_p_clean.sh"
+      ],
+      "assertions": [
+        "VLLM_USE_V2_MODEL_RUNNER 被设为 0（force 依赖 V1 runner）",
+        "写入 unset DYNAMIC_EPLB 且不存在 export DYNAMIC_EPLB",
+        "--additional-config 的 JSON 里加上了 \"enable_force_eplb\":true",
+        "additional-config 原有的 4 个键全部保留（enable_cpu_binding/enable_fused_mc2/enable_flashcomm1/enable_shared_expert_dp）",
+        "--additional-config 恰好出现 1 次（没有新增第二个 flag）",
+        "没有 --enable-eplb 或 --eplb-config.* 参数（未混入 dynamic 残留）",
+        "修改前创建了带时间戳的 .bak-* 备份文件",
+        "bash -n 语法检查通过"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "enable-dynamic-eplb-clean-template",
+      "prompt": "帮我在 P 节点的启动脚本里开一下动态 EPLB（dynamic eplb），冗余专家 16 个就行。模板路径：/tmp/opencode/eplb-eval-2/run_dp_template.sh",
+      "expected_output": "模板被正确修改为 dynamic EPLB 状态：VLLM_USE_V2_MODEL_RUNNER=1、export DYNAMIC_EPLB=\"true\"、--enable-eplb 与 --eplb-config.num_redundant_experts 16 / window_size 1000 / step_interval 1000 追加到 vllm serve 命令、additional-config 里没有 enable_force_eplb。修改前有备份。bash -n 通过。",
+      "files": [
+        "evals/fixtures/run_dp_template_p_clean.sh"
+      ],
+      "assertions": [
+        "VLLM_USE_V2_MODEL_RUNNER 保持为 1（dynamic 依赖 V2 runner）",
+        "写入 export DYNAMIC_EPLB=\"true\"",
+        "vllm serve 命令里出现 --enable-eplb",
+        "三个 eplb-config 参数为 16 / 1000 / 1000（num_redundant_experts / window_size / step_interval）",
+        "additional-config 里没有 enable_force_eplb 键",
+        "additional-config 原有 4 个键保留且该 flag 恰好出现 1 次",
+        "修改前创建了带时间戳的 .bak-* 备份文件",
+        "bash -n 语法检查通过"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "switch-force-to-dynamic",
+      "prompt": "这个 P 节点模板现在跑的是 force EPLB（additional-config 里那个 enable_force_eplb），压测数据不理想，我想切换成动态 EPLB 那套配置（V2 runner + DYNAMIC_EPLB + eplb-config 参数，冗余专家 16）。模板在 /tmp/opencode/eplb-eval-3/run_dp_template.sh，帮我切换，别留下 force 模式的残留。",
+      "expected_output": "完成模式切换且无残留：VLLM_USE_V2_MODEL_RUNNER 从 0 改回 1、unset DYNAMIC_EPLB 行移除、export DYNAMIC_EPLB=\"true\" 添加、4 个 eplb 参数添加、additional-config 里的 enable_force_eplb 键移除（其他键保留）。有备份。bash -n 通过。",
+      "files": [
+        "evals/fixtures/run_dp_template_p_force.sh"
+      ],
+      "assertions": [
+        "VLLM_USE_V2_MODEL_RUNNER 从 0 改回 1",
+        "unset DYNAMIC_EPLB 行被移除且写入 export DYNAMIC_EPLB=\"true\"",
+        "vllm serve 命令里出现 --enable-eplb 与三个 eplb-config 参数（16/1000/1000）",
+        "additional-config 里的 enable_force_eplb 键被移除",
+        "additional-config 其他 4 个键保留且该 flag 恰好出现 1 次",
+        "无 force 残留（不存在 VLLM_USE_V2_MODEL_RUNNER=0 或 unset DYNAMIC_EPLB）",
+        "修改前创建了带时间戳的 .bak-* 备份文件",
+        "bash -n 语法检查通过"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "disable-eplb-restore-baseline",
+      "prompt": "EPLB 对比实验做完了，帮我把 P 节点启动模板恢复到没开 EPLB 的干净基线状态。模板：/tmp/opencode/eplb-eval-4/run_dp_template.sh",
+      "expected_output": "模板恢复为无 EPLB 基线：VLLM_USE_V2_MODEL_RUNNER=1、无 export/unset DYNAMIC_EPLB、无 --enable-eplb 与 --eplb-config.* 参数、additional-config 无 enable_force_eplb。其他原有配置全部保留。有备份。bash -n 通过。",
+      "files": [
+        "evals/fixtures/run_dp_template_p_dynamic.sh"
+      ],
+      "assertions": [
+        "VLLM_USE_V2_MODEL_RUNNER 为 1",
+        "不存在 export DYNAMIC_EPLB 与 unset DYNAMIC_EPLB",
+        "不存在 --enable-eplb 与 --eplb-config.* 参数",
+        "additional-config 里不存在 enable_force_eplb",
+        "原有非 EPLB 配置全部保留（DP=8、EP、kv-transfer-config、max-model-len 131072、max-num-seqs 32、port 8000、additional-config 4 个键）",
+        "修改前创建了带时间戳的 .bak-* 备份文件",
+        "bash -n 语法检查通过"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "validation-guidance-imbalanced-dataset",
+      "prompt": "dynamic EPLB 已经在 P 节点配置好了（V2 runner + DYNAMIC_EPLB + eplb-config 那套），接下来我想验证一下 EPLB 优化的效果，应该怎么做？帮我把验证要用的压测数据集准备好。",
+      "expected_output": "生成不均衡数据集：每条请求携带 ~100k token 的重复长前缀（如 100 条），格式为 dumpjsonl（每行一个 OpenAI chat 请求 JSON，兼容 benchmark_serving --dataset-name dumpjsonl）。同时说明验证口径：三组对照（关闭 EPLB 基线 / dynamic EPLB 优化 / force EPLB 均衡参照上限），每组 4 轮剔除第 1 轮预热取后 3 轮 mean TTFT 均值；并说明混码在线形态流量接近均衡，看不出收益属预期，不能用混合流量验证。",
+      "files": [],
+      "assertions": [
+        "生成了 dumpjsonl 数据集文件（.jsonl，约 100 行）",
+        "每行都是合法 JSON 且带 messages[0].content 字段（可直接被 benchmark_serving --dataset-name dumpjsonl 读取）",
+        "每条请求的上下文长度达到 ~100k token 量级（内容 >= 120000 字符，按 1.5 字符/token 估算）",
+        "说明了三组对照：关闭 EPLB / dynamic EPLB / force EPLB",
+        "说明了 4 轮剔除第 1 轮、取后 3 轮 mean TTFT 均值的口径",
+        "说明了混合/在线均衡流量不能用于验证 EPLB 收益"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "dry-run-dynamic-preview",
+      "prompt": "先别动文件。我想看看把 P 节点模板切到 dynamic EPLB（冗余专家 16）会改成什么样，把 diff 给我看看。模板：/tmp/opencode/eplb-eval-6/run_dp_template.sh",
+      "expected_output": "只读预览：给出 unified diff（V2 runner 保持 1、新增 export DYNAMIC_EPLB=\"true\" 与 4 个 eplb 参数），模板文件字节级不变、目录下没有新增 .bak-* 备份；说明当前状态与将要发生的改动。",
+      "files": [
+        "evals/fixtures/run_dp_template_p_clean.sh"
+      ],
+      "assertions": [
+        "模板文件内容与原始文件完全一致（dry-run 未写入）",
+        "没有产生新的 .bak-* 备份文件",
+        "报告中包含 unified diff（@@ hunk 与 + 行）",
+        "diff 里能看到 --enable-eplb 与 eplb-config 参数",
+        "说明了当前状态或未修改文件这一事实"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "analyze-redundant-expert-ratio",
+      "prompt": "我们准备给 384 个逻辑专家、EP=16 的部署开 EPLB，冗余专家定 32 个合适吗？每个 rank 还剩 3G 显存。帮我算一下比例和显存够不够。",
+      "expected_output": "算出 32/384 = 8.33%、每 rank 多 2 个专家；按 2.4 GiB/副本/rank 估算每 rank 需 4.8 GiB，3 GiB 放不下；给出可负担上限 16（每 rank 1 个）并建议收敛或先释放显存，说明 8.33% 本身落在常规带。",
+      "files": [],
+      "assertions": [
+        "给出冗余比例 8.33%（32/384）与每 rank 多 2 个专家",
+        "按 2.4 GiB/副本/rank 估算每 rank 增量 4.8 GiB",
+        "判定 3 GiB 放不下，给出可负担上限 16",
+        "建议收敛到 16 或先释放显存，并说明比例本身落在常规带"
+      ]
+    }
+  ]
+}
