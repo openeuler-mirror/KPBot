@@ -13,6 +13,10 @@ The case contains the READY list resolver and generation cache from the CubeSand
 
 ## Validate the deployment
 
+The cancellation case blocks a leader's read, joins a live follower, then cancels the leader. The canceled request must return its own error and the follower must obtain its preferred node through a new generation. Ordinary database errors retain their original meaning.
+
+The consistency test checks SHA-256 pins for the resolver and cache fixtures and both Scheme 2 patch copies in a KPBot checkout. For a standalone export, set `SCHEME2_REFERENCE_PATCH` to an absolute patch path to check that revision as well. When the reference changes, apply it to the pinned v0.7.1 source, compare the two resolver declarations and the generated cache file, then refresh the three digests after review.
+
 Use one CubeMaster process and a fixed template and placement policy. Record baseline and candidate database read counts per process, join counts, errors, and successful creates. Keep completed-result TTL configuration equal across arms and start each burst with cold metadata. Exercise an unrelated template during the burst and a committed replica update while a read is outstanding.
 
 Inject a database error and cancel a follower while the leader is blocked. Verify each caller's deadline and check that the next request can start a fresh read after a failed flight. The reference group's wait on the leader is synchronous. A target requiring prompt follower cancellation needs a context-aware wait and a bounded shared read before rollout.

@@ -5,6 +5,7 @@ package templatecenter
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
@@ -32,6 +33,10 @@ func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeI
 			rows, err := ListReplicas(ctx, templateID)
 			if err != nil {
 				if !readyReplicaResultCache.Discard(cacheKey, generation) {
+					return nil, errResolveGenerationChanged
+				}
+				// Discard retired this generation. Live followers may start a new read.
+				if cause := ctx.Err(); cause != nil && errors.Is(err, cause) {
 					return nil, errResolveGenerationChanged
 				}
 				return nil, err

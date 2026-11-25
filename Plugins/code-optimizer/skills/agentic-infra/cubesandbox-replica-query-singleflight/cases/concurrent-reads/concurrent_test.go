@@ -128,6 +128,50 @@ func TestReadyFlightBeforeCacheFill(t *testing.T) {
 	}
 }
 
+func TestCanceledLeaderDoesNotCancelLiveFollower(t *testing.T) {
+	db := setup()
+	release := make(chan struct{})
+	db.blocked, db.entered = release, make(chan struct{}, 1)
+	joined := make(chan string, 1)
+	resolveResultFetchGroup.followerJoined = joined
+	leader, cancelLeader := context.WithCancel(context.Background())
+	follower, cancelFollower := context.WithTimeout(context.Background(), 5*time.Second)
+	var workers sync.WaitGroup
+	defer func() {
+		cancelLeader()
+		cancelFollower()
+		close(release)
+		workers.Wait()
+	}()
+	resolve := func(ctx context.Context, node string) <-chan resolutionResult {
+		result := make(chan resolutionResult, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			row, err := ResolveTemplateReadyReplica(ctx, "tpl", node)
+			result <- resolutionResult{row, err}
+		}()
+		return result
+	}
+	first := resolve(leader, "a")
+	receive(t, db.entered)
+	second := resolve(follower, "b")
+	receive(t, joined)
+	db.mu.Lock()
+	db.blocked = nil // Only the replacement read may complete normally.
+	db.mu.Unlock()
+	cancelLeader()
+	if got := receive(t, first); !errors.Is(got.err, context.Canceled) {
+		t.Fatalf("leader error: %v", got.err)
+	}
+	if got := receive(t, second); got.err != nil || got.replica.NodeID != "b" {
+		t.Fatalf("live follower: %+v", got)
+	}
+	if db.listReads["tpl"] != 2 {
+		t.Fatalf("want canceled read and one replacement; got %v", db.listReads)
+	}
+}
+
 func TestReadyInvalidationSeparatesFlightsAndRejectsOldRefill(t *testing.T) {
 	db := setup()
 	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}

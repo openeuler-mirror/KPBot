@@ -606,7 +606,7 @@ index 0000000..a719021
 +	readyReplicaResultCache.DeletePrefix(templateID + "\x00")
 +}
 diff --git a/CubeMaster/pkg/templatecenter/store.go b/CubeMaster/pkg/templatecenter/store.go
-index 31312a3..76a449f 100644
+index 31312a3..7aa1579 100644
 --- a/CubeMaster/pkg/templatecenter/store.go
 +++ b/CubeMaster/pkg/templatecenter/store.go
 @@ -425,7 +425,11 @@ func configureSandboxSpecHooks() {
@@ -649,7 +649,7 @@ index 31312a3..76a449f 100644
  }
  
  func EnsureReadyReplica(ctx context.Context, templateID string) error {
-@@ -2007,13 +2021,76 @@ func EnsureReadyReplica(ctx context.Context, templateID string) error {
+@@ -2007,13 +2021,80 @@ func EnsureReadyReplica(ctx context.Context, templateID string) error {
  }
  
  func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
@@ -682,6 +682,10 @@ index 31312a3..76a449f 100644
 +			rows, err := ListReplicas(ctx, templateID)
 +			if err != nil {
 +				if !readyReplicaResultCache.Discard(cacheKey, generation) {
++					return nil, errResolveGenerationChanged
++				}
++				// Discard retired this generation. Live followers may start a new read.
++				if cause := ctx.Err(); cause != nil && errors.Is(err, cause) {
 +					return nil, errResolveGenerationChanged
 +				}
 +				return nil, err
@@ -732,7 +736,7 @@ index 31312a3..76a449f 100644
  		if !isReplicaSchedulableNow(ctx, replica) {
  			continue
  		}
-@@ -2028,14 +2105,56 @@ func isTemplateReplicaSchedulable(ctx context.Context, templateID, nodeID string
+@@ -2028,14 +2109,56 @@ func isTemplateReplicaSchedulable(ctx context.Context, templateID, nodeID string
  	if !isReady() || strings.TrimSpace(templateID) == "" || strings.TrimSpace(nodeID) == "" {
  		return false
  	}
