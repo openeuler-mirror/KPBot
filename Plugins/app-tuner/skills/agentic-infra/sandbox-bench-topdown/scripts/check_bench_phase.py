@@ -4,7 +4,8 @@
 用法：
     python3 scripts/check_bench_phase.py <bench-run.log> [--bench NAME]
 
-判据（与 capture_topdown.sh 一致，可回归）：
+判据（与 capture_topdown.sh 一致，可回归；Benchmarking 行须行尾锚定，
+防 snapshot_creation 误匹配 snapshot_creation_1gdisk 前缀变体）：
   Benchmarking <BENCH> 行出现 + "Collecting N samples" 进度行出现 → measuring
   仅 Benchmarking 行（warm-up 进行中）→ warmup
   两者皆无 → not_started
@@ -19,12 +20,16 @@ import sys
 COLLECT_RE = re.compile(r"Collecting \d+ samples")
 
 
+BENCH_RE_TMPL = r"Benchmarking {bench}[ \t]*$"
+
+
 def classify(path, bench):
     has_bench_line = False
     has_collecting = False
+    bench_re = re.compile(BENCH_RE_TMPL.format(bench=re.escape(bench)))
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
-            if f"Benchmarking {bench}" in line:
+            if bench_re.search(line):          # 行尾锚定：防 snapshot_creation 前缀匹配 _1gdisk 变体
                 has_bench_line = True
             if COLLECT_RE.search(line):
                 has_collecting = True

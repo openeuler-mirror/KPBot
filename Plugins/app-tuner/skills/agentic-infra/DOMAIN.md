@@ -34,6 +34,7 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
 - AgentENV 内核适配与专项调优（TLBI、kernel-hz、pvspinlock、snapshot-fs）→ `kptools-agentenv-tuning`
 - 官方 benchmark 单项要采火焰图（时延太短采不到）→ `sandbox-bench-flame`
 - 官方 benchmark 单项要 top-down 比例分类（前端/后端/退休/预测错误）→ `sandbox-bench-topdown`
+- top-down 级别口径与通用质量诊断/解读 → `kptools-devkit`（`references/topdown-guide.md`）
 - coding 负载 TLB 切换开销高（__tlb_switch_to_host 热点）→ `agentenv-dtlbi-pr30652`
 - 改创建路径与内核机制本身 → `code-optimizer` 侧 `agentic-infra/`
 

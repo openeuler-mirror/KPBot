@@ -1,0 +1,4 @@
+# Synthetic criterion output; not real benchmark data.
+Benchmarking snapshot_creation_1gdisk
+Collecting 100 samples in estimated 120
+sample 1/100 time: 45.1 ms

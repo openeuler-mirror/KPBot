@@ -38,10 +38,15 @@ def main():
     data = json.loads(other.stdout)
     assert data["state"] == "not_started", ("exact-match", data)
 
+    # 前缀变体（真坑）：日志是 _1gdisk 项，按 snapshot_creation 查不得误判 measuring
+    variant = run(EVID / "prefix-variant.log", bench="snapshot_creation")
+    vdata = json.loads(variant.stdout)
+    assert vdata["state"] == "not_started", ("prefix-variant", vdata)
+
     miss = run(EVID / "no-such-file.log")
     assert miss.returncode == 2, ("missing rc", miss.returncode)
 
-    print("OK: phase contract 5 assertions passed")
+    print("OK: phase contract 6 assertions passed")
     return 0
 
 

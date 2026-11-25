@@ -1,11 +1,17 @@
 ---
 name: sandbox-bench-topdown
-description: 解决 AgentENV 官方 benchmark 单项时延过短、无法采集 top-down 比例分析的问题（与 sandbox-bench-flame 同思路，采集工具换为鲲鹏 DevKit Tuner CLI 的 top-down PMU 分析）。通过 sample-size 100 + 拉长 measurement-time 把单项跑长，等基准进入计量期后用 DevKit 在指定核上采集 top-down（frontend/backend/retiring/bad-speculation），产物 top-down.tar 可用 devkit report 或 WebUI 复核。触发词：benchmark 采 top-down、topdown 比例、DevKit 采集、前端/后端瓶颈分类、短时延单项采不到 PMU 数据。
+description: 解决 AgentENV 官方 benchmark 单项时延过短、无法采集 top-down 比例分析的问题（与 sandbox-bench-flame 同思路，采集工具换为鲲鹏 DevKit Tuner CLI 的 top-down PMU 分析）。通过 sample-size 100 + 拉长 measurement-time 把单项跑长，等基准进入计量期后用 DevKit 在指定核上采集 top-down（frontend/backend/retiring/bad-speculation），产物 top-down.tar 可用 devkit report 或 WebUI 复核。触发词：benchmark 采 top-down、topdown 比例、DevKit 采集、前端/后端瓶颈分类、短时延单项采不到 PMU 数据。本技能做 AgentENV 单项的"采集编排"；top-down 级别口径与通用质量诊断/解读走 kptools-devkit（topdown-quality-diagnosis / references/topdown-guide.md）。
 ---
 
 # 沙箱官方 benchmark 短时延 → DevKit top-down 采集
 
 **核心思想**（与 `sandbox-bench-flame` 一致）：官方 benchmark 单项仅 ~30ms 量级，
+与 `kptools-devkit` 的 **topdown-quality-diagnosis**（通用 top-down 质量诊断与
+解读，含 `references/topdown-guide.md` 分类知识）划界：**本技能负责 AgentENV
+benchmark 单项的"长时化 + 采集编排"**（窗口门禁、白名单、范围化清理、产物
+核验）；级别口径（`-L 0-6`）与瓶颈分类解读引用该 guide，需要通用诊断/报告
+解读时转 kptools-devkit。
+
 PMU 采集窗口不够。先把单项**长时化**——`--sample-size 100`（样本数固定）+
 `--measurement-time` 拉长（如 120s），让计量期足够长；等基准进入计量期后，
 再用 DevKit 在绑定的核上采集 top-down，窗口稳稳落在忙期内。要调用栈火焰图走
@@ -24,7 +30,7 @@ DevKit 原生支持 `-c` 指定核、`-p` PID、`-G` cgroup 范围化采集。
 | 采集范围授权 | top-down 按指定的 `-c` 核范围采集，不采整机；但共享主机上仍须确认所选核在采集窗内承载本轮负载（或为本轮专用），以及 PMU 访问权限（devkit 需要 perf 权限） | **必须确认**；所选核承载他人负载时换核或停止 |
 | 绑核范围 | benchmark 与采集共用同一核集合：48 个连续核；内存侧 `MEMBIND`（NUMA 节点） | 核默认 `47-94`，MEMBIND 默认 `2`，均可环境变量覆盖 |
 | 计量时长 | 拉长后的 measurement 秒数 | 默认 120s（保证采集窗落在忙期内） |
-| 采集参数 | top-down 采集时长 `TD_SEC`（默认 10s）、分析层级 `TD_LEVEL`（`-L 0-6`，默认 2） | 可环境变量覆盖；语义见 DevKit 官方文档 |
+| 采集参数 | top-down 采集时长 `TD_SEC`（默认 10s）、分析层级 `TD_LEVEL`（`-L 0-6`，**默认 1**=四分类 Retiring/Frontend/Backend/Bad-Speculation；2=Core Bound 子类、3=Memory Bound 子类，口径详见 ../kptools-devkit/references/topdown-guide.md） | 可环境变量覆盖；语义见 DevKit 官方文档 |
 | 路径参数 | `AENV_ROOT` / `DEVKIT_BIN` / `WORK_ROOT` / `AENV_RUN_USER` / `AENV_HOME_PATH` / `AENV_RUNTIME_PATH` / `AENV_CONFIG_PATH` | 缺省见 §1；`DEVKIT_BIN` 与 `AENV_CONFIG_PATH` **必填**（自动探测失败即停），启动前逐一校验 |
 
 ## 1. 路径输入（缺省 `$HOME` 相对；换机作为输入提供，勿硬编码绝对路径）
@@ -135,7 +141,7 @@ case "$BENCH" in
 esac
 CORES="${CORES:-47-94}"
 TD_SEC="${TD_SEC:-10}"               # top-down 采集时长，须罩住计量忙期内的稳态段
-TD_LEVEL="${TD_LEVEL:-2}"            # -L 分析层级（0-6），语义见 DevKit 文档
+TD_LEVEL="${TD_LEVEL:-1}"            # -L 1=四分类；2/3=Backend 子类深挖，口径见 kptools-devkit topdown-guide
 DEVKIT_BIN="${DEVKIT_BIN:-}"
 LOG="$DIR/bench-run.log"
 TD_LOG="$DIR/devkit-topdown.log"
@@ -147,12 +153,12 @@ if [ -z "$DEVKIT_BIN" ]; then
 fi
 [ -n "$DEVKIT_BIN" ] && [ -x "$DEVKIT_BIN" ] || { echo "[err] 需提供可执行的 DEVKIT_BIN=<devkit 路径>"; exit 1; }
 
-# 1) 等目标项进入计量期：Benchmarking <BENCH> 之后出现 "Collecting N samples"
+# 1) 等目标项进入计量期：Benchmarking <BENCH>（行尾锚定，防前缀变体）之后出现 "Collecting N samples"
 #    进度行（criterion 计量进行中的标准输出，不依赖 PRINT_SAMPLES；最终报告的
 #    time: 行出现在测量结束后，不能作门禁）。基准退出或 120s 超时立即失败。
 ok=0
 for i in $(seq 1 60); do
-  if grep -q "Benchmarking ${BENCH}" "$LOG" 2>/dev/null \
+  if grep -qE "Benchmarking ${BENCH}[[:space:]]*$" "$LOG" 2>/dev/null \
       && grep -Eq "Collecting [0-9]+ samples" "$LOG" 2>/dev/null; then
     ok=1; break
   fi
@@ -199,8 +205,9 @@ ls /sys/class/ublk-char | wc -l             # ublk 残留检查
 
 ```
 benchmark: <名> | 采集: devkit tuner top-down -c <核> -d <秒> -L <层级>
-top-down: <DIR>/top-down.tar（devkit report 或 WebUI 导入复核，比例分类
-          frontend / backend / retiring / bad-speculation）
+top-down: <DIR>/top-down.tar（devkit report 或 WebUI 导入复核；-L 1 四分类
+          Retiring / Frontend Bound / Backend Bound / Bad Speculation，
+          口径与解读见 ../kptools-devkit/references/topdown-guide.md）
 采集日志: <DIR>/devkit-topdown.log
 基准日志: <DIR>/bench-run.log
 瓶颈分流: 比例指向 frontend 瓶颈 → 指令取指/分支预测方向；
