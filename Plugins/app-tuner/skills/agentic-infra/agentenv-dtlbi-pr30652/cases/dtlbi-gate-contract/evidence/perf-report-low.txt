@@ -1,0 +1,4 @@
+# Synthetic fixture for case testing; not real perf data.
+    44.55  ±1.31  aenv-srv   [kernel.kallsyms]  handle_vm_exit
+     0.43  ±0.07  kvm-os     [kernel.kallsyms]  __tlb_switch_to_host
+     3.02  ±0.21  ublkd      [kernel.kallsyms]  ublk_queue_rq

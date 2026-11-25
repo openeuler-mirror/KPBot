@@ -121,8 +121,10 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | [`topdown-quality-diagnosis`](skills/topdown-quality-diagnosis/SKILL.md) | 鲲鹏 DevKit Top-down 采集质量审核：核对目标、窗口与事件口径，诊断异常数值和运行中断，提供有界复采方案与证据报告 |
+| [`kptools-thread-affinity-analyzer`](skills/kptools-thread-affinity-analyzer/SKILL.md) | 线程绑核分析器 — 读取 kptools-thread-affinity-collector 输出目录做离线分析：拓扑富化(NUMA/NPU 归属)、角色识别规则外置 roles.json、8 类异常判定(A1 忙线程跨 NUMA 漂移/A1u 掩码不可读/A2 NPU 主机线程错位/A3 忙实例挤核/A4 掩码震荡/A5 绑核意图未覆盖按共同在场区间/A6 观测完整性/A7 线程翻动)，输出 HTML 报告(仅看异常过滤)+ summary.json(原子写入)；跨机采样包须带 topology_raw.txt |
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
-| [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡采集与分析：现场轮询/Prometheus 回采/本地 CSV 三种方式获取 dp_load_metrics，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性） |
+| [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡数据采集：现场轮询 /metrics（单池/PD 双池）与 Prometheus 时间段回采两种方式产出统一的 dp_load_metrics CSV（30 数据列 + queue_fixed） |
+| [`kptools-dplb-report`](skills/kptools-dplb-report/SKILL.md) | vLLM DP 负载均衡分析报告：解析 dp_load_metrics CSV，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性）；数据由 kptools-dplb-profiler 采集或由用户提供 |
 | [`kptools-arthas`](skills/kptools-arthas/SKILL.md) | Java 进程性能分析(Arthas 批处理只读采集：trace/watch/monitor/tt 方法级耗时分解与入参观察、thread 高 CPU/阻塞/锁竞争分析、memory/GC 状态、JVM 运行时性能参数、ognl 查询)，含性能分析剧本、采集纪律与 agent 级 with/without A/B 用例 |
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
 | [`kptools-vllm-ttft`](skills/kptools-vllm-ttft/SKILL.md) | vLLM / vLLM-Ascend v0.27.1rc 首 token 延迟诊断，支持日志预检、按执行步和 TP 生成 HTML，以及按需规划与回滚 Python 打点 |
@@ -160,6 +162,12 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `nginx-optimization` | Nginx 场景专属调优(http/https × 长/短连接四场景、L1 环境/L2 配置/L3 鲲鹏加速分层、IRQ-worker 布局、KAL OpenSSL/KAE 加速、火焰图热点对策与压测验证纪律)，含 evals 评测集与 agent 级 with/without A/B 用例集(场景决策、调优循环纪律) |
 | [`redis-optimize`](skills/redis-optimize/SKILL.md) | Redis 场景专属调优(实例发现、网卡 NUMA 定位、进程绑核、多队列中断绑核、ntuple 按端口分流、redis.conf/OS 参数与 redis-benchmark 验证纪律)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 | [`kptools-dpdk-tuning`](skills/kptools-dpdk-tuning/SKILL.md) | DPDK 应用性能调优(诊断+顾问双模式) — 现象驱动的分层排查与硬件+场景驱动的分层配置建议，覆盖 BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延，不修改业务源码；需要改码的优化移交 code-optimizer 的 `dpdk-optimization` |
+
+### 环境部署 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`redis-deploy`](skills/redis-deploy/SKILL.md) | Redis 环境部署(源码构建、默认 7.0.15、sha256 校验、systemd 托管、多实例、离线部署、升级/回滚与验收；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、不自动修改内核参数、不执行远程脚本、卸载需人工确认)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 
 ### 独立诊断 skill
 
@@ -218,6 +226,7 @@ app-tuner/
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
 | RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
+| Redis 环境部署 | "部署一个 Redis 环境（默认 7.0.15）" | `redis-deploy` |
 
 ### 优化工作流
 
