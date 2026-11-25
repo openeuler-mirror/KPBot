@@ -6,12 +6,12 @@
 #   SRC        patch 包目录，默认 /data/ttft/patched_src（需先 scp 上传到宿主机）
 #   KVXFER     SP ascend_store patch 目录，默认 $SRC/ascend_store（可选）
 # 可选环境变量:
-#   PROXY_TGT  proxy 文件目标路径（宿主机进程），设置后连 proxy patch 一起推
-#   BENCH_TGT  压测端目录（宿主机进程），设置后连 bench patch 一起推
+#   PROXY_TGT  proxy 文件目标路径（宿主机进程），设置后连 proxy patch 一起推（HOST_FP 指纹门禁）
+#   BENCH_TGT  压测端目录（宿主机进程），设置后连 bench patch 一起推（HOST_FP 指纹门禁）
 #   ALLOW_UNKNOWN_DIGEST=1  现役摘要既非目标也非已知打点版本时，经人工确认差异后放行（默认停止）
 #
 # 安全红线（对应 skill 踩坑清单）:
-#   1. 先核验后写入：输入文件存在、known-good 指纹匹配、py_compile 通过，任一不过禁止进目标
+#   1. 先核验后写入：输入文件（vllm/SP/KVXFER/proxy/bench）存在、known-good 指纹匹配、py_compile 通过，任一不过禁止进目标
 #   2. 备份先行且覆盖本轮全部目标（vllm/SP/KVXFER/proxy/bench），按原路径记录 MANIFEST；备份不完整即停
 #   3. 基座指纹不可读或不符即停；现役摘要未知即停（防覆盖现场定制，人工确认后显式放行）
 #   4. 只用 docker cp 覆盖（stopped 容器 docker exec 无效）；docker cp 双向均可用
@@ -86,6 +86,14 @@ declare -A BASE_FP=(
     ["detokenizer.py"]="3fe8bf88"
     ["kv_cache_manager.py"]="d1a6c67c"
     ["version.py"]="2b4efcd3"
+)
+# 宿主机侧（proxy/压测端）known-good 指纹——与 PATCH_FP 同一门禁语义：
+# 设置 PROXY_TGT/BENCH_TGT 时纳入输入预检（md5 前缀比对 + py_compile），登记不全/不符即拒；
+# 写入后对宿主机目标回读 md5 并比对指纹（步骤 6/7 尾部）
+declare -A HOST_FP=(
+    ["proxy/load_balance_proxy_server_example.py"]="b7061c0b"
+    ["utils/bench_serving/backend_request_func.py"]="03c3c37f"
+    ["utils/bench_serving/benchmark_serving.py"]="487540b8"
 )
 # 部署后 grep 校验关键字段（容器内现役文件中应 >0）
 GREP_KEYS=(frontend_ts schedule_total_time queue_wait step_other add_req_iq \
@@ -176,12 +184,23 @@ if [ "$KVXFER_MISSING" -eq 0 ]; then
             || die "输入指纹不符: kvxfer/$f md5=${in_md5:0:8} 期望=${PATCH_FP[kvxfer/$f]} —— 禁止携带未验证版本"
     done
 fi
+# 宿主机侧（proxy/压测端）：与容器侧同一输入预检门禁（存在 + known-good 指纹），写入前完成
+HOST_FILES=()
 if [ -n "${PROXY_TGT:-}" ]; then
-    [ -f "$SRC/proxy/load_balance_proxy_server_example.py" ] || die "设置了 PROXY_TGT 但 patch 包缺 proxy 文件"
+    HOST_FILES+=("proxy/load_balance_proxy_server_example.py")
 fi
 if [ -n "${BENCH_TGT:-}" ]; then
-    [ -f "$SRC/utils/bench_serving/backend_request_func.py" ] || die "设置了 BENCH_TGT 但 patch 包缺 backend_request_func.py"
-    [ -f "$SRC/utils/bench_serving/benchmark_serving.py" ] || die "设置了 BENCH_TGT 但 patch 包缺 benchmark_serving.py"
+    HOST_FILES+=("utils/bench_serving/backend_request_func.py"
+                 "utils/bench_serving/benchmark_serving.py")
+fi
+if [ "${#HOST_FILES[@]}" -gt 0 ]; then
+    for hf in "${HOST_FILES[@]}"; do
+        [ -f "$SRC/$hf" ] || die "设置了 PROXY_TGT/BENCH_TGT 但 patch 包缺文件: $SRC/$hf"
+        [ -n "${HOST_FP[$hf]:-}" ] || die "指纹登记不全: $hf 无 known-good 指纹 —— 拒绝绕过内容核验，请先在 HOST_FP 登记"
+        in_md5="$(md5sum "$SRC/$hf" | awk '{print $1}')"
+        [[ "$in_md5" = "${HOST_FP[$hf]}"* ]] \
+            || die "输入指纹不符: $hf md5=${in_md5:0:8} 期望=${HOST_FP[$hf]} —— 禁止携带未验证版本"
+    done
 fi
 PYC_ERR=0
 for f in "${VLLM_FILES[@]}" "${SP_FILES[@]}"; do
@@ -192,35 +211,55 @@ if [ "$KVXFER_MISSING" -eq 0 ]; then
         python3 -m py_compile "$KVXFER/$f" >/dev/null 2>&1 || { echo "[FATAL] py_compile 失败: $KVXFER/$f"; PYC_ERR=1; }
     done
 fi
+if [ "${#HOST_FILES[@]}" -gt 0 ]; then
+    for hf in "${HOST_FILES[@]}"; do
+        python3 -m py_compile "$SRC/$hf" >/dev/null 2>&1 || { echo "[FATAL] py_compile 失败: $SRC/$hf"; PYC_ERR=1; }
+    done
+fi
 [ "$PYC_ERR" -eq 0 ] || die "输入 py_compile 未通过，禁止写入目标"
 log "  输入预检通过（全部输入已核验，可安全写入）"
 
 # ---------- 5. 步骤 2/7: 定位 SP / KVXFER 路径 ----------
 log "== 步骤 2/7: 定位 site-packages 路径 =="
-# 容器在跑优先 exec find；stopped 则用默认 SP 并用 docker cp 探测验证
+# 容器在跑优先 exec find；stopped 则用默认 SP 并用 docker cp 探测验证。
+# find 不限深度 + prune /proc /sys + -print -quit 命中即止：文档声明的 SP 布局下
+# model_runner_v1.py 在第 9 层、ascend_store 在第 11 层，原 -maxdepth 8/9 匹配不到
 SP_ROOT=""
+SP_RUNNING=0
 if docker exec "$CONTAINER" true >/dev/null 2>&1; then
-    SP_ROOT="$(docker exec "$CONTAINER" find / -maxdepth 8 -path '*site-packages/vllm_ascend/worker/model_runner_v1.py' 2>/dev/null \
-               | sed 's#vllm_ascend/worker/model_runner_v1.py$##' | head -n1 || true)"
+    SP_RUNNING=1
+    SP_ROOT="$(docker exec "$CONTAINER" find / \( -path /proc -o -path /sys \) -prune -o \
+               -path '*site-packages/vllm_ascend/worker/model_runner_v1.py' -print -quit 2>/dev/null \
+               | sed 's#vllm_ascend/worker/model_runner_v1.py$##' || true)"
 fi
 if [ -z "$SP_ROOT" ]; then
     # stopped 容器：按默认 SP 探测
     if docker cp "$CONTAINER:$SP_EXPECT/vllm_ascend/worker/model_runner_v1.py" "$WORK/probe_mr1" >/dev/null 2>&1; then
         SP_ROOT="$SP_EXPECT/"
+    elif [ "$SP_RUNNING" -eq 1 ]; then
+        die "无法定位 vllm_ascend SP 路径（未找到）：容器在跑但 find 未匹配到 site-packages/vllm_ascend/worker/model_runner_v1.py，且默认 $SP_EXPECT 探测不匹配——布局与预期不符。请手工核对:\n  docker exec $CONTAINER find / -path '*vllm_ascend/worker/model_runner_v1.py'"
     else
-        die "无法定位 vllm_ascend SP 路径（容器未运行且默认 $SP_EXPECT 探测失败）。请启动容器后重试，或手工 find:\n  find / -path '*site-packages/vllm_ascend/core/recompute_scheduler.py'"
+        die "无法定位 vllm_ascend SP 路径（路径不匹配）：容器 stopped 且默认 $SP_EXPECT 探测失败。请启动容器后重试，或手工 find:\n  find / -path '*site-packages/vllm_ascend/core/recompute_scheduler.py'"
     fi
 fi
 log "  SP_ROOT = $SP_ROOT"
 
 KVXFER_DST=""
-if docker exec "$CONTAINER" true >/dev/null 2>&1; then
-    KVXFER_DST="$(docker exec "$CONTAINER" find / -maxdepth 9 -type d -path '*vllm_ascend/distributed/kv_transfer/kv_pool/ascend_store' 2>/dev/null | head -n1 || true)"
+if [ "$SP_RUNNING" -eq 1 ]; then
+    KVXFER_DST="$(docker exec "$CONTAINER" find / \( -path /proc -o -path /sys \) -prune -o \
+                   -type d -path '*vllm_ascend/distributed/kv_transfer/kv_pool/ascend_store' -print -quit 2>/dev/null || true)"
 fi
 if [ -z "$KVXFER_DST" ]; then
     KVXFER_DST="${SP_ROOT}vllm_ascend/distributed/kv_transfer/kv_pool/ascend_store"
-    docker cp "$CONTAINER:$KVXFER_DST/kv_transfer.py" "$WORK/probe_kv" >/dev/null 2>&1 \
-        || log "  [WARN] 默认 ascend_store 路径探测失败，仍按默认继续（若失败请手工 find 定位）"
+    if ! docker cp "$CONTAINER:$KVXFER_DST/kv_transfer.py" "$WORK/probe_kv" >/dev/null 2>&1; then
+        # 探测失败必须致命：继续写盘会形成『先覆盖 vllm/SP、KVXFER 才失败』的部分部署；
+        # 全部路径探测都发生在任何 docker cp 写盘之前（步骤 2/7 早于步骤 6/7）
+        if [ "$SP_RUNNING" -eq 1 ]; then
+            die "ascend_store 定位失败（未找到）：容器在跑但 find 未匹配到 kv_pool/ascend_store，且默认 $KVXFER_DST 探测不匹配——引擎版本可能不含 ascend_store KV transfer。路径未验证禁止写盘，请手工核对:\n  docker exec $CONTAINER find / -type d -path '*vllm_ascend/distributed/kv_transfer/kv_pool/ascend_store'"
+        else
+            die "ascend_store 定位失败（路径不匹配）：容器 stopped 且默认 $KVXFER_DST 探测失败。请启动容器后重试或手工 find 定位——路径未验证禁止写盘（防部分部署后才失败）"
+        fi
+    fi
 fi
 log "  KVXFER_DST = $KVXFER_DST"
 
@@ -373,20 +412,28 @@ else
     done
 fi
 
-# proxy / 压测端（宿主机进程，可选）：逐个复制并回读校验，失败即停
+# proxy / 压测端（宿主机进程，可选）：逐个复制，回读 md5 比对 + known-good 指纹核对，失败即停
 if [ -n "${PROXY_TGT:-}" ]; then
-    cp -f "$SRC/proxy/load_balance_proxy_server_example.py" "$PROXY_TGT" \
+    hf="proxy/load_balance_proxy_server_example.py"
+    cp -f "$SRC/$hf" "$PROXY_TGT" \
         || die "proxy patch 复制失败 -> $PROXY_TGT"
-    cmp -s "$SRC/proxy/load_balance_proxy_server_example.py" "$PROXY_TGT" \
-        || die "proxy patch 回读校验失败（与源不一致）: $PROXY_TGT"
-    log "  proxy patch -> $PROXY_TGT（记得重启宿主机 proxy 进程）"
+    got="$(md5sum "$PROXY_TGT" | awk '{print $1}')"
+    want="$(md5sum "$SRC/$hf" | awk '{print $1}')"
+    [ "$got" = "$want" ] || die "proxy patch 回读 md5 不一致: $PROXY_TGT got=${got:0:8} want=${want:0:8}"
+    [[ "$got" = "${HOST_FP[$hf]}"* ]] \
+        || die "known-good 指纹不符(部署后): $hf got=${got:0:8} want=${HOST_FP[$hf]} —— 禁止携带未验证版本"
+    log "  proxy patch -> $PROXY_TGT (md5=${got:0:8})（记得重启宿主机 proxy 进程）"
 fi
 if [ -n "${BENCH_TGT:-}" ]; then
     for bf in backend_request_func.py benchmark_serving.py; do
-        cp -f "$SRC/utils/bench_serving/$bf" "$BENCH_TGT/" \
+        hf="utils/bench_serving/$bf"
+        cp -f "$SRC/$hf" "$BENCH_TGT/" \
             || die "bench patch 复制失败: $bf -> $BENCH_TGT/"
-        cmp -s "$SRC/utils/bench_serving/$bf" "$BENCH_TGT/$bf" \
-            || die "bench patch 回读校验失败: $BENCH_TGT/$bf"
+        got="$(md5sum "$BENCH_TGT/$bf" | awk '{print $1}')"
+        want="$(md5sum "$SRC/$hf" | awk '{print $1}')"
+        [ "$got" = "$want" ] || die "bench patch 回读 md5 不一致: $BENCH_TGT/$bf got=${got:0:8} want=${want:0:8}"
+        [[ "$got" = "${HOST_FP[$hf]}"* ]] \
+            || die "known-good 指纹不符(部署后): $hf got=${got:0:8} want=${HOST_FP[$hf]} —— 禁止携带未验证版本"
     done
     log "  bench patch -> $BENCH_TGT"
 fi

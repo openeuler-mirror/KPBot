@@ -62,7 +62,7 @@ PD 分离：P 做 prefill、D 做 decode，proxy 是宿主机进程。
 | `proxy/load_balance_proxy_server_example.py` | `[LB_DISPATCH]` + client_send_ts 透传（宿主机进程） |
 | `utils/bench_serving/backend_request_func.py` + `benchmark_serving.py` | 注入 client_send_ts、`--save-detailed`（宿主机进程） |
 
-**版本指纹（known-good，2026-11-18 v3.2）**：16 文件全量登记于脚本 `PATCH_FP`——写入前比对上传件、写入后回读比对，登记不全脚本拒绝运行（拒绝绕过内容核验）。易变重点文件：`model_runner_v1=2e7db5f3`、`shm_broadcast=55821b06`、`gpu_model_runner=0a59cde4`、`stats=9f9f5276`、`sched_output=c6d9b049`。
+**版本指纹（known-good，2026-11-18 v3.2）**：16 文件全量登记于脚本 `PATCH_FP`——写入前比对上传件、写入后回读比对，登记不全脚本拒绝运行（拒绝绕过内容核验）；宿主机侧 proxy/压测端 3 文件登记于脚本 `HOST_FP`，同一门禁（写入前 md5 前缀比对 + py_compile、写入后回读 md5 并核对指纹）。易变重点文件：`model_runner_v1=2e7db5f3`、`shm_broadcast=55821b06`、`gpu_model_runner=0a59cde4`、`stats=9f9f5276`、`sched_output=c6d9b049`。
 
 ## 3. 部署流程
 
@@ -76,7 +76,7 @@ PD 分离：P 做 prefill、D 做 decode，proxy 是宿主机进程。
    find / -path '*site-packages/vllm_ascend/core/recompute_scheduler.py'
    ```
 
-5. **一键脚本**：`bash scripts/deploy_ttft_full.sh <CONTAINER> [SRC] [KVXFER]` —— 输入预检（文件存在 + **16 文件全量 known-good 指纹比对** + py_compile，写入前完成、登记不全即拒绝运行）→ 定位 SP/KVXFER → 按原路径备份全部目标 → 基座指纹核对（不可读即停）→ 现役 vs 目标 md5（**vllm/SP/KVXFER 全量，未知摘要即停**，人工确认后 `ALLOW_UNKNOWN_DIGEST=1` 放行）→ docker cp 16 文件并回读校验 → proxy/压测端（可选，失败即停 + 回读）→ grep 校验（含跳过写入的现役文件）→ 提示重启。
+5. **一键脚本**：`bash scripts/deploy_ttft_full.sh <CONTAINER> [SRC] [KVXFER]` —— 输入预检（文件存在 + **16 文件全量 known-good 指纹比对** + py_compile，写入前完成、登记不全即拒绝运行；设 `PROXY_TGT`/`BENCH_TGT` 时宿主机 3 文件走 `HOST_FP` 同一门禁）→ 定位 SP/KVXFER（find 不限深度、prune /proc /sys，SP/KVXFER 探测失败即停，不做未验证路径写盘）→ 按原路径备份全部目标 → 基座指纹核对（不可读即停）→ 现役 vs 目标 md5（**vllm/SP/KVXFER 全量，未知摘要即停**，人工确认后 `ALLOW_UNKNOWN_DIGEST=1` 放行）→ docker cp 16 文件并回读校验 → proxy/压测端（可选，`HOST_FP` 指纹门禁，失败即停 + 回读 md5 比对）→ grep 校验（含跳过写入的现役文件）→ 提示重启。
 6. **校验**：容器内 grep 各关键字段应 >0：`frontend_ts`、`schedule_total_time`、`queue_wait`、`step_other`、`add_req_iq`、`TTFT_DECODE`、`TTFT_KVXFER`、`start_load_kv`、`TTFT_DRAFT`、`_ttft_in_draft`、`_TTFT_SHM_DQ`；再与本地逐字节 `md5sum` 比对。
 7. **不自动重启**：由用户停启 P/D 引擎与 proxy。顺序参考：pkill launch_online_dp / vllm serve / EngineCore → P 起 mooncake_master → P `start_p0.sh` → D `start_d0.sh` → 102 宿主机 `start_proxy.sh`。
 8. **smoke**：发 1 条请求，确认 `[TTFT][BREAKDOWN]` v3 行、`[TTFT_DRAFT]`、`[SHM_DEQUEUE_BATCH]` 有输出、端口监听、`Application startup complete`。
