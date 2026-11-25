@@ -167,18 +167,50 @@ def main():
         check("same-line EPLB 参数被拒绝且不改文件",
               rs.returncode != 0 and read(same) == before and "独占一行" in rs.stdout)
 
-        # --- 5c. EP is the last serve argument ---
+        # --- 5c. EP is the last serve argument: dynamic/off/force must not swallow the next command ---
         ep_last = os.path.join(tmp, "ep_last.sh")
         write(ep_last, base_template("vllm serve /models/x \\\n" + KV +
                                      "    --enable-expert-parallel\nbash /opt/start_proxy.sh\n"))
         re_ = run([APPLY, "--template", ep_last, "--mode", "dynamic", "--ep-size", "16"])
         lines = read(ep_last).splitlines()
-        idx = next(i for i, l in enumerate(lines) if "--eplb-config.step_interval" in l)
-        check("EP 为末参数: 末条 flag 不带悬挂续行符",
-              re_.returncode == 0 and not lines[idx].rstrip().endswith("\\"), lines[idx])
-        check("EP 为末参数: 后续脚本行未被拼进 serve",
-              lines[idx + 1] == "bash /opt/start_proxy.sh", lines[idx + 1] if idx + 1 < len(lines) else "EOF")
+        body = "\n".join(lines)
+        bash_i = lines.index("bash /opt/start_proxy.sh")
+        check("EP 为末参数: dynamic 成功且 4 个 eplb 参数齐全",
+              re_.returncode == 0 and "--enable-eplb" in body and
+              all(("--eplb-config.%s %d" % (k, v)) in body for k, v in
+                  (("num_redundant_experts", 16), ("window_size", 1000), ("step_interval", 1000))))
+        check("EP 为末参数: serve 末行不悬挂续行符、后续脚本行未被拼进 serve",
+              bash_i > 0 and not lines[bash_i - 1].rstrip().endswith("\\"),
+              lines[bash_i - 1] if bash_i > 0 else "EOF")
         check("EP 为末参数: bash -n 通过", subprocess.run(["bash", "-n", ep_last]).returncode == 0)
+
+        rd2 = run([APPLY, "--template", ep_last, "--mode", "dynamic", "--ep-size", "16"])
+        lines2 = read(ep_last).splitlines()
+        bash_i2 = lines2.index("bash /opt/start_proxy.sh")
+        check("EP 为末参数: dynamic 再执行幂等且不吞下一行",
+              rd2.returncode == 0 and "无需修改" in rd2.stdout
+              and not lines2[bash_i2 - 1].rstrip().endswith("\\")
+              and sum(1 for l in lines2 if "--enable-eplb" in l) == 1)
+
+        roff_ep = run([APPLY, "--template", ep_last, "--mode", "off"])
+        lines3 = read(ep_last).splitlines()
+        bash_i3 = lines3.index("bash /opt/start_proxy.sh")
+        check("EP 为末参数: dynamic->off 不悬挂续行符、不吞下一行",
+              roff_ep.returncode == 0 and not lines3[bash_i3 - 1].rstrip().endswith("\\")
+              and not any("--enable-eplb" in l or "--eplb-config." in l for l in lines3))
+
+        # dynamic -> force on an EP-last fixture that carries --additional-config
+        ep_last_ac = os.path.join(tmp, "ep_last_ac.sh")
+        write(ep_last_ac, base_template("vllm serve /models/x \\\n" + KV +
+                                        "    --additional-config '{\"a\":1}' \\\n"
+                                        "    --enable-expert-parallel\nbash /opt/start_proxy.sh\n"))
+        run([APPLY, "--template", ep_last_ac, "--mode", "dynamic", "--ep-size", "16"])
+        rf = run([APPLY, "--template", ep_last_ac, "--mode", "force"])
+        linesf = read(ep_last_ac).splitlines()
+        bash_if = linesf.index("bash /opt/start_proxy.sh")
+        check("EP 为末参数: dynamic->force 不悬挂续行符、不吞下一行",
+              rf.returncode == 0 and not linesf[bash_if - 1].rstrip().endswith("\\")
+              and '"enable_force_eplb":true' in "\n".join(linesf))
 
         # --- 5d. symlink: edit the real file, keep the link ---
         real = os.path.join(tmp, "real.sh")

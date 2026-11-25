@@ -171,7 +171,9 @@ physical_per_rank= (num_logical_experts + num_redundant_experts) / ep_size
 拒绝改写（避免误删 `--port` 之类相邻参数；布尔开关 `--eplb-config.log_balancedness` 后跟另一个 flag
 同样按同行处理拒绝）；对三个参数做域校验（`window/step >= 1`、`redundant > 0`，且 dynamic 必须给
 `--ep-size` 并据其校验整除、非整数倍向上取整）；`--mode off` 只按**有效配置**（忽略注释）判断
-模板是否开过 EPLB，仅有注释提及 `DYNAMIC_EPLB` 的 V1 模板不会被翻转 V2 runner；符号链接先解析到真实文件；备份为
+模板是否开过 EPLB，仅有注释提及 `DYNAMIC_EPLB` 的 V1 模板不会被翻转 V2 runner；`--enable-expert-parallel`
+是 serve 末参数时，EPLB 参数插在该行之前、不改动 EP 行本身，因此重复执行或切回 off/force 都不会留下
+悬空续行符把模板下一行命令吞进 serve（verify 会检测这类吞并并拒绝写入）；符号链接先解析到真实文件；备份为
 `run_dp_template.sh.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>`；写入用唯一临时文件 + 原子替换；重复执行同一
 模式不再改动；写后 `bash -n` 失败自动回滚，`bash` 不可用时明确标注"未验证"；最后按目标状态逐项校验。
 

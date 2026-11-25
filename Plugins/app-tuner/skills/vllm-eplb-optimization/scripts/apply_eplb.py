@@ -39,6 +39,10 @@ Safety behavior:
     shared line and refused, not parsed as "value".
   * Requires --ep-size for --mode dynamic and validates/rounds
     --redundant-experts against it before writing (no unverified value on disk).
+  * Inserts EPLB flags *before* the --enable-expert-parallel anchor and never
+    rewrites that line, so re-running dynamic or switching to off/force cannot
+    leave a dangling backslash that swallows the next script line; verify()
+    rejects any output whose serve command merged a following shell command.
   * Symlinked templates are resolved first, so the real file is edited.
   * Makes a timestamped backup (.bak-eplb-<mode>-<YYYYmmdd-HHMMSS>) before writing.
   * Merges into the existing --additional-config JSON instead of adding a
@@ -71,6 +75,11 @@ RE_AC_CLOSE = re.compile(r"^\s*\}'(.*)$")
 
 # eplb-config keys that are boolean switches (take no value)
 EPLB_BOOL_KEYS = ('log_balancedness',)
+
+# lines that start a new shell command; seeing one inside the continued serve
+# command means a dangling backslash swallowed the next script line
+_SHELL_CMD_RE = re.compile(
+    r'^\s*(bash|sh|python3?|docker|nohup|cd|source|export|unset|echo|sleep|\.)\b')
 
 
 def die(msg, code=1):
@@ -127,6 +136,30 @@ def find_serve(lines):
     for i, line in enumerate(lines):
         if RE_SERVE_LINE.match(line):
             return i
+    return None
+
+
+def _serve_swallowed_command(lines):
+    """Return a shell-command line wrongly merged into the serve command, or None.
+
+    Walks the `vllm serve` command honouring single-quoted JSON blocks and
+    backslash continuations. A line inside the command that starts a new shell
+    command means a dangling continuation swallowed the next script line.
+    """
+    start = find_serve(lines)
+    if start is None:
+        return None
+    in_squote = False
+    i = start
+    while i < len(lines):
+        line = lines[i]
+        if line.count("'") % 2 == 1:
+            in_squote = not in_squote
+        if i > start and not in_squote and _SHELL_CMD_RE.match(line):
+            return line
+        if not in_squote and not line.rstrip().endswith('\\'):
+            break
+        i += 1
     return None
 
 
@@ -253,19 +286,19 @@ def transform(src, mode, redundant, window, interval):
             raise ValueError("--enable-expert-parallel appears before `vllm serve`; "
                              "refusing to guess the serve argument block")
         ep_indent = re.match(r'^(\s*)', out[ep_idx]).group(1)
-        had_cont = out[ep_idx].rstrip().endswith('\\')
         flags = ['--enable-eplb',
                  '--eplb-config.num_redundant_experts %d' % redundant,
                  '--eplb-config.window_size %d' % window,
                  '--eplb-config.step_interval %d' % interval]
-        if had_cont:
-            inserted = ['%s%s \\' % (ep_indent, f) for f in flags]
-        else:
-            # the anchor line ends the command: keep it open, close on the last flag
-            out[ep_idx] = out[ep_idx].rstrip() + ' \\'
-            inserted = ['%s%s \\' % (ep_indent, f) for f in flags[:-1]]
-            inserted.append('%s%s' % (ep_indent, flags[-1]))
-        out[ep_idx + 1:ep_idx + 1] = inserted
+        # Insert the EPLB flags *before* the --enable-expert-parallel line and
+        # never mutate that line. It either already ends the serve command (no
+        # trailing backslash) or is a mid-command line that must keep its own
+        # backslash. Every inserted flag keeps the command open with a trailing
+        # backslash; the untouched EP line then closes the command when it is
+        # last. This keeps dynamic idempotent and lets off/force remove the
+        # flags without leaving a dangling backslash that would swallow the
+        # next script line.
+        out[ep_idx:ep_idx] = ['%s%s \\' % (ep_indent, f) for f in flags]
 
     # --- --additional-config ---
     ac = find_json_block(out, '--additional-config')
@@ -372,6 +405,10 @@ def verify(text, mode, redundant, window, interval):
         problems.append('force requires exactly one --additional-config flag, found %d' % n_ac)
     elif n_ac > 1:
         problems.append('more than one --additional-config flag (found %d)' % n_ac)
+    n_checks += 1
+    swallowed = _serve_swallowed_command(lines)
+    if swallowed is not None:
+        problems.append('vllm serve 命令吞并了后续脚本行（悬空续行符）: %r' % swallowed)
     return problems, n_checks
 
 
