@@ -1,0 +1,6 @@
+# Synthetic criterion output; not real benchmark data.
+snapshot_creation: benchmarking
+Benchmarking snapshot_creation
+Collecting 100 samples in estimated 120
+sample 1/100 time: 30.2 ms
+sample 2/100 time: 29.8 ms

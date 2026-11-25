@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""bench 计量期门禁判定：解析 bench-run.log，判定是否已进入计量阶段。
+
+用法：
+    python3 scripts/check_bench_phase.py <bench-run.log> [--bench NAME]
+
+判据（与 capture_topdown.sh 一致，可回归）：
+  Benchmarking <BENCH> 行出现 + "Collecting N samples" 进度行出现 → measuring
+  仅 Benchmarking 行（warm-up 进行中）→ warmup
+  两者皆无 → not_started
+退出码：0 = 解析完成（状态见 JSON）；2 = 输入缺失。
+"""
+
+import argparse
+import json
+import re
+import sys
+
+COLLECT_RE = re.compile(r"Collecting \d+ samples")
+
+
+def classify(path, bench):
+    has_bench_line = False
+    has_collecting = False
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if f"Benchmarking {bench}" in line:
+                has_bench_line = True
+            if COLLECT_RE.search(line):
+                has_collecting = True
+    if has_bench_line and has_collecting:
+        state = "measuring"
+    elif has_bench_line:
+        state = "warmup"
+    else:
+        state = "not_started"
+    return state
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("log", help="bench-run.log 路径")
+    ap.add_argument("--bench", required=True, help="单项名（精确匹配）")
+    args = ap.parse_args()
+    try:
+        state = classify(args.log, args.bench)
+    except OSError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 2
+    print(json.dumps({"bench": args.bench, "state": state,
+                      "gate": "pass" if state == "measuring" else "fail"},
+                     ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

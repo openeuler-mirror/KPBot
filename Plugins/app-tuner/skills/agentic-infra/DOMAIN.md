@@ -10,6 +10,7 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
 
 - [`kptools-agentenv-tuning`](kptools-agentenv-tuning/SKILL.md) — AgentENV 沙箱内核适配与调优入口，含 pvspinlock / kernel-hz / cluster-tlbi / snapshot-fs 四个专项子技能包
 - [`sandbox-bench-flame`](sandbox-bench-flame/SKILL.md) — AgentENV 官方 benchmark 短时延单项的火焰图采集：长时化 + 连续核绑定脚本生成与 perf 全系统采样
+- [`sandbox-bench-topdown`](sandbox-bench-topdown/SKILL.md) — AgentENV 官方 benchmark 短时延单项的 DevKit top-down PMU 采集（与 flame 同门：长时化拉出采集窗，产物 top-down.tar 支持比例分类瓶颈）
 - [`agentenv-dtlbi-pr30652`](agentenv-dtlbi-pr30652/SKILL.md) — AgentENV coding 负载 KVM 定向 stage-2 TLB 失效优化（openEuler PR #30652）：__tlb_switch_to_host 热点确认门禁 → 换核 → 使能 kvm.direct_tlbi
 - [`cubesandbox-deployment`](cubesandbox-deployment/SKILL.md) — CubeSandbox 单机在线部署：x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试
 - `cubesandbox-lifecycle-bench`（现居 `../cubesandbox-lifecycle-bench/`）— 一键 29 档 Workflow、路由与共享执行器
@@ -32,6 +33,7 @@ Agent 运行时基础设施的性能优化：AgentENV 沙箱的安装部署、�
   `cubesandbox-lifecycle-bench`
 - AgentENV 内核适配与专项调优（TLBI、kernel-hz、pvspinlock、snapshot-fs）→ `kptools-agentenv-tuning`
 - 官方 benchmark 单项要采火焰图（时延太短采不到）→ `sandbox-bench-flame`
+- 官方 benchmark 单项要 top-down 比例分类（前端/后端/退休/预测错误）→ `sandbox-bench-topdown`
 - coding 负载 TLB 切换开销高（__tlb_switch_to_host 热点）→ `agentenv-dtlbi-pr30652`
 - 改创建路径与内核机制本身 → `code-optimizer` 侧 `agentic-infra/`
 
