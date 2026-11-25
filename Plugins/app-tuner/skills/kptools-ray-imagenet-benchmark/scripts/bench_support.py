@@ -139,8 +139,92 @@ def validate_version_profile(versions):
     return problems
 
 
-def effective_cpus():
-    """Return affinity/cgroup-aware visible CPUs and source evidence."""
+def _unescape_mountinfo_path(value):
+    """Decode octal escapes used by procfs mountinfo paths."""
+    return re.sub(
+        r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value
+    )
+
+
+def _cgroup_memberships(proc_root):
+    """Return this process's v2 and per-controller v1 cgroup paths."""
+    memberships = {}
+    for line in (proc_root / "self/cgroup").read_text(
+        encoding="utf-8"
+    ).splitlines():
+        fields = line.strip().split(":", 2)
+        if len(fields) != 3 or not fields[2].startswith("/"):
+            continue
+        hierarchy, controllers, path = fields
+        if hierarchy == "0" and not controllers:
+            memberships["v2"] = path
+        for controller in controllers.split(","):
+            if controller in {"cpu", "memory"}:
+                memberships[controller] = path
+    return memberships
+
+
+def _cgroup_mounts(proc_root):
+    """Map cgroup controllers to their mount roots and visible mount points."""
+    mounts = {"v2": [], "cpu": [], "memory": []}
+    for line in (proc_root / "self/mountinfo").read_text(
+        encoding="utf-8"
+    ).splitlines():
+        left, separator, right = line.partition(" - ")
+        fields = left.split()
+        details = right.split()
+        if not separator or len(fields) < 6 or len(details) < 3:
+            continue
+        root = _unescape_mountinfo_path(fields[3])
+        mount_point = _unescape_mountinfo_path(fields[4])
+        filesystem = details[0]
+        if filesystem == "cgroup2":
+            mounts["v2"].append((root, Path(mount_point)))
+        elif filesystem == "cgroup":
+            controllers = set(details[2].split(","))
+            controllers.update(fields[5].split(","))
+            for controller in ("cpu", "memory"):
+                if controller in controllers:
+                    mounts[controller].append((root, Path(mount_point)))
+    return mounts
+
+
+def _visible_cgroup_paths(membership, mounts):
+    """Translate a procfs cgroup path through each matching mount namespace."""
+    paths = []
+    for mount_root, mount_point in mounts:
+        prefix = mount_root.rstrip("/")
+        if membership != mount_root and not membership.startswith(prefix + "/"):
+            continue
+        relative = membership[len(mount_root):].lstrip("/")
+        current = mount_point / relative if relative else mount_point
+        visible = []
+        while True:
+            visible.append(current)
+            if current == mount_point:
+                break
+            current = current.parent
+        paths.extend(visible)
+    return paths
+
+
+def _cgroup_paths(proc_root, controller):
+    """Return current and visible ancestor directories for one controller."""
+    memberships = _cgroup_memberships(proc_root)
+    mounts = _cgroup_mounts(proc_root)
+    if "v2" in memberships:
+        paths = _visible_cgroup_paths(memberships["v2"], mounts["v2"])
+        if paths:
+            return "v2", paths
+    if controller not in memberships:
+        return controller, []
+    return controller, _visible_cgroup_paths(
+        memberships[controller], mounts[controller]
+    )
+
+
+def effective_cpus(proc_root=Path("/proc")):
+    """Return affinity and current/visible-ancestor cgroup CPU limits."""
     try:
         affinity = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):
@@ -148,49 +232,61 @@ def effective_cpus():
     evidence = {"affinity_cpus": affinity}
     visible = affinity
     try:
-        quota_text, period_text = (
-            Path("/sys/fs/cgroup/cpu.max").read_text(encoding="utf-8").split()
-        )
-        evidence["cgroup_version"] = "v2"
-        if quota_text == "max":
-            evidence["cgroup_cpu"] = "unlimited"
-        else:
-            quota = int(quota_text)
-            period = int(period_text)
-            quota_cpus = max(1, quota // period)
-            visible = min(visible, quota_cpus)
-            evidence.update({"quota": quota, "period": period})
-    except (OSError, ValueError):
-        try:
-            quota = int(
-                Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
-                .read_text(encoding="utf-8")
-                .strip()
-            )
-            period = int(
-                Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
-                .read_text(encoding="utf-8")
-                .strip()
-            )
-            evidence["cgroup_version"] = "v1"
-            if quota > 0:
+        hierarchy, paths = _cgroup_paths(proc_root, "cpu")
+        evidence["cgroup_version"] = hierarchy
+        observations = []
+        for path in paths:
+            if hierarchy == "v2":
+                fields = (path / "cpu.max").read_text(
+                    encoding="utf-8"
+                ).split()
+                if len(fields) != 2:
+                    raise ValueError("invalid cpu.max")
+                quota_text, period_text = fields
+                quota = None if quota_text == "max" else int(quota_text)
+                period = int(period_text)
+            else:
+                quota = int(
+                    (path / "cpu.cfs_quota_us").read_text(
+                        encoding="utf-8"
+                    ).strip()
+                )
+                period = int(
+                    (path / "cpu.cfs_period_us").read_text(
+                        encoding="utf-8"
+                    ).strip()
+                )
+                if quota < 0:
+                    quota = None
+            observation = {"path": str(path), "period": period}
+            if quota is not None:
+                if period <= 0:
+                    raise ValueError("cgroup CPU period must be positive")
                 quota_cpus = max(1, quota // period)
                 visible = min(visible, quota_cpus)
-                evidence.update({"quota": quota, "period": period})
+                observation.update(quota=quota, effective_cpus=quota_cpus)
             else:
-                evidence["cgroup_cpu"] = "unlimited"
-        except (OSError, ValueError, ZeroDivisionError):
+                observation["quota"] = "unlimited"
+            observations.append(observation)
+        evidence["cgroup_cpu_hierarchy"] = observations
+        if not paths:
             evidence["cgroup_cpu"] = "unavailable"
+    except (OSError, ValueError, ZeroDivisionError) as exc:
+        evidence["cgroup_cpu"] = "unavailable"
+        evidence["cgroup_cpu_error"] = sanitize_text(
+            f"{type(exc).__name__}: {exc}"
+        )
     evidence["effective_cpus"] = visible
     return visible, evidence
 
 
-def memory_available_bytes():
-    """Estimate available memory from procfs and cgroup v1/v2 limits."""
+def memory_available_bytes(proc_root=Path("/proc")):
+    """Limit procfs memory by current and visible-ancestor cgroup limits."""
     available = None
     try:
-        lines = Path("/proc/meminfo").read_text(encoding="utf-8").splitlines()
-        for line in lines:
+        for line in (proc_root / "meminfo").read_text(
+            encoding="utf-8"
+        ).splitlines():
             if line.startswith("MemAvailable:"):
                 available = int(line.split()[1]) * 1024
                 break
@@ -198,61 +294,53 @@ def memory_available_bytes():
         pass
     evidence = {"proc_mem_available_bytes": available}
     try:
-        maximum_text = (
-            Path("/sys/fs/cgroup/memory.max")
-            .read_text(encoding="utf-8")
-            .strip()
-        )
-        evidence["cgroup_version"] = "v2"
-        if maximum_text == "max":
-            evidence["cgroup_memory"] = "unlimited"
-        else:
-            maximum = int(maximum_text)
-            current = int(
-                Path("/sys/fs/cgroup/memory.current")
-                .read_text(encoding="utf-8")
-                .strip()
-            )
-            remaining = max(0, maximum - current)
-            available = (
-                remaining if available is None else min(available, remaining)
-            )
-            evidence.update(
-                {
-                    "cgroup_memory_max": maximum,
-                    "cgroup_memory_current": current,
-                }
-            )
-    except (OSError, ValueError):
-        try:
-            maximum = int(
-                Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")
-                .read_text(encoding="utf-8")
-                .strip()
-            )
-            current = int(
-                Path("/sys/fs/cgroup/memory/memory.usage_in_bytes")
-                .read_text(encoding="utf-8")
-                .strip()
-            )
-            evidence["cgroup_version"] = "v1"
-            if maximum < 1 << 60:
-                remaining = max(0, maximum - current)
-                available = (
-                    remaining
-                    if available is None
-                    else min(available, remaining)
+        hierarchy, paths = _cgroup_paths(proc_root, "memory")
+        evidence["cgroup_version"] = hierarchy
+        observations = []
+        for path in paths:
+            if hierarchy == "v2":
+                maximum_text = (path / "memory.max").read_text(
+                    encoding="utf-8"
+                ).strip()
+                maximum = (
+                    None if maximum_text == "max" else int(maximum_text)
                 )
-                evidence.update(
-                    {
-                        "cgroup_memory_max": maximum,
-                        "cgroup_memory_current": current,
-                    }
+                current = int(
+                    (path / "memory.current").read_text(
+                        encoding="utf-8"
+                    ).strip()
                 )
             else:
-                evidence["cgroup_memory"] = "unlimited"
-        except (OSError, ValueError):
+                maximum = int(
+                    (path / "memory.limit_in_bytes").read_text(
+                        encoding="utf-8"
+                    ).strip()
+                )
+                current = int(
+                    (path / "memory.usage_in_bytes").read_text(
+                        encoding="utf-8"
+                    ).strip()
+                )
+                if maximum >= 1 << 60:
+                    maximum = None
+            observation = {"path": str(path), "current": current}
+            if maximum is not None:
+                remaining = max(0, maximum - current)
+                available = (
+                    remaining if available is None else min(available, remaining)
+                )
+                observation.update(maximum=maximum, remaining=remaining)
+            else:
+                observation["maximum"] = "unlimited"
+            observations.append(observation)
+        evidence["cgroup_memory_hierarchy"] = observations
+        if not paths:
             evidence["cgroup_memory"] = "unavailable"
+    except (OSError, ValueError) as exc:
+        evidence["cgroup_memory"] = "unavailable"
+        evidence["cgroup_memory_error"] = sanitize_text(
+            f"{type(exc).__name__}: {exc}"
+        )
     evidence["effective_available_bytes"] = available
     return available, evidence
 

@@ -40,6 +40,61 @@ def ready_resource():
     )
 
 
+def cgroup_fixture(root, version, membership, mount_root):
+    """Build procfs and cgroup files for nested namespace fixtures."""
+    proc = root / "proc"
+    (proc / "self").mkdir(parents=True)
+    (proc / "meminfo").write_text("MemAvailable: 8388608 kB\n")
+    mount_root_path = Path(root / "cgroup")
+    if version == "v2":
+        (proc / "self/cgroup").write_text(f"0::{membership}\n")
+        (proc / "self/mountinfo").write_text(
+            f"31 24 0:27 {mount_root} {mount_root_path} rw "
+            "- cgroup2 cgroup2 rw\n"
+        )
+        current = mount_root_path / membership[len(mount_root):].lstrip("/")
+        paths = {"current": current, "root": mount_root_path}
+        if mount_root == "/" and membership != "/":
+            paths["parent"] = current.parent
+        for path in paths.values():
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "cpu.max").write_text("max 100000\n")
+            (path / "memory.max").write_text("max\n")
+            (path / "memory.current").write_text("0\n")
+    else:
+        (proc / "self/cgroup").write_text(
+            f"4:cpu,cpuacct:{membership}\n5:memory:{membership}\n"
+        )
+        cpu_mount = mount_root_path / "cpu"
+        memory_mount = mount_root_path / "memory"
+        (proc / "self/mountinfo").write_text(
+            f"32 24 0:28 {mount_root} {cpu_mount} rw "
+            "- cgroup cgroup rw,cpu,cpuacct\n"
+            f"33 24 0:29 {mount_root} {memory_mount} rw "
+            "- cgroup cgroup rw,memory\n"
+        )
+        relative = membership[len(mount_root):].lstrip("/")
+        current = {"cpu": cpu_mount / relative, "memory": memory_mount / relative}
+        paths = {
+            "current": current,
+            "root": {"cpu": cpu_mount, "memory": memory_mount},
+        }
+        if mount_root == "/" and membership != "/":
+            paths["parent"] = {
+                "cpu": current["cpu"].parent,
+                "memory": current["memory"].parent,
+            }
+        for group in paths.values():
+            selected = group.values() if isinstance(group, dict) else [group]
+            for path in selected:
+                path.mkdir(parents=True, exist_ok=True)
+                (path / "cpu.cfs_quota_us").write_text("-1\n")
+                (path / "cpu.cfs_period_us").write_text("100000\n")
+                (path / "memory.limit_in_bytes").write_text(str(1 << 62) + "\n")
+                (path / "memory.usage_in_bytes").write_text("0\n")
+    return proc, paths
+
+
 class EnvironmentContractTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(
@@ -235,6 +290,153 @@ class EnvironmentContractTests(unittest.TestCase):
             check.classify_error("connection refused"), "unreachable"
         )
         self.assertEqual(check.classify_error("other failure"), "error")
+
+    def test_object_store_values_below_ray_minimum_fail_before_output(self):
+        for value in (64, 74):
+            with self.subTest(value=value):
+                output = self.root / f"low-object-store-{value}.json"
+                with (
+                    mock.patch.object(check, "run_local_runtime") as local,
+                    redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    check.main(
+                        [
+                            "--output",
+                            str(output),
+                            "--object-store-mib",
+                            str(value),
+                        ]
+                    )
+                self.assertEqual(raised.exception.code, 2)
+                self.assertFalse(output.exists())
+                local.assert_not_called()
+        args = check.build_parser().parse_args(
+            ["--output", "unused", "--object-store-mib", "75"]
+        )
+        self.assertEqual(args.object_store_mib, 75)
+
+    def test_shared_memory_is_mandatory_only_for_local_startup(self):
+        for address in (None, "auto"):
+            with self.subTest(address=address):
+                output = self.root / ("local" if address is None else "remote")
+                argv = ["--output", str(output), "--object-store-mib", "75"]
+                if address:
+                    argv.extend(["--address", address])
+                args = check.build_parser().parse_args(argv)
+                usage = mock.Mock(total=64 * 1024**2, free=64 * 1024**2)
+                with (
+                    mock.patch.object(check, "effective_cpus", return_value=(8, {})),
+                    mock.patch.object(
+                        check, "memory_available_bytes", return_value=(1 << 32, {})
+                    ),
+                    mock.patch.object(check.shutil, "disk_usage", return_value=usage),
+                ):
+                    probes = check.resource_probes(args)
+                shared = [
+                    item for item in probes if item["name"] == "resource.shared_memory"
+                ]
+                if address:
+                    self.assertEqual(shared, [])
+                else:
+                    self.assertEqual(shared[0]["status"], "blocked")
+                    self.assertTrue(shared[0]["mandatory"])
+
+    def test_nested_cgroup_limits_apply_to_cpu_and_memory(self):
+        for version in ("v1", "v2"):
+            with self.subTest(version=version):
+                root = self.root / f"nested-{version}"
+                proc, paths = cgroup_fixture(root, version, "/parent/child", "/")
+                parent = paths["parent"]
+                selected = parent.values() if isinstance(parent, dict) else [parent]
+                for path in selected:
+                    if version == "v2":
+                        (path / "cpu.max").write_text("100000 100000\n")
+                        (path / "memory.max").write_text(str(1024**3) + "\n")
+                        (path / "memory.current").write_text(
+                            str(128 * 1024**2) + "\n"
+                        )
+                    else:
+                        (path / "cpu.cfs_quota_us").write_text("100000\n")
+                        (path / "memory.limit_in_bytes").write_text(
+                            str(1024**3) + "\n"
+                        )
+                        (path / "memory.usage_in_bytes").write_text(
+                            str(128 * 1024**2) + "\n"
+                        )
+                with mock.patch.object(
+                    check.os, "sched_getaffinity", return_value=set(range(8))
+                ):
+                    cpus, _ = check.effective_cpus(proc)
+                available, _ = check.memory_available_bytes(proc)
+                self.assertEqual(cpus, 1)
+                self.assertEqual(available, 896 * 1024**2)
+
+    def test_namespaced_cgroup_mount_root_limit_is_not_ignored(self):
+        for version in ("v1", "v2"):
+            with self.subTest(version=version):
+                root = self.root / f"root-limited-{version}"
+                proc, paths = cgroup_fixture(root, version, "/limited", "/limited")
+                selected = (
+                    paths["root"].values()
+                    if version == "v1"
+                    else [paths["root"]]
+                )
+                for path in selected:
+                    if version == "v2":
+                        (path / "cpu.max").write_text("200000 100000\n")
+                        (path / "memory.max").write_text(str(512 * 1024**2) + "\n")
+                    else:
+                        (path / "cpu.cfs_quota_us").write_text("200000\n")
+                        (path / "memory.limit_in_bytes").write_text(
+                            str(512 * 1024**2) + "\n"
+                        )
+                with mock.patch.object(
+                    check.os, "sched_getaffinity", return_value=set(range(8))
+                ):
+                    cpus, _ = check.effective_cpus(proc)
+                available, _ = check.memory_available_bytes(proc)
+                self.assertEqual(cpus, 2)
+                self.assertEqual(available, 512 * 1024**2)
+
+    def test_cluster_worker_rejects_mismatched_preprocessing_packages(self):
+        versions = {"python": "3.11.9", **check.EXPECTED_VERSIONS}
+        self.assertEqual(check.runtime_version_mismatches(versions), [])
+        versions["torchvision"] = "0.27.0"
+        versions["Pillow"] = "12.0.0"
+        self.assertEqual(
+            check.runtime_version_mismatches(versions), ["torchvision", "Pillow"]
+        )
+        evidence = {"versions": versions, "errors": {}, "marker": 28}
+        fake_ray = mock.Mock()
+        fake_ray.remote.side_effect = lambda function: mock.Mock(
+            remote=lambda: evidence
+        )
+        fake_ray.get.side_effect = lambda value, timeout: value
+        fake_ray.cluster_resources.return_value = {"CPU": 2}
+        environment = {
+            "KPBOT_RAY_PROBE_ADDRESS": "auto",
+            "KPBOT_RAY_PROBE_TIMEOUT": "1",
+            "KPBOT_RAY_PROBE_CPUS": "2",
+        }
+        output = io.StringIO()
+        with (
+            mock.patch.dict(sys.modules, {"ray": fake_ray}),
+            mock.patch.dict(os.environ, environment),
+            redirect_stdout(output),
+        ):
+            code = check.cluster_worker()
+        report = json.loads(output.getvalue())
+        cluster = report["probes"][0]
+        self.assertEqual(code, 0)
+        self.assertEqual(cluster["status"], "blocked")
+        self.assertEqual(cluster["reason"], "wrong_version")
+        self.assertEqual(
+            cluster["evidence"]["worker_version_mismatches"],
+            ["torchvision", "Pillow"],
+        )
+        self.assertEqual(report["versions"]["cluster_worker"], versions)
+        fake_ray.shutdown.assert_called_once_with()
 
     def test_eval_and_skill_contract(self):
         skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")

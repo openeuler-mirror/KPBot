@@ -28,7 +28,7 @@ metadata:
 python3 scripts/benchmark.py --output results/smoke-001
 ```
 
-默认 8 张确定性小 JPEG、batch size 4、2 CPU、256 MiB 对象存储、1 轮预热、3 轮计时、总超时 240 秒。预热、fixture 生成、串行参照和 Ray 初始化不进入计时汇总。可调整但均有硬边界：`--images 4..64`、`--batch-size 1..16`、`--cpus 2..16`、`--warmup 1..5`、`--rounds 3..20`、`--timeout 1..900`。没有无限时间/无限轮数选项。
+默认 8 张确定性小 JPEG、batch size 4、2 CPU、256 MiB 对象存储、1 轮预热、3 轮计时、总超时 240 秒。预热、fixture 生成、串行参照和 Ray 初始化不进入计时汇总。可调整但均有硬边界：`--images 4..64`、`--batch-size 1..16`、`--cpus 2..16`、`--object-store-mib 75..2048`（Ray 2.56.0 最低 75 MiB）、`--warmup 1..5`、`--rounds 3..20`、`--timeout 1..900`。没有无限时间/无限轮数选项。
 
 连接已有服务时，显式给出不含凭据的端点：
 

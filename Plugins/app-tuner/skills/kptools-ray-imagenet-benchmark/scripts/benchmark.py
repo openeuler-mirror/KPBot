@@ -79,12 +79,26 @@ class CorrectnessError(ValueError):
 def preprocess(row):
     """Decode JPEG bytes and apply the ResNet18 CPU preprocessing recipe."""
     global _TRANSFORM
+    import platform
+
     import numpy as np
+    import pyarrow
+    import ray
     import torch
+    import PIL
     from PIL import Image
     from torchvision.models import ResNet18_Weights
 
     torch.set_num_threads(1)
+    worker_versions = {
+        "python": platform.python_version(),
+        "ray": str(ray.__version__),
+        "torch": str(torch.__version__),
+        "torchvision": str(__import__("torchvision").__version__),
+        "numpy": str(np.__version__),
+        "pyarrow": str(pyarrow.__version__),
+        "Pillow": str(PIL.__version__),
+    }
     if _TRANSFORM is None:
         # Reads weight metadata only; model parameters are never downloaded.
         _TRANSFORM = ResNet18_Weights.DEFAULT.transforms()
@@ -106,6 +120,7 @@ def preprocess(row):
             np.ascontiguousarray(value).tobytes()
         ).hexdigest(),
         "transform_latency_ms": elapsed_ms,
+        "worker_versions": worker_versions,
     }
 
 
@@ -134,6 +149,7 @@ class DigestActor:
             "tensor_sha256": np.array(digests),
             "transform_latency_ms": batch["transform_latency_ms"],
             "actor_batch_latency_ms": np.full(size, elapsed_ms),
+            "worker_versions": batch["worker_versions"],
         }
 
 
@@ -182,6 +198,26 @@ def verify_rows(expected, rows):
             "max": max(actor_latencies),
         },
     }
+
+
+def verify_worker_versions(rows):
+    """Validate and retain versions from the actual preprocessing tasks."""
+    observed = []
+    for row in rows:
+        versions = row.get("worker_versions")
+        if not isinstance(versions, dict):
+            raise CorrectnessError("preprocessing worker versions are absent")
+        versions = {name: str(value) for name, value in versions.items()}
+        problems = support.validate_version_profile(versions)
+        if problems:
+            raise CorrectnessError(
+                "preprocessing worker version mismatch: " + "; ".join(problems)
+            )
+        if versions not in observed:
+            observed.append(versions)
+    if not observed:
+        raise CorrectnessError("no preprocessing worker versions were returned")
+    return observed
 
 
 def generate_fixture(output, count):
@@ -264,6 +300,7 @@ def execute_round(ray, records, expected, args, kind, index):
                 "tensor_sha256": str(row["tensor_sha256"]),
                 "transform_latency_ms": float(row["transform_latency_ms"]),
                 "actor_batch_latency_ms": float(row["actor_batch_latency_ms"]),
+                "worker_versions": dict(row["worker_versions"]),
             }
             for row in rows
         ]
@@ -274,12 +311,16 @@ def execute_round(ray, records, expected, args, kind, index):
         if not stats.strip():
             raise RuntimeError("Ray returned empty native Dataset stats")
         document.update(verify_rows(expected, rows))
+        document["preprocessing_worker_versions"] = verify_worker_versions(rows)
         document["throughput_images_per_second"] = (
             len(rows) * 1000.0 / document["wall_elapsed_ms"]
         )
         document["status"] = "passed"
     except Exception as exc:
-        document["wall_elapsed_ms"] = (time.perf_counter() - started) * 1000.0
+        if "wall_elapsed_ms" not in document:
+            document["wall_elapsed_ms"] = (
+                time.perf_counter() - started
+            ) * 1000.0
         document["reason"] = (
             "correctness"
             if isinstance(exc, CorrectnessError)
@@ -734,7 +775,7 @@ def build_parser():
     parser.add_argument("--batch-size", type=bounded_int(1, 16), default=4)
     parser.add_argument("--cpus", type=bounded_int(2, 16), default=2)
     parser.add_argument(
-        "--object-store-mib", type=bounded_int(64, 2048), default=256
+        "--object-store-mib", type=bounded_int(75, 2048), default=256
     )
     parser.add_argument(
         "--min-memory-mib", type=bounded_int(1024, 65536), default=2048

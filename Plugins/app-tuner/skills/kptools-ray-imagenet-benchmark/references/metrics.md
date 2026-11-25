@@ -25,10 +25,11 @@ summary 的 min/median/max 只来自 timed rounds；吞吐每轮先计算再汇�
 2. 每个 ID 的 post-batch SHA-256 与串行参照完全一致；
 3. tensor shape 为 `(N,3,224,224)`、dtype `float32`、全部有限；
 4. 每行 transform/actor 延迟有限且非负；
-5. Ray 原生 stats 非空；
-6. 父进程复核成功状态、正确性、预热/计时轮数和 warmup 排除标记。
+5. 每个实际预处理任务返回完整运行时版本，torchvision、Pillow 或其他包缺失/不符即失败；每轮记录去重后的 worker 版本，原始 rows 保留逐行版本；
+6. Ray 原生 stats 非空；
+7. 父进程复核成功状态、正确性、预热/计时轮数和 warmup 排除标记。
 
-任何一轮失败都停止后续测量并返回非零；已成功或失败的轮次、stats、rows、stdout/stderr 原样保留。不完整轮次不进入成功 summary。
+任何一轮失败都停止后续测量并返回非零；已成功或失败的轮次、stats、rows、stdout/stderr 原样保留。若 `take_all()` 已返回，即使随后写证据或校验失败，也保留已测得的 `wall_elapsed_ms`，不把后处理重复计入。不完整轮次不进入成功 summary。
 
 ## 文件
 

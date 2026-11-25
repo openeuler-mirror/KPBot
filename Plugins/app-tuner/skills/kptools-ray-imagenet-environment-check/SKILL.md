@@ -36,7 +36,7 @@ metadata:
 python3 scripts/check_environment.py --output results/environment-001.json
 ```
 
-默认要求 2 个有效 CPU、256 MiB `/dev/shm`、2048 MiB 可用内存和 512 MiB 临时磁盘余量。可按实际计划调整有界参数，例如：
+默认要求 2 个有效 CPU、256 MiB `/dev/shm`、2048 MiB 可用内存和 512 MiB 临时磁盘余量。本地对象存储参数范围为 75–4096 MiB（Ray 2.56.0 最低要求 75 MiB）；只有启动本地 Ray 时才强制检查 `/dev/shm`，连接现有服务时不以 driver 的共享内存容量阻断。可按实际计划调整有界参数，例如：
 
 ```bash
 python3 scripts/check_environment.py \

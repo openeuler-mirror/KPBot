@@ -20,6 +20,61 @@ import bench_support as support  # noqa: E402
 import benchmark as bench  # noqa: E402
 
 
+def cgroup_fixture(root, version, membership, mount_root):
+    """Build procfs and cgroup files for nested namespace fixtures."""
+    proc = root / "proc"
+    (proc / "self").mkdir(parents=True)
+    (proc / "meminfo").write_text("MemAvailable: 8388608 kB\n")
+    mount_root_path = Path(root / "cgroup")
+    if version == "v2":
+        (proc / "self/cgroup").write_text(f"0::{membership}\n")
+        (proc / "self/mountinfo").write_text(
+            f"31 24 0:27 {mount_root} {mount_root_path} rw "
+            "- cgroup2 cgroup2 rw\n"
+        )
+        current = mount_root_path / membership[len(mount_root):].lstrip("/")
+        paths = {"current": current, "root": mount_root_path}
+        if mount_root == "/" and membership != "/":
+            paths["parent"] = current.parent
+        for path in paths.values():
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "cpu.max").write_text("max 100000\n")
+            (path / "memory.max").write_text("max\n")
+            (path / "memory.current").write_text("0\n")
+    else:
+        (proc / "self/cgroup").write_text(
+            f"4:cpu,cpuacct:{membership}\n5:memory:{membership}\n"
+        )
+        cpu_mount = mount_root_path / "cpu"
+        memory_mount = mount_root_path / "memory"
+        (proc / "self/mountinfo").write_text(
+            f"32 24 0:28 {mount_root} {cpu_mount} rw "
+            "- cgroup cgroup rw,cpu,cpuacct\n"
+            f"33 24 0:29 {mount_root} {memory_mount} rw "
+            "- cgroup cgroup rw,memory\n"
+        )
+        relative = membership[len(mount_root):].lstrip("/")
+        current = {"cpu": cpu_mount / relative, "memory": memory_mount / relative}
+        paths = {
+            "current": current,
+            "root": {"cpu": cpu_mount, "memory": memory_mount},
+        }
+        if mount_root == "/" and membership != "/":
+            paths["parent"] = {
+                "cpu": current["cpu"].parent,
+                "memory": current["memory"].parent,
+            }
+        for group in paths.values():
+            selected = group.values() if isinstance(group, dict) else [group]
+            for path in selected:
+                path.mkdir(parents=True, exist_ok=True)
+                (path / "cpu.cfs_quota_us").write_text("-1\n")
+                (path / "cpu.cfs_period_us").write_text("100000\n")
+                (path / "memory.limit_in_bytes").write_text(str(1 << 62) + "\n")
+                (path / "memory.usage_in_bytes").write_text("0\n")
+    return proc, paths
+
+
 def valid_versions():
     versions = {
         name: value for name, value in support.EXPECTED_VERSIONS.items()
@@ -90,6 +145,9 @@ def verify_e2e_result(result_path):
             raise ValueError("real result contains a failed round")
         if item["output_rows"] != len(expected):
             raise ValueError("real result output count differs from reference")
+        worker_profiles = item.get("preprocessing_worker_versions")
+        if not worker_profiles:
+            raise ValueError("real result lacks preprocessing worker versions")
         for key in ("raw_rows_file", "native_dataset_stats_file"):
             if Path(item[key]).name != item[key]:
                 raise ValueError("unsafe evidence path")
@@ -97,6 +155,10 @@ def verify_e2e_result(result_path):
         actual = {row["id"]: row["tensor_sha256"] for row in rows}
         if len(rows) != len(actual) or actual != expected:
             raise ValueError("raw Ray rows differ from serial reference")
+        if any(
+            row.get("worker_versions") not in worker_profiles for row in rows
+        ):
+            raise ValueError("raw rows omit recorded preprocessing versions")
         stats = (root / item["native_dataset_stats_file"]).read_text()
         if item["native_dataset_stats"] != stats:
             raise ValueError("inline/native stats differ")
@@ -399,6 +461,169 @@ class BenchmarkContractTests(unittest.TestCase):
             bench.validate_address("ray://user:password@example:10001")
         with self.assertRaises(ValueError):
             bench.validate_address("local")
+
+    def test_object_store_values_below_ray_minimum_fail_before_output(self):
+        for value in (64, 74):
+            with self.subTest(value=value):
+                output = self.root / f"low-object-store-{value}"
+                with (
+                    mock.patch.object(bench, "supervise") as supervisor,
+                    redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    bench.main(
+                        [
+                            "--output",
+                            str(output),
+                            "--object-store-mib",
+                            str(value),
+                        ]
+                    )
+                self.assertEqual(raised.exception.code, 2)
+                self.assertFalse(output.exists())
+                supervisor.assert_not_called()
+        args = bench.build_parser().parse_args(
+            ["--output", "unused", "--object-store-mib", "75"]
+        )
+        self.assertEqual(args.object_store_mib, 75)
+
+    def test_nested_cgroup_limits_apply_to_cpu_and_memory(self):
+        for version in ("v1", "v2"):
+            with self.subTest(version=version):
+                root = self.root / f"nested-{version}"
+                proc, paths = cgroup_fixture(root, version, "/parent/child", "/")
+                parent = paths["parent"]
+                selected = parent.values() if isinstance(parent, dict) else [parent]
+                for path in selected:
+                    if version == "v2":
+                        (path / "cpu.max").write_text("100000 100000\n")
+                        (path / "memory.max").write_text(str(1024**3) + "\n")
+                        (path / "memory.current").write_text(
+                            str(128 * 1024**2) + "\n"
+                        )
+                    else:
+                        (path / "cpu.cfs_quota_us").write_text("100000\n")
+                        (path / "memory.limit_in_bytes").write_text(
+                            str(1024**3) + "\n"
+                        )
+                        (path / "memory.usage_in_bytes").write_text(
+                            str(128 * 1024**2) + "\n"
+                        )
+                with mock.patch.object(
+                    support.os, "sched_getaffinity", return_value=set(range(8))
+                ):
+                    cpus, _ = support.effective_cpus(proc)
+                available, _ = support.memory_available_bytes(proc)
+                self.assertEqual(cpus, 1)
+                self.assertEqual(available, 896 * 1024**2)
+
+    def test_namespaced_cgroup_mount_root_limit_is_not_ignored(self):
+        for version in ("v1", "v2"):
+            with self.subTest(version=version):
+                root = self.root / f"root-limited-{version}"
+                proc, paths = cgroup_fixture(root, version, "/limited", "/limited")
+                selected = (
+                    paths["root"].values()
+                    if version == "v1"
+                    else [paths["root"]]
+                )
+                for path in selected:
+                    if version == "v2":
+                        (path / "cpu.max").write_text("200000 100000\n")
+                        (path / "memory.max").write_text(str(512 * 1024**2) + "\n")
+                    else:
+                        (path / "cpu.cfs_quota_us").write_text("200000\n")
+                        (path / "memory.limit_in_bytes").write_text(
+                            str(512 * 1024**2) + "\n"
+                        )
+                with mock.patch.object(
+                    support.os, "sched_getaffinity", return_value=set(range(8))
+                ):
+                    cpus, _ = support.effective_cpus(proc)
+                available, _ = support.memory_available_bytes(proc)
+                self.assertEqual(cpus, 2)
+                self.assertEqual(available, 512 * 1024**2)
+
+    def test_preprocessing_worker_versions_fail_closed(self):
+        row = {"worker_versions": valid_versions()}
+        self.assertEqual(bench.verify_worker_versions([row]), [valid_versions()])
+        for name, value in (("torchvision", "0.27.0"), ("Pillow", "12.0.0")):
+            with self.subTest(name=name):
+                invalid = valid_versions()
+                invalid[name] = value
+                with self.assertRaises(bench.CorrectnessError):
+                    bench.verify_worker_versions([{"worker_versions": invalid}])
+        with self.assertRaises(bench.CorrectnessError):
+            bench.verify_worker_versions([{}])
+
+    def test_failed_round_preserves_take_all_elapsed_time(self):
+        class FakeDataset:
+            def map(self, *args, **kwargs):
+                return self
+
+            def map_batches(self, *args, **kwargs):
+                return self
+
+            def take_all(self):
+                return [
+                    {
+                        "id": "a",
+                        "tensor_sha256": "wrong",
+                        "transform_latency_ms": 1.0,
+                        "actor_batch_latency_ms": 2.0,
+                        "worker_versions": valid_versions(),
+                    }
+                ]
+
+            def stats(self):
+                return "synthetic native stats"
+
+        class FakeData:
+            @staticmethod
+            def from_items(*args, **kwargs):
+                return FakeDataset()
+
+        class FakeRay:
+            data = FakeData()
+
+        for failure in ("evidence", "digest"):
+            with self.subTest(failure=failure):
+                output = self.root / failure
+                output.mkdir()
+                args = argparse.Namespace(output=output, batch_size=1)
+                patches = [
+                    mock.patch.object(
+                        bench.time,
+                        "perf_counter",
+                        side_effect=[10.0, 10.25, 90.0],
+                    ),
+                    mock.patch.dict(
+                        sys.modules,
+                        {
+                            "ray": mock.Mock(data=FakeData()),
+                            "ray.data": mock.Mock(ActorPoolStrategy=mock.Mock()),
+                        },
+                    ),
+                ]
+                if failure == "evidence":
+                    patches.append(
+                        mock.patch.object(
+                            bench.support,
+                            "write_text_exclusive",
+                            side_effect=OSError("write failed"),
+                        )
+                    )
+                for patch in patches:
+                    patch.start()
+                try:
+                    result = bench.execute_round(
+                        FakeRay(), [], {"a": "expected"}, args, "timed", 0
+                    )
+                finally:
+                    for patch in reversed(patches):
+                        patch.stop()
+                self.assertEqual(result["wall_elapsed_ms"], 250.0)
+                self.assertEqual(result["status"], "failed")
 
     def test_eval_and_skill_contract(self):
         skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
