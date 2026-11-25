@@ -85,6 +85,7 @@ bash scripts/install_redis.sh --dry-run
 | 数据 | `/var/lib/redis/redis` |
 | 日志 | `/var/log/redis/redis.log` |
 | 服务 | `redis.service`（Type=simple，LimitNOFILE=1000000） |
+| 构建缓存 | `/var/cache/redis-deploy`（root:root 0700，工作目录用 `mktemp -d`） |
 | 产物 | `/var/log/redis-deploy/<run_id>/env/deploy.env` |
 
 多实例以实例名隔离：`--instance-name redis6380 --port 6380` 对应
@@ -106,7 +107,7 @@ bash scripts/install_redis.sh --dry-run
 --tarball FILE           离线源码包
 --sha256 HEX             非内置版本的校验值
 --allow-unverified       跳过校验（不推荐，记录告警）
---build-root DIR         默认 /var/tmp/redis-build
+--build-root DIR         默认 /var/cache/redis-deploy（要求 root:root 0700）
 --result-dir DIR         默认 /var/log/redis-deploy/<run_id>
 --build-tls              构建 TLS 支持（需 OpenSSL 开发包）
 --skip-deps / --no-systemd / --keep-conf / --force / --dry-run
@@ -120,6 +121,9 @@ bash scripts/install_redis.sh --dry-run
   `requirepass`，权限固定 `0640 root:<运行组>`。
 - 客户端验证使用 `REDISCLI_AUTH` 环境变量；禁止 `redis-cli -a <值>` 把密码放进命令行。
 - 下载包必须做 sha256 校验；7.0.15 内置校验值；不把远程下载内容直接交给 shell 执行，不关闭 TLS 校验。
+- 路径参数必须是绝对路径，拒绝 `.`、`..`、`//` 段；有 `realpath` 时归一化符号链接，归一化结果命中系统目录黑名单（`/`、`/etc`、`/var` 等）直接失败；安装前缀还不得指向 `/bin`、`/usr/bin`、`/etc` 等系统可执行/配置目录。
+- 构建根目录必须 `root:root 0700`，父目录不得属于非 root 用户或非 sticky 的组/其他可写目录；工作目录用 `mktemp -d` 创建，`tar` 使用 `--no-same-owner` 并校验解压树属主均为 root 且无组/其他写权限，防止本地用户替换源码树。
+- 已存在的配置/数据/日志/run 目录不自动改属主或权限；属主既不是 root 也不是运行用户时拒绝，root 属主的数据/日志/run 目录需人工确认后 `chown` 或删除。
 - 不自动修改内核参数（overcommit、THP、somaxconn）；只检查并提示，改动需用户确认。
 - 不删除旧配置、旧单元、旧数据；卸载与清数据必须人工确认后执行。
 
@@ -172,6 +176,8 @@ ss -lntp | grep ':6379'
 | 服务启动失败 | `journalctl -u <instance> -n 100`；查配置、目录权限、端口、密码文件 |
 | PING 无响应 | 核对 bind 与探测地址、防火墙、`protected-mode`、密码 |
 | jemalloc 编译失败 | 检查 gcc 与磁盘；可手工 `make MALLOC=libc` 后复测 |
+| 构建根目录权限/属主被拒绝 | 使用默认 `/var/cache/redis-deploy`，或由 root 修正为 `root:root 0700` |
+| 路径含 `.` 或 `..` 被拒绝 | 使用规范化绝对路径；不要指向 `/etc`、`/var` 等系统目录 |
 | 无 systemd | 用 `--no-systemd` 落盘，前台运行 `redis-server <conf>` |
 | 需要远程访问 | 提供 `--password-file` 并明确 bind；否则不要开放 |
 | 启动日志 THP/overcommit 告警 | 按手册第 10 节确认后调整，不影响本次部署判定 |
@@ -181,7 +187,7 @@ ss -lntp | grep ':6379'
 | 脚本 | 用途 |
 |------|------|
 | `scripts/preflight_check.sh` | 部署前只读检查：权限、OS/架构、资源、工具、端口、既有安装、下载源、运行参数、源码包校验；有 FAIL 时退出码非零 |
-| `scripts/install_deps.sh` | 安装 gcc/make/tar/下载工具与 CA（可选 OpenSSL 开发包）；幂等，支持 `--dry-run` |
+| `scripts/install_deps.sh` | 安装 gcc/make/tar/findutils/coreutils/下载工具与 CA（可选 OpenSSL 开发包）；幂等，支持 `--dry-run` |
 | `scripts/install_redis.sh` | 主部署流程：下载/校验、构建、用户/目录、配置、systemd、启动验收、写 `deploy.env` |
 | `scripts/lib/common.sh` | 日志、root 检查、sha256 等公共函数 |
 

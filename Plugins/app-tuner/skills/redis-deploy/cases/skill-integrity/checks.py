@@ -166,6 +166,21 @@ if "REDISCLI_AUTH" not in install_text:
     fail("install_redis.sh must authenticate redis-cli via REDISCLI_AUTH")
 if re.search(r"redis-cli[^\n]*\s-a\s", install_text):
     fail("install_redis.sh must not pass a password with redis-cli -a")
+if "/var/tmp/redis-build" in install_text:
+    fail("build root must not default to the world-writable /var/tmp")
+if "BUILD_ROOT=/var/cache/redis-deploy" not in install_text:
+    fail("build root default must be the root-private /var/cache/redis-deploy")
+for marker in (
+    "normalize_path",
+    "check_system_path",
+    "prepare_private_dir",
+    "check_existing_dir",
+    "mktemp -d",
+    "--no-same-owner",
+    "offline.$run_id",
+):
+    if marker not in install_text:
+        fail("install_redis.sh lost security marker: {!r}".format(marker))
 
 ref_text = "\n".join(read(p) for p in sorted(REFS_DIR.glob("*.md")))
 if re.search(r"\brm\s+-rf\b", ref_text, re.IGNORECASE):
@@ -197,6 +212,7 @@ ANCHORS = [
     (r"preflight_check\.sh", "preflight script is indexed"),
     (r"--tarball", "offline tarball path is documented"),
     (r"危险操作警告", "destructive uninstall warning is present"),
+    (r"0700", "build root permission hardening is documented"),
 ]
 for pattern, label in ANCHORS:
     if re.search(pattern, corpus):

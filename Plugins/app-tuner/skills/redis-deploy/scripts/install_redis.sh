@@ -41,7 +41,7 @@ MIRROR=https://download.redis.io/releases
 TARBALL=""
 SHA256=""
 ALLOW_UNVERIFIED=0
-BUILD_ROOT=/var/tmp/redis-build
+BUILD_ROOT=/var/cache/redis-deploy
 RESULT_DIR=""
 BUILD_TLS=0
 SKIP_DEPS=0
@@ -77,7 +77,7 @@ usage() {
   --allow-insecure-remote 允许非回环 bind 且无密码（不推荐）
 
 构建与执行:
-  --build-root DIR        构建缓存根目录（默认 /var/tmp/redis-build）
+  --build-root DIR        构建缓存根目录（默认 /var/cache/redis-deploy，要求 root:root 0700）
   --result-dir DIR        日志与 deploy.env 输出目录（默认 /var/log/redis-deploy/<run_id>）
   --build-tls             构建 TLS 支持（需要 OpenSSL 开发包）
   --skip-deps             跳过依赖安装
@@ -129,7 +129,85 @@ trim_slash() {
 }
 
 valid_abs_path() {
-  [[ "$1" =~ ^/[A-Za-z0-9._/-]+$ ]]
+  local p=$1
+  [[ "$p" =~ ^/[A-Za-z0-9._/-]+$ ]] || return 1
+  [[ "$p" == *".."* ]] && return 1
+  [[ "$p" =~ (^|/)\.(/|$) ]] && return 1
+  [[ "$p" == *"//"* ]] && return 1
+  return 0
+}
+
+normalize_path() {
+  local p=$1
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -m -- "$p" || die "无法归一化路径: $p"
+  else
+    printf '%s' "$p"
+  fi
+}
+
+check_system_path() {
+  case "$1" in
+    /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/usr/local|/var|/var/cache|/var/lib|/var/log|/var/opt|/var/spool|/var/tmp)
+      die "拒绝把系统级目录直接作为安装/配置/数据/日志/构建/结果路径: $1（请使用其下专用子目录）" ;;
+  esac
+}
+
+secure_path() {
+  local name=$1
+  local p=$2
+  valid_abs_path "$p" || die "路径非法（必须是绝对路径，且不含 .、..、// 段）: $p"
+  p=$(normalize_path "$p")
+  valid_abs_path "$p" || die "归一化后的路径非法: $p"
+  check_system_path "$p"
+  printf -v "$name" '%s' "$p"
+}
+
+check_build_parents() {
+  local dir=$1
+  local parent perm owner bits
+  parent=$(dirname "$dir")
+  while [[ "$parent" != "/" && "$parent" != "." ]]; do
+    if [[ -d "$parent" ]]; then
+      owner=$(stat -c '%u' "$parent")
+      perm=$(stat -c '%a' "$parent")
+      bits=$((8#$perm))
+      [[ "$owner" == "0" ]] || die "构建根目录的父目录不属于 root: $parent（请改用 root 私有路径）"
+      if (((bits & 0022) != 0 && (bits & 01000) == 0)); then
+        die "构建根目录的父目录可被组/其他用户写入且无 sticky 位: $parent（权限 $perm）"
+      fi
+    fi
+    parent=$(dirname "$parent")
+  done
+}
+
+prepare_private_dir() {
+  local dir=$1
+  local owner perm
+  if [[ ! -e "$dir" ]]; then
+    install -d -m 0700 -o root -g root "$dir"
+  fi
+  [[ -d "$dir" ]] || die "构建根路径不是目录: $dir"
+  owner=$(stat -c '%u' "$dir")
+  perm=$(stat -c '%a' "$dir")
+  [[ "$owner" == "0" ]] || die "构建根目录必须属于 root（当前 uid=$owner）: $dir"
+  case "$perm" in
+    700|0700) ;;
+    *) die "构建根目录权限必须为 0700（当前 $perm）: $dir" ;;
+  esac
+}
+
+check_existing_dir() {
+  local dir=$1
+  local owner
+  if [[ ! -e "$dir" ]]; then
+    return 1
+  fi
+  [[ -d "$dir" ]] || die "路径已存在但不是目录: $dir"
+  owner=$(stat -c '%u' "$dir")
+  [[ "$owner" == "0" || "$owner" == "$(id -u "$RUN_AS")" ]] \
+    || die "目录已存在且属主既不是 root 也不是 $RUN_AS: $dir（拒绝修改系统目录）"
+  return 0
 }
 
 [[ -n "$PREFIX" ]] || PREFIX="/opt/redis-$VERSION"
@@ -140,6 +218,20 @@ LOG_DIR=$(trim_slash "$LOG_DIR")
 RUN_DIR=$(trim_slash "$RUN_DIR")
 BUILD_ROOT=$(trim_slash "$BUILD_ROOT")
 [[ -n "$RESULT_DIR" ]] && RESULT_DIR=$(trim_slash "$RESULT_DIR")
+
+secure_path PREFIX "$PREFIX"
+secure_path CONF_DIR "$CONF_DIR"
+secure_path DATA_ROOT "$DATA_ROOT"
+secure_path LOG_DIR "$LOG_DIR"
+secure_path RUN_DIR "$RUN_DIR"
+secure_path BUILD_ROOT "$BUILD_ROOT"
+if [[ -n "$RESULT_DIR" ]]; then
+  secure_path RESULT_DIR "$RESULT_DIR"
+fi
+case "$PREFIX" in
+  /bin|/bin/*|/sbin|/sbin/*|/usr/bin|/usr/bin/*|/usr/sbin|/usr/sbin/*|/usr/local/bin|/usr/local/bin/*|/usr/local/sbin|/usr/local/sbin/*|/lib|/lib/*|/lib64|/lib64/*|/boot|/boot/*|/etc|/etc/*)
+    die "安装前缀不得指向系统可执行/配置目录: $PREFIX（请使用 /opt 或 /usr/local 下的专用子目录）" ;;
+esac
 
 CONF="$CONF_DIR/$INSTANCE.conf"
 DATA_DIR="$DATA_ROOT/$INSTANCE"
@@ -157,17 +249,6 @@ UNIT_FILE="/etc/systemd/system/$SERVICE_NAME.service"
   || die "端口非法: $PORT"
 [[ "$RUN_AS" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] \
   || die "运行用户非法: $RUN_AS"
-
-for p in "$PREFIX" "$CONF_DIR" "$DATA_ROOT" "$LOG_DIR" "$RUN_DIR" "$BUILD_ROOT"; do
-  valid_abs_path "$p" || die "路径必须是绝对路径且只含 [A-Za-z0-9._/-]: $p"
-  case "$p" in
-    /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/usr/local|/var|/var/lib|/var/log|/var/tmp)
-      die "拒绝把系统级目录直接作为安装/配置/数据/日志路径: $p（请使用其下专用子目录）" ;;
-  esac
-done
-if [[ -n "$RESULT_DIR" ]]; then
-  valid_abs_path "$RESULT_DIR" || die "result-dir 非法: $RESULT_DIR"
-fi
 
 for tok in $BIND; do
   [[ "$tok" =~ ^-?(\*|[0-9A-Fa-f:.]+)$ ]] \
@@ -217,7 +298,7 @@ run_id="$(date +%Y%m%d-%H%M%S)-$$"
 [[ -n "$RESULT_DIR" ]] || RESULT_DIR="/var/log/redis-deploy/$run_id"
 DEPLOY_ENV="$RESULT_DIR/env/deploy.env"
 MAIN_LOG="$RESULT_DIR/logs/install.log"
-WORK_DIR="$BUILD_ROOT/redis-$VERSION-$run_id"
+WORK_DIR=""
 CACHE_DIR="$BUILD_ROOT/download"
 CACHE_FILE="$CACHE_DIR/redis-$VERSION.tar.gz"
 PARTIAL_FILE=""
@@ -236,6 +317,9 @@ on_exit() {
     fi
     if [[ -n "${PARTIAL_FILE:-}" && -f "$PARTIAL_FILE" ]]; then
       log_warn "下载未完成，保留临时文件供排查: $PARTIAL_FILE"
+    fi
+    if [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]]; then
+      log_warn "构建目录保留供排查: $WORK_DIR"
     fi
     log_error "部署失败（阶段: $CURRENT_PHASE；日志: ${MAIN_LOG:-unknown}）"
   fi
@@ -265,6 +349,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   安装前缀        : $PREFIX
   配置 / 数据     : $CONF / $DATA_DIR
   日志            : $LOG_FILE
+  构建缓存        : $BUILD_ROOT（要求 root:root 0700）
   systemd 单元    : $UNIT_FILE
   运行用户        : $RUN_AS
   密码            : $( [[ -n "$PASSWORD_FILE" ]] && echo "从 $PASSWORD_FILE 读取（不读取内容）" || echo "未设置" )
@@ -302,17 +387,25 @@ if ((SKIP_DEPS == 0)); then
   log_ok "依赖安装完成"
 else
   log_info "阶段 1/5: 跳过依赖安装（--skip-deps）"
-  for cmd in gcc make tar; do require_cmd "$cmd"; done
+  for cmd in gcc make tar find; do require_cmd "$cmd"; done
 fi
 
 # ---------- 2. 下载与校验 ----------
 CURRENT_PHASE=download
 log_info "阶段 2/5: 获取并校验源码包"
+check_build_parents "$BUILD_ROOT"
+prepare_private_dir "$BUILD_ROOT"
+# 创建后再查一次，覆盖“中间父目录在两次检查之间被抢占”的情况。
+check_build_parents "$BUILD_ROOT"
+install -d -m 0700 -o root -g root "$CACHE_DIR"
 if [[ -n "$TARBALL" ]]; then
-  SRC_TARBALL=$TARBALL
-  log_info "使用本地源码包: $SRC_TARBALL"
+  # 先复制到 root 私有缓存，再对副本做 sha256 与解压，避免校验后被替换（TOCTOU）。
+  SRC_TARBALL="$CACHE_DIR/redis-$VERSION.offline.$run_id.tar.gz"
+  cat -- "$TARBALL" >"$SRC_TARBALL"
+  chown root:root "$SRC_TARBALL"
+  chmod 0600 "$SRC_TARBALL"
+  log_info "本地源码包已复制到私有缓存: $SRC_TARBALL"
 else
-  mkdir -p "$CACHE_DIR"
   if [[ -f "$CACHE_FILE" ]]; then
     SRC_TARBALL=$CACHE_FILE
     log_info "复用已下载源码包: $SRC_TARBALL"
@@ -361,13 +454,15 @@ if [[ "$existing_ver" == "$VERSION" && "$FORCE" != "1" ]]; then
 elif [[ -n "$existing_ver" && "$existing_ver" != "$VERSION" && "$FORCE" != "1" ]]; then
   die "$PREFIX 已存在 v$existing_ver，与目标 v$VERSION 不一致；确认后加 --force 覆盖"
 else
-  # 构建目录带本次 run_id；若同名目录已存在则停止，交由人工确认后清理。
-  if [[ -e "$WORK_DIR" ]]; then
-    die "构建目录已存在，请人工确认后清理或更换 --build-root: $WORK_DIR"
-  fi
+  # 在 root 私有构建根目录下用 mktemp 创建本次工作目录，避免被本地用户替换。
+  WORK_DIR=$(mktemp -d "$BUILD_ROOT/redis-$VERSION.XXXXXX") \
+    || die "无法在 $BUILD_ROOT 下创建构建目录"
   mkdir -p "$WORK_DIR/src"
-  tar -xzf "$SRC_TARBALL" -C "$WORK_DIR/src" --strip-components=1
+  tar -xzf "$SRC_TARBALL" -C "$WORK_DIR/src" --strip-components=1 --no-same-owner
   [[ -f "$WORK_DIR/src/src/Makefile" ]] || die "源码包结构不符合预期（缺少 src/Makefile）"
+  bad_entry=$(find "$WORK_DIR/src" \( ! -user 0 -o -type f -perm /022 -o -type d -perm /022 \) -print -quit)
+  [[ -z "$bad_entry" ]] || die "解压目录存在非 root 属主或组/其他可写的文件/目录: $bad_entry"
+  log_info "构建目录: $WORK_DIR"
   jobs=$(nproc 2>/dev/null || echo 1)
   build_log="$RESULT_DIR/logs/build.log"
   log_info "编译中（-j$jobs），日志: $build_log"
@@ -410,8 +505,18 @@ else
   RUN_GROUP=root
 fi
 
-install -d -m 0755 -o root -g root "$CONF_DIR"
-install -d -m 0750 -o "$RUN_AS" -g "$RUN_GROUP" "$DATA_DIR" "$LOG_DIR" "$RUN_DIR"
+if ! check_existing_dir "$CONF_DIR"; then
+  install -d -m 0755 -o root -g root "$CONF_DIR"
+fi
+for dir in "$DATA_DIR" "$LOG_DIR" "$RUN_DIR"; do
+  if check_existing_dir "$dir"; then
+    if [[ "$(stat -c '%u' "$dir")" == "0" && "$RUN_AS" != "root" ]]; then
+      die "目录已存在且属于 root: $dir；请确认是专用目录后 chown $RUN_AS:$RUN_GROUP 或删除后重试"
+    fi
+  else
+    install -d -m 0750 -o "$RUN_AS" -g "$RUN_GROUP" "$dir"
+  fi
+done
 
 render_template() {
   local tpl=$1 out=$2

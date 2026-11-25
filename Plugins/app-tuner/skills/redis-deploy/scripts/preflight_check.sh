@@ -160,6 +160,13 @@ if command -v useradd >/dev/null 2>&1; then
 else
   warn "缺少 useradd（install_deps 会安装 shadow-utils/passwd；--skip-deps 时需自备）"
 fi
+for cmd in find realpath; do
+  if command -v "$cmd" >/dev/null 2>&1; then
+    pass "命令存在: $cmd"
+  else
+    warn "缺少 $cmd（install_deps 会安装 coreutils/findutils；--skip-deps 时需自备）"
+  fi
+done
 
 # ---------- 5. 端口 ----------
 sect "5. 端口占用"

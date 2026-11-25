@@ -165,7 +165,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 
 | 技能 | 描述 |
 |------|------|
-| [`redis-deploy`](skills/redis-deploy/SKILL.md) | Redis 环境部署(源码构建、默认 7.0.15、sha256 校验、systemd 托管、多实例、离线部署、升级/回滚与验收；不自动修改内核参数、不执行远程脚本、卸载需人工确认)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
+| [`redis-deploy`](skills/redis-deploy/SKILL.md) | Redis 环境部署(源码构建、默认 7.0.15、sha256 校验、systemd 托管、多实例、离线部署、升级/回滚与验收；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、不自动修改内核参数、不执行远程脚本、卸载需人工确认)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 
 ### 独立诊断 skill
 

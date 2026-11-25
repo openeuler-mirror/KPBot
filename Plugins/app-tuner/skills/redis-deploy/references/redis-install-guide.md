@@ -26,6 +26,7 @@
 /var/lib/redis/redis/                  # 数据目录，redis:redis 0750
 /var/log/redis/redis.log               # 日志
 /run/redis/redis.pid                   # pid 目录占位
+/var/cache/redis-deploy/               # 构建缓存，root:root 0700
 ```
 
 部署产物：
@@ -54,6 +55,21 @@ $RESULT_DIR/logs/build.log             # 编译/安装日志
 新增内置版本：在 `assets/checksums.txt` 追加 `版本 sha256` 一行，并在
 `evals/evals.json` 补一条对应版本用例。
 
+### 路径与构建目录安全
+
+- 所有路径参数必须是绝对路径，拒绝含 `.`、`..` 或 `//` 的输入；系统存在 `realpath` 时用
+  `realpath -m` 归一化符号链接，归一化结果命中系统目录黑名单（`/`、`/etc`、`/var` 等）直接失败；
+  安装前缀还不得指向 `/bin`、`/usr/bin`、`/usr/local/bin`、`/etc` 等系统可执行/配置目录。
+- 构建缓存默认 `/var/cache/redis-deploy`，必须是 `root:root 0700`；父目录不得属于非 root 用户，
+  且组/其他可写时必须带 sticky 位（如 `/tmp`），否则脚本拒绝执行。
+- 每次构建在缓存根目录下用 `mktemp -d` 创建 0700 工作目录；`tar` 使用 `--no-same-owner`，
+  解压后校验所有条目属于 root 且无组/其他写权限，避免本地非特权用户替换源码树后由 root 执行其 Makefile。
+- 离线 `--tarball` 先复制到 root 私有缓存（0600），再对副本做 sha256 校验与解压，
+  避免校验通过后源包被本地用户替换。
+- 已存在的配置/数据/日志/run 目录不自动改属主或权限；属主既不是 root 也不是运行用户时拒绝。
+  root 属主的数据/日志/run 目录不会被自动 `chown` 给运行用户，需人工确认后处理。
+- 自定义 `--build-root` 时同样适用上述规则；不要把构建目录放在用户可控制的目录下。
+
 ## 3. 标准部署流程
 
 ```bash
@@ -73,8 +89,8 @@ cat /var/log/redis-deploy/<run-id>/env/deploy.env
 
 执行顺序（脚本内部）：
 
-1. `install_deps.sh`：按 dnf/yum/apt/zypper 安装 gcc、make、tar、下载工具与 CA 证书。
-2. 下载或复用 `$BUILD_ROOT/download/redis-<version>.tar.gz` → sha256 校验 → 解压到独立构建目录。
+1. `install_deps.sh`：按 dnf/yum/apt/zypper 安装 gcc、make、tar、findutils、coreutils、下载工具与 CA 证书。
+2. 校验构建根目录属主/权限 → 下载或复用 `$BUILD_ROOT/download/redis-<version>.tar.gz`（离线包先复制到私有缓存）→ sha256 校验 → `mktemp -d` 创建 root 私有构建目录 → 解压（`--no-same-owner`）并校验属主。
 3. `make -j$(nproc)` → `make PREFIX=<prefix> install`；同版本已存在时默认复用，`--force` 强制重编译。
 4. 创建系统用户 `redis`（已存在则复用）、数据/日志/pid 目录。
 5. 渲染 `redis.conf`（旧文件先备份为 `.bak.<时间戳>`）与 systemd 单元。
@@ -90,6 +106,7 @@ cat /var/log/redis-deploy/<run-id>/env/deploy.env
 | `--port` | 6379 | 监听端口 |
 | `--bind` | 127.0.0.1 | 可多地址；非回环必须配密码 |
 | `--prefix` | /opt/redis-<version> | 安装前缀 |
+| `--build-root` | /var/cache/redis-deploy | 构建缓存根目录，要求 root:root 0700 |
 | `--password-file` | 无 | requirepass 来源，要求 600 |
 | `--tarball` | 无 | 离线源码包 |
 | `--sha256` | 无 | 非内置版本的校验值 |
@@ -257,6 +274,10 @@ unset REDISCLI_AUTH
 | `make` 在 jemalloc 阶段失败 | 确认 gcc 完整；可改用 `make MALLOC=libc` 后重试（需手工执行），或检查磁盘空间 |
 | 下载失败 / 证书错误 | 检查 `--mirror`、代理、时间同步与 CA 证书；离线改用 `--tarball` |
 | sha256 不匹配 | 源码包损坏或被篡改；重新下载，不要带 `--allow-unverified` 绕过 |
+| 构建根目录权限/属主被拒绝 | 使用默认 `/var/cache/redis-deploy`，或由 root 修正为 `root:root 0700`；不要使用 `/var/tmp` 下他人可预先创建的目录 |
+| 路径参数含 `.` 或 `..` 被拒绝 | 使用规范化的绝对路径；不要通过 `..` 指向 `/etc`、`/var` 等系统目录 |
+| 解压目录存在非 root 属主条目 | 该构建目录已被污染，保留现场排查后人工清理，重新执行部署；不要放宽校验 |
+| 数据/日志/run 目录已存在且属于 root | 确认是 Redis 专用目录后 `chown redis:redis <dir>`，或停止使用该路径；脚本不会自动改属主 |
 | 端口已被监听 | `ss -lntp "sport = :6379"` 找到进程；先停旧实例，或换 `--port` |
 | 服务启动即退出 | `journalctl -u redis -n 100`；常见为配置语法、目录权限、端口占用、`requirepass` 文件不可读 |
 | `PING` 超时 | 确认 `bind` 与探测地址一致；容器/防火墙放行；检查 `protected-mode` 与密码 |

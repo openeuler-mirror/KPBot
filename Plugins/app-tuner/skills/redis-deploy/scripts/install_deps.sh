@@ -52,7 +52,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 elif command -v zypper >/dev/null 2>&1; then
   PKG_MGR=zypper
 else
-  die "未识别的包管理器（需要 dnf/yum/apt-get/zypper），请手工安装 gcc make tar 后加 --skip-deps"
+  die "未识别的包管理器（需要 dnf/yum/apt-get/zypper），请手工安装 gcc make tar findutils coreutils 后加 --skip-deps"
 fi
 
 PKGS=()
@@ -61,6 +61,8 @@ if [[ "$PKG_MGR" == "apt-get" ]]; then
   command -v curl >/dev/null 2>&1 || PKGS+=(curl)
   command -v wget >/dev/null 2>&1 || PKGS+=(wget)
   command -v sha256sum >/dev/null 2>&1 || PKGS+=(coreutils)
+  command -v realpath >/dev/null 2>&1 || PKGS+=(coreutils)
+  command -v find >/dev/null 2>&1 || PKGS+=(findutils)
   command -v useradd >/dev/null 2>&1 || PKGS+=(passwd)
   if [[ "$BUILD_TLS" == "1" ]]; then
     PKGS+=(libssl-dev)
@@ -70,6 +72,8 @@ else
   command -v curl >/dev/null 2>&1 || PKGS+=(curl)
   command -v wget >/dev/null 2>&1 || PKGS+=(wget)
   command -v sha256sum >/dev/null 2>&1 || PKGS+=(coreutils)
+  command -v realpath >/dev/null 2>&1 || PKGS+=(coreutils)
+  command -v find >/dev/null 2>&1 || PKGS+=(findutils)
   if [[ "$PKG_MGR" == "zypper" ]]; then
     command -v useradd >/dev/null 2>&1 || PKGS+=(shadow)
     PKGS+=(ca-certificates)
@@ -110,7 +114,7 @@ case "$PKG_MGR" in
     ;;
 esac
 
-for cmd in gcc make tar; do
+for cmd in gcc make tar find; do
   require_cmd "$cmd"
 done
 if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
