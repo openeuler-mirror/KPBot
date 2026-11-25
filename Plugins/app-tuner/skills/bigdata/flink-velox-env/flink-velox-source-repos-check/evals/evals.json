@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-source-repos-check",
+  "evals": [
+    {
+      "id": "missing-checkout",
+      "query": "编译 gluten-flink 找不到 velox4j 的 pom.xml，三个源码仓是不是没克隆齐",
+      "expected": "触发本 skill：跑 scripts/source_repos_check.py，缺失/不可用的仓逐项 fail 并给完整 git clone -b <基线> 命令，按 next_step 转述；只报告不克隆"
+    },
+    {
+      "id": "branch-and-baseline",
+      "query": "velox、velox4j、gluten 现在分别在哪个分支哪个提交，是不是在基线分支上",
+      "expected": "触发本 skill：checkouts 里每个仓的 branch / head / on_baseline 作答；偏离基线只提示不判负"
+    },
+    {
+      "id": "repos-dir",
+      "query": "源码仓的 repos 目录在哪，VELOX_HOME 指对了没",
+      "expected": "触发本 skill：root / root_via 与 pinned_via 作答（--repos-dir / GFV_REPOS_DIR / 向上找 repos/；单仓环境变量优先）"
+    },
+    {
+      "id": "not-cpp-deps",
+      "query": "velox 的 setup 脚本要装的 C++ 库装了没",
+      "expected": "不触发：C++ 依赖属 flink-velox-cpp-deps-check"
+    },
+    {
+      "id": "not-toolchain",
+      "query": "git 和 cmake 装了没",
+      "expected": "不触发：编译工具链属 flink-velox-toolchain-check"
+    },
+    {
+      "id": "not-overall",
+      "query": "这台机器现在能不能编译并运行 GlutenFlink 栈",
+      "expected": "不触发：总裁决属统筹 flink-velox-env-check"
+    },
+    {
+      "id": "not-clone",
+      "query": "把 velox 和 gluten 克隆下来，切到基线分支",
+      "expected": "不触发：本 skill 只读；克隆与切分支属安装类 skill（审中 !322），next_step 是交给它的工单"
+    }
+  ]
+}
