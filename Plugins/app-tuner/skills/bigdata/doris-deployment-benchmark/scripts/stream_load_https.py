@@ -9,6 +9,7 @@ is read from the environment, never from argv.
 
 import argparse
 import base64
+import errno
 import http.client
 import json
 import math
@@ -16,12 +17,106 @@ import os
 from pathlib import Path
 import re
 import ssl
+import stat
 import sys
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 
 class LoadError(Exception):
     pass
+
+
+UPLOAD_CHUNK_SIZE = 64 * 1024
+
+
+def file_signature(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+
+
+def open_regular_file(path):
+    try:
+        info = path.stat()
+    except OSError as exc:
+        raise LoadError(f"cannot stat data file: {exc}") from exc
+    if not stat.S_ISREG(info.st_mode):
+        raise LoadError("data file must be a regular file")
+    try:
+        stream = path.open("rb")
+    except OSError as exc:
+        raise LoadError(f"cannot open data file: {exc}") from exc
+    try:
+        opened = os.fstat(stream.fileno())
+        if file_signature(opened) != file_signature(info):
+            raise OSError("data file changed while opening")
+        stream.seek(0, os.SEEK_SET)
+    except OSError as exc:
+        stream.close()
+        raise LoadError("data file must remain stable and seekable") from exc
+    return stream, file_signature(info)
+
+
+def ensure_same_file(stream, path, signature):
+    try:
+        current = path.stat()
+        opened = os.fstat(stream.fileno())
+    except (OSError, ValueError) as exc:
+        raise LoadError(f"cannot restat data file: {exc}") from exc
+    if (
+        not stat.S_ISREG(current.st_mode)
+        or file_signature(current) != signature
+        or not stat.S_ISREG(opened.st_mode)
+        or file_signature(opened) != signature
+    ):
+        raise LoadError("data file changed or is no longer a regular file")
+
+
+def early_response(connection):
+    try:
+        return connection.getresponse()
+    except (http.client.HTTPException, OSError):
+        return None
+
+
+def response_tuple(response):
+    payload = response.read()
+    return (
+        response.status,
+        {name.lower(): value for name, value in response.getheaders()},
+        payload,
+    )
+
+
+def is_disconnect(exc):
+    if isinstance(exc, http.client.HTTPException):
+        return True
+    if isinstance(exc, ssl.SSLError):
+        return True
+    return isinstance(exc, OSError) and exc.errno in {
+        errno.EPIPE,
+        errno.ECONNRESET,
+        errno.ECONNABORTED,
+        errno.ENOTCONN,
+    }
+
+
+def stream_file(connection, stream, path, signature, length):
+    ensure_same_file(stream, path, signature)
+    try:
+        stream.seek(0, os.SEEK_SET)
+    except OSError as exc:
+        raise LoadError("data file must remain stable and seekable") from exc
+    sent = 0
+    while sent < length:
+        count = min(UPLOAD_CHUNK_SIZE, length - sent)
+        try:
+            chunk = stream.read(count)
+        except OSError as exc:
+            raise LoadError(f"cannot read data file: {exc}") from exc
+        if not chunk:
+            raise LoadError("data file is truncated")
+        connection.send(chunk)
+        sent += len(chunk)
+    ensure_same_file(stream, path, signature)
 
 
 def positive_timeout(value):
@@ -55,7 +150,7 @@ def header_value(value):
     return name.strip(), text.strip()
 
 
-def send(url, body, headers, auth, context, timeout):
+def send(url, upload, headers, auth, context, timeout):
     parts = parse_https_url(url)
     connection = http.client.HTTPSConnection(
         parts.hostname,
@@ -71,17 +166,32 @@ def send(url, body, headers, auth, context, timeout):
         for name, value in headers.items():
             connection.putheader(name, value)
         connection.putheader("Authorization", auth)
-        connection.putheader("Content-Length", str(len(body or b"")))
-        connection.endheaders()
-        if body:
-            connection.send(body)
-        response = connection.getresponse()
-        payload = response.read()
-        return (
-            response.status,
-            {name.lower(): value for name, value in response.getheaders()},
-            payload,
+        connection.putheader(
+            "Content-Length", str(upload["size"] if upload else 0)
         )
+        connection.endheaders()
+        try:
+            if upload:
+                stream_file(
+                    connection,
+                    upload["stream"],
+                    upload["path"],
+                    upload["signature"],
+                    upload["size"],
+                )
+        except (http.client.HTTPException, OSError) as exc:
+            if not is_disconnect(exc):
+                raise
+            response = early_response(connection)
+            if response is None:
+                raise
+            if 200 <= response.status < 300:
+                raise LoadError(
+                    "connection ended before a complete upload was confirmed"
+                ) from exc
+            return response_tuple(response)
+        response = connection.getresponse()
+        return response_tuple(response)
     finally:
         connection.close()
 
@@ -147,7 +257,7 @@ def discover(
 
 def follow(
     url,
-    body,
+    upload,
     headers,
     auth,
     context,
@@ -159,7 +269,7 @@ def follow(
     hops = 0
     while True:
         status, response_headers, payload = send(
-            url, body, headers, auth, context, timeout
+            url, upload, headers, auth, context, timeout
         )
         if 300 <= status < 400:
             url = redirect_target(
@@ -216,54 +326,67 @@ def load(args, save_response=None):
         raise LoadError(f"environment variable {args.password_env} is not set")
     user = args.user or os.environ.get("DORIS_USER", "root")
     allowed = {host.lower() for host in args.allow_host}
-    data = args.data_file.read_bytes()
-    context = ssl.create_default_context(
-        cafile=str(args.cafile) if args.cafile else None
-    )
-    context.check_hostname = True
-    context.verify_mode = ssl.CERT_REQUIRED
-    if args.client_cert:
-        context.load_cert_chain(
-            certfile=str(args.client_cert),
-            keyfile=str(args.client_key) if args.client_key else None,
+    upload = None
+    stream = None
+    try:
+        stream, signature = open_regular_file(args.data_file)
+        upload = {
+            "path": args.data_file,
+            "stream": stream,
+            "signature": signature,
+            "size": signature[2],
+        }
+        context = ssl.create_default_context(
+            cafile=str(args.cafile) if args.cafile else None
         )
-    headers = {
-        "Content-Type": "application/octet-stream",
-        "Accept": "application/json",
-        "Expect": "100-continue",
-    }
-    for name, value in args.header:
-        headers[name] = value
-    auth = basic_auth(user, password)
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+        if args.client_cert:
+            context.load_cert_chain(
+                certfile=str(args.client_cert),
+                keyfile=str(args.client_key) if args.client_key else None,
+            )
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Accept": "application/json",
+            "Expect": "100-continue",
+        }
+        for name, value in args.header:
+            headers[name] = value
+        auth = basic_auth(user, password)
 
-    status, be_url = discover(
-        args.fe_url,
-        headers,
-        auth,
-        context,
-        args.timeout,
-        allowed,
-        args.max_redirects,
-        args.be_https_port,
-    )
-    if 200 <= status < 300:
-        raise LoadError(
-            "FE returned success without a BE redirect; refusing to send "
-            "data without a validated target"
+        status, be_url = discover(
+            args.fe_url,
+            headers,
+            auth,
+            context,
+            args.timeout,
+            allowed,
+            args.max_redirects,
+            args.be_https_port,
         )
-    if status != 307:
-        raise LoadError(f"FE redirect discovery returned HTTP {status}")
-    status, be_url, payload = follow(
-        be_url,
-        data,
-        headers,
-        auth,
-        context,
-        args.timeout,
-        allowed,
-        args.max_redirects,
-        args.be_https_port,
-    )
+        if 200 <= status < 300:
+            raise LoadError(
+                "FE returned success without a BE redirect; refusing to send "
+                "data without a validated target"
+            )
+        if status != 307:
+            raise LoadError(f"FE redirect discovery returned HTTP {status}")
+        status, be_url, payload = follow(
+            be_url,
+            upload,
+            headers,
+            auth,
+            context,
+            args.timeout,
+            allowed,
+            args.max_redirects,
+            args.be_https_port,
+        )
+    finally:
+        if stream is not None:
+            stream.close()
+
     def persist_response(value):
         sanitized = sanitize_response(value)
         if save_response is not None:

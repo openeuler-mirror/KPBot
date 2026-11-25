@@ -36,3 +36,5 @@ python3 cases/tool-fetch/test_tool_fetch.py
 运行产物隔离测试需 Git：`python3 cases/output-isolation/test_output_isolation.py`。随附忽略规则覆盖示例结果、实验与源码目录；自定义输出位置需自行检查 Git 状态，凭据始终保存在工作树外或通过环境注入。
 
 检查脚本退出码：0 表示验证通过，1 表示客户端调用或结果验证失败，2 表示命令参数错误或无法创建输出目录（包括目录已存在）；换新目录后重试，不覆盖旧证据。case.yaml 的入口为各 case 的 run.sh，会生成该 case 的 results/result.json，记录 success、测试数、失败数与错误数。
+
+流式上传回归：`bash cases/streaming-upload/run.sh`（Linux、Python 3.10+、OpenSSL）。[用例定义](cases/streaming-upload/case.yaml)验证 64 KiB 有界读取、文件一致性、8 MiB 本地 TLS 多跳重放和资源回收；这是传输夹具验证，不代表真实 Doris 集群导入或 SF=10 验收。
