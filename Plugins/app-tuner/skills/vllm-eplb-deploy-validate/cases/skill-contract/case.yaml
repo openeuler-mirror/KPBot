@@ -1,0 +1,24 @@
+# 用例：tier A —— vllm-eplb-deploy-validate 契约与脚本行为单测
+#
+# 覆盖：frontmatter/metadata、资源完整性（apply_eplb.py / gen_imbalanced_dataset.py /
+# make_run_manifest.py）、内容卫生、脚本契约（三态切换/幂等/备份/EP-last/数据集/manifest）。
+name: skill-contract
+skill: vllm-eplb-deploy-validate
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 40
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0

@@ -1,0 +1,23 @@
+{
+  "skill_name": "vllm-eplb-deploy-validate",
+  "queries": [
+    {"id": "EQ-01", "prompt": "帮我把 run_dp_template.sh 从 force 切成 dynamic，冗余专家 16", "should_trigger": true, "note": "模式切换"},
+    {"id": "EQ-02", "prompt": "EPLB 实验做完了，把 prefill 模板还原成没开的基线", "should_trigger": true, "note": "off 还原"},
+    {"id": "EQ-03", "prompt": "additional-config 里已经有 enable_cpu_binding，再加 enable_force_eplb 会不会冲突", "should_trigger": true, "note": "JSON 合并"},
+    {"id": "EQ-04", "prompt": "custom 模板 --enable-expert-parallel 后面还有启动代理命令，开 EPLB 别把下一行吞了", "should_trigger": true, "note": "EP-last"},
+    {"id": "EQ-05", "prompt": "怎么造一份不均衡数据集来压 EPLB", "should_trigger": true, "note": "数据集"},
+    {"id": "EQ-06", "prompt": "帮我准备 off/dynamic/force 三组对照压测，并记录运行清单", "should_trigger": true, "note": "实验编排+manifest"},
+    {"id": "EQ-07", "prompt": "模板备份和幂等我需要注意什么", "should_trigger": true, "note": "部署安全"},
+    {"id": "EQ-08", "prompt": "DYNAMIC_EPLB 和 VLLM_USE_V2_MODEL_RUNNER 怎么配，模板开了起不来", "should_trigger": true, "note": "互斥约束"},
+    {"id": "EQ-09", "prompt": "冗余专家该给几个、window_size 设多少", "should_trigger": false, "note": "routes to parameter-analysis"},
+    {"id": "EQ-10", "prompt": "压测跑完 off 和 dynamic 的 TTFT 收益是多少", "should_trigger": false, "note": "routes to benefit-analysis"},
+    {"id": "NQ-01", "prompt": "帮我看看服务到底有没有专家负载不均衡", "should_trigger": false, "note": "vllm-eplb-analysis"},
+    {"id": "NQ-02", "prompt": "allreduce 慢，查 RoCE 错包", "should_trigger": false, "note": "network"},
+    {"id": "NQ-03", "prompt": "模型精度掉了，对比优化前后", "should_trigger": false, "note": "precision"},
+    {"id": "NQ-04", "prompt": "vLLM 分词后端换 fastokens", "should_trigger": false, "note": "fastokens"},
+    {"id": "NQ-05", "prompt": "专家并行度 EP 设 8 还是 16", "should_trigger": false, "note": "EP 拓扑"},
+    {"id": "NQ-06", "prompt": "MoE router 为什么选 top-8", "should_trigger": false, "note": "原理"},
+    {"id": "NQ-07", "prompt": "docker exec 后进程起不来", "should_trigger": false, "note": "shell 调试"},
+    {"id": "NQ-08", "prompt": "抓一份 vLLM profiling 看算子耗时", "should_trigger": false, "note": "profiling"}
+  ]
+}
