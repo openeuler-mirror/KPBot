@@ -1,6 +1,13 @@
 ---
 name: model-precision-analysis
 description: 模型精度分析（model precision analysis）— 对比优化前后两次推理运行（torch / torch_npu 精度评测工具输出）的合并结果，计算准确率、定位“优化前答对、优化后答错”的回归题，并判定精度是否达标。当用户提到对比优化前后精度、精度回归、准确率掉了/降了、精度验证、精度评测结果、opendatas/output 下两次运行对比，或某次量化/算子/图优化是否影响模型正确性时，都使用本技能；也适用于只看单次运行准确率、判断答案差异是格式问题还是真实错误、以及需要为精度门禁输出机器可读结论的场合。
+license: MulanPSL-2.0
+metadata:
+  skill_type: tool_assisted
+  category: verification
+  domain: model_precision
+  activation_mode: passive
+  version: "1.2.0"
 ---
 
 # 模型精度分析
@@ -8,15 +15,24 @@ description: 模型精度分析（model precision analysis）— 对比优化前
 手头有两份（或多份）**同一批题目**的推理结果 JSON，来自 torch / torch_npu 精度评测工具。
 任务不是复述模型输出，而是回答一句话：**这次优化让模型变差了吗？**
 
+本技能只读已有评测结果：不跑推理、不造数据、不改环境、不编排优化；它是优化流水线的**终点验证**，
+产出可被人和 CI 同时消费的结论（`--json` 结构化结果 + 退出码）。
+
 ## 快速开始
 
 ```bash
+# 人读报告
 python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> \
     [--dataset-name aime2024.json]
+
+# 机器可读（CI / validation_plan），退出码语义不变
+python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> --json [--out result.json]
 ```
 
 脚本只读文件，不修改任何数据。报告含两次准确率、未答/截断数、逐题明细、回归项和改善项。
-退出码语义（CI/脚本化调用一律按此判断，**退出码 0 才是达标**）：
+`--json` 输出稳定 schema：`before/after` 摘要、`status_flip`、`regressions[]`、`improvements[]`、
+`gold_mismatch[]`、`only_one_side[]`、`comparable`、`verdict(pass|fail|undecidable)`、`exit_code`；
+`--out` 可同时落盘。退出码语义（CI/脚本化调用一律按此判断，**退出码 0 才是达标**）：
 
 | 退出码 | 含义 |
 |--------|------|

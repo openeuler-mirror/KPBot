@@ -1,0 +1,24 @@
+# 用例：tier A —— model-precision-analysis 契约与脚本行为单测
+#
+# 覆盖：frontmatter/metadata、资源完整性、evals 标准 schema（eval_name+assertions）、
+# 标准触发评估集、内容卫生、脚本契约（抽取 31 / 端到端 12 / JSON 输出 8）。
+name: skill-contract
+skill: model-precision-analysis
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 55
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0

@@ -1,0 +1,20 @@
+[
+  {"query": "帮我对比优化前后两次推理结果的精度，看看准确率有没有掉", "should_trigger": true},
+  {"query": "aime2024 fp16 优化后准确率从 90 掉到 80，是不是有题被弄坏了", "should_trigger": true},
+  {"query": "量化之后精度有没有回归，帮我列一下对→错的题号", "should_trigger": true},
+  {"query": "opendatas/output 下这两次运行帮我做个精度对比", "should_trigger": true},
+  {"query": "这次算子优化会不会影响模型正确性，帮我验证一下精度", "should_trigger": true},
+  {"query": "只看单次运行的准确率就行，顺便标一下截断的题", "should_trigger": true},
+  {"query": "这个答案差异是格式问题还是真的算错了", "should_trigger": true},
+  {"query": "给精度门禁出一份机读结论，JSON 那种，CI 要用", "should_trigger": true},
+  {"query": "GPQA 这版 bf16 跑完了，帮我跟基线对比找回归", "should_trigger": true},
+  {"query": "优化后未答/截断变多了，是精度下降还是输出被截断了", "should_trigger": true},
+  {"query": "帮我跑一下 aime2024 的推理评测", "should_trigger": false},
+  {"query": "模型精度掉了，帮我定位是哪个算子数值不对", "should_trigger": false},
+  {"query": "帮我做模型量化的精度校准 calibration", "should_trigger": false},
+  {"query": "对比这两个 profile 的算子耗时", "should_trigger": false},
+  {"query": "把两次 benchmark 的 TTFT 和 QPS 对比一下", "should_trigger": false},
+  {"query": "vLLM 分词后端换 fastokens 后 token 数有没有变", "should_trigger": false},
+  {"query": "解析这份 JSON 并统计有多少条 prediction", "should_trigger": false},
+  {"query": "把评测结果画成准确率曲线图", "should_trigger": false}
+]
