@@ -1,0 +1,61 @@
+{
+  "skill_name": "pggraph-architecture",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "请解释 pgGraph 的 `graph.build()` 如何把 PostgreSQL 普通表变成 CSR 图：三个阶段、临时表/spool 的作用、双向边如何影响边数、以及 `.pggraph` 工件在什么时机写入。不要执行任何命令。",
+      "expected_output": "阶段1 通过 SPI 游标分批读注册节点表，分配 node_idx，写 NodeStore/ResolutionIndex/FilterIndex/租户位图，并批量写 pg_temp.graph_build_nodes；阶段2 读边表，用 UNNEST JOIN spool 把主键翻译成 node_idx，双向边写正向+反向两条，写 pg_temp.graph_build_edges；阶段3 按 (source,target,type_id,schema_reversed) 排序后流式建 offsets/targets/type_ids/weights，派生反向 CSR，replace_edge_stores。persist_on_build=true 时写 .pggraph.tmp、CRC、fsync、原子 rename，并立即重载校验；edges_loaded 含双向展开，约为原始边数×2。",
+      "files": [],
+      "expectations": [
+        "说明三阶段：加载节点、解析边端点、排序建 CSR",
+        "说明临时表/spool 用于节点主键到 node_idx 的批量解析",
+        "说明双向边会写正向和反向两条，edges_loaded 约翻倍",
+        "说明 CSR 依赖按 source 排序，offsets 是 node_count+1 的单调数组",
+        "说明 persist_on_build 时 tmp+fsync+rename 写 .pggraph 并立即重载校验",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "为什么 pgGraph 每个 PostgreSQL backend 都有一份 Engine？高并发下哪些内存是共享的、哪些是每 backend 私有的？`graph.status()` 显示 0 节点是否说明图没建好？不要执行命令。",
+      "expected_output": "pgGraph 用 thread_local! RefCell<Engine>，每个 backend 独立，符合 PG 进程隔离；跨 backend 共享靠 .pggraph 只读 mmap + OS page cache。前向 CSR/NodeStore/Resolution 主段 mmap 共享；反向 CSR 从正向 CSR 重建到后端堆，FilterIndex/edge_type_registry 反序列化到后端堆，BFS/结果 String 是查询级私有。所以每 backend 私有内存随连接数放大。graph.status() 报告后端内存构建元数据，不是工件状态；刚启动/刚 mmap 可能显示 0，但 traverse 可用，应用一次 1-hop traverse 验证。",
+      "files": [],
+      "expectations": [
+        "指出 thread_local Engine 与 PG 进程隔离",
+        "指出前向 CSR/NodeStore/Resolution 主段是 mmap 共享",
+        "指出反向 CSR、FilterIndex、edge_type_registry 是每 backend 私有堆",
+        "说明私有内存随 backend/连接数放大",
+        "说明 status 可能是 0 但 traverse 可用，不应据此重建",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "对比 `graph.traverse`、`graph.search`、`graph.gql` 三条查询路径：各自是否读 CSR、是否回 SQL、结果如何返回；并说明 pgGraph 的 search 是否是向量检索。不要执行命令。",
+      "expected_output": "traverse 解析 seed 后走前向/反向 CSR 紧循环 BFS/DFS，candidate_allowed 做 visited/edge_type/active/tx_delta/tenant/filter 检查，热路径不回 SQL；返回图坐标，hydrate=true 才 SPI 回查源表。search 不读图工件，而是对注册了搜索列的源表构造 contains/exact/prefix/token SQL 谓词，再在 Rust 用 SearchValueMatcher 二次核验，返回图坐标；score 固定 1.0，不是相似度，没有 embedding/向量索引/ANN。gql/cypher 解析→语义绑定→逻辑/物理计划→CSR 执行，可 hydrate，结果 JSONB；GQL 写通过 SPI 改源表并要求 mutable_overlay。",
+      "files": [],
+      "expectations": [
+        "说明 traverse 读 CSR 且热路径不回 SQL",
+        "说明 search 对源表构造 SQL 谓词并做 Rust 二次核验",
+        "说明 search 不是向量检索，score 固定 1.0",
+        "说明 gql 经过解析/绑定/计划后走 CSR，可 hydrate 为 JSONB",
+        "说明 GQL 写通过 SPI 改源表并受 PG 约束/RLS/MVCC 约束",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "pgGraph 的图是派生状态，源表 INSERT/UPDATE/DELETE 后图如何保持一致？`csr_readonly` 与 `mutable_overlay` 的覆盖层可见性有什么不同？加权最短路径为什么可能报 PG018？不要执行命令。",
+      "expected_output": "源表 DML 由 pgGraph 触发器写 graph._sync_log；下次图查询前 apply_sync 按当前图注册表 OID 回放到 high-water mark：INSERT 加节点+resolution_delta，UPDATE 改 tenant/filter（PK 变更则旧墓碑+新插入），DELETE 墓碑+edge delete overlay，边变更进 edge_buffer；遍历前 reduce 成 overlay inserts/deletes，OverlayNeighbors 合并 CSR 与覆盖层。csr_readonly 的覆盖层只在本 backend 有效，其他 backend 需 vacuum/maintenance 重建才可见；mutable_overlay 把提交的边变更发布为持久投影段，其他 backend reload manifest 可见。加权路径要求合并后的加权 CSR，有 pending 覆盖层时报 PG018，需要 vacuum/maintenance。",
+      "files": [],
+      "expectations": [
+        "说明触发器写 _sync_log，查询前 apply_sync 回放",
+        "说明 INSERT/UPDATE/DELETE 分别如何处理（含墓碑/PK 变更）",
+        "说明 edge_buffer/overlay 如何合并到 CSR 邻居",
+        "说明 csr_readonly 覆盖层仅本 backend，mutable_overlay 可跨 backend 可见",
+        "说明加权路径需要无 pending 覆盖层的加权 CSR，否则 PG018",
+        "没有执行命令"
+      ]
+    }
+  ]
+}
