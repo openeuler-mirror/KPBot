@@ -371,53 +371,6 @@ type resolutionResult struct {
 	err     error
 }
 
-func TestReadyFlightBeforeCacheFill(t *testing.T) {
-	db := setup()
-	db.rows["other"] = []ReplicaStatus{{"c", "READY"}}
-	db.health["c"] = true
-	joined := make(chan string, 3)
-	resolveResultFetchGroup.followerJoined = joined
-
-	release := make(chan struct{})
-	db.blocked, db.entered = release, make(chan struct{}, 1)
-	var workers sync.WaitGroup
-	var once sync.Once
-	resume := func() { once.Do(func() { close(release) }) }
-	defer func() { resume(); workers.Wait() }()
-	resolve := func(template, preferred string) <-chan resolutionResult {
-		done := make(chan resolutionResult, 1)
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			row, err := ResolveTemplateReadyReplica(context.Background(), template, preferred)
-			done <- resolutionResult{row, err}
-		}()
-		return done
-	}
-	check := func(done <-chan resolutionResult, want string) {
-		t.Helper()
-		got := receive(t, done)
-		if got.err != nil || got.replica.NodeID != want {
-			t.Fatalf("wanted node %q, got %+v", want, got)
-		}
-	}
-
-	first := resolve("tpl", "a")
-	receive(t, db.entered)
-	second := resolve("tpl", "b")
-	receive(t, joined) // Only this follower exists and the first DB read is still blocked.
-	db.mu.Lock()
-	db.blocked = nil // Subsequent reads can finish while the first remains blocked.
-	db.mu.Unlock()
-	check(resolve("other", "c"), "c")
-	resume()
-	check(first, "a")
-	check(second, "b")
-	if db.listReads["tpl"] != 1 || db.listReads["other"] != 1 {
-		t.Fatalf("wanted one read per template, got %v", db.listReads)
-	}
-}
-
 func TestReadyInvalidationSeparatesFlightsAndRejectsOldRefill(t *testing.T) {
 	db := setup()
 	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}

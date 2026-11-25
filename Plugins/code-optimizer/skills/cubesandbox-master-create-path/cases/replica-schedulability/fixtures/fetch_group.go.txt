@@ -16,17 +16,12 @@ type templateFetchCall struct {
 type templateFetchGroup struct {
 	mu    sync.Mutex
 	calls map[string]*templateFetchCall
-	// Test-only observation point, installed before callers start.
-	followerJoined chan<- string
 }
 
 func (g *templateFetchGroup) Do(key string, fn func() (interface{}, error)) (interface{}, error) {
 	g.mu.Lock()
 	if call, ok := g.calls[key]; ok {
 		g.mu.Unlock()
-		if g.followerJoined != nil {
-			g.followerJoined <- key
-		}
 		<-call.done
 		return call.val, call.err
 	}

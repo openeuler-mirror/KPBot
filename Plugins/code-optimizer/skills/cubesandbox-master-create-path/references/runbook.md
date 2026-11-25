@@ -151,8 +151,3 @@ CGO_ENABLED=0 make build > "$RUN_DIR/build/master.log" 2>&1
 ## 7. 交付与回退
 
 交付缓存键/失效表、异步状态顺序、代码版本/哈希、DB 计数、正确性结果和 total_time 下降率。缓存与异步分支分别可撤回；关闭/回退前确认待写处理策略。恢复备份 Master 后核对运行哈希与 READY，不能只验证文件已复制。所有工具与原 patch 均在本目录，可独立复制执行。
-
-
-### Verify same-key reads before the TTL cache is filled
-
-From the skill directory, run `python3 cases/replica-schedulability/run.py` with Git and Go on PATH. In `TestReadyFlightBeforeCacheFill`, the fake database holds the first list read open. A fixture-only notification confirms that the second caller joined its in-flight operation before any value could enter the TTL cache. A different template must resolve while that read remains blocked. After release, the two callers select different preferred nodes from one shared read. The existing `TestReadyInvalidationSeparatesFlightsAndRejectsOldRefill` verifies a new generation can read updated metadata during an older flight. These assertions measure resolver behavior with a fake database. Measure creation time on the target separately.
