@@ -1,0 +1,10 @@
+name: dtlbi-gate-contract
+skill: agentenv-dtlbi-pr30652
+tier: A
+entrypoint: ["python3", "cases/dtlbi-gate-contract/test_gate.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 合成 perf report 驱动门禁判定逻辑（scripts/check_hotspot.py）的契约回归：
+# 成功路径（5.23% → pass）与误判路径（无样本 / 0.43% 低于阈值 → fail）、
+# 输入缺失（rc=2）、阈值覆盖。不代表真机热点或端到端收益。

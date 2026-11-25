@@ -1,0 +1,64 @@
+{
+  "skill_name": "nebula-build-deployment",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "一台鲲鹏 950（384 逻辑 CPU，4 NUMA，749GB，双 NVMe），openEuler 24.03，GCC 12.3.1。我要从零部署 NebulaGraph 3.8.0 的 1P 分布式：1 metad + 4 graphd + 4 storaged，LDBC SF100。请给出部署规划（NUMA/绑核、端口、数据目录）、编译步骤、配置要点、启动顺序和验收清单。不要执行任何命令。",
+      "expected_output": "先确认架构/依赖/数据盘/NUMA，再规划：metad 与 graphd/storaged 分域，storaged 每实例占 port-1/port/port+1 三连且实例间隔≥3（如 9779/9782/9785/9788），graphd 9670-9673；每个 storaged 独立 data_path，meta/storage 分目录；编译用 ENABLE_STANDALONE_VERSION=OFF、ENABLE_MEMORY_TRACKER=OFF、ENABLE_WERROR=OFF、NEBULA_USE_LINKER=bfd，安装 third-party 3.3 并校验；配置给出 num_worker_threads、rocksdb_block_cache、minloglevel、wal_ttl、meta_server_addrs；启动顺序 metad→graphd→ADD HOSTS→storaged，停止反序；验收 SHOW HOSTS 全 ONLINE、分区数、读查询、端口、日志；说明 SF100 分区数/副本数选择与备份策略。不得执行命令。",
+      "files": [],
+      "expectations": [
+        "先做只读前置检查（架构、CPU、NUMA、内存、磁盘、依赖、third-party、端口、时区文件、cluster.id）",
+        "选择 ENABLE_STANDALONE_VERSION=OFF 并说明 standalone 与分布式差异",
+        "storaged 端口按每实例 3 个连续端口规划，实例间隔≥3，避免 Address already in use",
+        "每个 storaged 独立 data_path，meta 与 storage 分目录，说明多盘用法",
+        "启动顺序 metad → graphd → ADD HOSTS（首次）→ storaged；停止反序",
+        "验收包含 SHOW HOSTS ONLINE、分区数、读查询、端口监听、日志异常检查",
+        "说明 third-party 版本/ABI 约束与编译参数（MemoryTracker、Werror、linker）",
+        "没有实际执行任何部署/修改命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "编译 Nebula 3.8.0 时出现两类错误：一是链接报 cannot find -lstdc++，二是加了 -march=armv8-a+crc 后出现 folly F14 相关未定义符号。另外启动 nebula-graphd 立即退出（退出码 1，日志含 Invalid timezone file）。请分别说明原因和处置，并给出验证方式。不要执行命令。",
+      "expected_output": "cannot find -lstdc++：缺 libstdc++-static，安装对应包后重编。F14 未定义：预编译 folly 的 F14 哈希模式（Simd/SimdAndCrc）与编译 -march 的 CRC 特性不一致，去掉 +crc 或使用与 third-party 匹配的编译参数；不要用 -Bsymbolic/-fno-plt 等改变符号可见性。启动即退出（退出码 1、Invalid timezone file）：不在源码根目录启动导致找不到 share/resources/date_time_zonespec.csv；在 NEBULA_HOME 下启动、复制时区文件即可。SIGSEGV/SIGBUS 则指向 F14/jemalloc/-march 与 third-party 不匹配：核对二进制 md5 与编译参数。验证：ls -lh 产物、strings 查 jemalloc 版本串、objdump 统计 LSE、nm 查符号、启动后 SHOW HOSTS、检查 stderr 日志。",
+      "files": [],
+      "expectations": [
+        "cannot find -lstdc++ 对应 libstdc++-static 缺失",
+        "F14 未定义对应预编译 folly 的 F14 模式与 -march 的 CRC 特性不一致",
+        "明确指出不要随意加 +crc，也不要用 -Bsymbolic/-fno-plt 等改变符号可见性",
+        "启动即退出（退出码 1、日志含 Invalid timezone file）优先排查启动目录与 share/resources/date_time_zonespec.csv；SIGSEGV/SIGBUS 指向 F14/jemalloc/-march 不匹配",
+        "给出产物/符号/库版本/启动状态的具体验证方式",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "一套 1P 分布式 Nebula 在生产变更后无法启动：storaged 日志报 Machine not existed，SHOW HOSTS 为空，数据目录里 meta 和 storage 看起来都在。我们有一份三天前的备份。请给出恢复方案、风险点和验证步骤。不要执行破坏性操作。",
+      "expected_output": "先只读取证：进程/端口/日志、cluster.id 是否存在、meta 与 storage 是否来自同一份备份、二进制 md5/commit、RocksDB 版本是否兼容、备份是否停服一致。恢复：停服（反序）→ 保留现场（改名而非删除）→ 用同一份备份成对恢复 meta+storage → 删除 cluster.id → 按 metad→graphd→storaged 启动 → SHOW HOSTS/SHOW SPACES/计数验收。风险：备份不一致、RocksDB 版本不兼容、端口/地址变化、覆盖现场导致无法取证；必须先确认用户授权并备份当前现场。",
+      "files": [],
+      "expectations": [
+        "先做只读取证，不直接删除或覆盖现场数据",
+        "指出 Machine not existed 的根因是机器未在 metad 注册（ADD HOSTS 未执行/元数据被清），需重新 ADD HOSTS",
+        "恢复时 meta 与 storage 必须来自同一份备份，且使用 --reflink=never 真实拷贝",
+        "恢复后删除 cluster.id，按 metad→graphd→storaged 顺序启动",
+        "验证包含 SHOW HOSTS、SHOW SPACES、关键计数/查询",
+        "说明 RocksDB 版本只向后兼容、备份需停服一致、端口/地址变化等风险",
+        "没有执行破坏性操作"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "团队想把 Nebula 3.8.0 的第三方库从 2021 版全量升级到 2025 版（folly/fbthrift/rocksdb 11.8 等），目标是提升读性能。请评估收益、风险和验证方案，并给出如果不达标如何回滚。",
+      "expected_output": "先说明升级不必然带来读性能提升：实测全量升级对读路径净贡献接近 0，FSP 收益主要来自 Nebula 侧补丁；写入路径可能受 RocksDB 版本影响但数据格式不兼容。风险：编译周期长、API/ABI 适配（F14、folly、fbthrift、glog、RocksDB C++17）、RocksDB 数据格式、链接顺序；必须先在测试环境验证。方案：备份数据与二进制、记录版本/commit/md5、新建 build 目录、应用适配补丁、编译、用测试数据启动、功能+性能 A/B、确认后再替换。回滚：保留旧 build/二进制与数据备份，旧二进制启动旧数据；RocksDB 新数据旧版本可能打不开，必要时恢复备份。",
+      "files": [],
+      "expectations": [
+        "不承诺全量升级必然提升读性能，指出实测读路径收益接近 0",
+        "列出主要风险：API/ABI、F14/folly/fbthrift 适配、RocksDB 数据格式、编译周期",
+        "要求先在测试环境做功能+性能 A/B，而不是直接上生产",
+        "升级前备份数据与二进制，记录版本/commit/md5，使用独立 build 目录",
+        "回滚方案保留旧二进制与数据备份，说明 RocksDB 只向后兼容",
+        "区分读路径与写路径的不同影响"
+      ]
+    }
+  ]
+}

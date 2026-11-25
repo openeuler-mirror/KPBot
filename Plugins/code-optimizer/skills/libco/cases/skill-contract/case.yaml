@@ -1,0 +1,4 @@
+name: skill-contract
+skill: libco
+tier: A
+entrypoint: ["bash", "cases/skill-contract/run.sh"]
