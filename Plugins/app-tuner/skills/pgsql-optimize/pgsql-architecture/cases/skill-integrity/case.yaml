@@ -1,0 +1,74 @@
+# 用例：tier A — pgSQL app-tuner 域已合入成员的完整性契约
+# （姊妹 skill 随系列 PR 合入；缺失成员在 result.json 的 pending 列表记录，不算失败，
+#  skills_checked 只统计树内实际存在的成员，五个全部合入后达到 5）
+#
+# 覆盖（checks.py）：
+#   1. SKILL.md frontmatter：name 与目录一致、description 非空/长度合法
+#   2. SKILL.md / references 中引用的 references/* 与 scripts/* 均存在；
+#      跨 skill 相对链接（skill 根文件用 ../pgsql-<skill>/<path>、references/ 内
+#      文件用 ../../pgsql-<skill>/<path>，姊妹 skill 间共享契约的入口）一并按
+#      文件相对语义解析到兄弟目录核对存在性——目标姊妹 skill 未合入时记 pending
+#      （不算失败）
+#   3. 每个 skill 的关键内容锚点仍在语料中
+#   4. evals/evals.json 结构完整（skill_name/id/prompt/expectations 等）
+#   5. 脚本 shebang 与敏感内容扫描（私网 IP、个人 home/ssd 路径）
+#
+# 运行（在 skill 根目录 pgsql-architecture/ 下；脚本内部经 $0 定位，无需其他前置）：
+#   bash cases/skill-integrity/run.sh
+#   # 产物 cases/skill-integrity/results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A，仅依赖 python3 标准库；不需要真实 pgSQL/PostgreSQL 环境。
+
+name: skill-integrity
+skill: pgsql-architecture
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: skills_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: links_checked
+    op: gte
+    expect: 12
+    # 注：仅本 skill 合入时即有 12 条计入（9 条 skill 内 + 3 条跨 skill `../../`
+    # 链接）——正则若退化为不识别 `../../pgsql-…` 形态，计数会跌回 9，此断言
+    # 立即失败，防止跨 skill 链接完全不校验也不记 pending 的假保证；姊妹
+    # skill 合入后链接数只增不减。跨 skill 目标缺失时进 pending（不算失败），
+    # 姊妹全部合入后由 checks.py 的存在性检查收紧为「目标文件必须存在」。
+  - type: json_field
+    file: results/result.json
+    field: scripts_checked
+    op: gte
+    expect: 0
+    # 注：pgsql-architecture 自身无 scripts/ 目录（脚本在姊妹 skill 随系列 PR 合入），
+    # 中间态实际为 0（断言降为 0）；姊妹 skill 合入后再收紧回 >=3
+  - type: json_field
+    file: results/result.json
+    field: anchors_found
+    op: gte
+    expect: 5
+  - type: json_field
+    file: results/result.json
+    field: evals_checked
+    op: gte
+    expect: 3
+  - type: json_field
+    file: results/result.json
+    field: sensitive_findings
+    expect: 0
