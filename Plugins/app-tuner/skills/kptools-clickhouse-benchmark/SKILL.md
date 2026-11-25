@@ -53,7 +53,7 @@ python3 scripts/run_benchmark.py \
   --client ./clickhouse --single-binary --output results/run-single-001
 ```
 
-TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变量传递，不能放入 argv；脚本会脱敏 JSON 和日志。`--user` 只在显式给出时传给客户端；省略时优先由 `--config` 客户端配置提供用户，两者都缺省时使用客户端内置默认用户，结果 JSON 的 `target.user_source` 会记录 `cli`、`config` 或 `client_default`。以下示例在有界子 shell 中运行，`EXIT` trap 在正常或失败退出时清除密码，不修改父 agent 会话中的 `CLICKHOUSE_PASSWORD`。若此前已在父会话导出此变量，使用结束后执行 `unset CLICKHOUSE_PASSWORD`。仅当确有现成客户端配置时才追加 `--config ./existing-client.xml`；配置文件必须是 group/other 无权限的普通文件（通常 `chmod 600`），密码与 TLS 本身不要求创建配置文件：
+TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变量传递，不能放入 argv；脚本会脱敏 JSON 和日志。账号优先级为显式 `--user`、`--config` 中的 `<user>`、客户端内置 `default`；解析后的账号会显式传给所有连接与 benchmark 负载，结果 JSON 的 `target.user` 记录实际账号，`target.user_source` 记录 `cli`、`config` 或 `client_default`。配置无法解析或账号为空时会在启动客户端前失败。以下示例在有界子 shell 中运行，`EXIT` trap 在正常或失败退出时清除密码，不修改父 agent 会话中的 `CLICKHOUSE_PASSWORD`。若此前已在父会话导出此变量，使用结束后执行 `unset CLICKHOUSE_PASSWORD`。仅当确有现成客户端配置时才追加 `--config ./existing-client.xml`；配置文件必须是 group/other 无权限的普通文件（通常 `chmod 600`），密码与 TLS 本身不要求创建配置文件：
 
 ```bash
 (
@@ -79,4 +79,4 @@ TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变
 python3 tests/test_contract.py
 ```
 
-tier-A 回归覆盖成功、预热排除、精确正确性、旧版本、缺工具、认证、超时、运行失败、指标格式变化、输出冲突、参数上限、安全端点、密码示例的父会话清理和单二进制布局，并直接解析观察到的 ClickHouse 26.8 原生输出；真实 fork 后代和取消时存活子进程回归显式验证有界返回、异常重抛和 PID 清理。假工具仅提供契约证据，不是服务 E2E。
+tier-A 回归覆盖成功、预热排除、精确正确性、旧版本、缺工具、认证、超时、运行失败、指标格式变化、输出冲突、参数上限、安全端点、配置账号对齐、数值口令、探针日志写入失败、密码示例的父会话清理和单二进制布局，并直接解析观察到的 ClickHouse 26.8 原生输出；真实 fork 后代和取消时存活子进程回归显式验证有界返回、异常重抛和 PID 清理。假工具仅提供契约证据，不是服务 E2E。

@@ -12,6 +12,7 @@ import stat
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 
 MIN_SERVER_VERSION = (22, 8, 0)
 MIN_OUTPUT_FREE_BYTES = 1024 * 1024
@@ -62,6 +63,42 @@ def secure_config(value):
             "configuration permissions must not grant group/other access"
         )
     return path
+
+
+def configured_user(path):
+    """Read only the configured user; never return or persist other values."""
+    if path is None:
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError) as exc:
+        raise ValueError(f"cannot parse client configuration: {exc}") from exc
+    user = root.findtext("user") if root.tag == "clickhouse" else None
+    if user is None and root.tag != "clickhouse":
+        user = root.findtext("clickhouse/user")
+    if user is None:
+        return None
+    user = user.strip()
+    if not user or "\x00" in user:
+        raise ValueError(
+            "configured client user must be non-empty and contain no NUL"
+        )
+    return user
+
+
+def resolve_user(args):
+    """Resolve and explicitly share the same account across client tools."""
+    if args.user is not None:
+        args.resolved_user = args.user
+        args.user_source = "cli"
+        return
+    config_user = configured_user(args.config)
+    if config_user is not None:
+        args.resolved_user = config_user
+        args.user_source = "config"
+    else:
+        args.resolved_user = "default"
+        args.user_source = "client_default"
 
 
 def build_parser():
@@ -139,13 +176,15 @@ def stop_process_group(process):
 
 
 def run_process(argv, timeout):
-    """Run one bounded subprocess and return sanitized captured evidence."""
+    """Return raw output for semantics and sanitized copies for evidence."""
     started = time.monotonic_ns()
     outcome = {
         "returncode": None,
         "timed_out": False,
         "stdout": "",
         "stderr": "",
+        "raw_stdout": "",
+        "raw_stderr": "",
         "error": None,
     }
     try:
@@ -176,6 +215,8 @@ def run_process(argv, timeout):
                 pass
             raise
         outcome["returncode"] = process.returncode
+        outcome["raw_stdout"] = stdout
+        outcome["raw_stderr"] = stderr
         outcome["stdout"] = redact(stdout)
         outcome["stderr"] = redact(stderr)
     outcome["duration_ms"] = round(
@@ -240,7 +281,7 @@ def process_check(name, argv, timeout, output, sql=None):
         check["reason"] = "timeout"
     elif outcome["returncode"] != 0:
         check["status"] = "blocked"
-        check["reason"] = classify_error(outcome["stderr"])
+        check["reason"] = classify_error(outcome["raw_stderr"])
         evidence["message"] = outcome["stderr"][-2000:]
     return check, outcome
 
@@ -299,8 +340,7 @@ def connection_arguments(args):
         "--port",
         str(args.port),
     ]
-    if args.user is not None:
-        argv += ["--user", args.user]
+    argv += ["--user", args.resolved_user]
     argv += [
         "--connect_timeout",
         str(max(1, math.ceil(args.timeout))),
@@ -343,7 +383,7 @@ def run_checks(args):
     )
     client_version = None
     if client_check["status"] == "ready":
-        client_version = version_tuple(client_outcome["stdout"])
+        client_version = version_tuple(client_outcome["raw_stdout"])
         if client_version is None:
             mark(client_check, "unknown", "invalid_version")
         else:
@@ -359,7 +399,9 @@ def run_checks(args):
         output,
     )
     if interface_check["status"] == "ready":
-        help_text = interface_outcome["stdout"] + interface_outcome["stderr"]
+        help_text = (
+            interface_outcome["raw_stdout"] + interface_outcome["raw_stderr"]
+        )
         required = (
             "--query",
             "--iterations",
@@ -408,9 +450,9 @@ def run_checks(args):
             sql,
         )
         if server_check["status"] == "ready":
-            raw_version = server_outcome["stdout"].strip()
+            raw_version = server_outcome["raw_stdout"].strip()
             server_version = version_tuple(raw_version)
-            server_check["evidence"]["version_output"] = raw_version
+            server_check["evidence"]["version_output"] = redact(raw_version)
             if server_version is None:
                 mark(server_check, "unknown", "invalid_version")
             elif server_version < MIN_SERVER_VERSION:
@@ -438,9 +480,9 @@ def run_checks(args):
             sql,
         )
         if correctness["status"] == "ready":
-            actual = correctness_outcome["stdout"].strip()
+            actual = correctness_outcome["raw_stdout"].strip()
             correctness["evidence"]["expected"] = "499500"
-            correctness["evidence"]["actual"] = actual
+            correctness["evidence"]["actual"] = redact(actual)
             if actual != "499500":
                 mark(correctness, "blocked", "correctness")
     checks.append(correctness)
@@ -485,14 +527,8 @@ def run_checks(args):
         "target": {
             "host": args.host,
             "port": args.port,
-            "user": args.user,
-            "user_source": (
-                "cli"
-                if args.user is not None
-                else "config"
-                if args.config is not None
-                else "client_default"
-            ),
+            "user": args.resolved_user,
+            "user_source": args.user_source,
             "secure": args.secure,
             "config_provided": args.config is not None,
             "single_binary": args.single_binary,
@@ -529,12 +565,20 @@ def main(argv=None):
     if args.user is not None and ("\x00" in args.user or not args.user):
         parser.error("--user must be non-empty and contain no NUL")
     try:
+        resolve_user(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    try:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.mkdir(mode=0o700, exist_ok=False)
     except OSError as exc:
         print(f"cannot create fresh output directory: {exc}", file=sys.stderr)
         return 2
-    result = run_checks(args)
+    try:
+        result = run_checks(args)
+    except OSError as exc:
+        print(f"cannot write probe evidence: {exc}", file=sys.stderr)
+        return 2
     try:
         private_write(
             args.output / "result.json",

@@ -16,6 +16,7 @@ import statistics
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 
 MIN_SERVER_VERSION = (22, 8, 0)
 VERSION_RE = re.compile(r"(?<!\d)(\d+(?:\.\d+){2,3})(?!\d)")
@@ -107,6 +108,42 @@ def secure_config(value):
     return path
 
 
+def configured_user(path):
+    """Read only the configured user; never return or persist other values."""
+    if path is None:
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError) as exc:
+        raise ValueError(f"cannot parse client configuration: {exc}") from exc
+    user = root.findtext("user") if root.tag == "clickhouse" else None
+    if user is None and root.tag != "clickhouse":
+        user = root.findtext("clickhouse/user")
+    if user is None:
+        return None
+    user = user.strip()
+    if not user or "\x00" in user:
+        raise ValueError(
+            "configured client user must be non-empty and contain no NUL"
+        )
+    return user
+
+
+def resolve_user(args):
+    """Resolve and explicitly share the same account across client tools."""
+    if args.user is not None:
+        args.resolved_user = args.user
+        args.user_source = "cli"
+        return
+    config_user = configured_user(args.config)
+    if config_user is not None:
+        args.resolved_user = config_user
+        args.user_source = "config"
+    else:
+        args.resolved_user = "default"
+        args.user_source = "client_default"
+
+
 def build_parser():
     """Build a bounded interface without arbitrary SQL or passwords."""
     parser = argparse.ArgumentParser(
@@ -190,13 +227,15 @@ def stop_process_group(process):
 
 
 def run_process(argv, timeout):
-    """Run a bounded subprocess with no shell and capture sanitized output."""
+    """Capture raw output for semantics and redacted copies for evidence."""
     started = time.monotonic_ns()
     outcome = {
         "returncode": None,
         "timed_out": False,
         "stdout": "",
         "stderr": "",
+        "raw_stdout": "",
+        "raw_stderr": "",
         "error": None,
     }
     try:
@@ -227,6 +266,8 @@ def run_process(argv, timeout):
                 pass
             raise
         outcome["returncode"] = process.returncode
+        outcome["raw_stdout"] = stdout
+        outcome["raw_stderr"] = stderr
         outcome["stdout"] = redact(stdout)
         outcome["stderr"] = redact(stderr)
     outcome["duration_ms"] = round(
@@ -263,7 +304,7 @@ def failure_kind(outcome, missing_tool=True):
     if outcome["timed_out"]:
         return "timeout"
     if outcome["returncode"]:
-        return classify_error(outcome["stderr"])
+        return classify_error(outcome["raw_stderr"])
     return None
 
 
@@ -303,8 +344,7 @@ def connection_arguments(args):
         "--port",
         str(args.port),
     ]
-    if args.user is not None:
-        argv += ["--user", args.user]
+    argv += ["--user", args.resolved_user]
     argv += [
         "--connect_timeout",
         str(max(1, math.ceil(args.timeout))),
@@ -366,7 +406,7 @@ def preflight(args, result):
         client_version_command(args),
         args,
     )
-    client_version = version_tuple(client_outcome["stdout"])
+    client_version = version_tuple(client_outcome["raw_stdout"])
     if client_version is None:
         client_check["status"] = "unknown"
         client_check["reason"] = "invalid_version"
@@ -382,7 +422,9 @@ def preflight(args, result):
         command_prefix(args, benchmark=True) + ["--help"],
         args,
     )
-    help_text = interface_outcome["stdout"] + interface_outcome["stderr"]
+    help_text = (
+        interface_outcome["raw_stdout"] + interface_outcome["raw_stderr"]
+    )
     required = (
         "--query",
         "--iterations",
@@ -425,9 +467,9 @@ def preflight(args, result):
         args,
         "SELECT version()",
     )
-    raw_version = server_outcome["stdout"].strip()
+    raw_version = server_outcome["raw_stdout"].strip()
     server_version = version_tuple(raw_version)
-    server_check["evidence"]["version_output"] = raw_version
+    server_check["evidence"]["version_output"] = redact(raw_version)
     if server_version is None:
         server_check["status"] = "unknown"
         server_check["reason"] = "invalid_version"
@@ -442,7 +484,7 @@ def preflight(args, result):
             "wrong_version", "server predates the bounded contract"
         )
     server_check["evidence"]["parsed_version"] = server_version
-    result["environment"]["server_version"] = raw_version
+    result["environment"]["server_version"] = redact(raw_version)
 
     sql = "SELECT sum(number) FROM numbers(1000)"
     exact_outcome, exact_check = record_probe(
@@ -454,8 +496,10 @@ def preflight(args, result):
         args,
         sql,
     )
-    actual = exact_outcome["stdout"].strip()
-    exact_check["evidence"].update({"expected": "499500", "actual": actual})
+    actual = exact_outcome["raw_stdout"].strip()
+    exact_check["evidence"].update(
+        {"expected": "499500", "actual": redact(actual)}
+    )
     if actual != "499500":
         exact_check["status"] = "blocked"
         exact_check["reason"] = "correctness"
@@ -523,10 +567,10 @@ def validate_workload(args, result, phase, query, expected):
         result["output_dir"] / f"{stem}.stderr.log", outcome["stderr"]
     )
     kind = failure_kind(outcome)
-    actual = outcome["stdout"].strip()
+    actual = outcome["raw_stdout"].strip()
     validation = {
         "expected": str(expected),
-        "actual": actual,
+        "actual": redact(actual),
         "returncode": outcome["returncode"],
         "duration_ms": outcome["duration_ms"],
         "passed": kind is None and actual == str(expected),
@@ -584,7 +628,8 @@ def run_phase(args, result, phase, iterations):
     if kind is None:
         try:
             record["native"] = parse_native_metrics(
-                outcome["stdout"] + "\n" + outcome["stderr"], iterations
+                outcome["raw_stdout"] + "\n" + outcome["raw_stderr"],
+                iterations,
             )
         except ValueError as exc:
             parse_failure = str(exc)
@@ -653,14 +698,8 @@ def initial_result(args):
         "target": {
             "host": args.host,
             "port": args.port,
-            "user": args.user,
-            "user_source": (
-                "cli"
-                if args.user is not None
-                else "config"
-                if args.config is not None
-                else "client_default"
-            ),
+            "user": args.resolved_user,
+            "user_source": args.user_source,
             "secure": args.secure,
             "config_provided": args.config is not None,
             "single_binary": args.single_binary,
@@ -710,6 +749,10 @@ def main(argv=None):
     if args.single_binary and args.benchmark != "clickhouse-benchmark":
         parser.error("--benchmark cannot be combined with --single-binary")
     try:
+        resolve_user(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    try:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.mkdir(mode=0o700, exist_ok=False)
     except OSError as exc:
@@ -757,6 +800,7 @@ def main(argv=None):
         if result["preflight"]["status"] == "running":
             result["preflight"]["status"] = "failed"
         result["failure"] = {"kind": "error", "message": redact(str(exc))}
+        exit_code = 2
     except KeyboardInterrupt:
         result["status"] = "failed"
         result["failure"] = {"kind": "interrupted", "message": "interrupted"}

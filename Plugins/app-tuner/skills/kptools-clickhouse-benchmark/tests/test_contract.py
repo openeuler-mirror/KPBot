@@ -371,12 +371,27 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         completed = self.invoke(output, extra=("--config", config))
         self.assertEqual(completed.returncode, 0, completed.stderr)
         result = self.result(output)
-        self.assertIsNone(result["target"]["user"])
+        self.assertEqual(result["target"]["user"], "config-user")
         self.assertEqual(result["target"]["user_source"], "config")
         query_calls = [call for call in self.calls() if "--query" in call]
         self.assertTrue(query_calls)
         for call in query_calls:
-            self.assertNotIn("--user", call)
+            self.assertEqual(call[call.index("--user") + 1], "config-user")
+
+    def test_invalid_config_fails_before_output_or_probes(self):
+        self.fake_client()
+        for index, content in enumerate(
+            ("<clickhouse><user></clickhouse>", "<clickhouse><user/></clickhouse>")
+        ):
+            with self.subTest(content=content):
+                config = self.root / f"invalid-{index}.xml"
+                config.write_text(content, encoding="utf-8")
+                config.chmod(0o600)
+                output = self.root / f"invalid-config-{index}"
+                completed = self.invoke(output, extra=("--config", config))
+                self.assertEqual(completed.returncode, 2)
+                self.assertFalse(output.exists())
+                self.assertEqual(self.calls(), [])
 
     def test_explicit_user_still_overrides_config(self):
         self.fake_client()
@@ -406,12 +421,12 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         completed = self.invoke(output)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         result = self.result(output)
-        self.assertIsNone(result["target"]["user"])
+        self.assertEqual(result["target"]["user"], "default")
         self.assertEqual(result["target"]["user_source"], "client_default")
         query_calls = [call for call in self.calls() if "--query" in call]
         self.assertTrue(query_calls)
         for call in query_calls:
-            self.assertNotIn("--user", call)
+            self.assertEqual(call[call.index("--user") + 1], "default")
 
     def test_secure_target_and_password_redaction(self):
         self.fake_client()
@@ -453,6 +468,29 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         self.assertIn("--secure", workload)
         self.assertIn(str(config), workload)
 
+    def test_numeric_password_preserves_correctness_and_metric_parsing(self):
+        self.secret = "499500"
+        self.env["CLICKHOUSE_PASSWORD"] = self.secret
+        self.fake_client(qps=[499500, 10, 20, 30])
+        output = self.root / "numeric-password"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.result(output)
+        self.assertTrue(result["success"])
+        self.assertEqual(result["warmup"]["native"]["qps"], 499500)
+        self.assertEqual(result["summary"]["median_qps"], 20)
+        self.assertEqual(result["warmup"]["correctness"]["actual"], "[REDACTED]")
+        self.assertEqual(
+            result["preflight"]["checks"][-1]["evidence"]["actual"],
+            "[REDACTED]",
+        )
+        self.assertEqual(
+            (output / "warmup.stdout.log").read_text(encoding="utf-8").count(
+                "[REDACTED]"
+            ),
+            3,
+        )
+
     def test_unsupported_server_version_stops_before_workload(self):
         self.fake_client(server_version="22.7.9.1")
         output = self.root / "old"
@@ -474,6 +512,8 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         self.assertIsNone(result["warmup"])
 
     def test_auth_failure_is_classified_and_redacted(self):
+        self.secret = "AUTHENTICATION_FAILED"
+        self.env["CLICKHOUSE_PASSWORD"] = self.secret
         self.fake_client(auth_error=True)
         output = self.root / "auth"
         completed = self.invoke(output)
@@ -643,6 +683,50 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         )
         self.assertEqual(self.calls(), [])
 
+    def test_probe_log_write_failure_uses_output_exit_code(self):
+        self.fake_client()
+        output = self.root / "probe-write-failure"
+        real_private_write = BENCHMARK_MODULE.private_write
+
+        def fail_probe_log(path, content):
+            if Path(path).name == "preflight-client-tool.stdout.log":
+                raise OSError("simulated probe log write failure")
+            return real_private_write(path, content)
+
+        with mock.patch.object(
+            BENCHMARK_MODULE, "private_write", side_effect=fail_probe_log
+        ):
+            with redirect_stderr(io.StringIO()) as stderr:
+                exit_code = BENCHMARK_MODULE.main(
+                    [
+                        "--client",
+                        str(self.client),
+                        "--benchmark",
+                        str(self.benchmark),
+                        "--timeout",
+                        "0.2",
+                        "--rows",
+                        "1000",
+                        "--iterations",
+                        "3",
+                        "--warmup-iterations",
+                        "2",
+                        "--rounds",
+                        "3",
+                        "--output",
+                        str(output),
+                    ]
+                )
+        self.assertEqual(exit_code, 2)
+        self.assertNotIn("simulated probe log write failure", stderr.getvalue())
+        result = self.result(output)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["failure"]["kind"], "error")
+        self.assertIn(
+            "simulated probe log write failure", result["failure"]["message"]
+        )
+        self.assertFalse(any("--iterations" in call for call in self.calls()))
+
     def test_result_write_failure_uses_output_exit_code(self):
         self.fake_client()
         output = self.root / "write-failure"
@@ -739,7 +823,10 @@ if __name__ == "__main__":
             "exact per-phase correctness",
             "wrong_version/missing_tool/auth/timeout/runtime/metric failures",
             "series exit codes for success/failure/arguments/output/help",
-            "secret redaction, bounded arguments, exclusive output",
+            "secret redaction, raw correctness/metric semantics and bounded arguments",
+            "config/default/cli account alignment and user_source evidence",
+            "probe and result output-write failures use exit code 2",
+            "exclusive output preservation",
             "password-example session cleanup on success and failure",
             "single-binary independence",
             "bounded timeout/cancellation process and PID cleanup",

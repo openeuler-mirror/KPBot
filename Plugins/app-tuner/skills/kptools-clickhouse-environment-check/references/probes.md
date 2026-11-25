@@ -8,7 +8,7 @@
 | `client_tool` | 必需 | 独立客户端执行 `clickhouse-client --version`；单二进制执行 `clickhouse --version`。输出须包含完整三段或四段数字版本。 |
 | `benchmark_interface` | 必需 | 执行 benchmark `--help`，必须出现 `--query`、`--iterations`、`--concurrency`、`--delay`、`--client-side-time`；使用配置时还需 `--config`。缺工具、非零退出或缺选项不能就绪。 |
 | `server_interface` | 必需 | 通过实际目标、用户、TLS/配置执行 `SELECT version()`，证明连接与认证可完成该 SELECT；解析版本不得低于 22.8.0。 |
-| `exact_query` | 必需 | `SELECT sum(number) FROM numbers(1000)` 的唯一输出必须精确等于 `499500`，零退出但结果错误仍为 blocked。 |
+| `exact_query` | 必需 | `SELECT sum(number) FROM numbers(1000)` 的原始唯一输出必须精确等于 `499500`，零退出但结果错误仍为 blocked；只有写入日志和 JSON 的证据副本会脱敏。 |
 | `client_server_series` | 可选 | 比较客户端和服务端 major.minor；不一致记录 unknown，但由上述真实接口检查决定总体就绪，不靠猜测拦截。 |
 
 `benchmark --version` 不是受支持的可移植接口，两个布局均不调用。单二进制的 benchmark 版本复用同一二进制的全局版本；独立 benchmark 只陈述实际验证过的帮助选项。

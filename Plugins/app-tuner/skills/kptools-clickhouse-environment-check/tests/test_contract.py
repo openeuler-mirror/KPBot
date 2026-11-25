@@ -211,6 +211,8 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
 
     def test_authentication_failure_is_classified_and_redacted(self):
+        self.secret = "AUTHENTICATION_FAILED"
+        self.env["CLICKHOUSE_PASSWORD"] = self.secret
         self.fake_client(auth_error=True)
         output = self.root / "auth"
         completed = self.invoke(output)
@@ -341,6 +343,24 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(exact["evidence"]["expected"], "499500")
         self.assertEqual(exact["evidence"]["actual"], "0")
 
+    def test_numeric_password_does_not_change_correctness_semantics(self):
+        self.secret = "499500"
+        self.env["CLICKHOUSE_PASSWORD"] = self.secret
+        self.fake_client()
+        output = self.root / "numeric-password"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.result(output)
+        exact = next(
+            item for item in result["checks"] if item["name"] == "exact_query"
+        )
+        self.assertEqual(exact["status"], "ready")
+        self.assertEqual(exact["evidence"]["actual"], "[REDACTED]")
+        self.assertEqual(
+            (output / "exact-query.stdout.log").read_text(encoding="utf-8"),
+            "[REDACTED]\n",
+        )
+
     def test_unknown_version_has_distinct_exit_and_status(self):
         self.fake_client(server_version="unparseable")
         output = self.root / "unknown"
@@ -447,13 +467,28 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         completed = self.invoke(output, extra=("--config", config))
         self.assertEqual(completed.returncode, 0, completed.stderr)
         result = self.result(output)
-        self.assertIsNone(result["target"]["user"])
+        self.assertEqual(result["target"]["user"], "config-user")
         self.assertEqual(result["target"]["user_source"], "config")
         query_calls = [call for call in self.calls() if "--query" in call]
         self.assertTrue(query_calls)
         for call in query_calls:
-            self.assertNotIn("--user", call)
+            self.assertEqual(call[call.index("--user") + 1], "config-user")
             self.assertIn(str(config), call)
+
+    def test_invalid_config_fails_before_output_or_probes(self):
+        self.fake_client()
+        for index, content in enumerate(
+            ("<clickhouse><user></clickhouse>", "<clickhouse><user/></clickhouse>")
+        ):
+            with self.subTest(content=content):
+                config = self.root / f"invalid-{index}.xml"
+                config.write_text(content, encoding="utf-8")
+                config.chmod(0o600)
+                output = self.root / f"invalid-config-{index}"
+                completed = self.invoke(output, extra=("--config", config))
+                self.assertEqual(completed.returncode, 2)
+                self.assertFalse(output.exists())
+                self.assertEqual(self.calls(), [])
 
     def test_explicit_user_still_overrides_config(self):
         self.fake_client()
@@ -485,12 +520,12 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         completed = self.invoke(output)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         result = self.result(output)
-        self.assertIsNone(result["target"]["user"])
+        self.assertEqual(result["target"]["user"], "default")
         self.assertEqual(result["target"]["user_source"], "client_default")
         query_calls = [call for call in self.calls() if "--query" in call]
         self.assertTrue(query_calls)
         for call in query_calls:
-            self.assertNotIn("--user", call)
+            self.assertEqual(call[call.index("--user") + 1], "default")
 
     def test_secure_nondefault_target_never_puts_password_in_argv(self):
         self.fake_client()
@@ -555,6 +590,36 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep me")
         self.assertEqual(self.calls(), [])
 
+    def test_probe_log_write_failure_uses_output_exit_code(self):
+        self.fake_client()
+        output = self.root / "probe-write-failure"
+        real_private_write = ENVIRONMENT_MODULE.private_write
+
+        def fail_probe_log(path, content):
+            if Path(path).name == "client-tool.stdout.log":
+                raise OSError("simulated probe log write failure")
+            return real_private_write(path, content)
+
+        with mock.patch.object(
+            ENVIRONMENT_MODULE, "private_write", side_effect=fail_probe_log
+        ):
+            with redirect_stderr(io.StringIO()) as stderr:
+                exit_code = ENVIRONMENT_MODULE.main(
+                    [
+                        "--client",
+                        str(self.client),
+                        "--benchmark",
+                        str(self.benchmark),
+                        "--timeout",
+                        "0.2",
+                        "--output",
+                        str(output),
+                    ]
+                )
+        self.assertEqual(exit_code, 2)
+        self.assertIn("simulated probe log write failure", stderr.getvalue())
+        self.assertFalse((output / "result.json").exists())
+
     def test_result_write_failure_uses_output_exit_code(self):
         output = self.root / "write-failure"
         with (
@@ -595,7 +660,9 @@ if __name__ == "__main__":
         "semantic_checks": [
             "ready/blocked/unknown and series exit codes in help/output",
             "wrong_version/missing_tool/auth/timeout/correctness",
-            "secret redaction and nondefault endpoints",
+            "secret redaction, raw numeric semantics and nondefault endpoints",
+            "config/default/cli account alignment and user_source evidence",
+            "probe and result output-write failures use exit code 2",
             "password-example session cleanup on success and failure",
             "exclusive output preservation",
             "bounded timeout/cancellation process and PID cleanup",
