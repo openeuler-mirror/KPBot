@@ -19,7 +19,7 @@ SSH 只读追完调用链（见 SKILL.md 1.3 的 grep 命令组）后产出下�
 
 ## 阶段 3 处置细则
 
-- **旧集群处置**：阶段 1 已问过要不要停，此处执行。停 P 侧旧实例：`ps -ef | grep vllm` 找到 PID 逐个 kill（**勿用宽匹配 pkill**，会误杀其他进程）；**仅当旧方案确实用 Ray 时**（脚本含 ray backend 或现场有 ray 进程）才在每台执行 `ray stop`；停完复查 `ps -ef | grep -E 'vllm|ray'` 确认干净、端口已释放
+- **旧集群处置**：阶段 1 已问过要不要停，此处执行。停 P 侧旧实例：`ps -ef | grep vllm` 找到 PID 逐个 kill（**勿用宽匹配 pkill**，会误杀其他进程）；旧方案确实用 Ray 时的 Ray 清理：先 `ps -ef | grep ray` **把每个 Ray 进程的归属核对到本次获准停服的旧集群**（同一部署用户、命令行/启动脚本指向本集群、启动时间与旧集群一致），确认后按 PID 逐个 kill 这些目标进程——**共享主机上禁用 `ray stop`**：该命令作用于本机全部 Ray 进程，会把其他业务/作业的 Ray 一起停掉（见 [Ray CLI 文档](https://docs.ray.io/en/latest/cluster/cli.html#ray-stop)）；仅当逐个核实本机所有 Ray 进程都属于本集群且已获准停服时，才允许 `ray stop` 兜底。停完复查 `ps -ef | grep -E 'vllm|ray'`：目标进程干净、端口已释放即通过；**其他业务的进程不在复查范围内，不得当成"未清干净"处理**
 - **去 Ray 残留（仅旧方案有 Ray 时）**：检查旧启动脚本与用户 shell 环境，确认无 `--distributed-executor-backend ray`、无 Ray 相关环境变量（RAY_ADDRESS 等），新脚本中不引入。旧方案本来就没有 Ray 时这步无事可做，直接过
 - **防火墙/安全组**：DP 组跨主机时，组内所有主机对 16600 互通；Proxy 到各实例 http 端口可达
 - **资源占用协调（拉起前置条件）**：预检发现卡被其他业务/容器占用（`npu-smi` 有占用但不是本集群旧实例），或 kv_port / mooncake_master 等端口被外部业务占用时——**并入"拉起前置条件"清单交用户协调**，本 skill 不静默处理。注意跨业务并存时冲突不止是卡：http / kv_port / mooncake_master 端口同样会撞（端口三连占），只停卡不够

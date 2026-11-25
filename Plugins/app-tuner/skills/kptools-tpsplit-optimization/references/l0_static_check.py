@@ -8,7 +8,9 @@
   2. 变量解析：脚本正文 + source/. 引用的 env 文件（SKILL.md 要求保留的 env
      文件传参形态可直接校验：env 文件放脚本同目录自动解析，或 --env-file 显式指定）；
      仍解析不到的变量（$VAR / <ARG:var>）对应检查项降级为 SKIP，不判 FAIL
-  3. KV_TRANSFER_CONFIG 抽取 + json.loads 校验
+  3. KV_TRANSFER_CONFIG 抽取 + json.loads 校验：正文赋值 / --kv-transfer-config
+     实参（含 '"$VAR"' 习语与 "$VAR" 变量）按序追溯到 env 文件中的完整定义，
+     脚本只 source env 并传参的形态同样可解析，不误报 no KV config parsed
   4. dp_size 守恒自检（两种执行口径）：--expect-dp <全局实例数> 核对全局守恒
      （全量目录执行）；缺省只核各实例 prefill.dp_size 一致、不与本机实例数比较
      （按主机分目录执行）
@@ -21,6 +23,13 @@
      单文件独立分组并输出告警（不再按"文件名首个数字 //2"猜每机 2 实例）
   8. 实例间 diff：遮蔽实例级差异（rank/卡/http 端口）与组级差异（DP 组大小/
      主节点 IP）后应完全一致；混合分组（如 4+4+2）用 --group-size 4,2 声明
+  9. DP rank 组级核对：解析实际 --data-parallel-rank 值，同组（--data-parallel-address
+     相同）内核对取值范围 [0,组大小) 与组内唯一；全量目录执行（--expect-dp）且无
+     未解析成员时再核每组 rank 齐全——rank 在实例 diff 中被遮蔽，重复/越界只有
+     此检查能拦截
+ 10. 全量目录执行的实例数核对：--expect-dp 给定时实例清单必须与布局表全局实例数
+     一致，漏分发/重复分发都 FAIL（所有配置都写同一 dp_size 时，dp 集合比较
+     发现不了缺实例）
 
 用法：
   python l0_static_check.py <脚本目录> [--expect-dp 20] [--tp 8] [--group-size 4]
@@ -98,14 +107,37 @@ def parse_env_sources(text: str, script_dir: str, v: dict):
 
 
 def extract_kvs(text: str, v: dict) -> list:
-    """抽取 KV_TRANSFER_CONFIG。先在全文替换 bash '"$VAR"' 拼接习语再抽取，避免
-    习语内引号截断匹配。变量未解析时记 <ARG:var> 并标 __unresolved__，由调用方
-    降级为 SKIP 而不是 json.loads 失败。"""
+    """抽取 KV_TRANSFER_CONFIG，按序追溯三类定义形态：
+    1) 启动脚本正文赋值 `KV_TRANSFER_CONFIG='...'`（自包含形态）；
+    2) --kv-transfer-config 实参为已解析字面量（含 bash '"$VAR"' 拼接习语替换后
+       的结果）时直接取实参内容；
+    3) 实参为 `"$VAR"`/`$VAR` 变量时追到 v 表（脚本正文或 source 的 env 文件中的
+       完整定义）再取值校验——脚本只 source env 并传参、正文无赋值的形态也能
+       解析，不误报 no KV config parsed。
+    变量未解析时记 <ARG:var> 并标 __unresolved__，由调用方降级为 SKIP 而不是
+    json.loads 失败。"""
     text = re.sub(r"'\"\$(\w+)\"'",
                   lambda mm: v.get(mm.group(1), '<ARG:%s>' % mm.group(1)), text)
+    cands = [m.group(1) for m in re.finditer(r"KV_TRANSFER_CONFIG\s*=\s*'(.*?)'", text, re.S)]
+    if not cands:
+        m = re.search(r'--kv-transfer-config[ =]+\'([^\']*)\'', text)
+        if m and m.group(1).strip():
+            arg = m.group(1).strip()
+            if '<ARG:' in arg or re.search(r'\$\w', arg):
+                return [{'__unresolved__': sorted(set(
+                    re.findall(r'<ARG:(\w+)>', arg) or re.findall(r'\$(\w+)', arg)))}]
+            cands.append(arg)
+        else:
+            m2 = re.search(r'--kv-transfer-config[ =]+"?\$?\{?(\w+)\}?"?', text)
+            if m2:
+                var = m2.group(1)
+                if v.get(var):
+                    cands.append(v[var])
+                elif '$' in m2.group(0):
+                    return [{'__unresolved__': [var]}]
     out = []
-    for m in re.finditer(r"KV_TRANSFER_CONFIG\s*=\s*'(.*?)'", text, re.S):
-        kv = resolve(m.group(1), v)
+    for raw in cands:
+        kv = resolve(raw, v)
         if '<ARG:' in kv or re.search(r'\$\w', kv):
             out.append({'__unresolved__': sorted(set(
                 re.findall(r'<ARG:(\w+)>', kv) or re.findall(r'\$(\w+)', kv)))})
@@ -341,6 +373,8 @@ def main() -> int:
     masked_bodies = []
     dp_collected = []
     tp_collected = []
+    dp_rank_info = []       # (文件名, data-parallel-address 实值, group size, rank 实值)
+    dp_rank_degraded = False  # 任一实例 rank/addr/size 未解析 → 组齐全核对降级 SKIP
     for p, raw in scripts:
         name = os.path.basename(p)
         try:
@@ -377,10 +411,12 @@ def main() -> int:
             dpp = flag_value(t, 'data-parallel-rpc-port', v)
             has_rank = has_flag(t, 'data-parallel-rank')
             has_addr = has_flag(t, 'data-parallel-address')
+            dpr = flag_value(t, 'data-parallel-rank', v)
+            dpa = flag_value(t, 'data-parallel-address', v)
             if (dps is not None and is_unresolved(dps)) or (dpp is not None and is_unresolved(dpp)):
                 record(name, 'dp-flags(size=%s,rpc=%d,rank,addr)' % (args.group_size, args.rpc_port),
                        True, 'SKIP: size=%r rpc=%r 变量未解析（env 文件缺失？--env-file）；'
-                       'rank=%s addr=%s' % (dps, dpp, has_rank, has_addr))
+                       'rank=%r addr=%r' % (dps, dpp, dpr, dpa))
             else:
                 size_ok = False
                 if dps is not None:
@@ -389,11 +425,21 @@ def main() -> int:
                     except ValueError:
                         size_ok = False
                 dp_ok = (size_ok and dpp == str(args.rpc_port) and has_rank and has_addr)
-                ev = 'size=%s rpc=%s rank=%s addr=%s' % (dps, dpp, has_rank, has_addr)
+                ev = 'size=%s rpc=%s rank=%s addr=%s' % (dps, dpp, dpr, dpa)
                 if dps is not None and not dps.lstrip('-').isdigit():
                     ev += '（size 非数字，按 FAIL 记录）'
                 record(name, 'dp-flags(size=%s,rpc=%d,rank,addr)' % (args.group_size, args.rpc_port),
                        dp_ok, ev)
+            # 解析出的 rank 实值进入组级核对（见 main 尾部 dp-rank-* 检查）；
+            # 未解析的成员标记降级——rank 在 instance-diff 中被遮蔽，重复/越界只有组级检查能拦
+            if ((dpr is not None and is_unresolved(dpr)) or (has_rank and dpr is None)
+                    or (dpa is not None and is_unresolved(dpa)) or (has_addr and dpa is None)
+                    or (dps is not None and is_unresolved(dps))):
+                dp_rank_degraded = True
+            if (dpr is not None and not is_unresolved(dpr)
+                    and dpa is not None and not is_unresolved(dpa)
+                    and dps is not None and not is_unresolved(dps)):
+                dp_rank_info.append((name, str(dpa), str(dps), str(dpr)))
 
             # KV 校验（未解析变量降级 SKIP）
             kvs = extract_kvs(t, v)
@@ -429,15 +475,21 @@ def main() -> int:
                     if args.keep_legacy and baseline:
                         asc = [c for c in conns if c.get('kv_connector') == 'AscendStoreConnector']
                         lp = str(asc[0]['kv_connector_extra_config'].get('lookup_rpc_port')) if asc else None
+                        # 先核对新旧 connector 存在性一致，再核 lookup_rpc_port：
+                        # 旧配置含 AscendStoreConnector 而新配置误删时 lp=None，
+                        # 只比较端口号会直接放行——旧有新无（或旧无新有）必须 FAIL
+                        conn_ok = (len(asc) > 0) == (baseline['lookup'] is not None)
+                        lookup_ok = conn_ok and (lp is None or baseline['lookup'] is None
+                                                  or lp == baseline['lookup'])
                         legacy_ok = (str(kv.get('engine_id')) == baseline['engine_id']
                                       and str(mc.get('kv_port')) == baseline['kv_port']
-                                      and (lp is None or baseline['lookup'] is None
-                                           or lp == baseline['lookup'])
+                                      and lookup_ok
                                       and str(dec['dp_size']) == baseline['decode_dp']
                                       and str(dec['tp_size']) == baseline['decode_tp'])
                         record(name, 'kv-legacy-fields', legacy_ok,
-                               'engine_id=%s kv_port=%s lookup=%s decode=%s/%s（基线 %s/%s/%s/%s/%s）' % (
-                                   kv.get('engine_id'), mc.get('kv_port'), lp, dec['dp_size'], dec['tp_size'],
+                               'engine_id=%s kv_port=%s ascend=%s lookup=%s decode=%s/%s（基线 %s/%s/%s/%s/%s）' % (
+                                   kv.get('engine_id'), mc.get('kv_port'),
+                                   'present' if asc else 'missing', lp, dec['dp_size'], dec['tp_size'],
                                    baseline['engine_id'], baseline['kv_port'], baseline['lookup'],
                                    baseline['decode_dp'], baseline['decode_tp']))
                 except Exception as e:
@@ -464,6 +516,18 @@ def main() -> int:
         record('(global)', 'kv-prefill-dp==%d' % args.expect_dp,
                set(dp_collected) == {str(args.expect_dp)},
                'dp values=%s' % sorted(set(dp_collected)))
+        # 全量目录执行：实例清单对照布局表全局实例数——漏分发（少）/重复分发（多）都 FAIL，
+        # 不能只要求 >0（每份配置都写 dp_size=全局值时，dp 集合比较发现不了缺实例）
+        cnt_ok = n_inst == args.expect_dp
+        if n_inst < args.expect_dp:
+            cnt_ev = 'found %d instances，缺 %d 个（漏分发？对照 2.1 布局表逐台核对）' % (
+                n_inst, args.expect_dp - n_inst)
+        elif n_inst > args.expect_dp:
+            cnt_ev = 'found %d instances，多 %d 个（重复分发/多余脚本？对照 2.1 布局表）' % (
+                n_inst, n_inst - args.expect_dp)
+        else:
+            cnt_ev = 'found %d instances（与布局表全局实例数一致）' % n_inst
+        record('(global)', 'instance-count==%d(布局表)' % args.expect_dp, cnt_ok, cnt_ev)
     else:
         hint = ''
         if dp_collected and set(dp_collected) and dp_collected[0] != str(n_inst):
@@ -471,7 +535,45 @@ def main() -> int:
                     '--expect-dp <全局实例数>；全量目录执行请核对布局表全局实例数）')
         record('(global)', 'kv-dp-consistent', len(set(dp_collected)) <= 1,
                'dp values=%s, instances=%d%s' % (sorted(set(dp_collected)), n_inst, hint))
-    record('(global)', 'instance-count=%d' % n_inst, n_inst > 0, 'found %d instances' % n_inst)
+        record('(global)', 'instance-count=%d' % n_inst, n_inst > 0, 'found %d instances' % n_inst)
+
+    # DP rank 组级核对（rank 在 instance-diff 中被遮蔽，重复/越界只有此检查能拦）：
+    # 同组（--data-parallel-address 相同）内解析实际 rank，核对取值范围 [0, 组大小)
+    # 与组内唯一；全量目录执行（--expect-dp）且无未解析成员时再核每组 rank 齐全。
+    dp_groups = {}
+    for gname, gaddr, gdps, grank in dp_rank_info:
+        if not gdps.lstrip('-').isdigit():
+            dp_rank_degraded = True
+            continue
+        dp_groups.setdefault(gaddr, []).append((gname, int(gdps), grank))
+    for gaddr, members in sorted(dp_groups.items()):
+        gkey = '(dp-group %s)' % gaddr
+        names = sorted(n for n, _, _ in members)
+        sizes = sorted({s for _, s, _ in members})
+        ranks = [r for _, _, r in members]
+        if len(sizes) > 1:
+            record(gkey, 'dp-rank-group(size-unique)', False,
+                   '组内 size 不一致: %s（files=%s）' % (sizes, names))
+            continue
+        size = sizes[0]
+        range_ok = all(str(r).lstrip('-').isdigit() and 0 <= int(r) < size for r in ranks)
+        unique_ok = len(set(ranks)) == len(ranks)
+        ev = 'size=%d ranks=%s files=%s' % (size, sorted(ranks), names)
+        if args.expect_dp is not None:
+            if dp_rank_degraded:
+                record(gkey, 'dp-rank-range-unique-complete', True,
+                       'SKIP: 存在 rank/addr/size 未解析实例，齐全核对降级'
+                       '（补 env 文件后复查）；' + ev)
+            else:
+                complete_ok = (len(members) == size
+                               and sorted(int(r) for r in set(ranks)) == list(range(size)))
+                record(gkey, 'dp-rank-range-unique-complete',
+                       range_ok and unique_ok and complete_ok,
+                       ev + ('；组内 rank 齐全' if complete_ok
+                             else '；组内 rank 不齐（缺号或成员数不足）'))
+        else:
+            record(gkey, 'dp-rank-range-unique', range_ok and unique_ok,
+                   ev + '（按主机分目录：只核范围与唯一；齐全核对需全量目录 --expect-dp）')
 
     # TP 组内一致性（--tp 未显式给出时）
     if args.tp is None:
