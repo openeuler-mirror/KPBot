@@ -282,7 +282,7 @@ scripts/run_placeholder_benchmark.sh "vllm-ascend-qwen15b"
 
 #### Step 6: 瓶颈识别
 
-调用 `io-optimization` 与 `accelerator-optimization`：
+调用 `io-optimization` 与 `vllm-ascend-profiling`（NPU+vLLM 场景；HPRE/KAE 密码卸载场景才走 `accelerator-optimization`）：
 
 - NPU 利用率 78% 未饱和 → 排除纯 NPU 算力瓶颈
 - CPU 峰值核 95%、826 线程跨 NUMA 散布 → CPU 调度与 NUMA 跨节点访问为主瓶颈

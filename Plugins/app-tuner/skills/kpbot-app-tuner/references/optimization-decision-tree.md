@@ -65,7 +65,6 @@
 - 线程、队列、缓存、数据库状态 → `application-config-optimization`
 - malloc/memcpy/压缩/加密/CRC 热点 → `performance-library-selection`
 - 编译选项、topdown、fallback 热点 → `compiler-optimization`
-- Go 微服务 GC/sync.Pool 堆内存颠簸 → `microservice-go-syncpool-optimization`
 - governor、THP、numa_balancing、irqbalance、sysctl → `os-optimization`
 - Power Profile、SMT、C-State、BIOS NUMA → `bios-optimization`
 - 未归类 CPU 热点 → `other-optimization`
@@ -97,7 +96,7 @@
 
 ### GPU 推理瓶颈（NVIDIA/CUDA）
 
-优先候选：`cpu-affinity-optimization`（强制首位）；GPU/NPU 等计算卡证据命中时追加 `accelerator-optimization`
+优先候选：`cpu-affinity-optimization`（强制首位）；NPU+vLLM 证据命中时追加 `vllm-ascend-profiling`，GPU/NPU 规格或容量不足时追加 `hardware-upgrade-analysis`。`accelerator-optimization` 只承接 HPRE/KAE 密码加速卡（`crypto_accelerator_bottleneck`），不再承接 GPU/NPU 通用计算卡分析。
 
 检查顺序：
 
