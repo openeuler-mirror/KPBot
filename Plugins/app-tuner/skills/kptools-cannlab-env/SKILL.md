@@ -18,7 +18,7 @@ metadata:
   skill_type: tool_assisted
   category: environment
   domain: cannlab_remote_ops
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # kptools-cannlab-env — cannlab 分设环境连接与远程调试

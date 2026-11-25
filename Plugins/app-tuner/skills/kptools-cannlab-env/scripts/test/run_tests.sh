@@ -175,9 +175,11 @@ else
 fi
 # T11g TILE_FWK_DEVICE_ID 必须 export
 check_in "T11g TILE_FWK_DEVICE_ID export" "export TILE_FWK_DEVICE_ID=0" "$SK"
-# T11h 凭据 argv 暴露提示（--token 形式的 ps 可见性）
-check_in "T11h token argv 暴露提示" "ps" "$SK"
-check_in "T11h-2 凭据传递替代方案" "不经 argv" "$SK"
+# T11h 凭据 argv 暴露提示（needle 用专属文案，不能用裸 "ps"——
+# cannlab_remote_ops/cannlab-ops-guide.md 文件名即可命中，删掉提示后假绿）
+check_in "T11h 凭据暴露提示" "凭据暴露提示" "$SK"
+check_in "T11h-2 ps 可见明文" "经 \`ps\` 能看到明文" "$SK"
+check_in "T11h-3 凭据传递替代方案" "不经 argv" "$SK"
 # T11i 规模画像一致（SKILL.md 五组 15 条）
 check_in "T11i SKILL.md 五组 15 条口径" "五组 15 条" "$SK"
 # T11j AICPU 目录权限（旧解法 777 不得再作为指令出现；警示性提及允许）
