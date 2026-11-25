@@ -9,7 +9,7 @@ description: >
   触发本技能——先向用户确认是否需要部署负载均衡组件；仅要采集负载指标、出均衡性
   分析或对比报告的诉求，改用 kptools-dplb-profiler。
 license: Proprietary
-compatibility: 远端 Linux（openEuler/EulerOS 等，aarch64/x86_64）；需要 SSH 访问远端机器；远端需有 Python >= 3.11 + pip（motor 3.x whl 元数据 Requires-Python >=3.11）；运行依赖按上游 requirements.txt 全量安装（whl 无 Requires-Dist，pip 不会自动安装任何依赖，见阶段 3 依赖清单）；方式 B（源码编译）还需 git、gcc/cmake、grpcio-tools（版本须与运行时 grpcio 一致）及 Rust 工具链（cargo，离线安装见 references/field-playbook-offline-build.md）
+compatibility: 远端 Linux（openEuler/EulerOS 等，aarch64/x86_64）；需要 SSH 访问远端机器；远端需有 Python >= 3.11 + pip（motor 3.x whl 元数据 Requires-Python >=3.11）；运行依赖按上游 requirements.txt 全量安装（whl 无 Requires-Dist，pip 不会自动安装任何依赖，见阶段 3 依赖清单）；方式 B（源码编译）还需 git、gcc、grpcio-tools（版本须与运行时 grpcio 一致）及 Rust 工具链（cargo，离线安装见 references/field-playbook-offline-build.md）
 metadata:
   skill_type: tool_assisted
   category: deployment
@@ -44,7 +44,7 @@ metadata:
 - **后端实例列表**：LB 后面挂的推理实例（vLLM 或 MindIE，均可能），每个实例形如 `ip:port[,ip:port...]`——**同一实例的多个 DP endpoint 用逗号连接**（与 kptools-dplb-profiler 的 DP endpoint 口径一致），不同实例才分开列；询问后端引擎类型（用于网络预检与验证命令，如 vLLM 的 `/v1/models` 探活路径）
 - **网络拓扑**：coordinator 与后端实例是同机、同容器网络还是跨容器/跨机——跨容器部署时，后端地址必须是 **coordinator 所在网络命名空间内可达**的地址（容器网 IP 或已发布端口），否则会出现注册显示健康、推理请求却 500 的情况；推理客户端需要跨机访问 coordinator 时，须把 `coordinator_api_host` 改绑非回环地址（实际 IP / `0.0.0.0`），**且必须先按阶段 4 的管理面鉴权要点开启管理面 API Key**（`start_motor.sh` 内置"非回环 ⇒ 鉴权必须开启"门禁，未开启会拒绝启动）
 - **安装路径**：默认建议 `/opt/mindie-motor`，用户可指定
-- **负载均衡策略**：询问用户期望——上游 `prefill_scheduler_type` / `decode_scheduler_type` 实际支持 4 个值：`load_balance`（负载感知均衡，默认）、`round_robin`（轮询）、`kv_cache_affinity`（KV 缓存亲和，需 kv-conductor）、`dynamic_bucket`（动态分桶）；无明确要求时用模板默认值 load_balance 并在部署指南中说明
+- **负载均衡策略**：询问用户期望——上游 `prefill_scheduler_type` / `decode_scheduler_type` 实际支持 4 个值：`load_balance`（负载感知均衡，默认）、`round_robin`（轮询）、`kv_cache_affinity`（KV 缓存亲和，需 kv-conductor）、`dynamic_bucket`（动态分桶）；无明确要求时用模板默认值 load_balance 并在部署指南中说明。**选 `kv_cache_affinity` 时的配套与启动后校验（缺一不可）**：`user_config.json` 需同步配置 `kv_conductor_config`（含 `conductor_service` 引擎名，以现场模板与上游文档字段为准）——上游 `CoordinatorConfig.from_json` 对未知字段与空值**静默通过**：拼错字段名、`conductor_service` 为空字符串都不会在启动时报错，服务会以空 conductor 空跑（亲和调度不生效但不报错）。因此该策略下配置错误**不会在启动时被发现**：启动后必须用 dplb 的 admin 接口（或 coordinator 日志）确认 `conductor_service` 非空、实际生效的引擎名与配置一致，空值或不匹配立即停止并回查配置，不得当作启动成功交付
 
 ## 阶段 2：环境检查（SSH 连通后先做，再动手装）
 
@@ -67,7 +67,7 @@ curl -m 3 -s -o /dev/null http://127.0.0.1:7200/ && echo PORT_7200_ANSWERED
 
 # 仅当选择方式 B（拉源码编译）时才需要检查：
 git --version
-gcc --version && cmake --version     # 编译 whl 需要
+gcc --version                        # 编译 whl 需要（上游 build.sh/Makefile/setup.py 均不用 cmake，预检无需 cmake）
 cargo --version                      # Rust 工具链：编译 libmindie_workload_shm.so（coordinator 必需，无 Python 兜底）
 pip3 show grpcio-tools >/dev/null && echo GRPCIO_TOOLS_OK || echo GRPCIO_TOOLS_MISSING
 python3 -c "import grpc; print('runtime grpcio:', grpc.__version__)"   # 决定 grpcio-tools 必须匹配的版本
@@ -87,7 +87,7 @@ python3 -c "import grpc; print('runtime grpcio:', grpc.__version__)"   # 决定 
 | --- | --- | --- |
 | 启动必需（Python 运行依赖） | 上游 `requirements.txt` 全量（23 项：fastapi、uvicorn、grpcio、protobuf、pydantic、msgspec、requests、httpx、pytest-asyncio、pyOpenSSL、watchdog、kubernetes、opentelemetry×2、pyzmq、uvloop、anyio、setproctitle、confluent_kafka、transformers、Pillow、ai-asset-obfuscate 等） | motor 3.x whl 元数据**无 Requires-Dist**（`setup.py` 的 `install_requires=[]`，这是 ISS-01/ISS-02 的根因），`pip3 install` whl 不会自动安装任何依赖；coordinator 硬 import fastapi/pydantic/zmq/msgspec/uvicorn 等，**只补 pyOpenSSL/watchdog 装不出可启动的 coordinator**。清单以上游对应版本 `requirements.txt` 为准 |
 | 运行时已有、预检确认 | grpcio | motor 运行依赖 gRPC（实例注册与通信），实测环境通常随基础镜像已具备；预检一并探测，缺失同样启动失败——缺失时随 requirements.txt 一并补装（版本无特殊要求，不要与方式 B 的 grpcio-tools 版本匹配规则混淆），不要静默 pip install |
-| 方式 B 编译依赖 | git、gcc、cmake、cargo（Rust 工具链）、grpcio-tools（+protobuf） | cargo 编译 `libmindie_workload_shm.so`（coordinator 必需）；grpcio-tools 供 `generate_proto.sh` 生成 proto，**版本必须与运行时 grpcio 一致**（如运行时 1.82.1 就装 1.82.1，用 1.85.3 会生成不匹配的 pb 文件）。kv-conductor 另需 libzmq 开发包，可用 `SKIP_KV_CONDUCTOR_BUILD=1` 跳过（可选组件） |
+| 方式 B 编译依赖 | git、gcc、cargo（Rust 工具链）、grpcio-tools（+protobuf） | cargo 编译 `libmindie_workload_shm.so`（coordinator 必需）；grpcio-tools 供 `generate_proto.sh` 生成 proto，**版本必须与运行时 grpcio 一致**（如运行时 1.82.1 就装 1.82.1，用 1.85.3 会生成不匹配的 pb 文件）。kv-conductor 另需 libzmq 开发包，可用 `SKIP_KV_CONDUCTOR_BUILD=1` 跳过（可选组件） |
 | 环境可选 | npu-smi、curl | NPU 驱动检查、端口/后端探活用 |
 
 ### 方式 A：用户自备 whl 包（跳过源码）
@@ -217,7 +217,7 @@ pip3 show motor
    - **coordinator 启动报找不到 `libmindie_workload_shm.so` / 装的是 1.2MB 左右的小 whl**：装到了 `pip3 wheel .` 产出的空壳包（未含 Rust 原生库，coordinator 无 Python 兜底）。处理：`pip3 show motor` 确认后卸载，改用 `bash build.sh` 重新编译（含第 5 步原生库断言），重新安装；远端无 cargo 时按"cargo 离线安装"或预编译产物直通处理
    - **`import motor` 成功但路径指向源码目录**：在源码目录内执行 import 会命中源码而非 site-packages，验证安装结果必须 `cd` 到源码目录之外再执行
    - **readiness 返回 `{"status":"ok","ready":false}`**：coordinator 已存活但还没有后端注册——启动后、register.sh 执行前的**正常状态**，不是故障（liveness ok + readiness not ready = 等 register）；注册成功后才应变为 `"ready":true`
-   - **重装/重启后"行为没变"**：两种常见原因——① 旧 coordinator 进程没停（先 `kill "$(cat ./log/motor_coordinator.pid)"` 再装再启）；② 重启后忘记重新执行 register.sh（注册表是内存态，重启即清空）
+   - **重装/重启后"行为没变"**：两种常见原因——① 旧 coordinator 进程没停（按阶段 3 停服纪律同口径执行：读出 PID 文件后先 `ps -p <PID> -o args=` 核对命令行确为 `python3 -m motor.coordinator.main` 且归属本部署实例，核对通过才 `kill <PID>` 并等待其退出，再装再启——PID 文件中的 PID 可能已退出并被复用，直接按文件盲 kill 或 `kill -9` 会误停无关服务）；② 重启后忘记重新执行 register.sh（注册表是内存态，重启即清空）
    - **容器化部署的易失性**：whl 装在容器内 site-packages，容器重建即丢失——持久化要么固化进镜像，要么保留离线安装包与部署流程（方式 A/B 手册）随时可重建；把"容器重建后如何快速恢复"写进部署指南
    - **代理变量未清理导致注册失败**：start_motor.sh 与 register.sh 模板均已内置 unset 代理；手动执行命令（如直接 curl/pip）时需自查
 
