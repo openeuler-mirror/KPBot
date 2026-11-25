@@ -13,4 +13,4 @@ assert:
   - type: json_field
     file: results/contract/result.json
     field: tests_run
-    expect: 9
+    expect: 10

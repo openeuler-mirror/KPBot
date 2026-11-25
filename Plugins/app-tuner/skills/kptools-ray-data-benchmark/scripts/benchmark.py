@@ -249,7 +249,7 @@ def worker(config):
         "config": {
             key: value for key, value in config.items() if key != "output_dir"
         },
-        "versions": {"python": platform.python_version(), **EXPECTED},
+        "versions": {"python": platform.python_version()},
         "seed": SEED,
         "workload": "ray.data.range -> NumPy map_batches(value=id*2+1)",
         "timing_scope": (
@@ -270,6 +270,7 @@ def worker(config):
     try:
         problems, evidence = preflight(config, output)
         result["preflight"] = evidence
+        result["versions"].update(evidence.get("actual_versions", {}))
         if problems:
             result["status"] = "blocked"
             result["error"] = "; ".join(problems)

@@ -175,6 +175,36 @@ class BenchmarkContract(unittest.TestCase):
             self.assertEqual(result["status"], "blocked")
             self.assertIn("small shm", result["error"])
 
+    def test_worker_reports_measured_versions_when_ready_and_blocked(self):
+        actual = {"ray": "0.0.0", "numpy": None, "pyarrow": "mismatch"}
+        for problems, status in (([], "completed"), (["mismatch"], "blocked")):
+            with (
+                self.subTest(status=status),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                output = Path(directory)
+                ray = FakeRay()
+                with (
+                    mock.patch.dict(sys.modules, {"ray": ray}),
+                    mock.patch.object(
+                        MODULE,
+                        "preflight",
+                        return_value=(problems, {"actual_versions": actual}),
+                    ),
+                ):
+                    returncode = MODULE.worker(self.config(output))
+                result = json.loads(
+                    (output / "result.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(result["status"], status)
+                self.assertEqual(returncode, 0 if not problems else 2)
+                expected = {"python": MODULE.platform.python_version(), **actual}
+                self.assertEqual(result["versions"], expected)
+                self.assertNotEqual(
+                    result["versions"],
+                    {"python": MODULE.platform.python_version(), **MODULE.EXPECTED},
+                )
+
     def test_signal_only_owned_group(self):
         process = mock.Mock(pid=321)
         process.wait.side_effect = [subprocess.TimeoutExpired("x", 1), 0]
