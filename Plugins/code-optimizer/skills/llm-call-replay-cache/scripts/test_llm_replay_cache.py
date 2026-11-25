@@ -146,6 +146,18 @@ def test_cli_merge(tmp):
     assert _cli(["--verify", m]) == 0
 
 
+def test_cli_verify_duplicates(tmp):
+    p = os.path.join(tmp, "dup.json")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write('{"k1": 1, "k1": 2}')
+    from llm_replay_cache import _cli
+
+    assert _cli(["--verify", p]) == 1, "重复键必须被检出并返回非零"
+    with open(p, "w", encoding="utf-8") as f:
+        f.write('{"k1": 1, "k2": 2}')
+    assert _cli(["--verify", p]) == 0
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         test_record_then_replay(tmp)
@@ -154,4 +166,5 @@ if __name__ == "__main__":
         test_none_result_roundtrip(tmp)
         test_key_stability()
         test_cli_merge(tmp)
+        test_cli_verify_duplicates(tmp)
     print("all tests passed")

@@ -150,11 +150,27 @@ def _cli(argv=None):
         return 0
 
     if a.verify:
+        dups = []
+
+        def _hook(pairs):
+            seen = set()
+            obj = {}
+            for k, v in pairs:
+                if k in seen:
+                    dups.append(k)
+                seen.add(k)
+                obj[k] = v
+            return obj
+
         with open(a.verify, "r", encoding="utf-8") as f:
-            d = json.load(f)
-        keys = list(d.keys())
-        print(f"entries: {len(keys)}  unique: {len(set(keys))}  size: {os.path.getsize(a.verify)}")
-        return 0 if len(keys) == len(set(keys)) else 1
+            d = json.load(f, object_pairs_hook=_hook)
+        print(
+            f"entries: {len(d) + len(dups)}  unique: {len(d)}  duplicates: {len(dups)}  "
+            f"size: {os.path.getsize(a.verify)}"
+        )
+        if dups:
+            print("duplicate keys: " + ", ".join(sorted(set(dups))[:10]))
+        return 0 if not dups else 1
 
     if a.merge:
         if not a.output:
