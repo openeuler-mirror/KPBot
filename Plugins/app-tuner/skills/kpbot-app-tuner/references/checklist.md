@@ -138,7 +138,6 @@
 - 高热点第三方库是否把 `performance-library-selection` 加入候选列表。
 - 网络相关热点高是否把 `network-optimization` 加入候选列表。
 - L1 icache miss 高是否把 `compiler-optimization` 加入候选列表，并标注 PGO/LTO 分析方向。
-- Go 微服务 GC/sync.Pool 堆内存颠簸是否把 `microservice-go-syncpool-optimization` 加入候选列表，并确认 Go 基线与重编译授权。
 - 线程切换高且 L3/LLC cache miss 高是否把 `cpu-affinity-optimization` 加入候选列表。
 - 是否把未进入证据候选列表的主优化 skill 追加为 `phase=coverage`。
 - 每个候选/coverage skill 是否有任务包、证据目录、输出路径和停止条件。
