@@ -100,6 +100,22 @@ check_agentenv_package() {
         '! bash "$skills/kptools-agentenv-tuning/scripts/collect_environment.sh" --output "$TMPROOT" >/dev/null 2>&1'
 }
 
+check_pdenv_package() {
+    local skills="$1"
+    local source="$ROOT/Plugins/app-tuner/skills/ascend_kunpeng/kptools-ascend-pd-env"
+    local parent="$skills/kptools-ascend-pd-env"
+    local source_skill name
+    check "installs P/D environment entry at skill root" '[ -f "$parent/SKILL.md" ]'
+    check "installs P/D summary subskill" \
+        '[ -r "$parent/subskills/summarize-environment-findings/SKILL.md" ]'
+    for source_skill in "$source"/subskills/*/SKILL.md; do
+        [ -f "$source_skill" ] || continue
+        name="$(basename "$(dirname "$source_skill")")"
+        check "keeps P/D $name inside the parent skill" \
+            'cmp -s "$source_skill" "$parent/subskills/$name/SKILL.md" && [ ! -e "$skills/$name" ]'
+    done
+}
+
 check_cubesandbox_split() {
     local skills="$1"
     local skill
@@ -156,9 +172,11 @@ check "keeps claude-only drive skill"         '[ -d "$CLAUDE_SKILLS/drive-claude
 check "keeps claude-only batch skill"         '[ -d "$CLAUDE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "keeps claude-only media skill"         '[ -d "$CLAUDE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
+check_pdenv_package "$CLAUDE_SKILLS"
 check_cubesandbox_split "$CLAUDE_SKILLS"
 check_sandbox_profile_install "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
@@ -177,6 +195,7 @@ check "excludes claude-only drive skill"      '[ ! -e "$OPENCODE_SKILLS/drive-cl
 check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
 check "opencode overlay keeps base references" '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/references/experiment-contract.md" ]'
 check "opencode overlay keeps base scripts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/scripts/experiment_feedback.py" ]'
@@ -187,6 +206,7 @@ for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
 check_agentenv_package "$OPENCODE_SKILLS"
+check_pdenv_package "$OPENCODE_SKILLS"
 check_cubesandbox_split "$OPENCODE_SKILLS"
 check_sandbox_profile_install "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"

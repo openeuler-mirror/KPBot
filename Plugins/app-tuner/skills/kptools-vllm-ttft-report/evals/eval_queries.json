@@ -1,0 +1,27 @@
+{
+  "skill_name": "kptools-vllm-ttft-report",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "TTFT-01",
+      "prompt": "用已有的 vLLM Prefill 日志生成首 token 延迟分解 HTML",
+      "should_trigger": false
+    },
+    {
+      "id": "TTFT-02",
+      "prompt": "向运行中的 P/D 实例发一次请求并写交接单，不出图",
+      "should_trigger": false
+    },
+    {
+      "id": "TTFT-03",
+      "prompt": "已有 TTFT 交接 JSON 和授权的本地日志副本，生成离线 HTML 报告",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-04",
+      "prompt": "给 vLLM 0.27.1rc 的 Prefill 源码检查打点兼容性并给出回滚流程",
+      "should_trigger": false
+    }
+  ]
+}

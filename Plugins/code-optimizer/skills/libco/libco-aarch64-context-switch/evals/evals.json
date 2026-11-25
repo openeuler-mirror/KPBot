@@ -1,0 +1,15 @@
+{
+  "skill_name": "libco-aarch64-context-switch",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "把 libco 从 x86_64 移植到 AArch64 后，协程切换能跑，但局部变量、指针或 SP 偶尔错乱。应该检查什么？",
+      "expected_output": "按 libco 的 AArch64 上下文切换路径检查：保存整数 callee-saved、x30 和 SP；coctx_make 的初始 SP 做 16B 对齐并设置入口/参数；用 get_sp 获取真实 SP；多协程交替测试寄存器和栈对齐。不要只以能跑作为正确。",
+      "expectations": [
+        "检查整数寄存器、x30、SP 与 coctx_make 初始化",
+        "要求 16B 栈对齐和 get_sp",
+        "用多协程寄存器/栈对齐测试验收"
+      ]
+    }
+  ]
+}
