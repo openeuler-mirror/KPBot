@@ -44,6 +44,18 @@
         "识别当前阶段与相邻技能分工",
         "保留已授权的单项范围和安全回退"
       ]
+    },
+    {
+      "id": 4,
+      "eval_name": "inline-padding-equality",
+      "prompt": "两个内联字符串均为单字节 a，但输入随后可读字节分别为 X 和 Y。宽加载后只比较有效长度，就能验证 StringView 一致吗？",
+      "expected_output": "需要清零内联区长度之外的字节，保持原构造器规范表示。用真实 StringView::operator== 对照原构造器；Python 截取值相同不能替代原生整字判等。",
+      "files": [],
+      "assertions": [
+        "识别非字符串字节污染槽位",
+        "清零内联填充",
+        "核对真实 operator== 并报告未执行项"
+      ]
     }
   ]
 }

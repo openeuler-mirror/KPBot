@@ -57,3 +57,23 @@ assert:
     file: results/result.json
     field: sqlite_reference_agrees
     expect: true
+  - type: json_field
+    file: results/result.json
+    field: pre_filter_candidates_are_workload
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: equal_quantity_changes_work_not_result
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: equal_boundary_baseline_candidates
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: equal_boundary_pruned_candidates
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: equal_boundary_post_filter_pairs
+    expect: 0

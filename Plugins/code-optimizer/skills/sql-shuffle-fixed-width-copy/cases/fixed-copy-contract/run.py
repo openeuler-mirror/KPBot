@@ -50,7 +50,7 @@ def main():
     check(rejected_writes == 2, "invalid-write-count")
 
     boundary_cases = exact_capacity_cases = nonzero_offset_cases = 0
-    outside_unchanged = source_unchanged = True
+    outside_unchanged = nonoverlap_source_unchanged = True
     for size in (0,1,13,15,16,17,20,31,32,33,64):
         payload = bytes((i*37+11)%256 for i in range(size))
         for source_offset in (0,3):
@@ -73,7 +73,7 @@ def main():
                     untouched = bytes(destination[:target_offset])==before[:target_offset] and bytes(destination[end:])==before[end:]
                     same_source = bytes(source)==original_source
                     outside_unchanged = outside_unchanged and untouched
-                    source_unchanged = source_unchanged and same_source
+                    nonoverlap_source_unchanged = nonoverlap_source_unchanged and same_source
                     check(bytes(destination)==expected, "boundary-bytes", **context)
                     check(len(destination)==len(before), "boundary-capacity", **context)
                     check(untouched, "outside-region", **context)
@@ -84,19 +84,28 @@ def main():
                     nonzero_offset_cases += source_offset>0 and target_offset>0
     check((boundary_cases,exact_capacity_cases,nonzero_offset_cases)==(88,44,22), "boundary-counts")
     alias_safe = True
-    for source_offset,target_offset in ((0,3),(3,0)):
-        shared = bytearray(range(40))
+    alias_outside_unchanged = True
+    alias_cases = overlap_source_changes = 0
+    for source_offset,target_offset in ((0,1),(1,0),(0,3),(3,0),(0,0),(0,24)):
+        shared = bytearray(range(64))
         before = bytes(shared)
         value = memoryview(shared)[source_offset:source_offset+20]
         route = write_string(shared,target_offset,value)
         expected = before[:target_offset]+before[source_offset:source_offset+20]+before[target_offset+20:]
+        untouched = bytes(shared[:target_offset]) == before[:target_offset] and bytes(shared[target_offset+20:]) == before[target_offset+20:]
+        alias_outside_unchanged = alias_outside_unchanged and untouched
+        overlap_source_changes += bytes(shared[source_offset:source_offset+20]) != before[source_offset:source_offset+20]
         alias_safe = alias_safe and route=="alias-fallback" and bytes(shared)==expected
+        alias_cases += 1
     check(alias_safe,"alias-fallback")
-    result = {"alias_fallback_safe":alias_safe,"success":not failures,"tested_lengths":tested_lengths,
+    check(alias_outside_unchanged and alias_cases == 6 and overlap_source_changes == 4,"alias-snapshot-and-outside")
+    result = {"alias_fallback_safe":alias_safe,"alias_outside_unchanged":alias_outside_unchanged,
+              "alias_cases":alias_cases,"overlap_source_changes":overlap_source_changes,
+              "success":not failures,"tested_lengths":tested_lengths,
               "fixed_copy_lengths":fixed_copy_lengths,"rejected_writes":rejected_writes,
               "boundary_cases":boundary_cases,"exact_capacity_cases":exact_capacity_cases,
               "nonzero_offset_cases":nonzero_offset_cases,"outside_regions_unchanged":outside_unchanged,
-              "source_regions_unchanged":source_unchanged,"failure_count":len(failures),"failures":failures}
+              "nonoverlapping_sources_unchanged":nonoverlap_source_unchanged,"failure_count":len(failures),"failures":failures}
     out = Path(__file__).resolve().parent / "results/result.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(result) + "\n", encoding="utf-8")

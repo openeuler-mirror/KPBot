@@ -1,4 +1,4 @@
-"""Model quantity-bound dispatch and compare complete join pair identities."""
+"""Compare post-filter pair identities; pre-filter candidates measure work only."""
 
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -37,9 +37,16 @@ def select_probes(build, probe, active, context):
 
 
 def original_pairs(build, probe, active):
+    """Pairs surviving ordinary key equality and the remaining strict predicate."""
     return [(i, j) for i in active for j, (key, qty) in enumerate(build)
             if probe[i][0] is not None and key is not None and probe[i][0] == key and probe[i][1] is not None
             and qty is not None and probe[i][1] < qty]
+
+
+def candidate_pairs(build, probe, active):
+    """Before the remaining quantity predicate; pruning can reduce these candidates."""
+    return [(i, j) for i in active for j, (key, _) in enumerate(build)
+            if probe[i][0] is not None and key is not None and probe[i][0] == key]
 
 
 def sqlite_pairs(build, probe, active):
@@ -84,6 +91,13 @@ def main():
     high_build, low_build = [("A", 20)] * 2, [("A", 5)] * 2
     high_selected, high_route = select_probes(high_build, changed_probe, changed_active, context)
     low_selected, low_route = select_probes(low_build, changed_probe, changed_active, context)
+    baseline_candidates = candidate_pairs(build, probe, active)
+    pruned_candidates = candidate_pairs(build, probe, selected)
+    equal_build, equal_probe = [("A", 10)], [("A", 10)]
+    # Single-pair semantic example; actual economic gates are checked separately.
+    equal_selected = [i for i in [0] if equal_probe[i][1] < 10]
+    gated_build, gated_probe = [("A", 10)] * 2, [("A", 10)] * 32
+    gated_selected, gated_route = select_probes(gated_build, gated_probe, list(range(32)), context)
 
     checks = {
         "quantity_bound_route_positive": route == "quantity-bound" and len(selected) < len(active),
@@ -102,6 +116,14 @@ def main():
         "signed_extremes": signed_route == "quantity-bound" and signed_selected == list(range(1, 32, 2))
         and original_pairs(signed_build, signed_probe, signed_selected)
         == original_pairs(signed_build, signed_probe, signed_active),
+        "pre_filter_candidates_are_workload": len(pruned_candidates) < len(baseline_candidates)
+        and original_pairs(build, probe, selected) == expected,
+        "equal_quantity_changes_work_not_result": candidate_pairs(equal_build, equal_probe, [0]) == [(0, 0)]
+        and candidate_pairs(equal_build, equal_probe, equal_selected) == []
+        and original_pairs(equal_build, equal_probe, [0]) == original_pairs(equal_build, equal_probe, equal_selected) == []
+        and gated_route == "quantity-bound" and gated_selected == []
+        and len(candidate_pairs(gated_build, gated_probe, list(range(32)))) == 64
+        and original_pairs(gated_build, gated_probe, list(range(32))) == [],
         "economic_gates_and_nullable_fallback": all(
             select_probes(b, p, list(range(len(p))), context)[1] == "fallback"
             for b, p in ((build, [("A", 1)] * 32), (build, probe[:16]),
@@ -121,7 +143,12 @@ def main():
     success = all(checks.values())
     out = Path(__file__).resolve().parent / "results" / "result.json"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps({"success": success, **checks}, indent=2) + "\n", encoding="utf-8")
+    out.write_text(json.dumps({"success": success, **checks,
+        "equal_boundary_baseline_candidates": len(candidate_pairs(equal_build, equal_probe, [0])),
+        "equal_boundary_pruned_candidates": len(candidate_pairs(equal_build, equal_probe, equal_selected)),
+        "equal_boundary_post_filter_pairs": len(original_pairs(equal_build, equal_probe, equal_selected)),
+        "baseline_candidate_pairs": len(baseline_candidates), "pruned_candidate_pairs": len(pruned_candidates)
+    }, indent=2) + "\n", encoding="utf-8")
     return 0 if success else 1
 
 

@@ -36,6 +36,8 @@ description: 优化原生 Shuffle 解压后逐条字符串视图重建。适用�
 
 除内联布局匹配外，还要确认一次实际加载宽度可读、ISA 已构建且 CPU 可用、字节序一致、对齐或非对齐规则合法。例：12 字节字符串紧贴无填充缓冲末端，不能凭长度执行 16 字节读取。
 
+宽加载后的内联槽位必须保持原构造器的规范表示：只保留字符串的有效字节，并把内联区中长度以外的字节清零，再发布视图。可读的相邻字节也不能写成字符串填充；引用版本的 `operator==` 使用长度/前缀整字及必要时的后段整字比较，不能只凭按 length 截出的字节相同就验收。清零只针对内联表示，非内联串保持原指针和拥有方契约。
+
 ### 4. 保留标量构造与拥有方
 
 尾部可读不足、空串、非内联串或能力不符时沿原构造。非内联 StringView 指向解压缓冲时，输出应持有缓冲；如果 reader 会提前复用，复制到输出拥有空间。
@@ -43,6 +45,8 @@ description: 优化原生 Shuffle 解压后逐条字符串视图重建。适用�
 ### 5. 验证边界和重建值
 
 覆盖内联阈值前后、0/15/16 字节剩余空间、非零偏移、无填充、非对齐、缺 ISA、NULL/空串及长串。对照值、NULL、长度、顺序及缓冲寿命，不能只比较是否进入快路径。
+
+增加两个输入首字节同为 `a`、其后可读字节分别为 `X` 和 `Y` 的反例：宽加载后若不清零，字符串截取值虽相同，槽位整字却可能不同。检查规范槽位与原生 `StringView::operator==`；不能用逐字节比较有效长度替代原生判等。
 
 ### 6. 分别衡量构造与查询
 
@@ -64,4 +68,4 @@ description: 优化原生 Shuffle 解压后逐条字符串视图重建。适用�
 
 从 Skill 根目录运行 `python3 cases/reconstruction-contract/run.py`，按 `cases/reconstruction-contract/case.yaml` 校验结果。使用 `python3 -O cases/reconstruction-contract/run.py` 或 `PYTHONOPTIMIZE=1` 重跑，结果应一致。用例通过普通布尔检查决定 `success` 和非零失败退出码。
 
-用例验证分派、值范围和拥有方模型，未执行 NEON、真实 StringView 布局或原生 reader；NULL 位图和损坏输入错误语义还需引擎验证。 未完成的目标端证据标为 `awaiting_target_evidence`。触发与边界评估规格见 [evals/evals.json](evals/evals.json)，规格不等于已执行模型评测。
+用例验证分派、值范围、内联零填充与整字判等模型及拥有方，未执行 NEON 或原生 reader。[原生判等回归](cases/reconstruction-contract/native_inline_equality.cpp) 在已配置的目标 Velox 构建中直接调用真实 `StringView::operator==`；本机未配置 C++ 工具链，未编译执行该回归。NULL 位图、原生布局和损坏输入错误语义仍需引擎验证。未完成的目标端证据标为 `awaiting_target_evidence`。触发与边界评估规格见 [evals/evals.json](evals/evals.json)，规格不等于已执行模型评测。
