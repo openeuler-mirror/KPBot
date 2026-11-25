@@ -33,8 +33,6 @@
 - code-optimizer 新增 `openzl-bench-protocol` skill：OpenZL 基准测试工程协议（unitBench 场景注册与熵模式、openzl_benchmark 均值口径、KV 数据准备与分布统计、绑核与噪声控制、多机部署复测、topdown TMA 采集），附 `prepare_kvdata.py` / `bench_kv.sh` / `td_loop.sh` 三个脚本与 tier-A 用例 `cases/script-contract`（脚本契约 + mock unitBench 解析 + 分布统计数值回归）
 - app-tuner 新增 `redis-deploy` skill：Redis 环境部署（源码构建、默认 7.0.15、sha256 校验、systemd 托管、单机多实例、离线安装、升级/回滚与卸载，非回环 bind 无密码会被拒绝；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、不自动修改内核参数、不执行远程脚本）；附 tier-A 完整性用例与 5 条触发评估集
 - app-tuner 为 `vllm-fastokens-segment-cache-migration` 新增六项技能：分词后端分析、候选加载验证、迁移快照、多轮回放数据生成、分词回放验证及迁移评估报告。已有验证产物可直接用于汇总。
-- code-optimizer 将 `sql-shuffle-string-codec` 明确为跨阶段诊断与组合验收入口，登记四个独立实施单元：`sql-join-string-materialization`、`sql-shuffle-fixed-width-copy`、`sql-shuffle-string-reconstruction`、`lz4-hash-candidate-optimization`；单项热点直接进入对应单元，保留原合成兼容基线并声明迁移矩阵不重复计证。
-- code-optimizer 新增 SQL72 的 `sql-q72-bloom-partition-binding`、`sql-q72-parquet-split-pruning`、`sql-q72-join-filter-bitmask`、`sql-q72-join-quantity-pruning`，明确扫描绑定/任务剪枝/探测前预筛/过滤后压缩的分工与衔接；本次八个独立单元各附 tier-A 用例，共 40 条模型评估规格，真实目标端验证另行取证。
 
 ## [1.0.0] - 2026-09-03
 
