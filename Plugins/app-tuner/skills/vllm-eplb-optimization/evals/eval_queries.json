@@ -1,0 +1,113 @@
+{
+  "skill_name": "vllm-eplb-optimization",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "P 节点压测 TTFT 长尾特别明显，几个 MoE 热点 expert 把个别 rank 拖死了，想开 EPLB 试试",
+      "should_trigger": true,
+      "note": "默认 dynamic"
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "帮忙把 run_dp_template.sh 的 EPLB 从 force 切成 dynamic，冗余专家 16",
+      "should_trigger": true,
+      "note": "模式切换 + 参数"
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "DYNAMIC_EPLB 和 VLLM_USE_V2_MODEL_RUNNER 到底怎么配，我这模板开了 EPLB 起不来",
+      "should_trigger": true,
+      "note": "互斥约束"
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "EPLB 实验做完了，把 prefill 模板还原成没开的基线",
+      "should_trigger": true,
+      "note": "off 还原"
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "怎么验证 EPLB 到底有没有收益？需要造什么压测数据集",
+      "should_trigger": true,
+      "note": "不均衡数据集 + 三组对照"
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "additional-config 里已经有 enable_cpu_binding 那几个键了，再加 enable_force_eplb 会不会冲突",
+      "should_trigger": true,
+      "note": "JSON 合并"
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "DeepSeek V4.1 双节点部署，想测一下专家负载均衡的上限，force 那套怎么配",
+      "should_trigger": true,
+      "note": "force 定位"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "eplb-config 的 window_size 和 step_interval 一般设多少",
+      "should_trigger": true,
+      "note": "参数取舍"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "压测跑了 4 轮，第 1 轮 28 秒后面都在 3 秒左右，这个数能直接算均值吗",
+      "should_trigger": true,
+      "note": "剔首轮口径"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "num_redundant_experts 加大会不会把显存吃爆",
+      "should_trigger": true,
+      "note": "冗余副本代价"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "vLLM 分词后端想换成 fastokens 并开段缓存",
+      "should_trigger": false,
+      "note": "routes to vllm-fastokens-segment-cache-migration"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "allreduce 很慢，帮我查一下 RoCE 错包和网口 link",
+      "should_trigger": false,
+      "note": "routes to 集群网络采集 skill"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "模型精度掉了，帮我对比优化前后的准确率，找出回归题号",
+      "should_trigger": false,
+      "note": "routes to model-precision-analysis"
+    },
+    {
+      "id": "NQ-04",
+      "prompt": "vLLM 服务 P99 抖动，帮我抓一份 profiling 看算子耗时",
+      "should_trigger": false,
+      "note": "routes to profiling 采集 skill"
+    },
+    {
+      "id": "NQ-05",
+      "prompt": "DeepSeek 的 silu 算子热点，想把 kernel 再优化一版",
+      "should_trigger": false,
+      "note": "routes to code-optimizer"
+    },
+    {
+      "id": "NQ-06",
+      "prompt": "专家并行度设多少合适，TP=8 还是 DP=8",
+      "should_trigger": false,
+      "note": "EP 拓扑配置，不是 EPLB"
+    },
+    {
+      "id": "NQ-07",
+      "prompt": "MoE 的 router 为什么总是选 top-k=8 个专家",
+      "should_trigger": false,
+      "note": "原理问答，无需改写模板"
+    },
+    {
+      "id": "NQ-08",
+      "prompt": "启动脚本 docker exec 之后进程起不来，帮我看下 shell 哪里写错了",
+      "should_trigger": false,
+      "note": "shell 调试，非 EPLB"
+    }
+  ]
+}

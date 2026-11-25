@@ -1,4 +1,4 @@
-# app-tuner
+﻿# app-tuner
 
 应用级调优插件 — 服务器应用性能优化的端到端 Agent 工作流。
 
@@ -110,7 +110,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `performance-library-selection` | 性能库选型(malloc/memcpy/压缩/加密) |
 | `compiler-optimization` | 编译优化(版本/架构参数/LTO/PGO/向量化) |
 | `application-config-optimization` | 应用配置(线程/队列/批量/缓存/连接) |
-| `accelerator-optimization` | GPU/NPU 加速卡利用率分析 |
+| `accelerator-optimization` | 密码加速卡优化: HPRE/KAE 密码卸载(UADK/ASF) |
 | `hardware-upgrade-analysis` | 硬件规格升级建议 |
 | `io-optimization` | 非 CPU 瓶颈预筛 + 磁盘/内存专项证据采集 |
 | `database-workload-analysis` | 数据库专项分析(MySQL/InnoDB) |
@@ -121,8 +121,13 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | [`topdown-quality-diagnosis`](skills/topdown-quality-diagnosis/SKILL.md) | 鲲鹏 DevKit Top-down 采集质量审核：核对目标、窗口与事件口径，诊断异常数值和运行中断，提供有界复采方案与证据报告 |
+| [`kptools-thread-affinity-analyzer`](skills/kptools-thread-affinity-analyzer/SKILL.md) | 线程绑核分析器 — 读取 kptools-thread-affinity-collector 输出目录做离线分析：拓扑富化(NUMA/NPU 归属)、角色识别规则外置 roles.json、8 类异常判定(A1 忙线程跨 NUMA 漂移/A1u 掩码不可读/A2 NPU 主机线程错位/A3 忙实例挤核/A4 掩码震荡/A5 绑核意图未覆盖按共同在场区间/A6 观测完整性/A7 线程翻动)，输出 HTML 报告(仅看异常过滤)+ summary.json(原子写入)；跨机采样包须带 topology_raw.txt |
+| [`kptools-thread-affinity-collector`](skills/kptools-thread-affinity-collector/SKILL.md) | 运行期线程绑核采集器（只读，任意进程）— 双通道持续采样每线程 CPU 允许掩码与实际落点，产出三件套：samples.jsonl（机器格式时间序列）+ trace.log（人类可读事件日志：新线程/掩码变化/线程退出/心跳/终态名册/统计，cat 即懂）+ topology_raw.txt（拓扑快照）；支持 --auto/--tick 分步与长任务；采集与分析职责分离，目标机只装采集器、输出目录跨机取回 |
+| [`kptools-cannlab-env`](skills/kptools-cannlab-env/SKILL.md) | cannlab 分设环境连接与远程调试 — 三级链路(本机→CPU dev容器→昇腾 NPU Pod)操作手册：SSH/引号纪律、scp 传输、remote_tool.sh 全子命令、NPU 开机预热 API、退出码契约(0-10)、rsync --delete 同步与文件生命周期纪律、长任务 nohup 轮询模式、NPU 环境配方(set_env/pyfix312 边界)、14 条实战踩坑(引号被吞/pip 陷阱/shm 与 AICPU 目录缺失/21008 根因分型等)；只管链路，执行内容路由具体任务 skill |
+| [`kptools-cannlab-env`](skills/kptools-cannlab-env/SKILL.md) | cannlab 分设环境连接与远程调试 — 三级链路(本机→CPU dev容器→昇腾 NPU Pod)操作手册：SSH/引号纪律、scp 传输、remote_tool.sh 全子命令、NPU 开机预热 API、退出码契约(0-10)、rsync --delete 同步与文件生命周期纪律、长任务 PID/退出码文件模式、NPU 环境配方(set_env/pyfix312 边界)、15 条实战踩坑(引号被吞/pip 陷阱/shm 与 AICPU 目录缺失/21008 根因分型等)；只管链路，执行内容路由具体任务 skill |
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
-| [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡采集与分析：现场轮询/Prometheus 回采/本地 CSV 三种方式获取 dp_load_metrics，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性） |
+| [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡数据采集：现场轮询 /metrics（单池/PD 双池）与 Prometheus 时间段回采两种方式产出统一的 dp_load_metrics CSV（30 数据列 + queue_fixed） |
+| [`kptools-dplb-report`](skills/kptools-dplb-report/SKILL.md) | vLLM DP 负载均衡分析报告：解析 dp_load_metrics CSV，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性）；数据由 kptools-dplb-profiler 采集或由用户提供 |
 | [`kptools-dplb-optimization`](skills/kptools-dplb-optimization/SKILL.md) | MindIE Motor 负载均衡部署与优化：SSH 远端安装（方式 A 自备 whl / 方式 B 源码编译，含离线 cargo 手册与空壳 whl 断言），生成 user_config.json/register.sh/start_motor.sh 配置三件套并输出部署指南；运行依赖按上游 requirements.txt 补装、管理面鉴权与 register 逗号合并语义对齐上游；部署后量化评估衔接 `kptools-dplb-profiler` |
 | [`kptools-arthas`](skills/kptools-arthas/SKILL.md) | Java 进程性能分析(Arthas 批处理只读采集：trace/watch/monitor/tt 方法级耗时分解与入参观察、thread 高 CPU/阻塞/锁竞争分析、memory/GC 状态、JVM 运行时性能参数、ognl 查询)，含性能分析剧本、采集纪律与 agent 级 with/without A/B 用例 |
 | `kptools-ascend-pd-env` | vLLM-Ascend P/D 容器环境采集与对比(CANN/驱动/torch_npu/HCCL/cgroup/启动参数差异) |
@@ -132,6 +137,8 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键 Workflow/路由与共享执行器(保留计划哈希、预检、准备、29 档全矩阵、冒烟、差集清理与证据归档) |
 | [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
+| [`kptools-cpuoffload-analyzer`](skills/kptools-cpuoffload-analyzer/SKILL.md) | torchtitan-npu CPU offload 内存分析器(bundle 离线三自检：node 映射自洽/L1 存活配对交叉核对/采样放大；nova 重建与骤降按共同 rank 对齐判定；bundle 只读，报告写 bundle 同级目录) |
+| [`kptools-cpuoffload-collector`](skills/kptools-cpuoffload-collector/SKILL.md) | torchtitan-npu CPU offload pinned 内存采集器(L0 pagemap 快照：devmm_svm 段定位/present 页计数/NUMA node 归属/多时间锚点序列；可选 L1 sitecustomize 埋点；判读归姊妹 analyzer) |
 
 #### CubeSandbox 单项基准入口（10 个）
 
@@ -162,10 +169,17 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | [`redis-optimize`](skills/redis-optimize/SKILL.md) | Redis 场景专属调优(实例发现、网卡 NUMA 定位、进程绑核、多队列中断绑核、ntuple 按端口分流、redis.conf/OS 参数与 redis-benchmark 验证纪律)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 | [`kptools-dpdk-tuning`](skills/kptools-dpdk-tuning/SKILL.md) | DPDK 应用性能调优(诊断+顾问双模式) — 现象驱动的分层排查与硬件+场景驱动的分层配置建议，覆盖 BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延，不修改业务源码；需要改码的优化移交 code-optimizer 的 `dpdk-optimization` |
 
+### 环境部署 skill
+
+| 技能 | 描述 |
+|------|------|
+| [`redis-deploy`](skills/redis-deploy/SKILL.md) | Redis 环境部署(源码构建、默认 7.0.15、sha256 校验、systemd 托管、多实例、离线部署、升级/回滚与验收；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、不自动修改内核参数、不执行远程脚本、卸载需人工确认)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
+
 ### 独立诊断 skill
 
 | 技能 | 描述 |
 |------|------|
+| [`kptools-torchtitan-deploy`](skills/kptools-torchtitan-deploy/SKILL.md) | torchtitan-npu 部署手册与踩坑指导 — 版本配套表(以上游 installation.md 为准的快照)、昇腾软件栈六件套安装(NNAL source 顺序)、三步源码安装与 torchao-npu、新配置系统(--module/--config，弃用 TOML)、run_train.sh 单机/多机环境变量逐项、单卡 debugmodel 冒烟、affinity 扩展配置(MR 1100 已合入 master)；踩坑实录 A 组以仓内补丁为可溯源证据(附真实路径)，B 组为实战环境坑(配置系统重构/版本错位/910B3 sync-start 地板/CPU_AFFINITY_CONF 主线程静默失效) |
 | `rocksdb-perf-diagnostics` | RocksDB 性能诊断与优化 — 用 LOG / properties / Statistics / perf_context / EventListener 定位写停顿、compaction 积压、读写/空间放大,并在授权下执行单变量复测 |
 
 ## 目录结构
@@ -219,6 +233,7 @@ app-tuner/
 | 环境备份 | "备份当前环境信息" | `scripts/backup_environment.sh` |
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
 | RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
+| Redis 环境部署 | "部署一个 Redis 环境（默认 7.0.15）" | `redis-deploy` |
 
 ### 优化工作流
 
@@ -231,6 +246,7 @@ app-tuner/
 - [架构设计(4+1)](docs/architecture-4plus1.md) — 主 skill 编排、子 skill 关系、运行闭环
 - [使用指南](docs/usage-guide.md) — 不同平台如何加载和使用
 - [报告模板](docs/report-template.md) — 首版优化报告模板
+| [`kptools-vllm-ttft-workflow`](skills/kptools-vllm-ttft-workflow/SKILL.md) | 按已有产物选择 TTFT 阶段，协调双侧计划、人工授权和采集交接 |
 
 ## 脚本说明
 

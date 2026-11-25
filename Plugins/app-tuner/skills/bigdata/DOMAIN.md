@@ -30,6 +30,7 @@
 | 成员 | 定位 |
 |---|---|
 | [`flink-velox-env/`](flink-velox-env/DOMAIN.md) | 子域：Flink + GlutenFlink（velox 向量化栈）环境检查家族——具体项检查子 skill 各自独立安装与触发，统筹 skill 按目标（build / native）聚合并给出唯一 next_step；只扫不改，是本域安装/构建/验证类 skill 的共同前置裁决点，详见其 DOMAIN.md |
+| [`flink-velox-install/`](flink-velox-install/DOMAIN.md) | 子域：Flink + GlutenFlink 环境的安装部署家族（动作类，`plan` 默认只打印、`apply --yes` 才执行、`verify` 复查）——构建环境准备、Flink 运行时与 nexmark 安装、GlutenFlink 构建编译部署、切栈重启，成员分 PR 提交；是 `flink-velox-env` 检查家族各项修复动作的执行者，详见其 DOMAIN.md |
 
 ## 与其它域的边界
 

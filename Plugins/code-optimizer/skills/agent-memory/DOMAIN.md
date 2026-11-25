@@ -3,9 +3,9 @@
 LLM Agent 记忆框架（mem0、Zep、Letta/MemGPT、MemoRAG、Cognee 及自研 memory service）在
 「框架层 → 驱动/协议 → 向量/图存储后端」这条链上的性能优化。本域只对**记忆框架这一层**
 负责：框架如何构造查询/过滤/索引、如何写入后端、如何跑基准；后端引擎内部的算法
-（距离计算、索引构建、图遍历）归 `vectordb/` 或 `agent-memory-db-optimization` 的边界表。
+（距离计算、索引构建、图遍历）归 `vectordb/` 或 `agent-memory-optimize` 的边界表。
 
-本域与 `agent-memory-db-optimization`（顶层枢纽 skill）的关系：枢纽给**诊断方法**（冻结负载 →
+本域与 `agent-memory-optimize`（顶层枢纽 skill）的关系：枢纽给**诊断方法**（冻结负载 →
 三段归因 → 瓶颈建模 → 分层杠杆），本域给**落在特定记忆框架（标定案例：mem0）上的可复用实现**。
 
 ## 成员
@@ -28,7 +28,7 @@ LLM Agent 记忆框架（mem0、Zep、Letta/MemGPT、MemoRAG、Cognee 及自研 
   不改插件 `README.md` 的总表（共享行会让并行 PR 必然冲突）。
 - 目录约定：`skills/agent-memory/<skill>/SKILL.md`；本域目录恒带 `DOMAIN.md`（安装器据此识别为分组）。
 - 跨域引用：本域 skill 可引用 `vectordb/`（引擎内部，基线已有）、`perf-engineering/`（测量方法论，
-  同批独立 PR 落地后有效）与 `agent-memory-db-optimization`（诊断方法），安装后统一平铺，
+  同批独立 PR 落地后有效）与 `agent-memory-optimize`（诊断方法），安装后统一平铺，
   按 skill 名引用即可，不写路径。
 
 ## Review

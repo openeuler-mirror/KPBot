@@ -152,7 +152,7 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `bottleneck_classification` | string | `disk_bottleneck` / `network_bottleneck` / `memory_capacity_bottleneck` / `memory_bandwidth_bottleneck` / `cpu_bottleneck` / `gpu_npu_bottleneck` / `hardware_capacity_limit` / `unknown_bottleneck` / `no_active_bottleneck` / `not_entered` / `blocked` |
+| `bottleneck_classification` | string | `disk_bottleneck` / `network_bottleneck` / `memory_capacity_bottleneck` / `memory_bandwidth_bottleneck` / `cpu_bottleneck` / `gpu_npu_bottleneck` / `crypto_accelerator_bottleneck` / `hardware_capacity_limit` / `unknown_bottleneck` / `no_active_bottleneck` / `not_entered` / `blocked` |
 | `bottleneck_confidence` | string | `high` / `medium` / `low` |
 | `bottleneck_evidence` | object | 支撑瓶颈判断的指标和文件路径 |
 | `hardware_capacity_recommendation` | object/string | 更换高规格硬件建议，仅在证据充分时输出 |
