@@ -39,13 +39,13 @@ SKILL_NAME=kpbot-code-optimizer; bash .opencode/skills/$SKILL_NAME/scripts/print
 | 12 | 媒体库优化 | `multimedia-code-optimizer` | 媒体库、图像视频算子、视频编解码、色彩转换、图像缩放、图像滤波 | 图像视频处理项目中的 YUV/RGB 转换、缩放、滤波或编解码算子 |
 | 13 | folly 异步链路优化 | `folly-future-optimization` | folly、future、promise、then 回调、SharedPromise、FunctionTraits、Core 构造 | `folly/futures/` 源码树；`folly::` 命名空间；`FOLLY_FUTURE` 宏；链接 libfolly |
 | 14 | protobuf 序列化库优化 | `protobuf-optimization` | protobuf、proto 反序列化、消息合并、MapMergeFrom、MiniParse、arena 分配 | `src/google/protobuf/` 源码树；`libprotobuf`；`TcParser`/`MapMergeFrom` 符号 |
-| 15 | Agent 记忆系统 / 图数据库后端优化 | `agent-memory-db-optimization` | Agent 记忆、长期记忆、记忆后端、记忆系统、记忆检索、memory agent、memory backend、知识图谱数据库、图数据库、Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee、Neo4j、Bolt、Cypher、pgvector、Qdrant、Chroma、LanceDB | `graphiti_core/` 或 `graphiti/` 源码树；memory service 入口（add_episode/retrieve_memory 类）；`neo4j`/Bolt 驱动依赖；`pgvector`/`qdrant`/`chroma`/`lancedb` 后端依赖；Cypher 查询模板 |
+| 15 | Agent 记忆系统优化（技能族入口） | `agent-memory-optimize` | Agent 记忆、长期记忆、记忆后端、记忆系统、记忆检索、memory agent、memory backend、知识图谱数据库、图数据库、Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee、Neo4j、Bolt、Cypher、pgvector、Qdrant、Chroma、LanceDB | `graphiti_core/` 或 `graphiti/` 源码树；memory service 入口（add_episode/retrieve_memory 类）；`neo4j`/Bolt 驱动依赖；`pgvector`/`qdrant`/`chroma`/`lancedb` 后端依赖；Cypher 查询模板 |
 | 16 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
 | 17 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 **向量检索接管**：优化对象已明确落在向量数据库或检索路径时，直接加载 `vector-search-optimize`，传递用户目标、已知库名、源码、基准、数据和已有实验状态。由它识别执行层级，选择 Faiss、DiskANN、pgvector 专项或通用 CP0–CP7。只有明确指向 VSAG 的专项任务才直达 VSAG 路由。共享算法名先交给通用入口查明实际后端。延续用户给出的资源范围和交互模式。
 
-**记忆后端接管**：优化对象明确是 Agent 记忆 / 知识图谱后端（Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee 或自研记忆服务，后端为 Neo4j/FalkorDB/pgvector/Qdrant/Chroma/LanceDB 等）时，直接加载 `agent-memory-db-optimization`；框架层是 Python/TS 还是 C++/Go/Rust/JVM 都适用，由它先判运行时再选杠杆。同一条链路里若还牵涉向量索引库（Faiss/DiskANN/VSAG）内部实现，按实测热点归属：客户端、驱动、图查询与载荷回传统一交本 skill，索引库内部算法优化交对应向量 skill。
+**记忆后端接管**：优化对象明确是 Agent 记忆 / 知识图谱后端（Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee 或自研记忆服务，后端为 Neo4j/FalkorDB/pgvector/Qdrant/Chroma/LanceDB 等）时，直接加载 `agent-memory-optimize`（该入口再按阶段分派到 19 个专项 skill）；框架层是 Python/TS 还是 C++/Go/Rust/JVM 都适用，由它先判运行时再选杠杆。同一条链路里若还牵涉向量索引库（Faiss/DiskANN/VSAG）内部实现，按实测热点归属：客户端、驱动、图查询与载荷回传统一交本 skill，索引库内部算法优化交对应向量 skill。
 
 ### 路由流程
 

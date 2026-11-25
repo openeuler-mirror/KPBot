@@ -156,6 +156,7 @@ check "keeps claude-only drive skill"         '[ -d "$CLAUDE_SKILLS/drive-claude
 check "keeps claude-only batch skill"         '[ -d "$CLAUDE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "keeps claude-only media skill"         '[ -d "$CLAUDE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
@@ -177,6 +178,7 @@ check "excludes claude-only drive skill"      '[ ! -e "$OPENCODE_SKILLS/drive-cl
 check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
 check "opencode overlay keeps base references" '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/references/experiment-contract.md" ]'
 check "opencode overlay keeps base scripts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/scripts/experiment_feedback.py" ]'
