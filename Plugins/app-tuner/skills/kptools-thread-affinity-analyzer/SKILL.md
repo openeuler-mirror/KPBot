@@ -20,7 +20,7 @@ metadata:
   skill_type: tool_assisted
   category: profiling
   domain: thread_affinity
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # kptools-thread-affinity-analyzer — 线程绑核分析器
@@ -123,7 +123,7 @@ python3 scripts/analyze.py ./af_20261123 --allow-sys-fallback
 |------|-----------|
 | 退出码 2 | samples.jsonl 损坏/为空；重新采集 |
 | 退出码 3 | topology_raw.txt 缺失（跨机包）——把采样包里的 topology_raw.txt 一并带上；确认同机分析才加 `--allow-sys-fallback` |
-| 报告"拓扑缺口"行 / stdout 注意行 | topology 存在但无 CPU→NUMA 映射（node_cpulist 不可解析）——A1/A1u/A2 跳过，其余判定不受影响；换 --full 采集或检查采样机 /sys |
+| 报告"拓扑缺口"行 / stdout 注意行 | topology 存在但无 CPU→NUMA 映射（node_cpulist 不可解析）——A1/A1u/A2 跳过，其余判定不受影响；检查采样机 /sys 可读性后用 `bash collect.sh -p <PID> --init` 重新建会话补 topology |
 | 允许掩码全是 0-127 类全掩码 | 进程未做任何绑核（默认状态），忙线程会按 A1 判定漂移 |
 | coverage/完整性 A6 比例偏高 | 采样异常（掩码收紧竞态放大或采集器 bug）——先修观测再信结论 |
 | 报告里角色列"未匹配" | 线程名不在角色规则内——按观测呈现，加自定义规则用 `--roles` |
