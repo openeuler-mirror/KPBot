@@ -1,6 +1,6 @@
 ---
 name: vllm-eplb-deploy-validate
-description: 把 EPLB 参数方案确定性落到 vLLM P 节点启动模板，并组织 off/dynamic/force 三态对照压测、采集原始数据。当用户说"帮我把 run_dp_template.sh 改成 dynamic/force/off""切换/还原 EPLB 配置""EPLB 参数没独占一行""合并 additional-config 的 enable_force_eplb""造一份不均衡数据集""跑 EPLB 的 off/dynamic/force 对比"时，使用本技能。只负责部署与采集，收益结论交给 vllm-eplb-benefit-analysis；是否真的实测由使用者决定，实测需提供 benchmark 服务器。
+description: 把 EPLB 参数方案确定性落到 vLLM P 节点启动模板，并组织 off/dynamic/force 三态对照压测、采集原始数据。当用户说"帮我把 run_dp_template.sh 改成 dynamic/force/off""切换/还原 EPLB 配置""EPLB 参数没独占一行""合并 additional-config 的 enable_force_eplb""造一份不均衡数据集""跑 EPLB 的 off/dynamic/force 对比"时，使用本技能。只负责部署与采集，收益结论可后续单独分析；是否真的实测由使用者决定，实测需提供 benchmark 服务器。
 license: MulanPSL-2.0
 metadata:
   skill_type: tool_assisted
@@ -13,12 +13,12 @@ metadata:
 
 # EPLB 部署与收益验证（vLLM MoE）
 
-本技能是 EPLB 流水线的第 3 环：消费 `vllm-eplb-parameter-analysis` 的
-`eplb_parameter_plan.json`，把配置**确定性写进 P 节点模板**，并把三组对照实验**跑对、采全**。
-它**不下收益结论**（那是 `vllm-eplb-benefit-analysis` 的职责）。
+本技能可**独立使用**：把显式的 mode 与参数（可选：读取一份参数方案）**确定性写进 P 节点模板**，
+造不均衡数据集，组织 off/dynamic/force 三组对照并生成运行清单。它**不依赖任何尚未合入的技能**；
+收益结论可后续单独分析。
 
 ```
-vllm-eplb-parameter-analysis --eplb_parameter_plan.json--> 本技能 --run_manifest+measurements--> vllm-eplb-benefit-analysis
+输入：显式 mode + 参数（可选 eplb_parameter_plan.json）--> 本技能 --> 模板 + eplb_run_manifest.json + measurements
 ```
 
 ## 输入契约
@@ -125,7 +125,7 @@ cd <P脚本目录> && bash start_proxy.sh
 
 等 `log/prefill_*.log`、`log/decode_*.log` 显示就绪后再经代理发请求。
 
-## 输出契约（交给 benefit-analysis）
+## 输出契约（供后续收益分析/人工使用）
 
 - `eplb_run_manifest.json`：`template.sha256`、`params`、`experiment{dataset,concurrency,rounds,groups,drop_warmup_round}`。
 - `eplb_measurements.json`：三组逐轮原始 TTFT（`{group: [ttft_round1, ...]}`），保留原始值不预先求均值。
@@ -143,4 +143,4 @@ cd <P脚本目录> && bash start_proxy.sh
 | 切 off 后 V1 模板被翻转 | 仅当模板有效配置里确有 EPLB 标记才动 V2；注释不算 |
 | 写后 `bash -n` 失败 | 脚本自动回滚到备份，检查模板 shell 结构 |
 
-收益是否达标、要不要保留/回退，见 `vllm-eplb-benefit-analysis`。
+收益是否达标、要不要保留/回退，可在拿到 measurements 后另行分析。
