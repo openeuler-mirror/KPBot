@@ -53,13 +53,18 @@ python3 scripts/run_benchmark.py \
   --client ./clickhouse --single-binary --output results/run-single-001
 ```
 
-TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变量传递，不能放入 argv；脚本会脱敏 JSON 和日志。仅当确有现成客户端配置时才追加 `--config /path/to/existing-client.xml`；配置文件必须是 group/other 无权限的普通文件（通常 `chmod 600`），密码与 TLS 本身不要求创建配置文件：
+TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变量传递，不能放入 argv；脚本会脱敏 JSON 和日志。以下示例在有界子 shell 中运行，`EXIT` trap 在正常或失败退出时清除密码，不修改父 agent 会话中的 `CLICKHOUSE_PASSWORD`。若此前已在父会话导出此变量，使用结束后执行 `unset CLICKHOUSE_PASSWORD`。仅当确有现成客户端配置时才追加 `--config ./existing-client.xml`；配置文件必须是 group/other 无权限的普通文件（通常 `chmod 600`），密码与 TLS 本身不要求创建配置文件：
 
 ```bash
-read -rsp 'ClickHouse password: ' CLICKHOUSE_PASSWORD; export CLICKHOUSE_PASSWORD; echo
-python3 scripts/run_benchmark.py \
-  --host db.example --port 9440 --user reader --secure \
-  --output results/run-tls-001
+(
+  trap 'unset CLICKHOUSE_PASSWORD' EXIT
+  read -rsp 'ClickHouse password: ' CLICKHOUSE_PASSWORD || exit
+  export CLICKHOUSE_PASSWORD
+  echo
+  python3 scripts/run_benchmark.py \
+    --host db.example --port 9440 --user reader --secure \
+    --output results/run-tls-001
+)
 ```
 
 ## 结果与失败语义
@@ -74,4 +79,4 @@ python3 scripts/run_benchmark.py \
 python3 tests/test_contract.py
 ```
 
-tier-A 回归覆盖成功、预热排除、精确正确性、旧版本、缺工具、认证、超时、运行失败、指标格式变化、输出冲突、参数上限、安全端点和单二进制布局，并直接解析观察到的 ClickHouse 26.8 原生输出；真实 fork 后代和取消时存活子进程回归显式验证有界返回、异常重抛和 PID 清理。假工具仅提供契约证据，不是服务 E2E。
+tier-A 回归覆盖成功、预热排除、精确正确性、旧版本、缺工具、认证、超时、运行失败、指标格式变化、输出冲突、参数上限、安全端点、密码示例的父会话清理和单二进制布局，并直接解析观察到的 ClickHouse 26.8 原生输出；真实 fork 后代和取消时存活子进程回归显式验证有界返回、异常重抛和 PID 清理。假工具仅提供契约证据，不是服务 E2E。

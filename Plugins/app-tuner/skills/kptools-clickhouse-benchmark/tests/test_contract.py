@@ -268,6 +268,71 @@ class BenchmarkContractTests(unittest.TestCase):
             self.assertEqual(phase["native"]["read_mib_per_second"], 0.182)
         self.assertIn("not TPC-H", result["scope"])
 
+    def test_tls_password_example_cleans_up_on_success_and_failure(self):
+        skill_text = (SCRIPT.parents[1] / "SKILL.md").read_text(encoding="utf-8")
+        example = next(
+            block.split("```", 1)[0]
+            for block in skill_text.split("```bash\n")[1:]
+            if "read -rsp" in block
+        )
+        self.assertIn("trap 'unset CLICKHOUSE_PASSWORD' EXIT", example)
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        fake_python = fake_bin / "python3"
+        fake_python.write_text(
+            "#!" + sys.executable + "\n"
+            + """import json
+import os
+from pathlib import Path
+import sys
+
+Path(os.environ["CAPTURE"]).write_text(
+    json.dumps({
+        "password": os.environ.get("CLICKHOUSE_PASSWORD"),
+        "argv": sys.argv[1:],
+    }),
+    encoding="utf-8",
+)
+raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
+""",
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o700)
+        for command_status in (0, 23):
+            with self.subTest(command_status=command_status):
+                capture = self.root / f"password-example-{command_status}.json"
+                wrapper = (
+                    "export CLICKHOUSE_PASSWORD=parent-marker\n"
+                    + example
+                    + "\nexample_status=$?\n"
+                    + '[ "$example_status" -eq "$EXPECTED_STATUS" ] || exit 90\n'
+                    + '[ "$CLICKHOUSE_PASSWORD" = "parent-marker" ] || exit 91\n'
+                )
+                env = dict(
+                    self.env,
+                    CAPTURE=str(capture),
+                    EXPECTED_STATUS=str(command_status),
+                    PATH=str(fake_bin) + os.pathsep + os.environ["PATH"],
+                )
+                completed = subprocess.run(
+                    ["bash", "-c", wrapper],
+                    cwd=SCRIPT.parents[1],
+                    env=env,
+                    input=self.secret + "\n",
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                observed = json.loads(capture.read_text(encoding="utf-8"))
+                self.assertEqual(observed["password"], self.secret)
+                argv_text = "\n".join(observed["argv"])
+                self.assertNotIn(self.secret, argv_text)
+                self.assertNotIn("--password", argv_text)
+                self.assertIn("scripts/run_benchmark.py", observed["argv"])
+                self.assertIn("--secure", observed["argv"])
+
     def test_secure_target_and_password_redaction(self):
         self.fake_client()
         config = self.root / "secure.xml"
@@ -555,6 +620,7 @@ if __name__ == "__main__":
             "exact per-phase correctness",
             "wrong_version/missing_tool/auth/timeout/runtime/metric failures",
             "secret redaction, bounded arguments, exclusive output",
+            "password-example session cleanup on success and failure",
             "single-binary independence",
             "bounded timeout/cancellation process and PID cleanup",
         ],

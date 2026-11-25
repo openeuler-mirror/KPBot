@@ -18,4 +18,4 @@ assert:
     file: cases/contract/results/result.json
     field: tests
     op: gte
-    expect: 13
+    expect: 14
