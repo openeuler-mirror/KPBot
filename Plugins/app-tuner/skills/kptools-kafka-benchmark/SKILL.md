@@ -108,8 +108,9 @@ bash cases/contract/run.sh
 ```
 
 tier-A 状态化假 CLI 覆盖成功、unsupported version、missing tool、auth、
-timeout、运行失败、输出冲突、预热排除、精确内容/计数/offset、RPC 模糊创建和
-清理失败。它是契约证据，不冒称真实 Kafka E2E。
+timeout、运行失败、输出冲突、预热排除、精确内容/计数/全分区 offset、字面量
+topic 查询、部分 offset fail-closed、RPC 模糊创建和清理失败（含本地证据盘写满
+后继续清理）。它是契约证据，不冒称真实 Kafka E2E。
 
 ## 官方依据
 

@@ -10,9 +10,9 @@
 | `official_cli_tools` | 是 | 六个实际使用的官方脚本均存在且可执行 | `absent` |
 | `cli_version` | 是 | `kafka-topics.sh --version` 返回 4.4.x | `wrong_version` / `timeout` / `error` |
 | `java_runtime` | 是 | 按官方脚本优先取 `JAVA_HOME/bin/java`，否则用 PATH 中的 `java`；版本可解析且 major >= 17 | `absent` / `wrong_version` / `error` |
-| `authenticated_metadata` | 是 | 真实 `kafka-topics.sh --list` 成功；只保留条目数，不收集 topic 名 | `auth` / `timeout` / `error` |
+| `authenticated_metadata` | 是 | 真实 `kafka-topics.sh --list` 成功；stdout 仅按列表解析并保留条目数，不收集 topic 名，也不把名称中的错误词当诊断 | `auth` / `timeout` / `error` |
 | `topic_plan` | 创建模式是 | 唯一命名/分区/副本计划有界；明确未发 create/delete | 计划参数由 CLI 拒绝 |
-| `topic_metadata` | 既有 topic 是 | describe 成功且各分区 latest offset 之和为零 | `auth` / `timeout` / `topic_not_empty` / `error` |
+| `topic_metadata` | 既有 topic 是 | describe/get-offsets 使用字面量转义并只选精确同名结果；describe 头接受官方 TopicId（同时保留无 TopicId fixture 兼容性）；offset 完整覆盖 describe 分区集合且总和为零 | `auth` / `timeout` / `topic_not_empty` / `error` |
 | `operation_authorization` | 是 | 用户显式声明允许计划中的写操作 | 未声明时为 `unknown` |
 | `workload_budget` | 是 | 轮数/条数/速率/超时有限，总 perf 身份不超过 1000000，计划载荷不超过 100 GiB，限速估计不超进程预算 | `resource` / `invalid_config` |
 | `output_storage` | 是 | 本地结果盘覆盖累计全量身份验证日志，且至少保留 16 MiB 余量 | `resource` / `error` |

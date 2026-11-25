@@ -205,29 +205,39 @@ def topic_probe(args, client_config):
             args.bootstrap,
             "--describe",
             "--topic",
-            args.topic,
+            support.topic_query_pattern(args.topic),
         ],
         args.timeout,
         client_config,
         "--command-config",
     )
     category = support.error_category(result)
-    partition_match = re.search(r"PartitionCount:\s*(\d+)", result["stdout"])
-    replication_match = re.search(
-        r"ReplicationFactor:\s*(\d+)", result["stdout"]
-    )
+    metadata = None
     evidence = {
         "command": support.public_command(result),
         "topic": args.topic,
-        "partition_count": int(partition_match.group(1))
-        if partition_match
-        else None,
-        "replication_factor": int(replication_match.group(1))
-        if replication_match
-        else None,
+        "partition_count": None,
+        "replication_factor": None,
+        "expected_partitions": None,
         "diagnostic": result["stderr"][-1000:],
         "latest_offset_sum": None,
     }
+    if category is None:
+        try:
+            metadata = support.parse_topic_description(
+                result["stdout"], args.topic
+            )
+        except ValueError as exc:
+            category = "error"
+            evidence["describe_error"] = str(exc)
+        else:
+            evidence.update(
+                {
+                    "partition_count": metadata["partition_count"],
+                    "replication_factor": metadata["replication_factor"],
+                    "expected_partitions": metadata["partitions"],
+                }
+            )
     if category is None:
         offsets = support.run_cli(
             args.kafka_dir,
@@ -236,7 +246,7 @@ def topic_probe(args, client_config):
                 "--bootstrap-server",
                 args.bootstrap,
                 "--topic",
-                args.topic,
+                support.topic_query_pattern(args.topic),
                 "--time",
                 "latest",
             ],
@@ -247,21 +257,19 @@ def topic_probe(args, client_config):
         category = support.error_category(offsets)
         evidence["offsets_command"] = support.public_command(offsets)
         evidence["offsets_diagnostic"] = offsets["stderr"][-1000:]
-        latest = 0
-        lines = 0
         if category is None:
-            for line in offsets["stdout"].splitlines():
-                match = re.fullmatch(
-                    re.escape(args.topic) + r":(\d+):(\d+)", line.strip()
+            try:
+                latest = support.parse_latest_offsets(
+                    offsets["stdout"], args.topic, metadata["partitions"]
                 )
-                if match:
-                    latest += int(match.group(2))
-                    lines += 1
-            if not lines:
+            except ValueError as exc:
                 category = "error"
-            elif latest:
-                category = "topic_not_empty"
-            evidence["latest_offset_sum"] = latest
+                evidence["offsets_error"] = str(exc)
+            else:
+                evidence["latest_offsets"] = latest
+                evidence["latest_offset_sum"] = sum(latest.values())
+                if evidence["latest_offset_sum"]:
+                    category = "topic_not_empty"
     return support.probe(
         "topic_metadata",
         True,
@@ -270,8 +278,9 @@ def topic_probe(args, client_config):
         evidence,
         (
             "Describe access does not prove produce/consume ACLs. An "
-            "existing topic must have a zero latest-offset sum so exact "
-            "correctness messages cannot be mixed with business data."
+            "existing topic must have zero latest offsets for every "
+            "described partition so correctness messages cannot be mixed "
+            "with business data."
         ),
     )
 

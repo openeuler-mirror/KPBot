@@ -352,6 +352,64 @@ def consumed_payload_lines(text):
     ]
 
 
+def topic_query_pattern(topic):
+    """Escape a literal topic for Kafka CLI options that accept regexes."""
+    return re.escape(topic)
+
+
+def parse_topic_description(text, expected_topic):
+    """Select only the exact topic header and derive its partition set."""
+    matches = []
+    for line in (text or "").splitlines():
+        match = re.match(
+            r"^\s*Topic:\s*(\S+)(?:\s+TopicId:\s*\S+)?\s+"
+            r"PartitionCount:\s*(\d+)\s+ReplicationFactor:\s*(\d+)(?:\s|$)",
+            line,
+        )
+        if match and match.group(1) == expected_topic:
+            matches.append(match)
+    if len(matches) != 1:
+        raise ValueError(
+            "describe output must contain exactly one exact target topic "
+            "header"
+        )
+    match = matches[0]
+    partition_count = int(match.group(2))
+    if partition_count < 1:
+        raise ValueError("describe output contains no target partitions")
+    return {
+        "topic": expected_topic,
+        "partition_count": partition_count,
+        "replication_factor": int(match.group(3)),
+        "partitions": list(range(partition_count)),
+    }
+
+
+def parse_latest_offsets(text, expected_topic, expected_partitions):
+    """Return exact-topic offsets only when every described partition appears."""
+    expected = set(expected_partitions)
+    offsets = {}
+    pattern = re.compile(
+        re.escape(expected_topic) + r":(\d+):(\d+)"
+    )
+    for line in (text or "").splitlines():
+        match = pattern.fullmatch(line.strip())
+        if not match:
+            continue
+        partition = int(match.group(1))
+        if partition in offsets:
+            raise ValueError("offset output repeats a target partition")
+        offsets[partition] = int(match.group(2))
+    missing = sorted(expected - offsets.keys())
+    unexpected = sorted(offsets.keys() - expected)
+    if not expected or missing or unexpected:
+        raise ValueError(
+            "offset output does not exactly cover the described partitions; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    return offsets
+
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -494,9 +552,14 @@ def error_category(result):
         return result["error_category"]
     if result.get("timed_out"):
         return "timeout"
-    output = (
-        result.get("stdout", "") + "\n" + result.get("stderr", "")
-    ).lower()
+    # Successful stdout is command data (for example, a topic list), not a
+    # diagnostic stream. A topic named "audit-timeoutexception" must not make
+    # an otherwise successful query look like a timeout. On failures, stdout
+    # can carry explicit Java/Kafka error records and remains diagnostic.
+    output = result.get("stderr", "")
+    if result.get("returncode") not in (0, None):
+        output = result.get("stdout", "") + "\n" + output
+    output = output.lower()
     if any(marker in output for marker in AUTH_MARKERS):
         return "auth"
     if any(marker in output for marker in TIMEOUT_MARKERS):

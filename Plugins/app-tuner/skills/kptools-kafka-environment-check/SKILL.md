@@ -89,7 +89,8 @@ bash cases/contract/run.sh
 ```
 
 该 tier-A 用例以状态化假 CLI 检查成功、版本不符、缺工具、认证、超时、运行
-失败、非空 topic、输出冲突与秘密脱敏；它不是实际 Kafka 服务 E2E。
+失败、非空/部分 offset topic、字面量精确查询、列表名称错误词隔离、输出冲突与
+秘密脱敏；它不是实际 Kafka 服务 E2E。
 
 ## 官方依据
 

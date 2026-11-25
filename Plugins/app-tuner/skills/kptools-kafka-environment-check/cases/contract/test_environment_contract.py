@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import shutil
 import subprocess
@@ -90,19 +91,51 @@ class EnvironmentContractTests(unittest.TestCase):
                 return {"returncode": -9, "timed_out": True}
             if self.mode == "runtime":
                 return {"returncode": 7, "stderr": "synthetic runtime failure"}
+            if self.mode == "timeout-marker-topic":
+                return {
+                    "returncode": 0,
+                    "stdout": "audit-timeoutexception\n",
+                }
             return {"returncode": 0, "stdout": ""}
         if Path(argv[1]).name == "kafka-get-offsets.sh":
             latest = 5 if self.mode == "nonempty" else 0
-            topic = parameters[parameters.index("--topic") + 1]
+            topic = re.sub(
+                r"\\(.)",
+                r"\1",
+                parameters[parameters.index("--topic") + 1],
+            )
+            if self.mode == "literal-topic":
+                return {
+                    "returncode": 0,
+                    "stdout": (
+                        f"benchX1:0:99\n{topic}:0:0\n{topic}:1:0\n"
+                    ),
+                }
+            if self.mode == "partial-offsets":
+                return {"returncode": 0, "stdout": f"{topic}:0:0\n"}
             return {"returncode": 0, "stdout": f"{topic}:0:{latest}\n"}
         if "--describe" in parameters:
-            return {
-                "returncode": 0,
-                "stdout": (
-                    "Topic: kpbot-contract PartitionCount: 1 "
-                    "ReplicationFactor: 1\n"
-                ),
-            }
+            topic = re.sub(
+                r"\\(.)",
+                r"\1",
+                parameters[parameters.index("--topic") + 1],
+            )
+            partitions = (
+                2
+                if self.mode in ("literal-topic", "partial-offsets")
+                else 1
+            )
+            lines = []
+            if self.mode == "literal-topic":
+                lines.append(
+                    "Topic: benchX1 PartitionCount: 9 "
+                    "ReplicationFactor: 3"
+                )
+            lines.append(
+                f"Topic: {topic} PartitionCount: {partitions} "
+                "ReplicationFactor: 1"
+            )
+            return {"returncode": 0, "stdout": "\n".join(lines) + "\n"}
         raise AssertionError("unexpected read-only probe: " + repr(argv))
 
     def fake_run_process(
@@ -307,6 +340,73 @@ class EnvironmentContractTests(unittest.TestCase):
             ],
             5,
         )
+
+    def test_native_describe_topic_id_header_and_legacy_compatibility(self):
+        native = (
+            "Topic: benchX1\tTopicId: AAAAAAAAAAAAAAAAAAAAAA\t"
+            "PartitionCount: 9\tReplicationFactor: 3\n"
+            "Topic: bench.1\tTopicId: Scj5akZsRAygBrkCwHef2w\t"
+            "PartitionCount: 2\tReplicationFactor: 1\t"
+            "Configs: min.insync.replicas=1\n"
+            "\tTopic: bench.1\tPartition: 0\tLeader: 1\tReplicas: 1\t"
+            "Isr: 1\tElr: \tLastKnownElr: \n"
+            "\tTopic: bench.1\tPartition: 1\tLeader: 1\tReplicas: 1\t"
+            "Isr: 1\tElr: \tLastKnownElr: \n"
+        )
+        metadata = support.parse_topic_description(native, "bench.1")
+        self.assertEqual(metadata["partitions"], [0, 1])
+        self.assertEqual(metadata["replication_factor"], 1)
+        offsets = support.parse_latest_offsets(
+            "benchX1:0:99\nbench.1:0:0\nbench.1:1:0\n",
+            "bench.1",
+            metadata["partitions"],
+        )
+        self.assertEqual(offsets, {0: 0, 1: 0})
+        legacy = support.parse_topic_description(
+            "Topic: bench.1 PartitionCount: 1 ReplicationFactor: 1\n",
+            "bench.1",
+        )
+        self.assertEqual(legacy["partitions"], [0])
+
+    def test_literal_topic_queries_ignore_regex_collision(self):
+        self.mode = "literal-topic"
+        arguments = self.arguments()
+        arguments[arguments.index("--topic") + 1] = "bench.1"
+        code, result, _, _ = self.invoke(arguments)
+        self.assertEqual(code, 0)
+        evidence = self.probe(result, "topic_metadata")["evidence"]
+        self.assertEqual(evidence["topic"], "bench.1")
+        self.assertEqual(evidence["partition_count"], 2)
+        self.assertEqual(evidence["replication_factor"], 1)
+        self.assertEqual(evidence["expected_partitions"], [0, 1])
+        self.assertEqual(evidence["latest_offset_sum"], 0)
+        for call in self.calls:
+            if call[1].endswith(
+                ("kafka-topics.sh", "kafka-get-offsets.sh")
+            ) and any(
+                flag in call for flag in ("--describe", "--time")
+            ):
+                self.assertEqual(
+                    call[call.index("--topic") + 1], re.escape("bench.1")
+                )
+
+    def test_partial_offsets_fail_closed_instead_of_declaring_empty(self):
+        self.mode = "partial-offsets"
+        code, result, _, _ = self.invoke()
+        self.assertEqual(code, 1)
+        probe = self.probe(result, "topic_metadata")
+        self.assertEqual(probe["status"], "blocked")
+        self.assertEqual(probe["category"], "error")
+        self.assertIsNone(probe["evidence"]["latest_offset_sum"])
+        self.assertIn("missing=[1]", probe["evidence"]["offsets_error"])
+
+    def test_successful_topic_list_allows_timeout_marker_in_name(self):
+        self.mode = "timeout-marker-topic"
+        code, result, _, _ = self.invoke()
+        self.assertEqual(code, 0)
+        probe = self.probe(result, "authenticated_metadata")
+        self.assertEqual(probe["category"], "ok")
+        self.assertEqual(probe["evidence"]["metadata_entry_count"], 1)
 
     def test_output_collision_preserves_existing_evidence(self):
         self.output.mkdir(parents=True)
@@ -573,7 +673,7 @@ class EnvironmentContractTests(unittest.TestCase):
                         status = Path(f"/proc/{pid}/stat").read_text(
                             encoding="utf-8"
                         )
-                    except FileNotFoundError:
+                    except (FileNotFoundError, ProcessLookupError):
                         break
                     if status.rpartition(") ")[2].startswith("Z"):
                         break

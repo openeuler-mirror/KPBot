@@ -212,20 +212,13 @@ def parse_perf_summary(text):
     }
 
 
-def parse_offsets(text, expected_topic):
-    offsets = {}
-    for line in text.splitlines():
-        match = re.fullmatch(
-            re.escape(expected_topic) + r":(\d+):(\d+)", line.strip()
+def parse_offsets(text, expected_topic, expected_partitions):
+    try:
+        return support.parse_latest_offsets(
+            text, expected_topic, expected_partitions
         )
-        if match:
-            offsets[int(match.group(1))] = int(match.group(2))
-    if not offsets:
-        raise WorkloadError(
-            "correctness",
-            "no parseable latest offsets were returned for the owned topic",
-        )
-    return offsets
+    except ValueError as exc:
+        raise WorkloadError("correctness", str(exc)) from exc
 
 
 def monotonic_payload_bytes(records):
@@ -366,6 +359,7 @@ def initial_result(args):
             "topic": "not_applicable" if args.topic else "not_requested",
             "consumer_groups": {},
             "issues": [],
+            "local_evidence_failures": [],
         },
         "limitations": [
             "Rate-limited native throughput is not the broker capacity limit.",
@@ -437,7 +431,29 @@ class BenchmarkRun:
                 f"{phase} failed with category {category}; native logs kept",
             )
 
+    def describe_topic(self, stem):
+        topic = self.result["target"]["topic"]
+        command = self.execute(
+            stem,
+            "kafka-topics.sh",
+            [
+                "--bootstrap-server",
+                self.args.bootstrap,
+                "--describe",
+                "--topic",
+                support.topic_query_pattern(topic),
+            ],
+            "--command-config",
+        )
+        self.require_success(command, stem)
+        try:
+            return support.parse_topic_description(command["stdout"], topic)
+        except ValueError as exc:
+            raise WorkloadError("correctness", str(exc)) from exc
+
     def read_offsets(self, stem):
+        topic = self.result["target"]["topic"]
+        metadata = self.describe_topic(stem + "-describe")
         command = self.execute(
             stem,
             "kafka-get-offsets.sh",
@@ -445,14 +461,14 @@ class BenchmarkRun:
                 "--bootstrap-server",
                 self.args.bootstrap,
                 "--topic",
-                self.result["target"]["topic"],
+                support.topic_query_pattern(topic),
                 "--time",
                 "latest",
             ],
             "--command-config",
         )
         self.require_success(command, stem)
-        return parse_offsets(command["stdout"], self.result["target"]["topic"])
+        return parse_offsets(command["stdout"], topic, metadata["partitions"])
 
     def prepare_existing_topic(self):
         command = self.execute(
@@ -463,7 +479,7 @@ class BenchmarkRun:
                 self.args.bootstrap,
                 "--describe",
                 "--topic",
-                self.args.topic,
+                support.topic_query_pattern(self.args.topic),
             ],
             "--command-config",
         )
@@ -479,6 +495,21 @@ class BenchmarkRun:
                     "diagnostic": command["stderr"][-1000:],
                 },
             )
+        try:
+            metadata = support.parse_topic_description(
+                command["stdout"], self.args.topic
+            )
+        except ValueError as exc:
+            return support.probe(
+                "existing_topic",
+                True,
+                "blocked",
+                "correctness",
+                {
+                    "command_id": "preflight-topic-describe",
+                    "error": str(exc),
+                },
+            )
         offsets_command = self.execute(
             "preflight-topic-empty",
             "kafka-get-offsets.sh",
@@ -486,7 +517,7 @@ class BenchmarkRun:
                 "--bootstrap-server",
                 self.args.bootstrap,
                 "--topic",
-                self.args.topic,
+                support.topic_query_pattern(self.args.topic),
                 "--time",
                 "latest",
             ],
@@ -502,7 +533,11 @@ class BenchmarkRun:
                 {"command_id": "preflight-topic-empty"},
             )
         try:
-            offsets = parse_offsets(offsets_command["stdout"], self.args.topic)
+            offsets = parse_offsets(
+                offsets_command["stdout"],
+                self.args.topic,
+                metadata["partitions"],
+            )
         except WorkloadError as exc:
             return support.probe(
                 "existing_topic_empty",
@@ -519,6 +554,8 @@ class BenchmarkRun:
             "topic_not_empty" if total else "ok",
             {
                 "command_id": "preflight-topic-empty",
+                "describe_command_id": "preflight-topic-describe",
+                "described_partitions": metadata["partitions"],
                 "latest_offsets": offsets,
                 "latest_offset_sum": total,
             },
@@ -663,13 +700,24 @@ class BenchmarkRun:
                     self.args.bootstrap,
                     "--describe",
                     "--topic",
-                    self.result["target"]["topic"],
+                    support.topic_query_pattern(
+                        self.result["target"]["topic"]
+                    ),
                 ],
                 "--command-config",
             )
-            ownership["ambiguous_topic_present"] = (
-                True if support.error_category(verification) is None else None
-            )
+            if support.error_category(verification) is not None:
+                ownership["ambiguous_topic_present"] = None
+            else:
+                try:
+                    support.parse_topic_description(
+                        verification["stdout"],
+                        self.result["target"]["topic"],
+                    )
+                except ValueError:
+                    ownership["ambiguous_topic_present"] = False
+                else:
+                    ownership["ambiguous_topic_present"] = True
             self.result["cleanup"]["topic"] = (
                 "retained_rpc_ambiguous_not_owned_for_certain"
             )
@@ -893,22 +941,43 @@ class BenchmarkRun:
                 "total",
             )
 
+    def record_cleanup_evidence_failure(self, operation, exc):
+        failure = {
+            "operation": operation,
+            "category": "local_evidence_write_failed",
+            "error": support.redact(str(exc), self.config.redactions),
+        }
+        cleanup = self.result["cleanup"]
+        cleanup["local_evidence_failures"].append(failure)
+        cleanup["issues"].append(
+            operation + ": local evidence write failed"
+        )
+
     def cleanup(self):
         ownership = self.result["ownership"]
-        self.result["cleanup"]["status"] = "running"
+        cleanup = self.result["cleanup"]
+        cleanup["status"] = "running"
         for index, group in enumerate(ownership["consumer_groups_started"]):
-            command = self.execute(
-                f"cleanup-consumer-group-{index:03d}",
-                "kafka-consumer-groups.sh",
-                [
-                    "--bootstrap-server",
-                    self.args.bootstrap,
-                    "--delete",
-                    "--group",
-                    group,
-                ],
-                "--command-config",
-            )
+            stem = f"cleanup-consumer-group-{index:03d}"
+            try:
+                command = self.execute(
+                    stem,
+                    "kafka-consumer-groups.sh",
+                    [
+                        "--bootstrap-server",
+                        self.args.bootstrap,
+                        "--delete",
+                        "--group",
+                        group,
+                    ],
+                    "--command-config",
+                )
+            except OSError as exc:
+                self.record_cleanup_evidence_failure(stem, exc)
+                cleanup["consumer_groups"][group] = (
+                    "unknown_after_local_evidence_failure"
+                )
+                continue
             category = support.error_category(command)
             output = (command["stdout"] + command["stderr"]).lower()
             absent = "does not exist" in output or "not found" in output
@@ -919,10 +988,10 @@ class BenchmarkRun:
                     + " cleanup failed: "
                     + category
                 )
-                self.result["cleanup"]["issues"].append(message)
-                self.result["cleanup"]["consumer_groups"][group] = "failed"
+                cleanup["issues"].append(message)
+                cleanup["consumer_groups"][group] = "failed"
             else:
-                self.result["cleanup"]["consumer_groups"][group] = (
+                cleanup["consumer_groups"][group] = (
                     "already_absent" if absent else "deleted_exact_owned_group"
                 )
         if (
@@ -930,34 +999,43 @@ class BenchmarkRun:
             and ownership["topic_create_state"] == "created"
         ):
             if self.args.keep_topic:
-                self.result["cleanup"]["topic"] = "retained_by_request"
+                cleanup["topic"] = "retained_by_request"
             else:
-                command = self.execute(
-                    "cleanup-topic",
-                    "kafka-topics.sh",
-                    [
-                        "--bootstrap-server",
-                        self.args.bootstrap,
-                        "--delete",
-                        "--topic",
-                        ownership["topic"],
-                    ],
-                    "--command-config",
-                )
-                category = support.error_category(command)
-                if category:
-                    self.result["cleanup"]["issues"].append(
-                        "owned topic cleanup failed: " + category
+                try:
+                    command = self.execute(
+                        "cleanup-topic",
+                        "kafka-topics.sh",
+                        [
+                            "--bootstrap-server",
+                            self.args.bootstrap,
+                            "--delete",
+                            "--topic",
+                            ownership["topic"],
+                        ],
+                        "--command-config",
                     )
-                    self.result["cleanup"]["topic"] = "failed"
+                except OSError as exc:
+                    self.record_cleanup_evidence_failure(
+                        "cleanup-topic", exc
+                    )
+                    cleanup["topic"] = (
+                        "unknown_after_local_evidence_failure"
+                    )
                 else:
-                    self.result["cleanup"]["topic"] = (
-                        "deleted_exact_owned_topic"
-                    )
-        self.result["cleanup"]["status"] = (
-            "failed" if self.result["cleanup"]["issues"] else "passed"
-        )
-        self.write()
+                    category = support.error_category(command)
+                    if category:
+                        cleanup["issues"].append(
+                            "owned topic cleanup failed: " + category
+                        )
+                        cleanup["topic"] = "failed"
+                    else:
+                        cleanup["topic"] = "deleted_exact_owned_topic"
+        cleanup["status"] = "failed" if cleanup["issues"] else "passed"
+        try:
+            self.write()
+        except OSError as exc:
+            self.record_cleanup_evidence_failure("cleanup-result", exc)
+            cleanup["status"] = "failed"
 
     def start(self):
         if not self.preflight():
@@ -1014,7 +1092,13 @@ class BenchmarkRun:
             self.result["status"] = "failed"
             if exit_code == 0:
                 exit_code = 1
-        self.write()
+        try:
+            self.write()
+        except OSError as exc:
+            self.record_cleanup_evidence_failure("final-result", exc)
+            self.result["cleanup"]["status"] = "failed"
+            self.result["status"] = "failed"
+            exit_code = 1
         return exit_code
 
 
