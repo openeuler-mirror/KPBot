@@ -2,7 +2,20 @@
 
 ## 环境与安装
 
-已有实例直接进入连接验证。新部署先确认版本、CPU 架构、内存、磁盘、端口、数据保存位置，以及裸机或容器；从 [官方 Releases](https://github.com/ClickHouse/ClickHouse/releases) 的目标版本 Assets 下载对应架构的 `clickhouse-common-static-<版本>-<架构>.tgz`，不要把 GitHub 页面另存为安装包。Linux x86_64 对应 amd64，aarch64 对应 arm64。解压后真正的可执行文件在包内 `usr/bin/clickhouse`，复制到新实验目录并赋予执行权限。下载后记录版本与 SHA-256，不使用 latest 作为可复现版本标识。需要源码构建时使用目标 release tag 及其构建文档，不替换系统编译器。
+已有实例直接进入连接验证。新部署先确认版本、CPU 架构、内存、磁盘、端口、数据保存位置，以及裸机或容器。版本确定前先审查该版本的官方安全公告：[GitHub Security Advisories](https://github.com/ClickHouse/ClickHouse/security/advisories) 与 [官方安全说明](https://github.com/ClickHouse/ClickHouse/security/policy)，确认候选版本没有适用本部署形态的未修复公告；没有核对结果时不要断言“无 CVE”，要在记录中给出核对来源与时间。
+
+从 [官方 Releases](https://github.com/ClickHouse/ClickHouse/releases) 的目标版本 Assets 同时下载安装包 `clickhouse-common-static-<版本>-<架构>.tgz` 和它的官方校验文件 `clickhouse-common-static-<版本>-<架构>.tgz.sha512`（同名 `.sha512` sidecar，例如 `v26.8.42.13-lts` 的 `clickhouse-common-static-26.8.42.13-amd64.tgz` 与 `clickhouse-common-static-26.8.42.13-amd64.tgz.sha512`）；同版本也可从 <https://packages.clickhouse.com/tgz/lts/> 或 <https://packages.clickhouse.com/tgz/stable/> 下载同名两文件。不要把 GitHub 页面另存为安装包。Linux x86_64 对应 amd64，aarch64 对应 arm64。**解压或执行前先校验**：用 `sha512sum -c` 或随附脚本对照官方 sidecar；校验通过前不得 `tar` 解压或运行包内任何文件，校验文件与安装包都要来自官方域名并留存文件名与版本证据：
+
+```bash
+curl -fLO "https://packages.clickhouse.com/tgz/lts/clickhouse-common-static-26.8.42.13-amd64.tgz"
+curl -fLO "https://packages.clickhouse.com/tgz/lts/clickhouse-common-static-26.8.42.13-amd64.tgz.sha512"
+python3 scripts/verify_archive_sha512.py \
+  --checksums clickhouse-common-static-26.8.42.13-amd64.tgz.sha512 \
+  clickhouse-common-static-26.8.42.13-amd64.tgz
+# 等价命令：sha512sum -c clickhouse-common-static-26.8.42.13-amd64.tgz.sha512
+```
+
+校验失败、sidecar 中缺少该安装包条目或文件不可读时必须停止，不得继续解压或执行。校验通过后解压，真正的可执行文件在包内 `usr/bin/clickhouse`，复制到新实验目录并赋予执行权限。记录版本与已验证的 SHA-512 摘要；不使用 latest 作为可复现版本标识。需要源码构建时使用目标 release tag 及其构建文档，不替换系统编译器。
 
 示例命令使用 Linux/Bash。依赖 Python 3.10+、tar、可用磁盘与对应架构的 ClickHouse；TPC-H 的源码获取另需 Git，生成数据另需 C 编译器和 Make。
 
@@ -75,4 +88,4 @@ done
 
 顺序：生成八张表数据 → 执行已审查 DDL → 按表导入 → 比对源文件记录数与 COUNT(*) → 校验查询结果 → 预热与多轮查询。保存生成参数、DDL/查询/数据清单校验和及导入日志。查询性能与合成计算基准分开报告。
 
-下载与运行是两个独立检查：下载应使用 `curl -fL` 或等价的 HTTP 错误检查，解压前执行 `tar -tzf` 检查文件内容；不能将 HTML 登录页当成二进制。若目标主机不能联网，可在可联网机器下载同版本同架构安装包和测试源码，再校验后传入目标机，命令保持不变。认证、权限和网络连通性需在部署前验证。
+下载与运行是两个独立检查：下载应使用 `curl -fL` 或等价的 HTTP 错误检查，先完成上文所述官方 `.sha512` 校验，再对包内容执行 `tar -tzf` 检查；不能将 HTML 登录页当成二进制。若目标主机不能联网，可在可联网机器下载同版本同架构安装包、对应 `.sha512` sidecar 和测试源码，校验后传入目标机，命令保持不变。认证、权限和网络连通性需在部署前验证。

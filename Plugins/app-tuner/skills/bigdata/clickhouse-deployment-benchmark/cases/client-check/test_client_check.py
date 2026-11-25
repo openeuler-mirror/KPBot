@@ -14,6 +14,14 @@ SCRIPT = Path(__file__).resolve().parents[2] / "scripts/check_service.py"
 spec = importlib.util.spec_from_file_location("service_check", SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+VERIFY_SCRIPT = (
+    Path(__file__).resolve().parents[2] / "scripts/verify_archive_sha512.py"
+)
+verify_spec = importlib.util.spec_from_file_location(
+    "verify_archive_sha512", VERIFY_SCRIPT
+)
+verify_module = importlib.util.module_from_spec(verify_spec)
+verify_spec.loader.exec_module(verify_module)
 
 
 class ClientCheckTests(unittest.TestCase):
@@ -140,6 +148,7 @@ class ClientCheckTests(unittest.TestCase):
     def test_connection_options_are_passed_as_argv(self):
         self.args.host = "db-host"
         self.args.port = 19000
+        self.args.user = "explicit-user"
         self.args.config = Path("client.conf")
         with patch.object(module.subprocess, "run", side_effect=self.client):
             module.check(self.args)
@@ -147,6 +156,26 @@ class ClientCheckTests(unittest.TestCase):
         self.assertIn("19000", self.calls[0])
         self.assertIn("--config-file", self.calls[0])
         self.assertIn("client.conf", self.calls[0])
+        user_index = self.calls[0].index("--user")
+        self.assertEqual(self.calls[0][user_index + 1], "explicit-user")
+
+    def test_omitted_user_leaves_config_user_authoritative(self):
+        self.args.config = Path("client.conf")
+        with patch.object(module.subprocess, "run", side_effect=self.client):
+            result = module.check(self.args)
+        self.assertEqual(result["status"], "passed")
+        for call in self.calls:
+            self.assertNotIn("--user", call)
+            self.assertIn("--config-file", call)
+
+    def test_omitted_user_without_config_uses_client_default(self):
+        self.assertIsNone(self.args.user)
+        with patch.object(module.subprocess, "run", side_effect=self.client):
+            result = module.check(self.args)
+        self.assertEqual(result["status"], "passed")
+        for call in self.calls:
+            self.assertNotIn("--user", call)
+            self.assertNotIn("--config-file", call)
 
     def test_passed_result_explicitly_limits_scope(self):
         with patch.object(module.subprocess, "run", side_effect=self.client):
@@ -168,6 +197,70 @@ class ClientCheckTests(unittest.TestCase):
         with patch.object(module.subprocess, "run", side_effect=self.client):
             self.assertEqual(module.check(self.args)["status"], "passed")
         self.assertEqual(self.calls[0][:2], ["./clickhouse", "client"])
+
+
+class ArchiveChecksumTests(unittest.TestCase):
+    """Verify the stdlib streaming checker against official sidecars."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.archive = self.root / "clickhouse-common-static-test-amd64.tgz"
+        self.archive.write_bytes(b"payload" * 4096)
+        digest = verify_module.file_sha512(self.archive)
+        self.sidecar = self.root / (self.archive.name + ".sha512")
+        self.sidecar.write_text(
+            f"{digest}  {self.archive.name}\n", encoding="utf-8"
+        )
+
+    def test_matching_official_entry_passes(self):
+        ok, message = verify_module.verify(self.archive, self.sidecar)
+        self.assertTrue(ok, message)
+        self.assertIn("verified", message)
+        self.assertEqual(
+            verify_module.main(
+                [
+                    "--checksums",
+                    str(self.sidecar),
+                    str(self.archive),
+                ]
+            ),
+            0,
+        )
+
+    def test_mismatched_digest_fails_before_use(self):
+        self.archive.write_bytes(b"tampered")
+        ok, message = verify_module.verify(self.archive, self.sidecar)
+        self.assertFalse(ok)
+        self.assertIn("mismatch", message)
+        self.assertEqual(
+            verify_module.main(
+                [
+                    "--checksums",
+                    str(self.sidecar),
+                    str(self.archive),
+                ]
+            ),
+            1,
+        )
+
+    def test_missing_entry_fails_closed(self):
+        other = self.root / "clickhouse-server-test-amd64.tgz"
+        other.write_bytes(b"payload" * 4096)
+        ok, message = verify_module.verify(other, self.sidecar)
+        self.assertFalse(ok)
+        self.assertIn("no checksum entry", message)
+        self.assertEqual(
+            verify_module.main(["--checksums", str(self.sidecar), str(other)]),
+            1,
+        )
+
+    def test_malformed_sidecar_fails_closed(self):
+        self.sidecar.write_text("not-a-checksum\n", encoding="utf-8")
+        ok, message = verify_module.verify(self.archive, self.sidecar)
+        self.assertFalse(ok)
+        self.assertIn("checksum line", message)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,14 @@ def parser():
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--host", default="localhost")
     result.add_argument("--port", type=int, default=9000)
-    result.add_argument("--user", default="default")
+    result.add_argument(
+        "--user",
+        default=None,
+        help=(
+            "explicit client user; when omitted the --config value or the "
+            "client built-in default (default) is used"
+        ),
+    )
     result.add_argument("--client", default="clickhouse-client")
     result.add_argument(
         "--single-binary",
@@ -58,9 +65,9 @@ def check(args):
             args.host,
             "--port",
             str(args.port),
-            "--user",
-            args.user,
         ]
+        if args.user is not None:
+            argv += ["--user", args.user]
         argv += ["--format", "TSV", "--query", sql]
         index = len(result["checks"])
         item = {"sql": sql, "returncode": None}
@@ -123,6 +130,8 @@ def main():
     args = parser().parse_args()
     if not 0 < args.port <= 65535:
         parser().error("invalid port")
+    if args.user is not None and ("\x00" in args.user or not args.user):
+        parser().error("--user must be non-empty and contain no NUL")
     try:
         result = check(args)
     except OSError as exc:
