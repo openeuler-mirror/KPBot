@@ -1,0 +1,60 @@
+{
+  "skill_name": "kptools-tpsplit-log-collector",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "fetch-full-set-validate",
+      "prompt": "把 evals/fixtures 下的 5 份文件按远端真实目录布局放到 /tmp/opencode/fakeroot/（模拟共享挂载根）：P102_prefill.log → p102/log/prefill.log、P103_prefill.log → p103/log/prefill.log、D103_decode.log → d103/log/decode.log、load_balance.log → proxy/load_balance.log、manual_synth_dumpjsonl.json → bench/manual_synth_dumpjsonl.json（fetch_logs.sh 按精确文件名 prefill.log/decode.log 定位，多台机器各占一个子目录）。然后在该根目录跑本 skill 的 fetch_logs.sh 做定位与校验（不带 --stage），告诉我：找到几份、每份的标记行数、四份是否同一轮压测、退出码是多少。",
+      "expected_output": "bash fetch_logs.sh --root /tmp/opencode/fakeroot（不给 --root 会扫默认 /data，必须显式传根）；汇总行 P=2 D=1 PROXY=1 BENCH=1；两份 P 的 [TTFT][BREAKDOWN] 计数各为 4、合计 8，压测记录按 JSON 解析计 8 条，无「≠ 压测请求数」偏差告警；退出码 0。",
+      "files": [
+        "evals/fixtures/P102_prefill.log",
+        "evals/fixtures/P103_prefill.log",
+        "evals/fixtures/D103_decode.log",
+        "evals/fixtures/load_balance.log",
+        "evals/fixtures/manual_synth_dumpjsonl.json"
+      ],
+      "assertions": [
+        "用 --root 显式传入扫描根而非依赖默认 /data",
+        "汇总行 P=2 D=1 PROXY=1 BENCH=1",
+        "BREAKDOWN 合计 8 与压测记录数 8 一致、无同轮偏差告警",
+        "退出码为 0"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "expect-req-gate-and-stage",
+      "prompt": "同样把 evals/fixtures 的 5 份按子目录布局（同上一题：p102/log/prefill.log、p103/log/prefill.log、d103/log/decode.log、proxy/load_balance.log、bench/manual_synth_dumpjsonl.json）放到 /tmp/opencode/fakeroot2 并执行 fetch_logs.sh：这次用 --expect-req 100 做完整性门槛，并用 --stage /tmp/opencode/stage2 暂存。跑完告诉我门槛是否通过、暂存目录里文件是否齐全且多 P 同名 prefill.log 不会互相覆盖。",
+      "expected_output": "P 侧 BREAKDOWN 合计 8 < 100 → 输出「P 侧 BREAKDOWN 总行数 8 < --expect-req 100」，退出码 1（暂存仍完成）；暂存目录 5 个文件，文件名为来源完整路径把 / 与 : 替换成 __（两份 prefill.log 来源路径不同、不重名不覆盖）。",
+      "files": [
+        "evals/fixtures/P102_prefill.log",
+        "evals/fixtures/P103_prefill.log",
+        "evals/fixtures/D103_decode.log",
+        "evals/fixtures/load_balance.log",
+        "evals/fixtures/manual_synth_dumpjsonl.json"
+      ],
+      "assertions": [
+        "--expect-req 失败时退出码非 0（=1）",
+        "暂存文件名含完整来源路径（多 P 同名 prefill.log 不互相覆盖）",
+        "门槛按多 P 求和（8）而非单份（4）校验"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "noshm-marker-detect",
+      "prompt": "把 evals/fixtures/noshm 下的两份 prefill.log 分别放到 /tmp/opencode/fakeroot3 的 p102/log/prefill.log 与 p103/log/prefill.log（真实布局同前两题），其余 3 份（D103_decode.log、load_balance.log、manual_synth_dumpjsonl.json）照常放 d103/log/、proxy/、bench/ 子目录，跑 fetch_logs.sh。输出里没看到 [SHM_DEQUEUE_BATCH] 的计数行，这对下游解析意味着什么？我该检查什么？",
+      "expected_output": "noshm 的 P 日志 [SHM_DEQUEUE_BATCH] 计数为 0，脚本只打印非 0 标记 → 计数行缺失即该 P 日志无 shm 打点；判定 VLLM_TTFT_SHM_LOG=1 未设置/未生效（Ray actor 的 env 来自 raylet、启动 shell export 不生效）；提示下游 dequeue 列将为 0、属采集侧缺数据源而非解析 bug；建议核对引擎启动 env 后决定是否重采；该检出为软提示，退出码仍为 0（只要 P 与压测 json 齐全）。",
+      "files": [
+        "evals/fixtures/noshm/P102_prefill.log",
+        "evals/fixtures/noshm/P103_prefill.log",
+        "evals/fixtures/D103_decode.log",
+        "evals/fixtures/load_balance.log",
+        "evals/fixtures/manual_synth_dumpjsonl.json"
+      ],
+      "assertions": [
+        "识别「计数行缺失 = 标记计数为 0」而非「脚本漏检」",
+        "归因到 VLLM_TTFT_SHM_LOG 未开/未生效（采集侧缺数据源，含 Ray actor env 陷阱）",
+        "不误判为解析器 bug；该软检出不改变退出码"
+      ]
+    }
+  ]
+}
