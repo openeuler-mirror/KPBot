@@ -1,0 +1,4 @@
+{
+  "verdict": "imbalanced",
+  "recommendation": {"action": "free_memory_first", "memory": {"verdict": "no_headroom"}}
+}
