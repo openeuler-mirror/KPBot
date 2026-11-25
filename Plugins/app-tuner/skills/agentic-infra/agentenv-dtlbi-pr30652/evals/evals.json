@@ -1,0 +1,36 @@
+{
+  "skill_name": "agentenv-dtlbi-pr30652",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "coding 负载 perf 里有不少 __tlb_switch_to_host，能优化吗？和 cluster-tlbi 那个 DVMBM 是一回事吗？",
+      "expected_output": "指向本技能：KVM 软件 directed stage-2 TLB 失效（openEuler PR #30652），与 agentenv-cluster-tlbi 的 DVMBM 硬件位图广播范围是不同机制——可共存，但对照测试固定其一；先做 __tlb_switch_to_host 占比门禁再决定换核。",
+      "files": [],
+      "expectations": [
+        "不与 DVMBM/cluster-tlbi 机制混淆",
+        "门禁前置：先量化热点占比再谈换核",
+        "换核重启风险需显式授权"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "perf report 里 __tlb_switch_to_host 只占 0.4%，还要按那个 skill 换内核吗？",
+      "expected_output": "按门禁规则（<1%）报告热点占比与预期收益有限，由使用者决定是否继续换核，不默认继续。",
+      "files": [],
+      "expectations": [
+        "不替用户默认继续",
+        "引用 ≥1% 阈值口径说明依据"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "能不能不重启临时打开 directed TLBI 看看效果？",
+      "expected_output": "运行时 sysfs 方式：echo 1 > /sys/module/kvm/parameters/direct_tlbi；提示仅在没有 VM 运行/负载停止时切换（已知切换竞态），核验输出为 1。",
+      "files": [],
+      "expectations": [
+        "给出方式 B（sysfs 运行时）",
+        "提示切换竞态与时机约束"
+      ]
+    }
+  ]
+}
