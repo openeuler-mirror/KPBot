@@ -96,7 +96,7 @@
 
 ### GPU 推理瓶颈（NVIDIA/CUDA）
 
-优先候选：`cpu-affinity-optimization`（强制首位）；GPU/NPU 等计算卡证据命中时追加 `accelerator-optimization`
+优先候选：`cpu-affinity-optimization`（强制首位）；NPU+vLLM 证据命中时追加 `vllm-ascend-profiling`，GPU/NPU 规格或容量不足时追加 `hardware-upgrade-analysis`。`accelerator-optimization` 只承接 HPRE/KAE 密码加速卡（`crypto_accelerator_bottleneck`），不再承接 GPU/NPU 通用计算卡分析。
 
 检查顺序：
 
