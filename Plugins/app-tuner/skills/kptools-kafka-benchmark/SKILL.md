@@ -116,3 +116,13 @@ timeout、运行失败、输出冲突、预热排除、精确内容/计数/offse
 - [Apache Kafka 4.1 Quick Start](https://kafka.apache.org/41/getting-started/quickstart/)
 - [ProducerPerformance 4.1.0 源码与单位实现](https://github.com/apache/kafka/blob/4.1.0/tools/src/main/java/org/apache/kafka/tools/ProducerPerformance.java)
 - [Apache Kafka 4.1 Configuration](https://kafka.apache.org/41/configuration/)
+
+
+## 镜像维护
+
+`scripts/kafka_support.py` 在两个 Kafka skill 中有意保持逐字节镜像；修改任一副本时
+必须同步另一副本，并由双侧契约在源码仓存在相邻 skill 时断言 SHA-256 一致。每个已安装
+skill 仍自包含其副本，运行时不导入、不读取也不要求相邻 skill 存在。
+
+
+CLI 子进程仅透传 Java、PATH、HOME、locale、临时目录及明确列出的 Kerberos 配置/缓存位置；不会继承其他凭据或 `KAFKA_OPTS` 等任意 JVM 注入设置。认证参数使用本技能校验的客户端配置文件。

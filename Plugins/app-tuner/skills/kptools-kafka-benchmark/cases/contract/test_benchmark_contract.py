@@ -2,6 +2,7 @@
 """Stateful offline benchmark contracts; not real-service E2E evidence."""
 
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -621,6 +622,59 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertEqual(metrics["records_sent"], 100)
         self.assertEqual(metrics["p95_latency_ms"], 8)
         self.assertIn("MiB/s", metrics["throughput_unit_note"])
+
+    def test_cli_environment_is_allowlisted_before_process_creation(self):
+        secret = "injected-unrelated-credential"
+        inherited = {
+            "HOME": self.root.as_posix(),
+            "JAVA_HOME": "/selected/jdk",
+            "KRB5_CONFIG": self.root.joinpath("krb5.conf").as_posix(),
+            "KRB5CCNAME": self.root.joinpath("krb5cc").as_posix(),
+            "LANG": "C.UTF-8",
+            "PATH": "/usr/bin:/bin",
+            "TMPDIR": self.root.as_posix(),
+            "AWS_SECRET_ACCESS_KEY": secret,
+            "KAFKA_OPTS": "-Dinjected=true",
+        }
+        process = Mock()
+        process.communicate.return_value = ("", "")
+        process.returncode = 0
+        with (
+            patch.dict(os.environ, inherited, clear=True),
+            patch.object(
+                support.subprocess, "Popen", return_value=process
+            ) as popen,
+        ):
+            before = dict(os.environ)
+            result = support.run_process(["bash", "tool"], 1)
+            self.assertEqual(dict(os.environ), before)
+        self.assertEqual(result["returncode"], 0)
+        child_env = popen.call_args.kwargs["env"]
+        self.assertEqual(
+            child_env,
+            {
+                key: value
+                for key, value in inherited.items()
+                if key in support.CLI_ENVIRONMENT_KEYS
+            },
+        )
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", child_env)
+        self.assertNotIn("KAFKA_OPTS", child_env)
+
+    def test_mirrored_kafka_support_matches_repository_sibling(self):
+        local = SKILL / "scripts/kafka_support.py"
+        sibling = (
+            SKILL.parent
+            / "kptools-kafka-environment-check"
+            / "scripts/kafka_support.py"
+        )
+        if not sibling.is_file():
+            self.assertTrue(local.is_file())
+            return
+        self.assertEqual(
+            hashlib.sha256(local.read_bytes()).hexdigest(),
+            hashlib.sha256(sibling.read_bytes()).hexdigest(),
+        )
 
     def test_timeout_kills_the_bounded_process_group(self):
         process = Mock()

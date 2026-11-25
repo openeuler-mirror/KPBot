@@ -55,6 +55,29 @@ SENSITIVE_CONFIG_MARKERS = (
     "secret",
     "token",
 )
+CLI_ENVIRONMENT_KEYS = (
+    "HOME",
+    "JAVA_HOME",
+    "LANG",
+    "LANGUAGE",
+    "LC_ALL",
+    "LC_COLLATE",
+    "LC_CTYPE",
+    "LC_MESSAGES",
+    "LC_MONETARY",
+    "LC_NUMERIC",
+    "LC_TIME",
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    # Native Kerberos configuration/cache locations used by Java GSSAPI.
+    "KRB5_CLIENT_KTNAME",
+    "KRB5_CONFIG",
+    "KRB5_KTNAME",
+    "KRB5_TRACE",
+    "KRB5CCNAME",
+)
 
 
 class ConfigError(ValueError):
@@ -340,6 +363,15 @@ def terminate_and_drain(process):
         return stdout, stderr, True
 
 
+def build_cli_environment():
+    """Return only the runtime variables required by official Java CLIs."""
+    return {
+        key: os.environ[key]
+        for key in CLI_ENVIRONMENT_KEYS
+        if key in os.environ
+    }
+
+
 def run_process(argv, timeout, input_text=None, redactions=()):
     """Run one bounded process group and return sanitized native evidence."""
     if not math.isfinite(timeout) or timeout <= 0:
@@ -368,6 +400,7 @@ def run_process(argv, timeout, input_text=None, redactions=()):
     try:
         process = subprocess.Popen(
             argv,
+            env=build_cli_environment(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
