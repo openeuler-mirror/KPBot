@@ -1,0 +1,20 @@
+{
+  "skill_name": "kptools-dplb-report",
+  "evals": [
+    {
+      "id": "DP-R04",
+      "query": "我这里已经有一份 dp_load_metrics CSV，帮我直接出分析报告",
+      "expected": "流程 B：跳过采集，直接 generate_report.py 解析；单份出单池报告，两份出 A/B 对比；PD 双池 CSV 各自出单池报告不做对比；输出路径先询问用户"
+    },
+    {
+      "id": "DP-R05",
+      "query": "对比 proxy 和 coordinator 两种路由策略哪个分发更均衡",
+      "expected": "需要两份等时长等步长 CSV：已有则直接 A/B 对比报告（逐指标对照、占优方与改善幅度）；只有一份则引导现场切换策略再采或 Prometheus 回采第二份（采集由 kptools-dplb-profiler 完成）；两窗均短时提示长时间窗复核"
+    },
+    {
+      "id": "DP-R06",
+      "query": "vLLM 推理集群各引擎忙闲不均，帮忙分析下负载均衡状况",
+      "expected": "报告场景：若用户已有 CSV 走流程 B；没有数据则引导先用 kptools-dplb-profiler 采集（现场轮询或 Prometheus 回采）拿到 CSV，再生成报告并按效应量（LIF/失衡比）与业务影响判读"
+    }
+  ]
+}
