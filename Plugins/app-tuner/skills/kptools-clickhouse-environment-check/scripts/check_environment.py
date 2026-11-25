@@ -76,7 +76,14 @@ def build_parser():
     )
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=network_port, default=9000)
-    parser.add_argument("--user", default="default")
+    parser.add_argument(
+        "--user",
+        default=None,
+        help=(
+            "explicit client user; when omitted the --config value or the "
+            "client built-in default (default) is used"
+        ),
+    )
     parser.add_argument("--client", default="clickhouse-client")
     parser.add_argument("--benchmark", default="clickhouse-benchmark")
     parser.add_argument(
@@ -291,8 +298,10 @@ def connection_arguments(args):
         args.host,
         "--port",
         str(args.port),
-        "--user",
-        args.user,
+    ]
+    if args.user is not None:
+        argv += ["--user", args.user]
+    argv += [
         "--connect_timeout",
         str(max(1, math.ceil(args.timeout))),
         "--receive_timeout",
@@ -477,6 +486,13 @@ def run_checks(args):
             "host": args.host,
             "port": args.port,
             "user": args.user,
+            "user_source": (
+                "cli"
+                if args.user is not None
+                else "config"
+                if args.config is not None
+                else "client_default"
+            ),
             "secure": args.secure,
             "config_provided": args.config is not None,
             "single_binary": args.single_binary,
@@ -508,8 +524,10 @@ def main(argv=None):
     """Create fresh evidence, run probes, and return a meaningful exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    if not args.host or "\x00" in args.host or not args.user:
-        parser.error("host and user must be non-empty and contain no NUL")
+    if not args.host or "\x00" in args.host:
+        parser.error("host must be non-empty and contain no NUL")
+    if args.user is not None and ("\x00" in args.user or not args.user):
+        parser.error("--user must be non-empty and contain no NUL")
     try:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.mkdir(mode=0o700, exist_ok=False)

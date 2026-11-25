@@ -359,6 +359,60 @@ raise SystemExit(int(os.environ["EXPECTED_STATUS"]))
                 self.assertIn("scripts/run_benchmark.py", observed["argv"])
                 self.assertIn("--secure", observed["argv"])
 
+    def test_omitted_user_respects_supplied_config(self):
+        self.fake_client()
+        config = self.root / "client.xml"
+        config.write_text(
+            "<clickhouse><user>config-user</user></clickhouse>",
+            encoding="utf-8",
+        )
+        config.chmod(0o600)
+        output = self.root / "config-user"
+        completed = self.invoke(output, extra=("--config", config))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.result(output)
+        self.assertIsNone(result["target"]["user"])
+        self.assertEqual(result["target"]["user_source"], "config")
+        query_calls = [call for call in self.calls() if "--query" in call]
+        self.assertTrue(query_calls)
+        for call in query_calls:
+            self.assertNotIn("--user", call)
+
+    def test_explicit_user_still_overrides_config(self):
+        self.fake_client()
+        config = self.root / "client.xml"
+        config.write_text(
+            "<clickhouse><user>config-user</user></clickhouse>",
+            encoding="utf-8",
+        )
+        config.chmod(0o600)
+        output = self.root / "explicit-user"
+        completed = self.invoke(
+            output,
+            extra=("--config", config, "--user", "cli-user"),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.result(output)
+        self.assertEqual(result["target"]["user"], "cli-user")
+        self.assertEqual(result["target"]["user_source"], "cli")
+        workload = next(
+            call for call in self.calls() if "--iterations" in call
+        )
+        self.assertEqual(workload[workload.index("--user") + 1], "cli-user")
+
+    def test_omitted_user_without_config_uses_client_default(self):
+        self.fake_client()
+        output = self.root / "default-user"
+        completed = self.invoke(output)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = self.result(output)
+        self.assertIsNone(result["target"]["user"])
+        self.assertEqual(result["target"]["user_source"], "client_default")
+        query_calls = [call for call in self.calls() if "--query" in call]
+        self.assertTrue(query_calls)
+        for call in query_calls:
+            self.assertNotIn("--user", call)
+
     def test_secure_target_and_password_redaction(self):
         self.fake_client()
         config = self.root / "secure.xml"

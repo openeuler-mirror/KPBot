@@ -53,7 +53,7 @@ python3 scripts/run_benchmark.py \
   --client ./clickhouse --single-binary --output results/run-single-001
 ```
 
-TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变量传递，不能放入 argv；脚本会脱敏 JSON 和日志。以下示例在有界子 shell 中运行，`EXIT` trap 在正常或失败退出时清除密码，不修改父 agent 会话中的 `CLICKHOUSE_PASSWORD`。若此前已在父会话导出此变量，使用结束后执行 `unset CLICKHOUSE_PASSWORD`。仅当确有现成客户端配置时才追加 `--config ./existing-client.xml`；配置文件必须是 group/other 无权限的普通文件（通常 `chmod 600`），密码与 TLS 本身不要求创建配置文件：
+TLS 可直接使用 `--secure`。密码仅通过 `CLICKHOUSE_PASSWORD` 环境变量传递，不能放入 argv；脚本会脱敏 JSON 和日志。`--user` 只在显式给出时传给客户端；省略时优先由 `--config` 客户端配置提供用户，两者都缺省时使用客户端内置默认用户，结果 JSON 的 `target.user_source` 会记录 `cli`、`config` 或 `client_default`。以下示例在有界子 shell 中运行，`EXIT` trap 在正常或失败退出时清除密码，不修改父 agent 会话中的 `CLICKHOUSE_PASSWORD`。若此前已在父会话导出此变量，使用结束后执行 `unset CLICKHOUSE_PASSWORD`。仅当确有现成客户端配置时才追加 `--config ./existing-client.xml`；配置文件必须是 group/other 无权限的普通文件（通常 `chmod 600`），密码与 TLS 本身不要求创建配置文件：
 
 ```bash
 (
