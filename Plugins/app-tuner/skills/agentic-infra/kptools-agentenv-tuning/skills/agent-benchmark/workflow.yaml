@@ -1,0 +1,21 @@
+{
+  "id": "agent-benchmark",
+  "capability": "agentenv.benchmark.replay",
+  "contract": "agentenv-benchmark-result/v1",
+  "inputs": {
+    "request": "任务类型、目标 driver 与 Host、档位及容量来源，默认使用内置 55 条或指定清单、轨迹目录及模板映射。现场执行还需服务、模板及获准并发和时间窗。",
+    "archive": "复核已有回放时提供本轮配置、日志、退出状态、结果目录和预期轨迹范围。"
+  },
+  "outputs": {
+    "plan": "plan.json 中的容量口径、名义沙箱数。准备配置时同时交付本轮 replays/ 与 image-map.json。",
+    "result": "benchmark-result.json，含 status、findings、evidence_sources 和 required_evidence。"
+  },
+  "resources": ["SKILL.md", "references", "scripts", "cases"],
+  "steps": ["plan", "prepare", "run", "verify"],
+  "supervisor": {
+    "action": "read",
+    "inputs": {"archive": "agentenv-benchmark-archive/v1"},
+    "when": {"archive": {"contract": "agentenv-benchmark-archive/v1"}},
+    "outputs": {"result": "agentenv-benchmark-result/v1"}
+  }
+}

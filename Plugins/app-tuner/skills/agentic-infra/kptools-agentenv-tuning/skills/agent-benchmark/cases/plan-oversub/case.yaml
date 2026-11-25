@@ -1,0 +1,12 @@
+name: plan-oversub
+skill: agent-benchmark
+tier: A
+# 本地在 skill 根目录执行 entrypoint，需要 Git、Python 3.11+ 和 PyYAML。
+# 用例使用临时仓库、合成 preset 和容量，也可按 build 配置构建镜像后离线运行。
+build:
+  context: ../../../../../../..
+  dockerfile: skills/agentic-infra/kptools-agentenv-tuning/skills/agent-benchmark/cases/plan-oversub/Dockerfile
+entrypoint: ["python3", "cases/plan-oversub/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
