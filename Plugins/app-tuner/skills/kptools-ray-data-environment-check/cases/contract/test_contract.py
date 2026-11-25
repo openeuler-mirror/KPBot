@@ -16,6 +16,27 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+def write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="ascii")
+
+
+def nested_v2_fixture(root):
+    write(root / "proc/self/cgroup", "0::/service\n")
+    write(
+        root / "proc/self/mountinfo",
+        "30 20 0:26 /system.slice /sys/fs/cgroup rw - cgroup2 cgroup rw\n",
+    )
+    write(root / "proc/meminfo", "MemAvailable: 8388608 kB\n")
+    base = root / "sys/fs/cgroup"
+    write(base / "cpu.max", "400000 100000")
+    write(base / "memory.max", "1073741824")
+    write(base / "memory.current", "0")
+    write(base / "service/cpu.max", "100000 100000")
+    write(base / "service/memory.max", "536870912")
+    write(base / "service/memory.current", "402653184")
+
+
 class EnvironmentContract(unittest.TestCase):
     def test_probe_shape_and_statuses(self):
         for function in (
@@ -48,6 +69,83 @@ class EnvironmentContract(unittest.TestCase):
             self.assertEqual(
                 MODULE.package_probe("ray")["reason"], "not_installed"
             )
+
+    def test_unreadable_metadata_is_unknown_without_invalidmetadata(self):
+        errors = (
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid metadata"),
+            OSError("metadata I/O failed"),
+        )
+        for error in errors:
+            with (
+                self.subTest(error=type(error).__name__),
+                mock.patch.object(
+                    MODULE.importlib.metadata, "version", side_effect=error
+                ),
+            ):
+                result = MODULE.package_probe("ray")
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "metadata_unreadable")
+                self.assertIsNone(result["evidence"]["actual"])
+                self.assertEqual(
+                    result["evidence"]["error_type"], type(error).__name__
+                )
+
+    def test_nested_v2_cgroup_limits_include_only_visible_ancestors(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(
+                MODULE.os, "sched_getaffinity", return_value=set(range(8))
+            ),
+            mock.patch.object(MODULE.os, "cpu_count", return_value=8),
+        ):
+            root = Path(directory)
+            nested_v2_fixture(root)
+            cpus = MODULE.visible_cpus(root)
+            memory = MODULE.memory_probe(root)
+        self.assertEqual(cpus["status"], "blocked")
+        self.assertEqual(cpus["evidence"]["cgroup_quotas"], [1.0, 4.0])
+        self.assertEqual(cpus["evidence"]["visible_upper_bound"], 1.0)
+        self.assertEqual(memory["status"], "blocked")
+        self.assertEqual(
+            memory["evidence"]["cgroup_remaining_by_group_bytes"],
+            [128 * 1024 * 1024, 1024 * 1024 * 1024],
+        )
+        self.assertEqual(
+            memory["evidence"]["available_upper_bound_bytes"],
+            128 * 1024 * 1024,
+        )
+
+    def test_root_v1_cgroup_limits_are_not_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write(
+                root / "proc/self/cgroup",
+                "1:cpu,cpuacct:/\n2:memory:/\n",
+            )
+            write(
+                root / "proc/self/mountinfo",
+                "30 20 0:26 / /sys/fs/cgroup/cpu rw - cgroup cgroup rw,cpu,cpuacct\n"
+                "31 20 0:27 / /sys/fs/cgroup/memory rw - cgroup cgroup rw,memory\n",
+            )
+            write(root / "proc/meminfo", "MemAvailable: 8388608 kB\n")
+            write(root / "sys/fs/cgroup/cpu/cpu.cfs_quota_us", "100000")
+            write(root / "sys/fs/cgroup/cpu/cpu.cfs_period_us", "100000")
+            write(root / "sys/fs/cgroup/memory/memory.limit_in_bytes", "134217728")
+            write(root / "sys/fs/cgroup/memory/memory.usage_in_bytes", "0")
+            with (
+                mock.patch.object(
+                    MODULE.os, "sched_getaffinity", return_value=set(range(8))
+                ),
+                mock.patch.object(MODULE.os, "cpu_count", return_value=8),
+            ):
+                cpus = MODULE.visible_cpus(root)
+            memory = MODULE.memory_probe(root)
+        self.assertEqual(cpus["reason"], "insufficient_cpus")
+        self.assertEqual(cpus["evidence"]["cgroup_quota"], 1.0)
+        self.assertEqual(memory["reason"], "insufficient_available_memory")
+        self.assertEqual(
+            memory["evidence"]["cgroup_remaining_bytes"], 128 * 1024 * 1024
+        )
 
     def test_insufficient_shm(self):
         usage = mock.Mock(total=1024, free=1024)

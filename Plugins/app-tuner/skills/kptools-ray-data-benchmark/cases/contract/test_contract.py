@@ -19,6 +19,27 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+def write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="ascii")
+
+
+def nested_v2_fixture(root):
+    write(root / "proc/self/cgroup", "0::/service\n")
+    write(
+        root / "proc/self/mountinfo",
+        "30 20 0:26 /system.slice /sys/fs/cgroup rw - cgroup2 cgroup rw\n",
+    )
+    write(root / "proc/meminfo", "MemAvailable: 8388608 kB\n")
+    base = root / "sys/fs/cgroup"
+    write(base / "cpu.max", "400000 100000")
+    write(base / "memory.max", "1073741824")
+    write(base / "memory.current", "0")
+    write(base / "service/cpu.max", "100000 100000")
+    write(base / "service/memory.max", "536870912")
+    write(base / "service/memory.current", "402653184")
+
+
 class Vector:
     def __init__(self, values):
         self.values = list(values)
@@ -133,6 +154,147 @@ class BenchmarkContract(unittest.TestCase):
                 "measured-1",
                 Path(directory),
             )
+
+    def test_preflight_enforces_nested_v2_cpu_and_memory_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "fixture"
+            output = Path(directory) / "output"
+            output.mkdir()
+            nested_v2_fixture(root)
+            usage = mock.Mock(
+                total=2 * MODULE.OBJECT_STORE_BYTES,
+                free=2 * MODULE.OBJECT_STORE_BYTES,
+            )
+            with (
+                mock.patch.object(
+                    MODULE.importlib.metadata,
+                    "version",
+                    side_effect=lambda package: MODULE.EXPECTED[package],
+                ),
+                mock.patch.object(
+                    MODULE.os, "sched_getaffinity", return_value=set(range(8))
+                ),
+                mock.patch.object(MODULE.os, "cpu_count", return_value=8),
+                mock.patch.object(MODULE.shutil, "disk_usage", return_value=usage),
+            ):
+                problems, evidence = MODULE.preflight(
+                    self.config(output), output, root
+                )
+        self.assertIn("at least two visible CPUs are required", problems)
+        self.assertIn("available memory is smaller than the object store", problems)
+        self.assertEqual(evidence["visible_cpus"], 1.0)
+        self.assertEqual(evidence["cpu_visibility"]["cgroup_quotas"], [1.0, 4.0])
+        self.assertEqual(
+            evidence["cgroup_remaining_by_group_bytes"],
+            [128 * 1024 * 1024, 1024 * 1024 * 1024],
+        )
+
+    def test_root_v1_cgroup_limits_are_not_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write(
+                root / "proc/self/cgroup",
+                "1:cpu,cpuacct:/\n2:memory:/\n",
+            )
+            write(
+                root / "proc/self/mountinfo",
+                "30 20 0:26 / /sys/fs/cgroup/cpu rw - cgroup cgroup rw,cpu,cpuacct\n"
+                "31 20 0:27 / /sys/fs/cgroup/memory rw - cgroup cgroup rw,memory\n",
+            )
+            write(root / "sys/fs/cgroup/cpu/cpu.cfs_quota_us", "100000")
+            write(root / "sys/fs/cgroup/cpu/cpu.cfs_period_us", "100000")
+            write(root / "sys/fs/cgroup/memory/memory.limit_in_bytes", "134217728")
+            write(root / "sys/fs/cgroup/memory/memory.usage_in_bytes", "0")
+            self.assertEqual(MODULE.cgroup_cpu_quotas(root), [1.0])
+            self.assertEqual(
+                MODULE.cgroup_memory_remaining(root), [128 * 1024 * 1024]
+            )
+
+    def test_preflight_preserves_unreadable_package_metadata_evidence(self):
+        errors = (
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid metadata"),
+            OSError("metadata I/O failed"),
+        )
+        for error in errors:
+            with (
+                self.subTest(error=type(error).__name__),
+                tempfile.TemporaryDirectory() as directory,
+                mock.patch.object(
+                    MODULE.importlib.metadata, "version", side_effect=error
+                ),
+            ):
+                output = Path(directory)
+                problems, evidence = MODULE.preflight(
+                    self.config(output), output, Path(directory) / "absent"
+                )
+                self.assertTrue(any("ray must be" in item for item in problems))
+                self.assertIsNone(evidence["actual_versions"]["ray"])
+                self.assertEqual(
+                    evidence["package_metadata_errors"]["ray"]["error_type"],
+                    type(error).__name__,
+                )
+
+    def test_worker_shutdown_failure_controls_final_exit_and_result(self):
+        class FailingShutdownRay(FakeRay):
+            def shutdown(self):
+                super().shutdown()
+                raise RuntimeError("shutdown failed")
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            ray = FailingShutdownRay()
+            with (
+                mock.patch.dict(sys.modules, {"ray": ray}),
+                mock.patch.object(
+                    MODULE, "preflight", return_value=([], {"mock": True})
+                ),
+            ):
+                returncode = MODULE.worker(self.config(output))
+            result = json.loads(
+                (output / "result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(returncode, 1)
+            self.assertFalse(result["success"])
+            self.assertEqual(result["status"], "failed")
+            self.assertIn("shutdown failed", result["shutdown_error"])
+            self.assertEqual(ray.shutdown_count, 1)
+
+    def test_worker_rejects_mismatched_parent_output_without_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            other = Path(directory) / "other"
+            output.mkdir()
+            other.mkdir()
+            config = self.config(other)
+            config_path = output / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            result_path = other / "result.json"
+            result_path.write_text("keep", encoding="utf-8")
+            args = MODULE.parse_args(
+                [
+                    "--output-dir",
+                    str(output),
+                    "--worker-config",
+                    str(config_path),
+                ]
+            )
+            self.assertEqual(MODULE.main_with_args(args), 2)
+            self.assertEqual(result_path.read_text(encoding="utf-8"), "keep")
+            self.assertFalse((output / "result.json").exists())
+
+    def test_worker_result_is_exclusive_and_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            result_path = output / "result.json"
+            result_path.write_text("keep", encoding="utf-8")
+            with (
+                mock.patch.object(
+                    MODULE, "preflight", return_value=(["blocked"], {})
+                ),
+                self.assertRaises(FileExistsError),
+            ):
+                MODULE.worker(self.config(output))
+            self.assertEqual(result_path.read_text(encoding="utf-8"), "keep")
 
     def test_worker_summary_excludes_warmup_and_shutdown(self):
         with tempfile.TemporaryDirectory() as directory:

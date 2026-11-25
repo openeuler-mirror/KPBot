@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -83,11 +84,150 @@ def terminate_owned_group(process):
             return
 
 
-def preflight(config, output):
+def _mount_path(value):
+    """Decode the octal escapes used by proc mountinfo paths."""
+    return re.sub(
+        r"\\([0-7]{3})",
+        lambda match: chr(int(match.group(1), 8)),
+        value,
+    )
+
+
+def _path_below(path, root):
+    if root == "/":
+        return path.lstrip("/")
+    if path == root:
+        return ""
+    if path.startswith(root + "/"):
+        return path[len(root) + 1 :]
+    return None
+
+
+def cgroup_directories(controller, proc_root=Path("/")):
+    """Return the current group and visible ancestors for one controller."""
+    try:
+        records = (
+            proc_root / "proc/self/cgroup"
+        ).read_text(encoding="ascii").splitlines()
+        mountinfo = (
+            proc_root / "proc/self/mountinfo"
+        ).read_text(encoding="ascii").splitlines()
+    except OSError:
+        return []
+    memberships = []
+    for line in records:
+        fields = line.split(":", 2)
+        if len(fields) != 3:
+            continue
+        controllers = fields[1].split(",") if fields[1] else []
+        version = 2 if not controllers else 1
+        if version == 2 or controller in controllers:
+            memberships.append((version, fields[2]))
+    candidates = []
+    for line in mountinfo:
+        try:
+            left, right = line.split(" - ", 1)
+            fields = left.split()
+            filesystem, _source, options = right.split()[:3]
+            version = 2 if filesystem == "cgroup2" else 1
+            if filesystem not in ("cgroup", "cgroup2"):
+                continue
+            if version == 1 and controller not in options.split(","):
+                continue
+            root = _mount_path(fields[3])
+            mount_point = _mount_path(fields[4])
+        except (ValueError, IndexError):
+            continue
+        for member_version, member_path in memberships:
+            if member_version != version:
+                continue
+            relative = _path_below(member_path, root)
+            if relative is None:
+                # In a cgroup namespace the membership path is already
+                # relative to its root, while mountinfo can retain the
+                # original, deeper mount root.
+                relative = member_path.lstrip("/")
+            candidates.append((len(root), version, root, mount_point, relative))
+    if not candidates:
+        return []
+    _length, version, _root, mount_point, relative = max(candidates)
+    base = proc_root / mount_point.lstrip("/")
+    current = base / relative if relative else base
+    groups = [current]
+    while current != base:
+        current = current.parent
+        groups.append(current)
+    return [(version, group) for group in groups]
+
+
+def cgroup_cpu_quotas(proc_root=Path("/")):
+    quotas = []
+    for version, group in cgroup_directories("cpu", proc_root):
+        try:
+            if version == 2:
+                raw = (group / "cpu.max").read_text(encoding="ascii").split()
+                unlimited = raw[0] == "max"
+                quota = -1 if unlimited else int(raw[0])
+                period = int(raw[1])
+            else:
+                quota = int(
+                    (group / "cpu.cfs_quota_us")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                period = int(
+                    (group / "cpu.cfs_period_us")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                unlimited = quota < 0
+            if not unlimited and quota > 0 and period > 0:
+                quotas.append(quota / period)
+        except (OSError, ValueError, IndexError):
+            continue
+    return quotas
+
+
+def cgroup_memory_remaining(proc_root=Path("/")):
+    remaining = []
+    for version, group in cgroup_directories("memory", proc_root):
+        try:
+            if version == 2:
+                raw_maximum = (group / "memory.max").read_text(
+                    encoding="ascii"
+                ).strip()
+                maximum = None if raw_maximum == "max" else int(raw_maximum)
+                current = int(
+                    (group / "memory.current")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+            else:
+                maximum = int(
+                    (group / "memory.limit_in_bytes")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                current = int(
+                    (group / "memory.usage_in_bytes")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                if maximum >= 1 << 60:
+                    maximum = None
+            if maximum is not None:
+                remaining.append(max(0, maximum - current))
+        except (OSError, ValueError):
+            continue
+    return remaining
+
+
+def preflight(config, output, proc_root=Path("/")):
     problems = []
     evidence = {
         "expected_versions": EXPECTED,
         "actual_versions": {},
+        "package_metadata_errors": {},
         "object_store_memory_bytes": OBJECT_STORE_BYTES,
         "ray_init_called": False,
     }
@@ -100,15 +240,36 @@ def preflight(config, output):
             actual = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
             actual = None
+        except (ValueError, OSError) as error:
+            actual = None
+            evidence["package_metadata_errors"][package] = {
+                "error_type": type(error).__name__,
+                "message": str(error)[:500],
+            }
         evidence["actual_versions"][package] = actual
         if actual != expected:
             problems.append(f"{package} must be {expected}; actual={actual}")
+    bounds = []
     try:
         affinity = len(os.sched_getaffinity(0))
+        bounds.append(affinity)
     except (AttributeError, OSError):
-        affinity = os.cpu_count()
-    evidence["visible_cpus"] = affinity
-    if affinity is None or affinity < 2:
+        affinity = None
+    quotas = cgroup_cpu_quotas(proc_root)
+    os_count = os.cpu_count()
+    if os_count:
+        bounds.append(os_count)
+    bounds.extend(quotas)
+    visible = min(bounds) if bounds else None
+    evidence["cpu_visibility"] = {
+        "affinity": affinity,
+        "os_count": os_count,
+        "cgroup_quota": min(quotas) if quotas else None,
+        "cgroup_quotas": quotas,
+        "visible_upper_bound": visible,
+    }
+    evidence["visible_cpus"] = visible
+    if visible is None or visible < 2:
         problems.append("at least two visible CPUs are required")
     try:
         usage = shutil.disk_usage("/dev/shm")
@@ -123,25 +284,18 @@ def preflight(config, output):
     available = []
     try:
         for line in (
-            Path("/proc/meminfo").read_text(encoding="ascii").splitlines()
-        ):
+            proc_root / "proc/meminfo"
+        ).read_text(encoding="ascii").splitlines():
             if line.startswith("MemAvailable:"):
                 evidence["mem_available_bytes"] = int(line.split()[1]) * 1024
                 available.append(evidence["mem_available_bytes"])
                 break
     except (OSError, ValueError, IndexError):
         pass
-    try:
-        cgroup = Path("/sys/fs/cgroup")
-        maximum = (cgroup / "memory.max").read_text(encoding="ascii").strip()
-        current = int(
-            (cgroup / "memory.current").read_text(encoding="ascii").strip()
-        )
-        if maximum != "max":
-            evidence["cgroup_remaining_bytes"] = max(0, int(maximum) - current)
-            available.append(evidence["cgroup_remaining_bytes"])
-    except (OSError, ValueError):
-        pass
+    remaining = cgroup_memory_remaining(proc_root)
+    evidence["cgroup_remaining_bytes"] = min(remaining) if remaining else None
+    evidence["cgroup_remaining_by_group_bytes"] = remaining
+    available.extend(remaining)
     if not available:
         problems.append("finite available memory cannot be established")
     elif min(available) < OBJECT_STORE_BYTES:
@@ -276,8 +430,16 @@ def run_phase(ray, config, phase, output):
     }
 
 
+def write_exclusive(path, payload):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(payload)
+
+
 def worker(config):
     output = Path(config["output_dir"])
+    exit_code = 1
     result = {
         "schema_version": 1,
         "success": False,
@@ -363,9 +525,11 @@ def worker(config):
         }
         result["success"] = True
         result["status"] = "completed"
+        exit_code = 0
         return 0
     except BaseException as error:
         result["error"] = f"{type(error).__name__}: {error}"
+        exit_code = 1
         return 1
     finally:
         if ray is not None:
@@ -376,14 +540,16 @@ def worker(config):
                 result["success"] = False
                 result["status"] = "failed"
                 result["shutdown_error"] = f"{type(error).__name__}: {error}"
+                exit_code = 1
         if temporary is not None:
             temporary.cleanup()
         result["finished_at_utc"] = utc_now()
-        (output / "result.json").write_text(
+        write_exclusive(
+            output / "result.json",
             json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False)
             + "\n",
-            encoding="utf-8",
         )
+        return exit_code
 
 
 def bounded_int(minimum, maximum):
@@ -487,7 +653,8 @@ def parent(args):
                 terminate_owned_group(process)
                 returncode = 124
         if returncode != 0 and not (output / "result.json").exists():
-            (output / "result.json").write_text(
+            write_exclusive(
+                output / "result.json",
                 json.dumps(
                     {
                         "schema_version": 1,
@@ -501,14 +668,14 @@ def parent(args):
                     indent=2,
                 )
                 + "\n",
-                encoding="utf-8",
             )
         return returncode
     except BaseException as error:
         control["outcome"] = "interrupted_" + type(error).__name__
         terminate_owned_group(process)
         if not (output / "result.json").exists():
-            (output / "result.json").write_text(
+            write_exclusive(
+                output / "result.json",
                 json.dumps(
                     {
                         "schema_version": 1,
@@ -521,7 +688,6 @@ def parent(args):
                     indent=2,
                 )
                 + "\n",
-                encoding="utf-8",
             )
         return 130 if isinstance(error, KeyboardInterrupt) else 1
     finally:
@@ -531,12 +697,31 @@ def parent(args):
         )
 
 
-def main(argv=None):
-    args = parse_args(argv)
+def main_with_args(args):
     if args.worker_config:
-        config = json.loads(
-            Path(args.worker_config).read_text(encoding="utf-8")
-        )
+        config_path = Path(args.worker_config)
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            requested_output = args.output_dir.resolve()
+            configured_output = Path(config["output_dir"]).resolve()
+            valid_output = (
+                config_path.resolve().parent
+                == requested_output
+                == configured_output
+                and args.output_dir.is_dir()
+                and not args.output_dir.is_symlink()
+                and config_path.is_file()
+                and not config_path.is_symlink()
+            )
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print("invalid worker configuration: " + str(error), file=sys.stderr)
+            return 2
+        if not valid_output:
+            print(
+                "worker output does not match the parent-created config directory",
+                file=sys.stderr,
+            )
+            return 2
         signal.signal(
             signal.SIGTERM,
             lambda _sig, _frame: (_ for _ in ()).throw(
@@ -545,6 +730,10 @@ def main(argv=None):
         )
         return worker(config)
     return parent(args)
+
+
+def main(argv=None):
+    return main_with_args(parse_args(argv))
 
 
 if __name__ == "__main__":

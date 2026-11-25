@@ -3,9 +3,9 @@
 | 探针 | ready 条件 | 证据与限制 |
 | --- | --- | --- |
 | `linux` / `python` | Linux、Python 3.11 | 当前解释器与系统值 |
-| `*_version` | Ray 2.56.0、NumPy 2.1.3、PyArrow 23.0.1 | `importlib.metadata` 的实际安装版本；缺失是 blocked |
-| `cpus` | 可见 CPU 上界至少 2 | affinity、OS 数量、可见 cgroup quota；隐藏祖先限制仍未知 |
-| `finite_memory` | 可见可用内存至少 256 MiB | `/proc/meminfo` 与可见 cgroup 余量取上界 |
+| `*_version` | Ray 2.56.0、NumPy 2.1.3、PyArrow 23.0.1 | `importlib.metadata` 的实际安装版本；缺失是 blocked，元数据解码或 I/O 错误是保留 `actual: null` 的 unknown |
+| `cpus` | 可见 CPU 上界至少 2 | affinity、OS 数量与当前进程及其可见祖先的 cgroup v1/v2 quota 取最小值；记录全部实际 quota |
+| `finite_memory` | 可见可用内存至少 256 MiB | `/proc/meminfo` 与当前进程及其可见祖先的 cgroup v1/v2 余量取最小值；namespace 挂载根之外的组不可见 |
 | `free_shm` | `/dev/shm` 总量和空闲量均至少 256 MiB | 与本地 object store 预检口径一致，不证明运行成功 |
 | `output` | 输出不存在且父目录可写 | 独占创建避免覆盖 |
 | `native_operations` | NumPy `arange*2+1` 经 PyArrow 往返精确 | 实际原生库运算，不是仅导入 |

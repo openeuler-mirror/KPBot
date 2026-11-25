@@ -12,7 +12,9 @@
 
 ## 生命周期
 
-父进程用 `start_new_session=True` 创建唯一 worker session，并执行硬墙计时。worker 正常/异常路径均在 `finally` 关闭自己初始化的 runtime；超时或 SIGINT 只向该 session 的进程组发 TERM/KILL。Ray 临时目录使用短路径系统临时目录并在 finally 清理（避免 AF_UNIX 路径上限），日志、配置、runtime control 与失败 JSON 均在新输出目录留存。
+父进程用 `start_new_session=True` 创建唯一 worker session，并执行硬墙计时。worker 核对请求输出目录、配置中的绝对输出目录和配置文件所在父目录一致，且以独占方式创建 `result.json`。正常/异常路径均在 `finally` 关闭自己初始化的 runtime，shutdown 失败会令最终状态和退出码同时失败；超时或 SIGINT 只向该 session 的进程组发 TERM/KILL。Ray 临时目录使用短路径系统临时目录并在 finally 清理（避免 AF_UNIX 路径上限），日志、配置、runtime control 与失败 JSON 均在新输出目录留存。
+
+预检的 CPU 上界取 affinity、OS 数量和当前进程及其可见祖先的 cgroup v1/v2 quota 最小值，内存同时计入相同可见层级的剩余额度。解析 `/proc/self/cgroup` 与 `/proc/self/mountinfo`，不会越过 cgroup namespace 的挂载根。
 
 ## 官方 Ray 文档
 

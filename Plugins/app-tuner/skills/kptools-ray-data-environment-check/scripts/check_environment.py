@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
 
@@ -68,7 +69,7 @@ def package_probe(package):
         actual = importlib.metadata.version(package)
     except importlib.metadata.PackageNotFoundError:
         return blocked(package + "_version", "not_installed", evidence)
-    except (importlib.metadata.InvalidMetadata, ValueError) as error:
+    except (ValueError, OSError) as error:
         evidence.update(error_data(error))
         return unknown(package + "_version", "metadata_unreadable", evidence)
     evidence["actual"] = actual
@@ -77,11 +78,150 @@ def package_probe(package):
     return ready(package + "_version", evidence)
 
 
-def visible_cpus():
+def _mount_path(value):
+    """Decode the octal escapes used by proc mountinfo paths."""
+    return re.sub(
+        r"\\([0-7]{3})",
+        lambda match: chr(int(match.group(1), 8)),
+        value,
+    )
+
+
+def _path_below(path, root):
+    if root == "/":
+        return path.lstrip("/")
+    if path == root:
+        return ""
+    if path.startswith(root + "/"):
+        return path[len(root) + 1 :]
+    return None
+
+
+def cgroup_directories(controller, proc_root=Path("/")):
+    """Return the current group and visible ancestors for one controller."""
+    try:
+        records = (
+            proc_root / "proc/self/cgroup"
+        ).read_text(encoding="ascii").splitlines()
+        mountinfo = (
+            proc_root / "proc/self/mountinfo"
+        ).read_text(encoding="ascii").splitlines()
+    except OSError:
+        return []
+    memberships = []
+    for line in records:
+        fields = line.split(":", 2)
+        if len(fields) != 3:
+            continue
+        controllers = fields[1].split(",") if fields[1] else []
+        version = 2 if not controllers else 1
+        if version == 2 or controller in controllers:
+            memberships.append((version, fields[2]))
+    candidates = []
+    for line in mountinfo:
+        try:
+            left, right = line.split(" - ", 1)
+            fields = left.split()
+            filesystem, _source, options = right.split()[:3]
+            version = 2 if filesystem == "cgroup2" else 1
+            if filesystem not in ("cgroup", "cgroup2"):
+                continue
+            if version == 1 and controller not in options.split(","):
+                continue
+            root = _mount_path(fields[3])
+            mount_point = _mount_path(fields[4])
+        except (ValueError, IndexError):
+            continue
+        for member_version, member_path in memberships:
+            if member_version != version:
+                continue
+            relative = _path_below(member_path, root)
+            if relative is None:
+                # In a cgroup namespace the membership path is already
+                # relative to its root, while mountinfo can retain the
+                # original, deeper mount root.
+                relative = member_path.lstrip("/")
+            candidates.append((len(root), version, root, mount_point, relative))
+    if not candidates:
+        return []
+    _length, version, _root, mount_point, relative = max(candidates)
+    base = proc_root / mount_point.lstrip("/")
+    current = base / relative if relative else base
+    groups = [current]
+    while current != base:
+        current = current.parent
+        groups.append(current)
+    return [(version, group) for group in groups]
+
+
+def cgroup_cpu_quotas(proc_root=Path("/")):
+    quotas = []
+    for version, group in cgroup_directories("cpu", proc_root):
+        try:
+            if version == 2:
+                raw = (group / "cpu.max").read_text(encoding="ascii").split()
+                unlimited = raw[0] == "max"
+                quota = -1 if unlimited else int(raw[0])
+                period = int(raw[1])
+            else:
+                quota = int(
+                    (group / "cpu.cfs_quota_us")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                period = int(
+                    (group / "cpu.cfs_period_us")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                unlimited = quota < 0
+            if not unlimited and quota > 0 and period > 0:
+                quotas.append(quota / period)
+        except (OSError, ValueError, IndexError):
+            continue
+    return quotas
+
+
+def cgroup_memory_remaining(proc_root=Path("/")):
+    remaining = []
+    for version, group in cgroup_directories("memory", proc_root):
+        try:
+            if version == 2:
+                raw_maximum = (group / "memory.max").read_text(
+                    encoding="ascii"
+                ).strip()
+                maximum = None if raw_maximum == "max" else int(raw_maximum)
+                current = int(
+                    (group / "memory.current")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+            else:
+                maximum = int(
+                    (group / "memory.limit_in_bytes")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                current = int(
+                    (group / "memory.usage_in_bytes")
+                    .read_text(encoding="ascii")
+                    .strip()
+                )
+                if maximum >= 1 << 60:
+                    maximum = None
+            if maximum is not None:
+                remaining.append(max(0, maximum - current))
+        except (OSError, ValueError):
+            continue
+    return remaining
+
+
+def visible_cpus(proc_root=Path("/")):
     evidence = {
         "affinity": None,
         "os_count": os.cpu_count(),
         "cgroup_quota": None,
+        "cgroup_quotas": [],
     }
     bounds = []
     try:
@@ -89,17 +229,11 @@ def visible_cpus():
         bounds.append(evidence["affinity"])
     except (AttributeError, OSError):
         pass
-    try:
-        raw = (
-            Path("/sys/fs/cgroup/cpu.max").read_text(encoding="ascii").split()
-        )
-        if raw and raw[0] != "max":
-            quota, period = int(raw[0]), int(raw[1])
-            if quota > 0 and period > 0:
-                evidence["cgroup_quota"] = quota / period
-                bounds.append(quota / period)
-    except (OSError, ValueError, IndexError):
-        pass
+    quotas = cgroup_cpu_quotas(proc_root)
+    evidence["cgroup_quotas"] = quotas
+    if quotas:
+        evidence["cgroup_quota"] = min(quotas)
+        bounds.extend(quotas)
     if evidence["os_count"]:
         bounds.append(evidence["os_count"])
     visible = min(bounds) if bounds else None
@@ -111,34 +245,29 @@ def visible_cpus():
     return ready("cpus", evidence)
 
 
-def memory_probe():
+def memory_probe(proc_root=Path("/")):
     evidence = {
         "minimum_available_bytes": MIN_SHM,
         "mem_available_bytes": None,
         "cgroup_remaining_bytes": None,
+        "cgroup_remaining_by_group_bytes": [],
     }
     available = []
     try:
         for line in (
-            Path("/proc/meminfo").read_text(encoding="ascii").splitlines()
-        ):
+            proc_root / "proc/meminfo"
+        ).read_text(encoding="ascii").splitlines():
             if line.startswith("MemAvailable:"):
                 evidence["mem_available_bytes"] = int(line.split()[1]) * 1024
                 available.append(evidence["mem_available_bytes"])
                 break
     except (OSError, ValueError, IndexError):
         pass
-    try:
-        base = Path("/sys/fs/cgroup")
-        maximum = (base / "memory.max").read_text(encoding="ascii").strip()
-        current = int(
-            (base / "memory.current").read_text(encoding="ascii").strip()
-        )
-        if maximum != "max":
-            evidence["cgroup_remaining_bytes"] = max(0, int(maximum) - current)
-            available.append(evidence["cgroup_remaining_bytes"])
-    except (OSError, ValueError):
-        pass
+    remaining = cgroup_memory_remaining(proc_root)
+    evidence["cgroup_remaining_by_group_bytes"] = remaining
+    if remaining:
+        evidence["cgroup_remaining_bytes"] = min(remaining)
+        available.extend(remaining)
     if not available:
         return unknown("finite_memory", "memory_visibility_unknown", evidence)
     evidence["available_upper_bound_bytes"] = min(available)
