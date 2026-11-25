@@ -48,7 +48,7 @@ metadata:
 
 | 结论 | 条件 | 该做什么 |
 |---|---|---|
-| `imbalanced` | ≥2 个信号，且失衡持续 | 输出 dynamic 模板改动清单（见第四步） |
+| `imbalanced` | ≥2 个信号，且失衡持续 | 交参数分析定参、交部署环节落盘（见第四步） |
 | `borderline` | 只有 1 个信号，或信号多但不持续 | 先做 force 上限探针，再决定 |
 | `balanced` | 没有信号 | **不要开** EPLB |
 | `inconclusive` | 可用指标 < 2，或 balancedness 窗口 < 3 | 补采证据 |
@@ -179,29 +179,30 @@ python3 scripts/analyze_eplb_metrics.py --evidence evidence.json --out verdict.j
 
 脚本输出的 `verdict.json` 就是这个报告的事实底稿，结论与证据要能对上；不要在报告里补充脚本没观测到的数字。
 
-## 第四步：按结论给出可执行的模板改动清单
+## 第四步：结论与交接清单（advisory）
 
-本技能只做诊断，输出的是**改哪个文件、加/删哪些行**，不含一键改写脚本。改之前一律先备份原模板，
-改完用 `bash -n` 校验，并确认 `--additional-config` 仍然只有一个。
+本技能只做诊断。下面是**交接建议**，不是可直接部署的最终参数：
 
-> 这份清单是 **advisory（建议）**：handoff 里的 N/W/S 是起点。最终参数（含整除取整、显存预算、窗口/周期）
-> 以参数分析环节的方案为准，模板写入由部署环节执行；不要把本清单当成唯一事实源。
+- 诊断产出 `verdict` + `recommendation.handoff`（advisory）。
+- **最终部署参数只从参数分析环节产出的 `eplb_parameter_plan.json` 取**：由它按 `ep_size` 整除、显存预算、
+  压测步数把 N/W/S 收敛成确定值。
+- 没有参数方案时，停在诊断交接，**不要直接把 handoff 的 N/W/S 写进模板**。
 
-**`imbalanced`：改 P 节点 `run_dp_template.sh` 为 dynamic**
+**`imbalanced`：交参数分析 → 部署**
 
 ```bash
+# 仅示意目标态；实际 mode/参数以参数分析方案为准
 export VLLM_USE_V2_MODEL_RUNNER=1
 export DYNAMIC_EPLB="true"
 # 在 vllm serve 参数中，紧跟 --enable-expert-parallel 之后追加：
     --enable-eplb \
-    --eplb-config.num_redundant_experts <N> \
-    --eplb-config.window_size <W> \
-    --eplb-config.step_interval <S> \
+    --eplb-config.num_redundant_experts <plan.N> \
+    --eplb-config.window_size <plan.W> \
+    --eplb-config.step_interval <plan.S> \
 ```
 
-`<N>/<W>/<S>` 取自 `recommendation.handoff`；同一份数据也在 `handoff.template_changes`
-（`env` / `unset_env` / `add_flags` / `additional_config`）里，便于直接照做或接自动化。
-`<N>` 必须是 `ep_size` 的整数倍；若为 `null`，说明显存余量未知或偏紧，先测余量再定。
+`<plan.N/W/S>` 来自参数分析方案，**不是** `handoff.redundant_experts/window_size/step_interval` 的原值。
+handoff 只是起点：例如 EP=32 时 handoff 可能建议 16，必须由参数分析整除校验/拦截，不能直接写入。
 
 **`borderline`：先做 force 上限探针（只测量，不上线）**
 
@@ -211,16 +212,16 @@ unset DYNAMIC_EPLB
 # 在原有 --additional-config JSON 里合并 "enable_force_eplb":true
 ```
 
-压测 off vs force：差距明显再按上面的 dynamic 清单改，测完还原 `off`。
+force 探针同样交给部署环节执行；测完还原 off。
 
 **`balanced` / `inconclusive`**：不动配置，把结论与证据留档。
 
 显存相关的分支：
 
 - `recommendation.memory.verdict == "no_headroom"` → 不要加副本，先降 KV 压力（`max-model-len`、并发、
-  上下文长度），或按 `affordable_redundant` 把副本数降到显存能容纳的量。
-- `optimize_with_cap` → 按 `handoff.redundant_experts` 执行；这个数值已经按余量压过，不要擅自加回去。
-  若它是 `null`，先测 `free_mem_gib` 与 `bytes_per_expert_gib` 再定值。
+  上下文长度），并把结论交参数分析，由它给出可负担上限。
+- `optimize_with_cap` → 把 handoff 与 `affordable_redundant` 一并交参数分析；**以方案的 redundant_experts 为准**，
+  不要直接按 handoff 写；若方案缺失，停在诊断交接。
 
 ## 常见误判
 
