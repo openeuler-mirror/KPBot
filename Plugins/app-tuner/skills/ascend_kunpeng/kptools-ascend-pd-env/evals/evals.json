@@ -30,6 +30,12 @@
       "prompt": "容器里 HCCL 的环境变量两边是不是设得不一样？",
       "expected_output": "运行采集后在 进程环境变量 和 Docker配置环境变量 两个分类里找 HCCL_* / ASCEND_* 项，列出仅单侧存在或取值不同的变量；单边存在要算作差异而不是忽略；不编造变量名和取值。",
       "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "只剩旧 P 和新 P 的对比结果（subskills/summarize-environment-findings/evals/fixtures/p-history.json），原包已经清理，其他组没跑。把已有结果汇总到报告里。",
+      "expected_output": "选择汇总子 skill，引用现有结果并保留 CANN 版本变化；其他组标为未执行，不再查原始包或运行比较器。",
+      "files": ["subskills/summarize-environment-findings/evals/fixtures/p-history.json"]
     }
   ]
 }
