@@ -1,7 +1,6 @@
 """Stdlib-only Kafka CLI support for this independently installed skill.
 
-The Java-properties parser is adapted from the user-supplied reference helper
-accompanying the implementation request. No external source tree is required.
+Includes self-contained Java-properties parsing and Kafka CLI probes.
 """
 
 from datetime import datetime, timezone
@@ -49,6 +48,13 @@ TIMEOUT_MARKERS = (
     "request timed out",
 )
 DRAIN_TIMEOUT_SECONDS = 5.0
+SENSITIVE_CONFIG_MARKERS = (
+    "credential",
+    "password",
+    "private.key",
+    "secret",
+    "token",
+)
 
 
 class ConfigError(ValueError):
@@ -70,7 +76,14 @@ class ClientConfig:
 
     @property
     def redactions(self):
-        values = {value for value in self.properties.values() if value}
+        values = set()
+        for key, value in self.properties.items():
+            if not value:
+                continue
+            if _sensitive_config_key(key):
+                values.add(value)
+            if key.lower() == "sasl.jaas.config":
+                values.update(_jaas_credentials(value))
         return sorted(values, key=len, reverse=True)
 
     def evidence(self):
@@ -81,6 +94,26 @@ class ClientConfig:
             "property_keys": sorted(self.properties),
             "property_values": "redacted",
         }
+
+
+def _jaas_credentials(text):
+    pattern = re.compile(
+        r"(?i)(?:credential|password|private_key|secret|token|username)"
+        r"\s*=\s*(?:\"((?:\\.|[^\"\\])*)\"|'([^']*)'|([^\s;]+))"
+    )
+    return {
+        next(group for group in match.groups() if group is not None)
+        for match in pattern.finditer(text)
+        if any(group for group in match.groups() if group is not None)
+    }
+
+
+def _sensitive_config_key(key):
+    normalized = key.lower()
+    return normalized == "sasl.jaas.config" or any(
+        marker in normalized
+        for marker in (*SENSITIVE_CONFIG_MARKERS, "key.pem", "keystore.key")
+    )
 
 
 def _java_unescape(text):

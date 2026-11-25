@@ -39,6 +39,7 @@ class EnvironmentContractTests(unittest.TestCase):
         self.calls = []
         self.mode = "success"
         self.secret = "contract-secret-do-not-disclose"
+        self.private_key = "contract-private-key-do-not-disclose"
 
     def arguments(self, authorized=True, create=False):
         arguments = [
@@ -297,8 +298,11 @@ class EnvironmentContractTests(unittest.TestCase):
         config = self.root / "secure.properties"
         config.write_text(
             "security.protocol=SASL_SSL\n"
+            "request.timeout.ms=30000\n"
+            "metadata.max.age.ms=0\n"
             "sasl.jaas.config=org.example.Login required "
-            f'password="{self.secret}";\n',
+            f'password="{self.secret}";\n'
+            f"ssl.key.pem={self.private_key}\n",
             encoding="utf-8",
         )
         config.chmod(0o600)
@@ -308,6 +312,15 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         serialized = json.dumps(result) + stdout
         self.assertNotIn(self.secret, serialized)
+        self.assertNotIn(self.private_key, serialized)
+        loaded = support.load_client_config(config)
+        sanitized = support.redact(
+            self.secret + "\n" + self.private_key, loaded.redactions
+        )
+        self.assertNotIn(self.secret, sanitized)
+        self.assertNotIn(self.private_key, sanitized)
+        self.assertNotIn("30000", loaded.redactions)
+        self.assertNotIn("0", loaded.redactions)
         evidence = self.probe(result, "secure_client_config")["evidence"]
         self.assertEqual(evidence["file_mode"], "0600")
         self.assertEqual(len(evidence["sha256"]), 64)
@@ -363,6 +376,23 @@ class EnvironmentContractTests(unittest.TestCase):
                 ):
                     parser.parse_args(arguments)
                 self.assertEqual(raised.exception.code, 2)
+
+    def test_nonsecret_numeric_options_preserve_offsets_and_identities(self):
+        config = support.ClientConfig(
+            properties={
+                "request.timeout.ms": "30000",
+                "metadata.max.age.ms": "0",
+                "security.protocol": "SASL_PLAINTEXT",
+                "sasl.mechanism": "PLAIN",
+            }
+        )
+        self.assertEqual(config.redactions, [])
+        native = (
+            "30000 records sent\n"
+            "0\n30000\n160000\n"
+            "kpbot-contract:0:30000\nkpbot-contract:1:160000\n"
+        )
+        self.assertEqual(support.redact(native, config.redactions), native)
 
     def test_java_properties_parser_handles_escapes_and_continuations(self):
         properties = support.java_properties(

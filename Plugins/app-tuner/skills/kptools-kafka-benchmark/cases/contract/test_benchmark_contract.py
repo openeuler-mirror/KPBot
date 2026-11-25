@@ -50,6 +50,7 @@ class BenchmarkContractTests(unittest.TestCase):
         self.native_count_adjustment = 0
         self.offset_adjustment = 0
         self.secret = "benchmark-secret-do-not-disclose"
+        self.private_key = "benchmark-private-key-do-not-disclose"
 
     def arguments(self, create=True):
         arguments = [
@@ -510,8 +511,11 @@ class BenchmarkContractTests(unittest.TestCase):
         config = self.root / "secure.properties"
         config.write_text(
             "security.protocol=SASL_SSL\n"
+            "request.timeout.ms=30000\n"
+            "metadata.max.age.ms=0\n"
             "sasl.jaas.config=org.example.Login required "
-            f'password="{self.secret}";\n',
+            f'password="{self.secret}";\n'
+            f"ssl.key.pem={self.private_key}\n",
             encoding="utf-8",
         )
         config.chmod(0o600)
@@ -524,6 +528,15 @@ class BenchmarkContractTests(unittest.TestCase):
             if path.is_file():
                 evidence += path.read_text(encoding="utf-8")
         self.assertNotIn(self.secret, evidence)
+        self.assertNotIn(self.private_key, evidence)
+        loaded = support.load_client_config(config)
+        sanitized = support.redact(
+            self.secret + "\n" + self.private_key, loaded.redactions
+        )
+        self.assertNotIn(self.secret, sanitized)
+        self.assertNotIn(self.private_key, sanitized)
+        self.assertNotIn("30000", loaded.redactions)
+        self.assertNotIn("0", loaded.redactions)
         joined = [item for call in self.calls for item in call]
         self.assertIn("--command-config", joined)
         self.assertIn("--producer.config", joined)
@@ -563,6 +576,40 @@ class BenchmarkContractTests(unittest.TestCase):
                 ):
                     benchmark.build_parser().parse_args(arguments)
                 self.assertEqual(raised.exception.code, 2)
+
+    def test_nonsecret_numeric_options_do_not_corrupt_native_evidence(self):
+        config = support.ClientConfig(
+            properties={
+                "request.timeout.ms": "30000",
+                "metadata.max.age.ms": "0",
+                "security.protocol": "SASL_PLAINTEXT",
+                "sasl.mechanism": "PLAIN",
+            }
+        )
+        self.assertEqual(config.redactions, [])
+        native = support.redact(
+            self.perf_summary(30000, 1000.0), config.redactions
+        )
+        self.assertEqual(
+            benchmark.parse_perf_summary(native)["records_sent"], 30000
+        )
+        consumed = support.redact(
+            "0\n30000\n160000\n", config.redactions
+        ).splitlines()
+        self.assertEqual(consumed, ["0", "30000", "160000"])
+        identities = benchmark.compare_identities(
+            consumed,
+            benchmark.Counter({"0": 1, "30000": 1, "160000": 1}),
+        )
+        self.assertTrue(identities["exact"])
+        offsets = support.redact(
+            "kpbot-collision:0:30000\nkpbot-collision:1:160000\n",
+            config.redactions,
+        )
+        self.assertEqual(
+            benchmark.parse_offsets(offsets, "kpbot-collision"),
+            {0: 30000, 1: 160000},
+        )
 
     def test_parser_uses_final_native_summary_and_explicit_units(self):
         text = (
