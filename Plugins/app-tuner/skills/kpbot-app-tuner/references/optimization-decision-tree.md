@@ -65,7 +65,6 @@
 - 线程、队列、缓存、数据库状态 → `application-config-optimization`
 - malloc/memcpy/压缩/加密/CRC 热点 → `performance-library-selection`
 - 编译选项、topdown、fallback 热点 → `compiler-optimization`
-- Go 微服务 GC/sync.Pool 堆内存颠簸 → `microservice-go-syncpool-optimization`
 - governor、THP、numa_balancing、irqbalance、sysctl → `os-optimization`
 - Power Profile、SMT、C-State、BIOS NUMA → `bios-optimization`
 - 未归类 CPU 热点 → `other-optimization`

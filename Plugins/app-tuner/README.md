@@ -1,4 +1,4 @@
-# app-tuner
+﻿# app-tuner
 
 应用级调优插件 — 服务器应用性能优化的端到端 Agent 工作流。
 
@@ -122,6 +122,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 |------|------|
 | [`topdown-quality-diagnosis`](skills/topdown-quality-diagnosis/SKILL.md) | 鲲鹏 DevKit Top-down 采集质量审核：核对目标、窗口与事件口径，诊断异常数值和运行中断，提供有界复采方案与证据报告 |
 | [`kptools-thread-affinity-analyzer`](skills/kptools-thread-affinity-analyzer/SKILL.md) | 线程绑核分析器 — 读取 kptools-thread-affinity-collector 输出目录做离线分析：拓扑富化(NUMA/NPU 归属)、角色识别规则外置 roles.json、8 类异常判定(A1 忙线程跨 NUMA 漂移/A1u 掩码不可读/A2 NPU 主机线程错位/A3 忙实例挤核/A4 掩码震荡/A5 绑核意图未覆盖按共同在场区间/A6 观测完整性/A7 线程翻动)，输出 HTML 报告(仅看异常过滤)+ summary.json(原子写入)；跨机采样包须带 topology_raw.txt |
+| [`kptools-thread-affinity-collector`](skills/kptools-thread-affinity-collector/SKILL.md) | 运行期线程绑核采集器（只读，任意进程）— 双通道持续采样每线程 CPU 允许掩码与实际落点，产出三件套：samples.jsonl（机器格式时间序列）+ trace.log（人类可读事件日志：新线程/掩码变化/线程退出/心跳/终态名册/统计，cat 即懂）+ topology_raw.txt（拓扑快照）；支持 --auto/--tick 分步与长任务；采集与分析职责分离，目标机只装采集器、输出目录跨机取回 |
 | [`kptools-prompt-capture`](skills/kptools-prompt-capture/SKILL.md) | 采集 Python proxy 转发给 vLLM 的请求，分析请求分布和多轮会话，生成报告；支持已有采集数据的离线分析 |
 | [`kptools-dplb-profiler`](skills/kptools-dplb-profiler/SKILL.md) | vLLM DP 负载均衡数据采集：现场轮询 /metrics（单池/PD 双池）与 Prometheus 时间段回采两种方式产出统一的 dp_load_metrics CSV（30 数据列 + queue_fixed） |
 | [`kptools-dplb-report`](skills/kptools-dplb-report/SKILL.md) | vLLM DP 负载均衡分析报告：解析 dp_load_metrics CSV，产出单池与 A/B 策略对比 HTML 报告（CV/LIF/方差分解/TTFT 相关性）；数据由 kptools-dplb-profiler 采集或由用户提供 |
@@ -133,6 +134,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | `cubesandbox-bench-protocol` | CubeSandbox 生命周期性能基准协议(创建/恢复吞吐与延迟的标准化场景、纪元纪律、多轮连跑防冷窗口、轮间清理清单、轮内分布形态判读) |
 | [`cubesandbox-lifecycle-bench`](skills/cubesandbox-lifecycle-bench/SKILL.md) | CubeSandbox 核心生命周期一键 Workflow/路由与共享执行器(保留计划哈希、预检、准备、29 档全矩阵、冒烟、差集清理与证据归档) |
 | [`kptools-openeuler-swegym-image-rebuilding`](skills/kptools-openeuler-swegym-image-rebuilding/SKILL.md) | SWE-Gym 任务镜像重建方法论(aarch64/x86 通用) — era-pin 四层锚定(git 时代锚点/freeze 清单/日期窗口/A/B 边界)、SCRIPT_FIXES 修复史、gold=1/empty=0 验收口径与判分/环境问题分流，含 agent 级 with/without A/B 用例(依赖漂移翻案) |
+| [`kptools-cpuoffload-analyzer`](skills/kptools-cpuoffload-analyzer/SKILL.md) | torchtitan-npu CPU offload 内存分析器(bundle 离线三自检：node 映射自洽/L1 存活配对交叉核对/采样放大；nova 重建与骤降按共同 rank 对齐判定；bundle 只读，报告写 bundle 同级目录) |
 
 #### CubeSandbox 单项基准入口（10 个）
 
@@ -239,6 +241,7 @@ app-tuner/
 - [架构设计(4+1)](docs/architecture-4plus1.md) — 主 skill 编排、子 skill 关系、运行闭环
 - [使用指南](docs/usage-guide.md) — 不同平台如何加载和使用
 - [报告模板](docs/report-template.md) — 首版优化报告模板
+| [`kptools-vllm-ttft-workflow`](skills/kptools-vllm-ttft-workflow/SKILL.md) | 按已有产物选择 TTFT 阶段，协调双侧计划、人工授权和采集交接 |
 
 ## 脚本说明
 
