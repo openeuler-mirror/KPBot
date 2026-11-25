@@ -166,6 +166,22 @@ def main():
                      "--ep-size", "16", "--logical-experts", "384", "--branch", "site-fork"])
         check("plan: 缺显存证据时 dynamic 转 hold",
               d.get("mode") == "hold" and any("显存" in w for w in d.get("warnings", [])))
+
+        # upstream memory warning / next must be preserved
+        vmem = os.path.join(tmp, "verdict_mem_unknown.json")
+        json.dump({"verdict": "imbalanced",
+                   "recommendation": {"action": "optimize_dynamic",
+                                      "memory": {"verdict": "unknown"},
+                                      "next": "上线前先确认 KV 占用与剩余显存",
+                                      "handoff": {"redundant_experts": 16,
+                                                  "window_size": 1000, "step_interval": 1000}}},
+                  open(vmem, "w"))
+        r, d = plan(["--verdict", vmem, "--ep-size", "16", "--logical-experts", "384",
+                     "--branch", "site-fork", "--bytes-per-expert-gib", "2.4", "--free-gib", "6"])
+        check("plan: 保留上游显存 unknown 告警与 next",
+              d.get("mode") == "dynamic"
+              and any("unknown" in w for w in d.get("warnings", []))
+              and (d.get("source") or {}).get("analysis_next"))
     finally:
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)

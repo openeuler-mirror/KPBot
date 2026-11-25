@@ -162,8 +162,17 @@ def build_plan(verdict, args):
         "warnings": warnings,
         "template_changes": {"env": {}, "unset_env": [], "add_flags": [],
                              "additional_config": {}},
-        "source": {"analysis_memory_verdict": mem_hint.get("verdict")},
+        "source": {"analysis_memory_verdict": mem_hint.get("verdict"),
+                   "analysis_next": rec.get("next"),
+                   "analysis_notes": rec.get("notes") or []},
     }
+
+    # Never drop the upstream memory gate / OOM warning.
+    if mem_hint.get("verdict") == "unknown":
+        warnings.append("上游显存余量=unknown：上线前必须确认 KV 占用与剩余显存，"
+                        "否则可能 OOM 或频繁换出")
+    elif mem_hint.get("verdict") == "no_headroom":
+        warnings.append("上游判定显存无余量：先释放/降低 KV 压力，不要直接加副本")
 
     if mode == "force":
         plan["rationale"].append("force 仅用于给 dynamic 的剩余空间定标，不可上线")
