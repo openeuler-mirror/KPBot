@@ -34,7 +34,9 @@ description: >
 | 3 | 按 ROI 实施杠杆 | `agent-memory-payload-slimming` → `bolt-decode-offload` → `temporal-hydration-offload` → `agent-memory-read-scaling` → `graph-store-readpath-patch` → `agent-memory-runtime-config` → `agent-memory-retrieval-recipe` |
 | 4 | 出可交付结论 | `agent-memory-bench-matrix`；被证伪方向查 `agent-memory-negative-results` |
 
-L8 过滤/索引下推（mem0 + Milvus 形态：把 metadata 高频过滤键提为 collection 顶层标量字段 + INVERTED 索引）不在本族 L1–L7 内，归属 `agent-memory` 域的 `mem0-flatidx-scalar-index`（待迁入，见 #279）；本族只负责判定这一层是否成立，不重复它的实现。
+L8 过滤/索引下推（mem0 + Milvus 形态：把 metadata 高频过滤键提为 collection 顶层标量字段 + INVERTED 索引）不在本族 L1–L7 内，归属 `agent-memory` 域的 `mem0-flatidx-scalar-index`（独立 PR 待合入）；本族只负责判定这一层是否成立，不重复它的实现。
+
+标定案例：`references/mem0-milvus-case.md` —— mem0 + Milvus 形态的三段归因（框架等待 / 服务端向量检索 / 服务端 Go 合并）、L8 过滤下推（QA 检索吞吐 +179.6%）与 Go 分配削减（+4.61%），以及被证伪的方向与适用性差异。
 
 任何阶段发现"负载不可复现"（同配置重跑 phase 波动 > 2%）→ 退回阶段 0（冻结负载）。
 
