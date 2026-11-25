@@ -170,6 +170,7 @@ claude plugins install --plugin-dir /path/to/KPBot/Plugins/app-tuner
 | 技能 | 描述 |
 |------|------|
 | [`redis-deploy`](skills/redis-deploy/SKILL.md) | Redis 环境部署(源码构建、默认 7.0.15、sha256 校验、systemd 托管、多实例、离线部署、升级/回滚与验收；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、不自动修改内核参数、不执行远程脚本、卸载需人工确认)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
+| [`pgvector-deploy`](skills/pgvector-deploy/SKILL.md) | pgvector 环境部署(默认 master 并记录 commit、PostgreSQL 安装/初始化/启动、源码构建、vector 扩展创建/升级、离线源码、远程数据库限制与超级用户校验；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、数据库密码不落 argv/日志)，含 evals 评测集与 tier-A skill-integrity 完整性用例 |
 
 ### 独立诊断 skill
 
@@ -229,6 +230,7 @@ app-tuner/
 | 报告生成 | "生成优化报告" | `scripts/generate_report.py` |
 | RocksDB 性能问题 | "RocksDB 写停顿/读慢/compaction 抖动怎么优化" | `rocksdb-perf-diagnostics` |
 | Redis 环境部署 | "部署一个 Redis 环境（默认 7.0.15）" | `redis-deploy` |
+| pgvector 环境部署 | "部署一个 pgvector 环境（默认 master）" | `pgvector-deploy` |
 
 ### 优化工作流
 
