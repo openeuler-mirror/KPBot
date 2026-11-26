@@ -1,0 +1,58 @@
+{
+  "skill_name": "pgsql-test-verification",
+  "version": "1.0.0",
+  "notes": "验证协议类评估；不实际执行压测。",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "换完二进制后跑 smoke_test.sh 全 PASS，sysbench 也比基线快 3%，可以直接宣布优化有效吗？不要执行命令。",
+      "expected_output": "不能：3% 低于 5% 噪声阈值，判噪声、不做结论；且需要核对口径——A/B 两侧 GUC（含观测扩展开关）与压测参数是否一致、是否剔首轮预热、是否 ≥3 轮、逐轮结果与波动是否归档、末段 TPS 与均值偏差是否 >10%（不稳轮作废）。冒烟全过只满足正确性门禁，性能判定按同口径协议执行：剔首轮 3 轮均值比较，收益 <5% 一律判噪声。",
+      "files": ["references/sysbench-baselines.md", "SKILL.md"],
+      "expectations": [
+        "指出 3% < 5% 噪声阈值，判噪声不宣布有效",
+        "列出 A/B 同口径的核对项（GUC/观测开关/参数/预热/轮次）",
+        "强调剔首轮与逐轮归档",
+        "冒烟（正确性门禁）与性能判定分离",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "PG 源码里改了 LWLock 相关代码，最低要跑哪些测试？t/*.pl 的测试我在 src/test/regress/t/ 下没找到，是怎么回事？不要执行命令。",
+      "expected_output": "LWLock/锁路径变更的最低矩阵：make check（核心回归）+ isolation 全量（src/test/isolation，暴露锁序/死锁/并发可见性问题）+ 冒烟 + 三负载 A/B。t/*.pl 找不到的原因：TAP 套件在 src/test/<suite>/t/（如 src/test/recovery/t/、src/test/isolation 也有 t/），而 regress 是 SQL 对照模型、没有 t/ 子目录——按 regress 目录找 t/ 是常见坑。跑法：make -C src/test/isolation check，或 prove -I src/test/perl/ 单套件驱动。",
+      "files": ["references/smoke-and-source-tests.md"],
+      "expectations": [
+        "给出锁路径变更的最低测试矩阵",
+        "纠正 t/*.pl 的位置误解（regress 无 t/，TAP 在 src/test/<suite>/t/）",
+        "给出 make/prove 两种跑法",
+        "说明 isolation 测试覆盖的问题类型",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "火焰图显示 BuildCachedPlan 很高，我想用 pg_stat_statements 印证计划重建行为，怎么查？另外 A/B 两轮一轮开了 pg_stat_statements 一轮没开，数字可信吗？不要执行命令。",
+      "expected_output": "查 pg_stat_statements 的 plans/calls：calls>100 的语句按 plans 排序看 plan_ratio（plans/calls 比率），比率高与火焰图 BuildCachedPlan 占比互证。数字不可信：pg_stat_statements 的 pgss_store 在高吞吐负载实测占 postgres CPU 约 1.8-5%，一轮开一轮关等于两侧负载不对称——观测扩展开关必须两侧一致，否则口径污染；同理 track_io_timing 等开关也要对齐。统计基线按纪律执行：清零是变更操作、共享实例默认不清零，压测前后各取一次快照按 queryid 差分；仅获准独占环境才带参清零 pg_stat_statements_reset(userid, dbid, 0)（userid 在前、dbid 在后）。",
+      "files": ["references/observation-extensions.md"],
+      "expectations": [
+        "给出 plans/calls 的具体查询与判读口径",
+        "指出观测自身成本导致两轮开关不一致即口径污染",
+        "给出与火焰图互证的思路",
+        "提到 reset 的使用纪律（按协议统一执行）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "smoke_test.sh 里为什么要每个检查都单独调 psql？计数对账失败和版本不匹配哪个更严重？等待事件那一节在空库上会不会误报？不要执行命令。",
+      "expected_output": "psql 每次调用都是独立会话（新连接），脚本内多段检查不共享会话状态——各节独立判定、互不牵连，某节失败不阻断后续节取证。计数对账失败更严重：说明数据不完整或指向了错误实例/库，正确性门禁直接否决（性能数字全部无效）；版本不匹配同样是部署完整性问题。等待事件节在空库上采不到活跃会话属正常（查询返回空、Lock 计数为 0、按阈值判定 PASS），不会误报；只有压测中采到 Lock 类等待超阈值才 FAIL。",
+      "files": ["scripts/smoke_test.sh"],
+      "expectations": [
+        "解释独立会话的意义（分节独立判定）",
+        "正确性失败优先于一切性能结论",
+        "空库采样不误报的机制（空结果=计数 0）",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

@@ -40,6 +40,10 @@ architecture（理解源表/CSR/后端进程）
   → 保留或回滚
 ```
 
+数据路径在此闭环中分两条且**互不兼容**：基准/导入用 LDBC v1 `CsvBasic`
+（build-deployment §1，`postgres` 库）；driver 验证用 v2
+`composite-merged-fk`（test-verification，另建 `ldbcsnb` 库）。
+
 ## 与插件内其他 skill 的边界
 
 | 问题 | 去哪里 |

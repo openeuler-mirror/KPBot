@@ -1,0 +1,58 @@
+{
+  "skill_name": "pgsql-performance-optimization",
+  "version": "1.0.0",
+  "notes": "优化决策类评估；不实际执行变更。",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "HNSW 检索场景 48 核，把 NUM_BUFFER_PARTITIONS 从 128 扩到 512 之后，火焰图和 cache miss 都看不出变化，是不是没效果？怎么判断该不该做这个优化？不要执行命令。",
+      "expected_output": "看不出变化不能下结论：分区扩容是锁等待（off-CPU）优化——等待期间 CPU 空闲、不进 on-CPU 火焰图、不产生 cache miss，这两类证据对它天然失明。验证通道是等待事件采样（LWLock/BufferMapping 占比）、offcputime 累计离核时长、自研扩展 cas_hotspots 重试计数、以及 A/B ≥3 轮吞吐。该不该做：先确认存在 BufferMapping 等待证据（高并发随机读、HNSW 每节点至少 2 次 ReadBuffer 的锁放大）；数学依据是生日碰撞（48 核 128 分区碰撞概率 ≈99.997%、512 分区 ≈89.5%，预期竞争对数 8.8→2.2）；无等待证据时不动（重编成本与二进制漂移）。",
+      "files": ["references/buffer-and-lock-optimizations.md"],
+      "expectations": [
+        "解释 on-CPU 火焰图/cache miss 对锁等待优化失明的原理",
+        "给出四个验证通道（等待采样/offcputime/cas_hotspots/A/B）",
+        "引用生日碰撞数学给出适用判据",
+        "强调先有等待证据再动手",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "写负载下想省提交成本，直接建议 synchronous_commit=off 可以吗？如果不行，还有什么提交链优化？不要执行命令。",
+      "expected_output": "不能直接建议：synchronous_commit=off 是持久性换吞吐（崩溃丢最近提交窗口、复制间隙），必须先与业务确认容忍度，不是免费加速。先取证：等待事件 WALSync/WALWrite 占比、火焰图 WaitXLogInsertionsToFinish/XLogFlush/LWLockWaitListLock。替代项：commit_delay 配 commit_siblings 的组提交（高并发短事务下攒批量刷，风险是低并发纯加延迟）、wal_buffers 加大（插入满页等待下降）。回滚路径：ALTER SYSTEM 改回 + pg_reload_conf。",
+      "files": ["references/wal-and-plan-optimizations.md"],
+      "expectations": [
+        "指出持久性权衡必须业务确认",
+        "给出取证门槛（等待事件+火焰图帧）",
+        "列出组提交与 wal_buffers 替代项及各自风险",
+        "给出回滚路径",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "shared_buffers 256G 换 96G 反而更快了，这违反直觉吧？什么时候不能这么缩？不要执行命令。",
+      "expected_output": "机制：池大于热数据集后命中率收益归零，剩下的只有元数据代价——BufferDescriptors/哈希表按 NBuffers 线性放大（256G→96G 各缩 2.67 倍），随机访问（HNSW 遍历）下 PinBuffer 随机碰元数据数组，跨核缓存行乒乓上升。所以数据全热（预热后工作集 < 池）时缩池收益为正。不能缩的场景：有冷数据（命中率会塌——缩池前用 pg_buffercache 确认命中率与热集大小）；还要同步核对 effective_cache_size 口径。实测数字只在同口径系列内引用（80GB 数据集轮）。",
+      "files": ["references/buffer-and-lock-optimizations.md"],
+      "expectations": [
+        "给出元数据代价机制（描述符/哈希表线性放大）",
+        "说明数据全热是适用前提",
+        "指出有冷数据时缩池的反例与预检方法（pg_buffercache）",
+        "跨系列数字不横比",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "verify_build_opts.sh 的 --lse-min 为什么要限制正整数？我用 --expect-symbol 传 operator[] 这种符号会有问题吗？不要执行命令。",
+      "expected_output": "--lse-min 限正整数：传 0 时完全无 LSE 指令的二进制也满足 0≥0 的下限检查（空检查），负数更无意义——非法值按用法错误 exit 2。operator[] 传给 --expect-symbol 没有问题：脚本用 grep -qF 字面匹配（符号名作为独立参数、不解释为正则）；若按正则实现，operator[] 会被解析成空字符类直接报错、nm 已列出也会误报缺失——这是符号校验必须字面匹配的原因（nebula 家族同款教训）。",
+      "files": ["scripts/verify_build_opts.sh", "references/compiler-flags-and-verification.md"],
+      "expectations": [
+        "解释 0 下限的空检查漏洞",
+        "解释 grep -F 字面匹配与正则模式对 operator[] 的差异",
+        "给出脚本的实际判定口径（退出码/输出）",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "skill_name": "kptools-ascend-profiling-analysis-nostack",
+  "version": 1,
+  "notes": "Behavioral evals for no-stack trace analysis (stage decomposition without python stack).",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我有一份 torch_npu profiler 的 trace_view.json，里面没有 python_function 字段。帮我分析 Computing/Communication/Free 占比。不要改任何数据。",
+      "expected_output": "判定为无栈 trace，使用本 skill 而非有栈版本；按 skill 的 stage 分解方法（无 ProfilerStep#N 标注时按事件密度/间隔切分阶段），输出 Computing/Communication/Free 三段占比与结论。",
+      "files": [],
+      "expectations": [
+        "正确判定 trace 类型（无栈 → 本 skill，不是有栈版）",
+        "说明无栈条件（无 python_function / 无 ProfilerStep#N）",
+        "给出三段占比的分析方法（不依赖 python 调用栈）",
+        "明确只读，不改数据"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "无栈 trace 分析出来 Free 占比 60%，正常吗？下一步怎么办？",
+      "expected_output": "Free 60% 说明 NPU 大量空闲，瓶颈在 host 侧（数据准备/Python 层/IO 等待）而非设备算力；建议路由：用 kptools-py-spy 采 Python 进程火焰图定位 host 热点，或 kptools-proc-collector 看线程分布；不是 NPU 算力不足不需要换硬件。",
+      "files": [],
+      "expectations": [
+        "判定 Free 高 → host 侧瓶颈而非设备瓶颈",
+        "给出 host 侧深挖路由（py-spy 火焰图 / proc-collector 线程分析）",
+        "不建议硬件升级（Free 高 ≠ 设备不足）",
+        "结论基于占比数据推理，不编造"
+      ]
+    }
+  ]
+}

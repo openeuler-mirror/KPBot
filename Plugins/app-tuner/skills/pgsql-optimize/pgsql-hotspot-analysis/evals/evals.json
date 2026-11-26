@@ -1,0 +1,58 @@
+{
+  "skill_name": "pgsql-hotspot-analysis",
+  "version": "1.0.0",
+  "notes": "归因方法类评估；不实际执行采集。",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "sysbench 写负载下吞吐很差，但 on-CPU 火焰图看起来挺正常（没有特别突出的计算热点），IPC 只有 0.23，这怎么解释？接下来怎么定位？不要执行命令。",
+      "expected_output": "这是锁自旋/等待形态：on-CPU 火焰图只显示 CPU 在执行什么，锁等待与自旋的部分要么在等待（off-CPU，不进栈）、要么是低 Retiring 的原子轮询。IPC 0.23 + Retiring ~2.9% + 原子/屏障串行化 ~33% + L3_Bound ~50% 是微架构坍塌的直接证据（写负载画像口径）。定位顺序：①等待事件采样（pg_stat_activity 高频快照，看 LWLock/WALSync 类占比）②火焰图下钻 LWLockWaitListLock/WaitXLogInsertionsToFinish 帧 ③offcputime 看睡眠原因链。三方互证后按竞争机制映射表归因（等待队列自旋锁/WAL 提交自旋是写负载前两大项）。",
+      "files": ["references/profiling-playbook.md", "references/contention-mechanisms.md"],
+      "expectations": [
+        "解释 on-CPU 栈看不到锁等待的原理",
+        "把 IPC/Retiring/串行化指标与锁自旋形态对应",
+        "给出等待采样/offcputime/火焰图三方互证顺序",
+        "指向写负载两大机制（等待队列自旋锁、WAL 提交自旋）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "火焰图最顶上一层是个叫 GetCommandTagEnum 的帧占很大比例，这函数是干嘛的、为什么这么热？另外为什么那么多帧名后面带 .lto_priv？不要执行命令。",
+      "expected_output": "GetCommandTagEnum 顶层高占比大概率是 LTO 归因伪影：LTO 构建把消息处理（exec_*）内联进 PostgresMain 后，采样帧被归到被内联共用的小函数名上，顶层帧应先归到主循环再下钻，不能按字面当作命令解析热点。.lto_priv 是 LTO 本地化符号的帧名标记。判别方法：查 pg_config --configure 确认构建带 -flto；对比非 LTO 构建的同负载火焰图确认分布。解读任何火焰图前先确认构建口径。",
+      "files": ["references/profiling-playbook.md"],
+      "expectations": [
+        "识别 LTO 归因伪影并解释成因（内联+符号本地化）",
+        "给出构建口径核对方法（pg_config --configure）",
+        "说明 .lto_priv 帧名含义",
+        "不下“命令解析是热点”的字面结论",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我要对 postgres 多个 backend 进程一起 perf 采样，直接 perf record -p \"$(pgrep postgres)\" 行不行？等待事件采样在空库上跑会不会白跑？不要执行命令。",
+      "expected_output": "不行：perf -p 按逗号分隔解析 PID 列表，pgrep 输出是换行/空格分隔——多实例下要么解析失败要么只采到第一个，必须先 tr 换成逗号（pidstat -p 同口径）。空库上等待事件快照采不到活跃会话属正常（查询返回空、Lock 类计数为 0、不会误报），采样要在压测窗口内做才有意义；高频采样用客户端侧单连接只读循环（psql 常驻单会话、对被测库零写入，勿用写表的 DO 块或每样本新起连接）。collect_profile.sh 已内置逗号转换与 psql 快照节。",
+      "files": ["scripts/collect_profile.sh", "references/profiling-playbook.md"],
+      "expectations": [
+        "指出 perf -p 逗号口径与 pgrep 空格输出的不匹配",
+        "给出 tr 转换写法",
+        "解释空库采样的行为（不误报）与采样时机（压测窗口）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "读写混合负载下我看到 StartReadBuffer 24.8%，里面还有 GetVictimBuffer 15.7、FlushBuffer 11.7、ForwardSyncRequest 8.3，加起来超过外层了，这数字是不是矛盾？机制上说明什么？不要执行命令。",
+      "expected_output": "不矛盾：火焰图百分比是 inclusive（包含）口径，子项按链路嵌套——GetVictimBuffer 15.7 ⊂ StartReadBuffer 24.8，FlushBuffer 11.7 ⊂ GetVictimBuffer（选中脏 victim 后的刷脏），ForwardSyncRequest 8.3 ⊂ FlushBuffer（刷完排 fsync 队列），是递进包含不可相加。机制说明：读查询在关键路径替后台刷脏（bgwriter/checkpointer 消化不及时 → clock-sweep 命中脏 victim → 同步 mdwritev → 排 fsync 队列）。验证方向：等待事件 BufferIO/DataFileWrite、pg_buffercache 脏页比、pg_stat_bgwriter 消化计数；处置入口在 bgwriter/checkpoint 组参数。",
+      "files": ["references/workload-portraits.md"],
+      "expectations": [
+        "解释 inclusive 嵌套口径（不可相加）",
+        "说清淘汰刷脏链的机制与递进关系",
+        "给出互证证据（等待事件/pg_buffercache/bgwriter 计数）",
+        "指向处置入口但不当场开方",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

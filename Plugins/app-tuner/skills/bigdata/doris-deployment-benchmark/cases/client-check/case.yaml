@@ -1,0 +1,12 @@
+name: client-check
+skill: doris-deployment-benchmark
+tier: A
+entrypoint: ["bash", "cases/client-check/run.sh"]
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: cases/client-check/results/result.json
+    field: success
+    expect: true

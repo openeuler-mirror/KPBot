@@ -1,0 +1,62 @@
+{
+  "skill_name": "pggraph-build-deployment",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在一台已装 PostgreSQL 18.3 的 Linux 机器上从源码编译安装 pgGraph 0.1.8：需要哪些依赖、pgrx 如何初始化、编译命令是什么、如何保证 pgNN feature 与目标 PG 一致？不要执行命令，只给步骤和判据。",
+      "expected_output": "依赖 Rust 1.96.0（rust-toolchain.toml 锁定）、cargo-pgrx 0.19.1、PostgreSQL 14–18 的 pg_config 和服务端头文件、Python 3.10+（基准）、zstd（LDBC）。用 pg_config --version 推导 major，PG_FEATURE=pgNN，执行 cargo pgrx init --pgNN=<prefix>/bin/pg_config；编译用 make install 或 cd graph && cargo pgrx install --pg-config <pg_config> --release --no-default-features --features pgNN。判据：产物 graph.so/graph.control/graph--0.1.8.sql 在 pg_config --pkglibdir/--sharedir 下，CREATE EXTENSION 后 pg_extension 版本正确。",
+      "files": [],
+      "expectations": [
+        "列出 Rust 1.96.0、cargo-pgrx 0.19.1、PG 14–18 头文件/pg_config、zstd 等依赖",
+        "说明 pgrx init 使用目标 pg_config，feature 为 pgNN 且必须匹配大版本",
+        "说明 cargo pgrx install 的 --release/--no-default-features/--features pgNN",
+        "说明产物 graph.so、graph.control、graph--0.1.8.sql 的位置",
+        "说明用 pg_extension 校验版本",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "PostgreSQL 已装好但还没启动。请给出 pgGraph 部署到本机实例的最小步骤：initdb/启动、连接、CREATE EXTENSION、工件目录、以及为什么不能用 root 运行。不要执行命令。",
+      "expected_output": "用数据目录属主（通常 postgres）执行 initdb -D $PGDATA（仅首次）和 pg_ctl -D $PGDATA -l $PGDATA/server.log start/restart；pg_isready 检查；psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB 连接；CREATE EXTENSION IF NOT EXISTS graph；工件在 $PGDATA/<graph.data_dir>/<graph_id>/main.pggraph，graph.data_dir 默认 graph。PostgreSQL 拒绝 root 运行，必须 su postgres 或切到属主。凭据用 .pgpass/peer，不写命令行。",
+      "files": [],
+      "expectations": [
+        "说明 initdb 仅首次、pg_ctl 启动/重启、pg_isready 检查",
+        "说明用 psql 连接并 CREATE EXTENSION graph",
+        "说明工件路径在 $PGDATA 下的 graph 数据目录，按 graph_id 分目录",
+        "说明 PostgreSQL 不能以 root 运行，需数据目录属主",
+        "说明凭据不要写进命令行/脚本",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "如何把 LDBC SNB SF1 导入 pgGraph 并建图？请说明数据归一化、节点/边表数量、注册方式、graph.build 的关键参数与验收判据；为什么报告里的 edges_loaded 可能是原始边数的两倍？不要执行命令。",
+      "expected_output": "下载 LDBC SF1 CsvBasic LongDateFormatter，记录 URL/SHA256；zstd 解压，按实体/关系合并分片、规范化列名、给 ID 加类型前缀、边端点校验，输出 CSV+metadata.json；8 张节点表、23 张边表（另有 2 张属性表），COPY 入 PG；用 graph.add_table 注册节点（主键+搜索列），graph.add_edge 注册边（label、bidirectional=true），可 add_filter_column；设置 graph.memory_limit_mb（SF1 约需 830MB，按余量）、persist_on_build/auto_load，然后 graph.build('csr_readonly')。验收：registered_tables=8、registered_edges=23、status/build_output、1-hop traverse 返回≥1、row_count 与 SQL 基线一致。双向注册会为每条边写正向+反向，所以 edges_loaded 约为原始边数×2。",
+      "files": [],
+      "expectations": [
+        "说明下载/解压/归一化/ID 前缀/边端点校验",
+        "说明 8 张节点表、23 张边表（及属性表）",
+        "说明 add_table/add_edge 注册，边可 bidirectional",
+        "说明 memory_limit_mb、persist_on_build/auto_load 与 graph.build 模式",
+        "说明验收：注册数、build 输出、1-hop traverse、row_count/SQL 基线",
+        "说明 edges_loaded 含双向展开，约为原始边数×2",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "重新编译 pgGraph 后，是否必须重新导入数据/重建图？什么时候需要 clean-graph？如果 graph.build 被中断或 graph.status() 显示 0，应该怎么排查？不要执行命令。",
+      "expected_output": "只重新编译 .so 且不改 .pggraph 格式时，重启 PG 加载新 .so 即可复用旧工件，不需要重新导入/build；改了 CSR/工件格式、注册表/边/过滤列、换数据集或工件校验失败时才需要 clean-graph + 重新注册/build。clean-graph 是 graph.reset() + TRUNCATE 注册/任务/同步表，删工件/注册但不动源表，属破坏性操作，先备份并确认可重建。build 中断可能留 build 锁/后台任务，查 pg_stat_activity，必要时 pg_terminate_backend，不要手改 .pggraph。status 为 0 可能是内存元数据未加载，先做 1-hop traverse 验证；不要据此直接重建。",
+      "files": [],
+      "expectations": [
+        "说明仅重编译且格式未变时工件可复用，只需重启加载新 .so",
+        "说明格式/注册/数据集变化或工件损坏时才需要 clean-graph + 重建",
+        "说明 clean-graph 是破坏性操作，先备份并确认可重建",
+        "说明 build 中断查 pg_stat_activity/终止残留 backend，不手改工件",
+        "说明 status=0 先用 traverse 验证，不等于图不可用",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

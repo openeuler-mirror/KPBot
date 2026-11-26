@@ -159,6 +159,41 @@ check_sandbox_profile_install() {
     done
 }
 
+check_cubesandbox_deployment_package() {
+    local skills="$1"
+    local skill
+    for skill in cubesandbox-deployment cubesandbox-deployment-preflight cubesandbox-single-node-install cubesandbox-deployment-verify; do
+        check "installs $skill" '[ -f "$skills/$skill/SKILL.md" ]'
+        check "$skill has an executable entry" \
+            '[ -f "$skills/$skill/scripts/run.sh" ] || [ "$skill" = cubesandbox-deployment ]'
+    done
+    check "CubeSandbox shared deploy and internal helpers resolve" \
+        '[ -f "$skills/cubesandbox-deployment/scripts/deploy.sh" ] && [ -f "$skills/cubesandbox-deployment/scripts/discover_release.py" ] && [ -f "$skills/cubesandbox-deployment/scripts/parse_env.py" ] && [ -f "$skills/cubesandbox-deployment/scripts/report_safety.py" ]'
+    check "CubeSandbox shared verifier resolves" \
+        '[ -f "$skills/cubesandbox-deployment/scripts/verify.sh" ]'
+    check "CubeSandbox shared references resolve from preflight" \
+        '[ -r "$skills/cubesandbox-deployment-preflight/../cubesandbox-deployment/references/deployment.md" ]'
+    check "CubeSandbox Workflow routes all focused skills" \
+        'grep -Fq cubesandbox-deployment-preflight "$skills/cubesandbox-deployment/SKILL.md" && grep -Fq cubesandbox-single-node-install "$skills/cubesandbox-deployment/SKILL.md" && grep -Fq cubesandbox-deployment-verify "$skills/cubesandbox-deployment/SKILL.md"'
+    check "preflight installed entry is executable without host checks" \
+        'bash "$skills/cubesandbox-deployment-preflight/scripts/run.sh" --help >/dev/null'
+    check "install installed entry is executable without authorization" \
+        'bash "$skills/cubesandbox-single-node-install/scripts/run.sh" --help >/dev/null'
+    check "verify installed entry is executable without host checks" \
+        'bash "$skills/cubesandbox-deployment-verify/scripts/run.sh" --help >/dev/null'
+    check "focused skills do not duplicate Release/env implementations" \
+        '! find "$skills/cubesandbox-deployment-preflight" "$skills/cubesandbox-single-node-install" "$skills/cubesandbox-deployment-verify" -name discover_release.py -o -name parse_env.py | grep -q .'
+    check "CubeSandbox shared tier-A fixture helper survives install" \
+        '[ -f "$skills/cubesandbox-deployment/cases/lib/deployment_fixture.py" ]'
+    for skill in cubesandbox-deployment-preflight:cases/preflight-contract cubesandbox-single-node-install:cases/install-contract cubesandbox-deployment-verify:cases/verify-contract; do
+        local name="${skill%%:*}" case_path="${skill#*:}"
+        check "$name tier-A case survives install" \
+            '[ -f "$skills/$name/$case_path/run.sh" ] && [ -f "$skills/$name/$case_path/case.yaml" ]'
+        check "$name installed tier-A contract passes" \
+            'bash "$skills/$name/$case_path/run.sh" >"$TMPROOT/$name-case.log" 2>&1'
+    done
+}
+
 echo "== claude mode =="
 run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
@@ -179,6 +214,7 @@ check_agentenv_package "$CLAUDE_SKILLS"
 check_pdenv_package "$CLAUDE_SKILLS"
 check_cubesandbox_split "$CLAUDE_SKILLS"
 check_sandbox_profile_install "$CLAUDE_SKILLS"
+check_cubesandbox_deployment_package "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
@@ -209,6 +245,7 @@ check_agentenv_package "$OPENCODE_SKILLS"
 check_pdenv_package "$OPENCODE_SKILLS"
 check_cubesandbox_split "$OPENCODE_SKILLS"
 check_sandbox_profile_install "$OPENCODE_SKILLS"
+check_cubesandbox_deployment_package "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo "== preview count vs installed count =="
