@@ -1,0 +1,7 @@
+{
+  "skill_name": "allocator-ab-trial",
+  "queries": [
+    { "id": "AAT-01", "prompt": "对比 jemalloc glibc tcmalloc 的分配性能", "should_trigger": true },
+    { "id": "AAT-02", "prompt": "优化 protobuf 序列化路径", "should_trigger": false }
+  ]
+}

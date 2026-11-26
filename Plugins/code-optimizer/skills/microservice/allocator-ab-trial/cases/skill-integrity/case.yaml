@@ -1,0 +1,25 @@
+# 验证 tier-A 用例：allocator-ab-trial 完整性契约
+#
+# 验证内容：
+#   skill     SKILL.md 自身格式（frontmatter name/description）
+#   links     SKILL.md 的 references/scripts 链接必须 >=1 且全部可解析
+#   invariants 方法论锚点（LD_PRELOAD 隔离/glibc 基线/交替/负载形态）
+#   sensitive 敏感内容看护（SKILL.md + references + scripts + evals，
+#             私网 IP/IPv6/凭据/私钥/个人路径，凭据命中脱敏）+ BOM 检查
+#   contract  脚本功能契约实测——参数校验（缺 -c、-r 0/abc、-w -1 → exit 2）；
+#             环境无替代分配器时 fail-closed（exit 1）；有替代分配器的环境
+#             加测 happy path（比值与方向结论输出）与垃圾/负值输出（exit 1）
+
+name: skill-integrity
+skill: allocator-ab-trial
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: pass
+    expect: true
