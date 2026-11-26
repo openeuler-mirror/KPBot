@@ -167,6 +167,19 @@ def main():
         check("plan: 缺显存证据时 dynamic 转 hold",
               d.get("mode") == "hold" and any("显存" in w for w in d.get("warnings", [])))
 
+        # per-slot cost magnitude guard
+        r = run([RECOMMEND, "--logical-experts", "384", "--ep-size", "16",
+                 "--redundant-experts", "16", "--bytes-per-expert-gib", "0.043"])
+        d = json.loads(r.stdout) if r.returncode == 0 else {}
+        check("recommend: 0.043 被提示像单专家权重",
+              any("槽位" in w for w in d.get("warnings", [])), str(d.get("warnings")))
+
+        r, d = plan(["--verdict", verdict("verdict_optimize_dynamic.json"),
+                     "--ep-size", "16", "--logical-experts", "384", "--branch", "site-fork",
+                     "--bytes-per-expert-gib", "0.043", "--free-gib", "6"])
+        check("plan: 可疑单副本成本 -> hold",
+              d.get("mode") == "hold" and any("槽位" in w for w in d.get("warnings", [])))
+
         # upstream memory warning / next must be preserved
         vmem = os.path.join(tmp, "verdict_mem_unknown.json")
         json.dump({"verdict": "imbalanced",

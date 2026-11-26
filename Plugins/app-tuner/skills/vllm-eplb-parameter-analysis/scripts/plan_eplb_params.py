@@ -185,9 +185,9 @@ def build_plan(verdict, args):
     n = args.logical_experts
     e = args.ep_size
     if not n or n <= 0:
-        die("--mode dynamic 需要 --logical-experts（>0）")
+        die("生成 dynamic 方案需要 --logical-experts（>0）")
     if not e or e <= 0:
-        die("--mode dynamic 需要 --ep-size（>0）")
+        die("生成 dynamic 方案需要 --ep-size（>0）")
     if n % e != 0:
         die("logical_experts (%d) 不能被 ep_size (%d) 整除，无法均分到各 rank" % (n, e))
 
@@ -206,6 +206,15 @@ def build_plan(verdict, args):
         else:
             die("handoff 未给 redundant_experts，且缺少 --free-gib/单副本成本；"
                 "请补显存事实或显式给 candidate")
+
+    # A single expert weight (~0.044 GiB) is not a per-slot cost; trusting it inflates
+    # affordable by ~ep_size**2 and ships an OOM plan.
+    if cost is not None and 0 < cost < 0.2:
+        warnings.append("--bytes-per-expert-gib=%.3f 看起来像单个专家权重（约0.044GiB），"
+                        "不是每 rank 槽位成本（DeepSeekV3 约2.4GiB）；按 hold 处理" % cost)
+        plan["rationale"].append("单副本成本口径可疑，停在参数分析交接")
+        plan["mode"] = "hold"
+        return plan
 
     # Dynamic writes real memory-hungry copies; without evidence we must not ship it.
     if args.free_gib is None or not cost:
@@ -270,7 +279,8 @@ def main():
     ap.add_argument("--ep-size", type=int, default=None)
     ap.add_argument("--logical-experts", type=int, default=None)
     ap.add_argument("--bytes-per-expert-gib", type=float, default=None,
-                    help="per-slot cost on each EP rank (DeepSeekV3 ~2.4)")
+                    help="per-slot cost on EVERY EP rank (e.g. 2.4 for DeepSeekV3); "
+                         "NOT one expert's weight (~0.044)")
     ap.add_argument("--bytes-per-expert-per-layer-gib", type=float, default=None)
     ap.add_argument("--num-moe-layers", type=int, default=None)
     ap.add_argument("--free-gib", type=float, default=None)

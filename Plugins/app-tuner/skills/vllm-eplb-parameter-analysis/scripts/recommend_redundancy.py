@@ -98,6 +98,9 @@ def analyse(args):
         bytes_per_rank = args.bytes_per_expert_gib
 
     memory = None
+    if bytes_per_rank is not None and 0 < bytes_per_rank < 0.2:
+        warnings.append("--bytes-per-expert-gib=%.3f 看起来像单个专家权重（约0.044GiB），"
+                        "不是每 rank 槽位成本（DeepSeekV3 约2.4GiB）；请确认口径" % bytes_per_rank)
     if bytes_per_rank is not None:
         extra_per_rank = per_rank_extra * bytes_per_rank
         extra_total = r * bytes_per_rank
@@ -141,7 +144,7 @@ def main():
     g.add_argument("--redundant-experts", type=int, help="candidate num_redundant_experts")
     g.add_argument("--ratio", type=float, help="candidate ratio, e.g. 0.04")
     ap.add_argument("--bytes-per-expert-gib", type=float,
-                    help="incremental GiB of one redundant expert on one EP rank")
+                    help="per-slot cost: GiB added on EVERY EP rank when one redundant expert slot is added (i.e. adding ep_size copies); DeepSeekV3 ~2.4. NOT a single expert weight (~0.044)")
     ap.add_argument("--bytes-per-expert-per-layer-gib", type=float,
                     help="same, per MoE layer (needs --num-moe-layers)")
     ap.add_argument("--num-moe-layers", type=int)
