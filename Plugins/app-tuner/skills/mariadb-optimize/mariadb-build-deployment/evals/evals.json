@@ -1,0 +1,65 @@
+{
+ "skill_name": "mariadb-build-deployment",
+ "version": "1.0.0",
+ "notes": "部署编译类评估；不实际执行构建/部署。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "从源码编译 MariaDB 10.11.16 时有哪些关键编译选项？LSE 和 jemalloc 怎么带上？不要执行命令。",
+   "expected_output": "关键编译选项按目标定：平台自适应参数（x86 用 -march=native，aarch64 默认可移植目标），仅确认目标 ARM CPU 支持 LSE 时才加 -march=armv8.2-a+lse（收益需 A/B 验证，x86 传该参数会报错）；jemalloc 用构建期 -DCMAKE_EXE_LINKER_FLAGS=\"-ljemalloc\" 或运行期 LD_PRELOAD（内存分配竞争场景；WITH_JEMALLOC 在 MariaDB 10.11 无消费者、不生效）、WITH_INNOBASE_STORAGE_ENGINE 等。构建目录默认本轮新建空目录，清理既有目录前校验真实路径与属主。构建步骤：cmake 配置→make -j→make install；参数与产物记录（编译器版本、md5）用于 A/B 身份核验。",
+   "files": [
+    "references/build-and-deps.md"
+   ],
+   "expectations": [
+    "列出 LSE/jemalloc 的开启方式",
+    "说明构建基本步骤",
+    "强调产物身份记录",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "mariadb-install-db 之后要做哪些最小配置？buffer pool 和 redo 应该怎么设？不要执行命令。",
+   "expected_output": "最小配置：datadir/socket/port、bind-address、innodb_buffer_pool_size（物理内存的关键比例，按数据规模与专属性设）、innodb_log_file_size（10.11 默认 96MB 偏小，写负载按 redo 增速调大减少 checkpoint 频率）、innodb_flush_method=O_DIRECT、max_connections 与文件描述符。spec/模板见 topology-and-config；改后用只读核验。",
+   "files": [
+    "references/topology-and-config.md"
+   ],
+   "expectations": [
+    "给出最小配置清单",
+    "说明 buffer pool/redo 的设置依据",
+    "点名 flush_method 与连接数",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "preflight_check.sh 部署前都查什么？哪类直接 FAIL？不要执行命令。",
+   "expected_output": "只读检查：架构、CPU/NUMA 拓扑、内存、datadir 磁盘空间与权限、端口范围校验（PORT/EXTRA_PORT 均须 1-65535，非法 exit 2）、端口占用（先检查 ss 退出状态，查询失败报无法判定、不当成端口空闲；主端口被占 FAIL，救援口 EXTRA_PORT 被占仅 WARN）、vm.swappiness、THP、numactl/python3/perl 依赖、残留 mariadbd 进程。直接 FAIL 的：非 Linux、datadir 不存在/不可写、端口非法、主端口被占；磁盘空间不足只 WARN，脚本不检查 max_map_count 或 libaio。",
+   "files": [
+    "scripts/preflight_check.sh"
+   ],
+   "expectations": [
+    "列出检查项分组",
+    "区分 FAIL/WARN 判定",
+    "端口范围校验 exit 2",
+    "说明只读不改系统",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "mariabackup 怎么做全量备份和恢复？和 mysqldump 什么时候选谁？不要执行命令。",
+   "expected_output": "mariabackup 物理备份：备份期间拷贝数据文件+redo；--compress 备份须对同一备份目录先 decompress 再 prepare 应用 redo，任一步失败即停止；恢复=停服→保留原 datadir→向新建空目录 copy-back→成功才改属主并启动。适合大库/快速恢复；mysqldump 逻辑备份适合小库/跨版本/可读性。备份要记录 md5/位置，恢复后必须跑只读冒烟（行数对账、引擎状态）确认一致性。",
+   "files": [
+    "references/data-load-and-backup.md"
+   ],
+   "expectations": [
+    "说明物理备份 prepare 流程",
+    "恢复步骤与属主修正",
+    "物理 vs 逻辑备份选择依据",
+    "恢复后冒烟对账",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
