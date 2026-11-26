@@ -94,7 +94,7 @@ balancedness=0.7900, steps until the next rearrangement: 600
 | `preemptions_delta` | int | 窗口内换出增量（门控用它） |
 | `preemptions_total` | int | 进程累计换出次数；只作参考，不参与门控 |
 | `free_mem_gib` | float | 剩余显存（GiB），可选 |
-| `bytes_per_expert_gib` | float | 每个冗余专家在每个 EP rank 上的增量显存（GiB），DeepSeekV3 约 2.4 |
+| `bytes_per_extra_expert_per_rank_gib` | float | 每个 EP rank 每多一个专家槽位的增量显存（GiB），DeepSeekV3 约 2.4；旧名 `bytes_per_expert_gib` 按 per-slot 解析 |
 | `ep_size` | int | EP rank 数，用于把每 rank 余量换算成全局副本数 |
 | `thresholds` | object | 覆盖默认阈值 |
 
@@ -145,10 +145,11 @@ per_rank_extra_bytes = NUM_MOE_LAYERS × BYTES_PER_EXPERT × NUM_REDUNDANT_EXPER
 **可负担副本数**（脚本 `affordable_redundant`）：
 
 ```
-affordable = floor(free_gib / bytes_per_expert_gib) × ep_size
+affordable = floor(free_gib / bytes_per_extra_expert_per_rank_gib) × ep_size
 ```
 
-其中 `bytes_per_expert_gib` 指"一个冗余专家在每个 EP rank 上的增量"（对应上面 2.4 GB 的口径）。
+其中 `bytes_per_extra_expert_per_rank_gib` 指“每 rank 每多一个专家槽位”的增量（DeepSeekV3 约 2.4 GiB）；
+不是单个专家的权重（约 44 MB）。填写 <0.2 GiB 会被判为可疑并忽略。
 `num_redundant_experts` 必须能被 `ep_size` 整除（vLLM 自动取值时也是向上取整到 ep_size 的倍数），
 所以这里乘回 `ep_size`。
 
