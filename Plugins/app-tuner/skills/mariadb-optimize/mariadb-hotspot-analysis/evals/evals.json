@@ -1,0 +1,67 @@
+{
+ "skill_name": "mariadb-hotspot-analysis",
+ "version": "1.0.0",
+ "notes": "热点归因类评估；不实际执行采集。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "火焰图里 futex 占比高说明什么？怎么进一步确认瓶颈？不要执行命令。",
+   "expected_output": "futex 高说明线程在用户态锁/条件变量上睡眠等待（内核辅助同步）。确认链：perf 栈看调用方（rw_lock/srw_lock/lock_sys/MDL 哪一层）、off-CPU 看睡眠时长原因、SHOW ENGINE INNODB STATUS/INNODB_LOCK_WAITS 看行锁冲突、MDL 等待看表级。区分用户态锁（futex）与 InnoDB 内部锁等待（lock_sys 自旋/队列）证据形态不同。",
+   "files": [
+    "references/profiling-playbook.md",
+    "references/innodb-lock-and-thread-model.md"
+   ],
+   "expectations": [
+    "解释 futex 的语义与调用链追查",
+    "列出锁等待的内部证据视图",
+    "区分 futex 与 InnoDB 锁证据形态",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "写负载卡住但 CPU 不满，Innodb_log_waits 高说明什么？不要执行命令。",
+   "expected_output": "Innodb_log_waits 高说明 redo log 写满导致事务等待 checkpoint 推进（log file size 不足或刷脏跟不上）——写入被 redo 空间阻塞而非 CPU 瓶颈。处理方向：增大 innodb_log_file_size、提升 io_capacity/刷脏能力、核对盘延迟；配套证据：Innodb_log_waits 增量、checkpoint age、刷脏/IO 指标。",
+   "files": [
+    "references/scenario-hotspots.md",
+    "references/stats-and-topdown.md"
+   ],
+   "expectations": [
+    "指出 redo 满→等待 checkpoint 的机制",
+    "给出处理方向与参数",
+    "列出配套证据指标",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "Topdown 里 IPC 很低、Back-End Bound（Memory Bound）高，怎么解读？下一步采什么？不要执行命令。",
+   "expected_output": "IPC 低 + Back-End Bound 高（其中 Memory Bound 主导）：指令多数时间在等数据（访存/缓存缺失），典型访存瓶颈。下一步：按 references/stats-and-topdown.md §5 的口径下钻 LLC miss / 缓存命中率确认层级、火焰图看访存热点函数与数据结构（伪共享/跨 NUMA 特征）、NUMA 侧 numastat/本地命中率；再看是否存在跨 NUMA 访问放大（mariadb 大页/绑核相关）。",
+   "files": [
+    "references/stats-and-topdown.md"
+   ],
+   "expectations": [
+    "解读 IPC 低 + Back-End Bound（Memory Bound）高为访存瓶颈",
+    "给出 LLC miss 等 cache 下钻指标（与 references 术语一致）",
+    "提到伪共享/NUMA 特征与 numastat",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "INNODB_METRICS 应该看时点值还是增量？怎么用它在窗口内解释问题？不要执行命令。",
+   "expected_output": "INNODB_METRICS/SHOW GLOBAL STATUS 是累计计数器：解释窗口必须前后快照求差分（增量），再按 TPS 归一化。时点值当窗口值是常见误判；SELECT 只读连接采集，A/B 两腿开关与口径一致。",
+   "files": [
+    "references/stats-and-topdown.md",
+    "references/profiling-playbook.md"
+   ],
+   "expectations": [
+    "累计值+快照差分口径",
+    "增量按 TPS 归一化",
+    "指出时点值误判",
+    "两腿开关一致",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
