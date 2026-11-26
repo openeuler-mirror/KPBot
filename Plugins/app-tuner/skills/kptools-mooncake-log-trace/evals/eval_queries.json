@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-mooncake-log-trace",
+  "queries": [
+    { "id": "AQ-01", "prompt": "把这个带 MKT 打点的 mooncake .so 部署替换到远端容器里", "should_trigger": true, "note": "核心场景：部署替换（预检→定位→备份→替换→回读→重启指引）" },
+    { "id": "AQ-02", "prompt": "给 P/D 容器换上打过点的 mooncake 动态库，容器现在是停着的", "should_trigger": true, "note": "stopped 容器场景（--pairs + docker cp 校验）" },
+    { "id": "AQ-03", "prompt": "D 侧多引擎容器都要替换同一份打点 .so", "should_trigger": true, "note": "多容器部署（逐容器独立备份与校验）" },
+    { "id": "AQ-04", "prompt": "部署后 MKT 日志不生效，按 MANIFEST 回滚到原库", "should_trigger": true, "note": "回滚场景" },
+    { "id": "AQ-05", "prompt": "mooncake 打点替换完重启了但看不到 [MKT_TTF] 输出，帮我排查", "should_trigger": true, "note": "生效排查（§6：进程没换库/glog/Ray 去重/无流量）" },
+    { "id": "AQ-06", "prompt": "容器里同名 .so 有好几份，替换目标怎么定", "should_trigger": true, "note": "多副本定位（/proc/<pid>/maps 为准 + --pairs）" },
+    { "id": "NQ-01", "prompt": "给 mooncake 源码加 MKT 打点并编译成 .so", "should_trigger": false, "note": "routes to kptools-mooncake-instrumentation（配套 PR #405）——本 skill 只部署，不打点不编译" },
+    { "id": "NQ-02", "prompt": "解析 MKT 日志出个耗时分布表", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis（日志解析出表）" },
+    { "id": "NQ-03", "prompt": "给 vLLM 的 Python 层加 TTFT 打点", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace（Python 层 .py 打点，与 C++ 层 Mooncake 库分工）" },
+    { "id": "NQ-04", "prompt": "现场没有带打点的 .so，帮我现编一个", "should_trigger": false, "note": "routes to kptools-mooncake-instrumentation（配套 PR #405）——本 skill 只部署已验证产物，禁止现场编译" },
+    { "id": "NQ-05", "prompt": "探测下容器里 mooncake 的版本和哪个 .so 在跑", "should_trigger": false, "note": "探测归 kptools-mooncake-instrumentation（probe_mooncake.sh，配套 PR #405）" },
+    { "id": "NQ-06", "prompt": "跑一轮压测验证 MKT 日志的耗时数据", "should_trigger": false, "note": "压测执行不归本 skill（smoke 仅需 1 条真实请求）" }
+  ]
+}
