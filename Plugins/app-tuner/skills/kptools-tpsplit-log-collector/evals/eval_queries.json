@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-tpsplit-log-collector",
+  "queries": [
+    {"id": "AQ-01", "prompt": "帮我把远端的 prefill/decode/load_balance 日志采集下载下来", "should_trigger": true, "note": "核心场景：采集日志"},
+    {"id": "AQ-02", "prompt": "这轮压测结束了，把 105/106/107 三台机器 /data 下的打点日志拉回本地，注意两台 P 都有 prefill.log 别互相覆盖", "should_trigger": true, "note": "多 P 同名防覆盖"},
+    {"id": "AQ-03", "prompt": "在采集机上用 fetch_logs.sh --root 扫一下 /data/opencode，看看这轮的四份日志齐不齐", "should_trigger": true, "note": "定位与完整性校验"},
+    {"id": "AQ-04", "prompt": "日志拉下来了，但 BREAKDOWN 行数跟压测请求数对不上，帮我查是不是四份不是同一轮压测", "should_trigger": true, "note": "同轮对齐校验"},
+    {"id": "AQ-05", "prompt": "还没压测数据，先出一轮带 --save-detailed 的压测，然后把日志一起拉回来", "should_trigger": true, "note": "日志链路前置补数据（压测须 --save-detailed）"},
+    {"id": "AQ-06", "prompt": "用 --stage 把找到的日志暂存到 /tmp/ttft_fetch，再打包下载", "should_trigger": true, "note": "暂存待下载"},
+    {"id": "AQ-07", "prompt": "采集输出里没看到 [SHM_DEQUEUE_BATCH] 的计数行，这正常吗？对后面的解析有影响吗", "should_trigger": true, "note": "标记缺失检出与下游影响解读"},
+    {"id": "NQ-01", "prompt": "帮我把这轮压测的 TTFT 日志解析一下", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis（解析出表）"},
+    {"id": "NQ-02", "prompt": "TTFT breakdown 出个表，看首 token 延迟耗在 tokenize/queue/forward/KV 哪一环", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis"},
+    {"id": "NQ-03", "prompt": "把 TTFT 打点 patch 部署到远端 vLLM 容器里", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace（打点部署，配套 PR #340 交付）"},
+    {"id": "NQ-04", "prompt": "帮我执行一轮压测，并发 16、8k5 序列，看吞吐和 P99", "should_trigger": false, "note": "独立压测/性能评估不归本 skill（本 skill 仅在日志链路缺数据时补跑 --save-detailed）"},
+    {"id": "NQ-05", "prompt": "对比 TP 拆分前后的收益，出一份对比报告", "should_trigger": false, "note": "routes to kptools-tpsplit-report"},
+    {"id": "NQ-06", "prompt": "dequeue 列全是 0，是解析器 bug 吗", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis（解析侧诊断；归因到采集缺数据源时会指引回本 skill）"},
+    {"id": "NQ-07", "prompt": "抓一次 NPU profiling，看算子耗时", "should_trigger": false, "note": "routes to profiling 采集类技能"}
+  ]
+}
