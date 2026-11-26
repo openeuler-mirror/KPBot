@@ -1,0 +1,86 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>Ascend Profiling 对比报告</title><style>
+*{box-sizing:border-box} body{font-family:-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;margin:0;background:#F4F2EE;color:#3B4750}
+nav{position:sticky;top:0;background:#3B4750;padding:9px 16px;z-index:9;display:flex;gap:6px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(60,70,80,.25)}
+nav button{background:#4B5862;color:#C9CFD4;border:0;padding:6px 16px;border-radius:5px;cursor:pointer;font-size:13px;transition:background .15s}
+nav button:hover{background:#5A6874}
+nav button.on{background:#6F8FA3;color:#fff;font-weight:600}
+.page{display:none;max-width:1200px;margin:18px auto;padding:0 14px}
+.page.on{display:block}
+h1{font-size:21px;margin:6px 0 14px;color:#3B4750}
+h2{font-size:17px;margin:26px 0 10px;padding:7px 14px;border-radius:6px;color:#fff}
+h2.s-P1{background:linear-gradient(90deg,#6F8FA3,#8FA3B2)}
+h2.s-P2{background:linear-gradient(90deg,#95879F,#AC9FB0)}
+h2.s-P3{background:linear-gradient(90deg,#869B85,#9DB39B)}
+h3{font-size:15px;margin:18px 0 6px}
+.sect{background:#fff;border:1px solid #E4E0D9;border-radius:8px;padding:14px 18px;margin:12px 0;box-shadow:0 1px 2px rgba(90,85,75,.06)}
+.stagebox{background:#fff;border:1px solid #E4E0D9;border-left:5px solid #6F8FA3;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 2px rgba(90,85,75,.06)}
+.stagebox h3{margin:0 0 10px;font-size:15px;color:#3B4750}
+.title-line{font-size:13.5px;font-weight:600;margin:2px 0 8px;color:#4A5560}
+.sem{font-size:13px;color:#5F6A74;margin:4px 0 10px;line-height:1.6;border-left:3px solid #D8D4CC;padding-left:10px}
+table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
+th,td{border:1px solid #E6E2DA;padding:6px 10px;text-align:left}
+th{background:#F0EDE7;font-weight:600;color:#4A5560}
+tr:nth-child(even) td{background:#FBFAF7}
+.flame{position:relative;background:#FAF8F5;border:1px solid #E8E4DC;border-radius:6px;overflow:hidden;margin:8px 0 4px}
+.fseg{position:absolute;height:20px;overflow:hidden;white-space:nowrap;font-size:11px;line-height:20px;color:#fff;padding:0 4px;border-right:1px solid rgba(255,255,255,.5);border-bottom:1px solid rgba(255,255,255,.35);cursor:default;text-overflow:clip}
+.fseg:hover{filter:brightness(1.09);z-index:2}
+.fseg .lbl{display:block;overflow:hidden;text-overflow:ellipsis}
+.chip{display:inline-block;width:11px;height:11px;border-radius:2px;margin:0 4px -1px 10px}
+.mstruct{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:10px 0;font-size:12px}
+.msb{border:1px solid #D8D3C8;border-radius:6px;padding:3px 9px;background:#FAF8F5;white-space:nowrap;color:#3B4750}
+.ms-attn{background:#4A78A0;color:#fff;border-color:#3D6488;font-weight:600}
+.ms-gemm{background:#E3E9EF;color:#2F5D86}
+.ms-norm{background:#EFE9DF;color:#7D5F42}
+.ms-act{background:#E8EDE3;color:#44603B}
+.ms-cache{background:#EDE4DA;color:#8A5560}
+.ms-rope{background:#E9E4F0;color:#5E4B75}
+.ms-sample{background:#E6E1EC;color:#5E4B75}
+.ms-embed{background:#E2E8E6;color:#3E5B52}
+.mslayer{border:1.5px dashed #A9B5BE;border-radius:9px;padding:5px 8px;display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center;background:#F4F3EE;font-weight:600;max-width:100%}
+.msa{color:#98A1A8;font-style:normal}
+.pbnote{font-size:11.5px;color:#8B9299;margin:2px 0 8px}
+.tree{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55;list-style:none;padding-left:18px;margin:4px 0}
+.tree>li{margin:1px 0}
+details{display:block} details>summary{cursor:pointer;list-style:none;display:block;padding:1px 0}
+details>summary:hover .fn{text-decoration:underline}
+details>summary::-webkit-details-marker{display:inline-block}
+.rowline{display:flex;align-items:center;gap:8px;min-width:0}
+.rowline .fn{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rowline .cmt{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mbar{margin-left:auto;flex:0 0 132px;height:11px;border-radius:2.5px;overflow:hidden;display:flex;background:#EDEAE3;border:1px solid #DDD8CF;cursor:default;vertical-align:middle;box-sizing:border-box}
+.mbar i{display:block;height:100%}
+.mbar.big{flex:1 1 100%;height:16px;border-radius:4px;margin:0}
+.barleg{font-size:11.5px;color:#8B9299;margin:8px 0 0}
+.barleg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px -1px 10px;border:1px solid rgba(0,0,0,.08)}
+.hero{background:linear-gradient(135deg,#FFFFFF 0%,#F5F3ED 100%);border:1px solid #E4E0D9;border-left:6px solid #4A78A0;border-radius:10px;padding:16px 22px 14px;margin:4px 0 18px;box-shadow:0 2px 6px rgba(90,85,75,.09)}
+.hero .htitle{font-size:17.5px;font-weight:700;color:#3B4750;margin-bottom:6px}
+.hero .htitle .judge{font-weight:600;color:#4F6059}
+.hero .hnums{font-size:14px;color:#4A5560;margin:4px 0 10px}
+.hero .hnums b{font-size:20px;color:#4F6059}
+.hero .hnums .sep{margin:0 8px;color:#C5CBCF}
+.fn{color:#44515D} .dur{color:#97A0A8;margin-left:8px;font-size:12px}
+.cmt{color:#8A939C;margin-left:10px;font-size:11.5px}
+.agg .fn,.agg .dur{color:#B0B7BD;font-style:italic}
+.b{display:inline-block;padding:2px 10px;border-radius:4px;font-size:12px;margin:0 3px;color:#fff;font-weight:600}
+.c-comp{background:#4A78A0}.c-comm{background:#B08968}.c-cno{background:#B5838D}.c-free{background:#A6BE9E;color:#3E4C3C}
+.verdict{font-weight:700}
+.v-host{color:#A65D57}.v-dev{color:#6E8B6E}.v-mid{color:#B08968}
+.note{font-size:12px;color:#8B9299;margin:6px 0}
+.kv{font-size:13px;color:#545E68;margin:2px 0}
+.flamehead{font-size:13px;font-weight:600;color:#4A5560;margin:12px 0 4px}
+.flamehead button{background:#EDEAE3;border:1px solid #D5D0C6;border-radius:5px;padding:2px 12px;font-size:12px;cursor:pointer;margin-left:10px;color:#5A6570}
+.flamehead button:hover{background:#E2DED4}
+.ovstrip{margin-bottom:2px}
+.ovstrip .fseg{cursor:pointer;font-weight:600}
+.ovstrip .fseg:hover{filter:brightness(1.1)}
+.vp{position:absolute;top:0;height:100%;background:rgba(35,48,60,.16);border-left:1px solid #5A6874;border-right:1px solid #5A6874;pointer-events:none;box-sizing:border-box}
+.fseg.tiny .lbl{visibility:hidden}
+.toolbar{margin:4px 0 8px}
+.toolbar button{background:#EDEAE3;border:1px solid #D5D0C6;border-radius:5px;padding:2px 12px;font-size:12px;cursor:pointer;margin-right:6px;color:#5A6570}
+.toolbar button:hover{background:#E2DED4}
+
+.ms-index{background:#EFE9DF;color:#7D5F42}
+.ms-ot{background:#F1EFEA;color:#6B737A}
+
+.ms-moe{background:#E4E9F2;color:#3F5B7A;font-weight:600}
+</style></head><body><nav><button class="on">总览</button></nav><div class="page on" id="home"><h1>Profiling 对比 · 瓶颈变化</h1><div class="hero"><div class="htitle">步耗时变化 · <span class="judge">候选更快：步耗时 20.0%（逐对 Δ +2.310ms，×0.80）</span></div><div class="hnums">Δ 中位数之差 <b>+2.310ms</b><span class="sep">·</span>base 11.550ms<span class="sep">→</span>cand 9.240ms<span class="sep">·</span>×0.80<span class="sep">·</span>配对 2 步</div><div class="barleg">噪声带 ±0.210ms（max(0.05ms, 1.0%×base, MAD(逐对 Δ))）</div></div><div class="kv">base: base · native · step=analysis.db:StepTraceTime · 四分类=analysis.db:StepTraceTime · torch_npu=2.10.0.post4 · rank=0</div><div class="kv">cand: cand · native · step=analysis.db:StepTraceTime · 四分类=analysis.db:StepTraceTime · torch_npu=2.10.0.post4 · rank=0</div><div class="kv">模式: 默认对齐（step N ↔ step N）</div><div class="kv">契约置信度: medium · 分量可比: 是 · 侧车: analysis.db, ascend_pytorch_profiler_0.db, kernel_details.csv, profiler_info_0.json</div><div class="sect"><h3>分量对比</h3><table><tr><th>指标</th><th>base 中位数</th><th>cand 中位数</th><th>Δ(base−cand)</th><th>候选/基线</th><th>判定</th></tr><tr><td>步耗时</td><td>11.550ms</td><td>9.240ms</td><td>+2.310ms</td><td>×0.80</td><td><span class="v-dev">改善</span></td></tr><tr><td>Computing</td><td>6.500ms</td><td>5.200ms</td><td>+1.300ms</td><td>×0.80</td><td><span class="v-dev">改善</span></td></tr><tr><td>Communication(未重叠)</td><td>1.100ms</td><td>0.880ms</td><td>+0.220ms</td><td>×0.80</td><td><span class="v-dev">改善</span></td></tr><tr><td>Free</td><td>3.400ms</td><td>2.720ms</td><td>+0.680ms</td><td>×0.80</td><td><span class="v-dev">改善</span></td></tr><tr><td>Preparing</td><td>0.550ms</td><td>0.440ms</td><td>+0.110ms</td><td>×0.80</td><td><span class="v-dev">改善</span></td></tr></table></div><div class="sect"><h3>瓶颈迁移</h3><div class="kv">base 主导: Computing（Computing 56.35% / Communication 9.52% / Free 29.37% / Preparing 4.76%） · cand 主导: Computing（Computing 56.35% / Communication 9.52% / Free 29.37% / Preparing 4.76%）</div><div class="kv">结论: <b>仍以 Computing 为主</b></div><div class="kv">主要变化分量: Computing +1.300ms、Free +0.680ms、Communication(未重叠) +0.220ms、Preparing +0.110ms</div></div><div class="sect"><h3>逐步配对</h3><table><tr><th>step (base/cand)</th><th>base 步长</th><th>cand 步长</th><th>Δ步长</th><th>ΔComputing</th><th>ΔComm</th><th>ΔFree</th><th>ΔPreparing</th></tr><tr><td>step0 / step0</td><td>10.500ms</td><td>8.400ms</td><td>+2.100ms</td><td>+1.200ms</td><td>+0.200ms</td><td>+0.600ms</td><td>+0.100ms</td></tr><tr><td>step1 / step1</td><td>12.600ms</td><td>10.080ms</td><td>+2.520ms</td><td>+1.400ms</td><td>+0.240ms</td><td>+0.760ms</td><td>+0.120ms</td></tr></table><div class="note">Δ = base − cand；正值=候选更省。</div></div><div class="sect"><h3>Top 变快算子（候选更省）</h3><table><tr><th>算子</th><th>类型</th><th>base/步</th><th>cand/步</th><th>Δ(base−cand)</th><th>次数 b/c</th></tr><tr><td>matmul</td><td>AI_CORE</td><td>2.500ms</td><td>2.000ms</td><td>+0.500ms</td><td>1 / 1</td></tr></table></div><div class="sect"><h3>Top 变慢算子（候选更耗时）</h3><div class="note">无。</div></div><div class="sect"><h3>通信 / Host API</h3><div class="note">输入未提供 communication.json / api_statistic.csv，本报告不比较通信与 Host API。</div></div><div class="sect"><h3>口径与限制</h3><div class="note">Δ = base − cand，正值表示候选更省；×列为 cand/base（<1 更快）。步耗时 = StepTraceTime 的 stage + preparing（≈STEP_TIME 跨度）；表中的 Δ 是中位数之差（JSON 的 delta），判定用逐对 Δ 的中位数（JSON 的 paired_delta）与 MAD 噪声带；分量占比 = 分量 / 步耗时，分母含 Preparing，因此大 Preparing 采集里 Preparing 可能成为主导分量；步间方向不一致时不下改善/退化结论。未做跨采集时间戳对齐，默认按 step 位置配对；kernel 按选中 step 数归一化、通信算子实例后缀已归一化，仅单侧出现的算子单独列出、不参与排名；API 按采集总步数归一化。四分类来源跨族（CANN 侧车 vs trace 自建）时仅比较步耗时。无栈 trace 的四分类来自设备任务类型自建，缺少 Python 栈，阶段/调用栈信息不可用。</div></div></div></body></html>
