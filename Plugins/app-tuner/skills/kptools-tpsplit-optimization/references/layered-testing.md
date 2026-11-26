@@ -2,7 +2,7 @@
 
 承接 SKILL.md 阶段 5 的压缩表格，展开拉起期每层的执行内容、通过标准与失败处理。拉起期的故障多数不是"起不来"，而是"起来了但 KV 错配"——拉起验证分层铺开，每层有明确通过标准，不过不进下一层。
 
-**范围说明**：本文件只覆盖 L0-L3（拉起验证）。部署完成后的交付验证（L4 功能 / L5 性能对比 / L6 稳定性）由 `kptools-tpsplit-optimization-verify（配套 PR #441 交付）` 承载（独立 PR 交付），细则在 verify 侧维护，本仓不再包含；停服前旧基线采样的时机与口径要求见 SKILL.md 阶段 3 红线。
+**范围说明**：本文件只覆盖 L0-L3（拉起验证）。部署完成后的交付验证（L4 功能 / L5 性能对比 / L6 稳定性）由 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付） 承载（独立 PR 交付），细则在 verify 侧维护，本仓不再包含；停服前旧基线采样的时机与口径要求见 SKILL.md 阶段 3 红线。
 
 ## L0 静态检查（拉起前）——标准验证产物，固化执行
 
@@ -57,4 +57,4 @@ python references/l0_static_check.py <脚本目录> \
 
 L0-L2 失败 = 配置/环境问题，修复后从 L1 重来；L3 失败优先怀疑 Mooncake 错配或新旧混跑。测试结果逐层记录进部署指南。
 
-L4-L6 交付验证不在本 skill 范围（转 `kptools-tpsplit-optimization-verify（配套 PR #441 交付）`）：L4 功能 / L5 性能对比 / L6 稳定性观察由 verify 执行，其 L5 消费的旧基线数据在阶段 3 停服前采样归档（见 SKILL.md 阶段 3 红线）。
+L4-L6 交付验证不在本 skill 范围（转 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付））：L4 功能 / L5 性能对比 / L6 稳定性观察由 verify 执行，其 L5 消费的旧基线数据在阶段 3 停服前采样归档（见 SKILL.md 阶段 3 红线）。
