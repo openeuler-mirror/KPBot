@@ -1,0 +1,13 @@
+-----------+-------------------------------------------------------
+     460ms   runtime.stealWork
+              runtime.findRunnable
+              runtime.schedule
+-----------+-------------------------------------------------------
+    1.23s   main.handleRequest (inline)
+              main.processPayload
+              main.decodeFrame
+-----------+-------------------------------------------------------
+      40ms   runtime.stealWork
+              runtime.findRunnable
+              runtime.schedule
+-----------+-------------------------------------------------------

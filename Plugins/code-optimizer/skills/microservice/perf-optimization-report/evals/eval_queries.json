@@ -1,0 +1,15 @@
+{
+  "skill_name": "perf-optimization-report",
+  "queries": [
+    { "id": "POR-01", "prompt": "优化实验做完了，帮我把这次性能优化写成正式的实验报告", "should_trigger": true },
+    { "id": "POR-02", "prompt": "怎么把优化成果和证据资产归档进仓库，让报告经得起评审", "should_trigger": true },
+    { "id": "POR-03", "prompt": "给这次 A/B 对照实验做 pprof 折叠火焰图证据，要求权重和帧能对上账", "should_trigger": true },
+    { "id": "POR-04", "prompt": "对标那份参照报告的水准，把我们这次的优化报告补齐质量维度", "should_trigger": true },
+    { "id": "POR-05", "prompt": "报告里每个数字都要有出处、能复现，应该怎么组织证据清单", "should_trigger": true },
+    { "id": "POR-06", "prompt": "优化做完要写收尾文档，benchmark 数据怎么呈现才不算裸报单值", "should_trigger": true },
+    { "id": "POR-07", "prompt": "优化 protobuf 的 MapMergeFrom 合并路径", "should_trigger": false },
+    { "id": "POR-08", "prompt": "生产火焰图里同名帧出现很多次，库占比怎么算才不虚高", "should_trigger": false },
+    { "id": "POR-09", "prompt": "还没做实验，先写一份方案预期收益的立项评估材料", "should_trigger": false },
+    { "id": "POR-10", "prompt": "给这套系统写一份 API 参考文档", "should_trigger": false }
+  ]
+}
