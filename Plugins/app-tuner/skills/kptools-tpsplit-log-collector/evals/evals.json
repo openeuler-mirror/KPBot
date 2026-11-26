@@ -5,7 +5,7 @@
       "id": 0,
       "eval_name": "fetch-full-set-validate",
       "prompt": "把 evals/fixtures 下的 5 份文件按远端真实目录布局放到 /tmp/opencode/fakeroot/（模拟共享挂载根）：P102_prefill.log → p102/log/prefill.log、P103_prefill.log → p103/log/prefill.log、D103_decode.log → d103/log/decode.log、load_balance.log → proxy/load_balance.log、manual_synth_dumpjsonl.json → bench/manual_synth_dumpjsonl.json（fetch_logs.sh 按精确文件名 prefill.log/decode.log 定位，多台机器各占一个子目录）。然后在该根目录跑本 skill 的 fetch_logs.sh 做定位与校验（不带 --stage），告诉我：找到几份、每份的标记行数、四份是否同一轮压测、退出码是多少。",
-      "expected_output": "bash fetch_logs.sh --root /tmp/opencode/fakeroot（不给 --root 会扫默认 /data，必须显式传根）；汇总行 P=2 D=1 PROXY=1 BENCH=1；两份 P 的 [TTFT][BREAKDOWN] 计数各为 4、合计 8，压测记录按 JSON 解析计 8 条，无「≠ 压测请求数」偏差告警；退出码 0。",
+      "expected_output": "bash fetch_logs.sh --root /tmp/opencode/fakeroot（--root 必填：不给 --root 直接退出 exit 2，/data 是共享挂载，防误扫他人目录）；汇总行 P=2 D=1 PROXY=1 BENCH=1；两份 P 的 [TTFT][BREAKDOWN] 计数各为 4、合计 8，压测记录按 JSON 解析计 8 条，无「≠ 压测请求数」偏差告警；退出码 0。",
       "files": [
         "evals/fixtures/P102_prefill.log",
         "evals/fixtures/P103_prefill.log",
