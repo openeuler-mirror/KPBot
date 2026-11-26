@@ -83,7 +83,7 @@ description: >
 ### 步骤 5：分配器三方对照与编译层收尾
 
 1. **分配器**：`LD_PRELOAD=` 同一负载下 glibc / jemalloc / tcmalloc 三方对照（协议脚本见 `scripts/allocator_ab.sh`，实测数据与部署前检查清单见[分配器三方对照档案](references/allocator-benchmark.md)）。实测参考：folly future 链路（小对象高频构造）tcmalloc 收益 +8%、glibc 持平、jemalloc **-69.5%**（页回收策略与小对象负载严重不合）。部署前先确认生产进程当前分配器（`cat /proc/<pid>/maps | grep -E 'jemalloc|tcmalloc'`）——已在用 jemalloc 的结论完全不同。
-2. **编译选项**：`-O3` + 按目标 CPU 选 `-mcpu`（映射与 `compiler-flag-tuning` skill 的 canonical 保持一致：读 `cpu_part_id`，0xd01 → `-mcpu=tsv110`，0xd03/0xd06 → `-mcpu=native`（GCC 12 对鲲鹏后端尚未提供独立代号）；LLVM 侧工具链映射见 `llvm-mca-analysis` 的 `mca_analyze.py`（0xd03 → hip10c、0xd06 → hip12a），勿与 GCC 参数混用）。确认与构建系统的全局继承链一致——配置声明值 ≠ 产物生效值，用 `scripts/inspect_build_flags.sh` 做产物反推（`DW_AT_producer` 字段含实际编译参数指纹）。
+2. **编译选项**：`-O3` + 按目标 CPU 选 `-mcpu`（映射与 `compiler-flag-tuning` skill 的 canonical 保持一致：读 `cpu_part_id`，0xd01 → `-mcpu=tsv110`，0xd03/0xd06 → `-mcpu=native`（GCC 12 对鲲鹏后端尚未提供独立代号）；LLVM 侧工具链映射见 `llvm-mca-analysis` 的 `mca_analyze.py`（0xd03 → hip10c、0xd06 → hip12a），勿与 GCC 参数混用）。确认与构建系统的全局继承链一致——配置声明值 ≠ 产物生效值，用产物反推（`DW_AT_producer` 字段含实际编译参数指纹）——工具已拆分至 `binary-compile-forensics` skill（comment 版本/参数指纹/SIMD 兜底三链通用层）。
 
 ### 步骤 6：终极验证与产物级确认
 
@@ -97,8 +97,8 @@ description: >
 # 产物级 patch 使能验证（nm/strings/debug-info 三探针，含动态/静态库定位）
 bash scripts/verify_folly_patch.sh /path/to/服务二进制
 
-# 实际编译参数反推（.comment 编译器版本 + DW_AT_producer 参数指纹 + 无 -g 时 SIMD 兜底探测）
-bash scripts/inspect_build_flags.sh /path/to/libfolly.a
+# 实际编译参数反推（.comment 版本 + DW_AT_producer 指纹 + SIMD 兜底三链）→ 已拆分至 binary-compile-forensics skill：
+binary-compile-forensics skill 的 inspect_build_flags.sh（见该 skill 的 SKILL.md 获取安装后入口）
 
 # 分配器三方对照（glibc/jemalloc/tcmalloc LD_PRELOAD 交替，输出每轮 ns/次与比值）
 bash scripts/allocator_ab.sh -c "<benchmark 命令>" -r 5

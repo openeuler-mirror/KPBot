@@ -1,0 +1,20 @@
+# 验证 tier-A 用例：binary-compile-forensics 完整性契约
+#
+# 验证内容：
+#   skill     SKILL.md 自身格式（frontmatter name/description）
+#   links     SKILL.md 引用的 references/*.md 与 scripts/*.sh 必须存在
+#   invariants 方法论不变量仍在语料中（DW_AT_producer 权威指纹/.comment 段/
+#             SIMD 兜底/退出码契约/三态判读/兄弟分界）
+#   sensitive 敏感内容看护（私网 IP / 凭据 / 家目录 / Windows 盘符）
+#   script    脚本契约：bash -n 语法检查 + 无参用法退出码 2
+#
+# 运行（在技能根目录下）：
+#   python3 cases/skill-integrity/checks.py
+#   # 或完整入口：bash cases/skill-integrity/run.sh
+#   # 产出 results/result.json；退出码 0 = 全部通过
+
+name: skill-integrity
+skill: binary-compile-forensics
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
