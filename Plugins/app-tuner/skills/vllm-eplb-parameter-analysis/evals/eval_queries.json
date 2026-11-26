@@ -1,0 +1,23 @@
+{
+  "skill_name": "vllm-eplb-parameter-analysis",
+  "queries": [
+    {"id": "EQ-01", "prompt": "拿到 analysis 的 imbalanced 结论了，num_redundant_experts 该写多少？", "should_trigger": true, "note": "参数取值"},
+    {"id": "EQ-02", "prompt": "window_size 和 step_interval 一般设多少，压测只有 4000 步", "should_trigger": true, "note": "窗口/周期"},
+    {"id": "EQ-03", "prompt": "冗余专家 7 个可以吗，EP 是 16", "should_trigger": true, "note": "整除/取整"},
+    {"id": "EQ-04", "prompt": "只剩 3G 显存，还能加几个冗余专家", "should_trigger": true, "note": "显存预算"},
+    {"id": "EQ-05", "prompt": "把 analysis 的 handoff 变成能直接用的参数方案", "should_trigger": true, "note": "handoff→plan"},
+    {"id": "EQ-06", "prompt": "borderline 结论下参数怎么给，是先 force 上限吗", "should_trigger": true, "note": "borderline→force"},
+    {"id": "EQ-07", "prompt": "每多一个冗余专家每 rank 多占多少显存", "should_trigger": true, "note": "单副本成本"},
+    {"id": "EQ-08", "prompt": "上游 vLLM 上 dynamic 的 DYNAMIC_EPLB 参数怎么配", "should_trigger": true, "note": "分支门禁"},
+    {"id": "EQ-09", "prompt": "帮我把 P 节点模板改成 dynamic 并备份", "should_trigger": false, "note": "routes to vllm-eplb-deploy-validate"},
+    {"id": "EQ-10", "prompt": "EPLB 压测跑完了，off 和 dynamic 的 TTFT 收益怎么算", "should_trigger": false, "note": "routes to vllm-eplb-benefit-analysis"},
+    {"id": "NQ-01", "prompt": "帮我看看服务到底有没有专家负载不均衡", "should_trigger": false, "note": "routes to vllm-eplb-analysis"},
+    {"id": "NQ-02", "prompt": "allreduce 慢，帮我查 RoCE 错包", "should_trigger": false, "note": "network skill"},
+    {"id": "NQ-03", "prompt": "模型精度掉了，对比优化前后准确率", "should_trigger": false, "note": "model-precision-analysis"},
+    {"id": "NQ-04", "prompt": "vLLM 分词后端换 fastokens", "should_trigger": false, "note": "fastokens migration"},
+    {"id": "NQ-05", "prompt": "专家并行度 EP 设 8 还是 16，拓扑怎么选", "should_trigger": false, "note": "EP 拓扑，不是 EPLB 参数"},
+    {"id": "NQ-06", "prompt": "MoE router 为什么选 top-8", "should_trigger": false, "note": "原理问答"},
+    {"id": "NQ-07", "prompt": "启动脚本 docker exec 后进程起不来", "should_trigger": false, "note": "shell 调试"},
+    {"id": "NQ-08", "prompt": "帮我抓一份 vLLM profiling 看算子耗时", "should_trigger": false, "note": "profiling"}
+  ]
+}
