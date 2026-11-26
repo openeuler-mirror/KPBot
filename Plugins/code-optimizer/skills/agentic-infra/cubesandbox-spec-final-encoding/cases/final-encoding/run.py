@@ -19,9 +19,10 @@ def canonicalize(request):
 
 
 def normalized_backend(request):
-    # Fixture vocabulary for the accepted / omitted / unrecognized decisions.
     value = request.get("backend", "").strip().lower()
-    return value if value == "xfs" else ""
+    if value in ("xfs", "cow", "cubecow", "reflink", "xfscow"):
+        return "xfs"
+    return "s3" if value == "s3" else ""
 
 
 class PayloadEncoder:
@@ -55,7 +56,7 @@ def candidate(request, encoder):
     return template, backend, encoder.encode(canonical)
 
 
-def main():
+def record_cases():
     cases = [
         ({"backend": " XFS ", "annotations": {"storage": "old", "template": "  t1 ",
                                               "runtimeSnapshotID": "transient"},
@@ -68,10 +69,21 @@ def main():
          {"annotations": {"storage": "existing"}}),
         ({"backend": "unknown", "annotations": {"storage": "keep", "template": " t2"}},
          "t2", "", {"backend": "unknown", "annotations": {"storage": "keep", "template": " t2"}}),
+        ({"backend": "   ", "annotations": {"storage": "s3"}}, "", "",
+         {"backend": "   ", "annotations": {"storage": "s3"}}),
+        ({"backend": " S3 ", "annotations": {"storage": "xfs"}}, "", "s3",
+         {"backend": "s3", "annotations": {"storage": "s3"}}),
     ]
+    for alias in ("cow", " CubeCoW ", "reflink", "XFSCOW"):
+        cases.append(({"backend": alias}, "", "xfs",
+                      {"backend": "xfs", "annotations": {"storage": "xfs"}}))
+    return cases
+
+
+def main():
     baseline_calls = candidate_calls = 0
     matched = 0
-    for request, template, backend, expected in cases:
+    for request, template, backend, expected in record_cases():
         original = json.loads(json.dumps(request))
         old = PayloadEncoder()
         new = PayloadEncoder()

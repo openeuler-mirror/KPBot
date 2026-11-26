@@ -1,6 +1,9 @@
 ---
 name: cubesandbox-snapshot-binding-read
-description: Evaluate and implement a single snapshot metadata read during CubeMaster create binding when readiness and placement share one consistency view. Use when tracing shows consecutive reads of the same snapshot and the target defines which committed state binding must observe.
+description: Reuse one snapshot metadata read for CubeMaster binding when readiness and placement share a fixed view. Keep the second read when binding requires the latest commit.
+metadata:
+  author: theFool001
+  tags: cubemaster, snapshot, binding
 ---
 
 # Read a checked snapshot record once during binding
@@ -21,6 +24,8 @@ For a successful bind, associate both reads with the same request, resolved snap
 - When the target contract already binds against one immutable version or transaction snapshot, combine the reads **within that view**. A version identity must cover deletion eligibility and every placement field. Retain the existing check that permits dispatch or acquisition of that version if the target uses one.
 - When the contract requires the latest committed placement or deletion state at the second statement, keep the second source lookup. Preserve its distinct error and fallback behavior wherever the target exposes a separately fallible source operation. Establishing a new transaction snapshot by itself changes the visibility policy; select that behavior only when the binding contract explicitly allows it.
 
+Start the binding read in the binding operation's own visibility scope. A missing-source result cached by an earlier locality probe cannot establish eligibility or placement here.
+
 ## Implement the fixed-view path
 
 1. Introduce a request-local helper that reads the row under the selected contract. Reuse the existing trim, lookup, tombstone and READY checks in their original order. Return the readiness error immediately for a missing or ineligible row. Leave the earlier HTTP locality probe in its existing position.
@@ -32,10 +37,15 @@ For a successful bind, associate both reads with the same request, resolved snap
 Run the stdlib contract fixture from the skill directory with Python 3.8+ and SQLite.
 
 ```sh
-cd cases/binding-read
-python3 run.py
+python3 cases/binding-read/run.py
 ```
 
-The case uses two SQLite connections with WAL and counts executed snapshot SELECTs. Between readiness and placement a writer commits a metadata change or deletes the row. Within one fixed read snapshot, the candidate should use one SELECT and return the baseline placement. In autocommit mode, the candidate keeps the second SELECT and observes the committed change. `results/result.json` reports these counts. The fixture models the binding decision and a subset of placement fields.
+The case uses two SQLite connections with WAL and counts executed snapshot SELECTs. Between readiness and placement a writer commits a metadata change or deletes the row. Within one fixed read snapshot, the candidate should use one SELECT and return the baseline placement. In autocommit mode, the candidate keeps the second SELECT and observes the committed change. `cases/binding-read/results/result.json` reports these counts. The fixture models the binding decision and a subset of placement fields.
+
+From `CubeMaster` on v0.7.1, run both tombstone tests against the Go store on the baseline and the candidate. They exercise the readiness and placement-source entry points with a stubbed record lookup. The inter-read commit still needs the two-connection check below.
+
+```sh
+go test -count=1 -gcflags=all=-l -run '^(TestGetSnapshotRestoreSourceRejectsTombstone|TestEnsureSnapshotReadyForNewUseRejectsTombstone)$' ./pkg/templatecenter
+```
 
 On the target, compare baseline and candidate outcomes with the actual Go store and deployment isolation level. Exercise missing, deleting, building and READY snapshots, local and remote placement, and host-mount pinning. Coordinate two store connections to commit a deletion and a remote-status update at the inter-read boundary. Compare the selected node, scope, annotations, returned error and SQL count for each mode; test source lookup errors on the two-read path. From `CubeMaster`, run `go test -race ./pkg/templatecenter ./pkg/service/httpservice/cube`. Report which consistency contract was demonstrated and the SELECT count for that contract. Keep the existing path for unverified modes.

@@ -1,27 +1,27 @@
 name: cubesandbox-rootfs-node-refill-budget
 skill: cubesandbox-rootfs-refill-budget
 tier: A
-entrypoint: ["python3", "run.py"]
+entrypoint: ["python3", "cases/node-budget/run.py"]
 assert:
   - type: exit_code
     expect: 0
   - type: json_field
-    file: results/result.json
+    file: cases/node-budget/results/result.json
     field: success
     expect: true
   - type: json_field
-    file: results/result.json
+    file: cases/node-budget/results/result.json
     field: peak_charged_slots
     expect: 3
   - type: json_field
-    file: results/result.json
+    file: cases/node-budget/results/result.json
     field: peak_active_derives
     expect: 2
   - type: json_field
-    file: results/result.json
+    file: cases/node-budget/results/result.json
     field: foreground_fallbacks
     expect: 1
   - type: json_field
-    file: results/result.json
+    file: cases/node-budget/results/result.json
     field: remaining_charges
     expect: 0

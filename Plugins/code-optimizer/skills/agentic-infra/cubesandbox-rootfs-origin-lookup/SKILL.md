@@ -1,6 +1,9 @@
 ---
 name: cubesandbox-rootfs-origin-lookup
-description: Verify an existing CubeSandbox rootfs snapshot by name when a Cubelet create retry reports AlreadyExists and origin-scoped enumeration visits sibling snapshots. Apply the lookup to backends that can prove object kind, origin and identity.
+description: Resolve Cubelet rootfs create retries by snapshot name when a backend can verify the existing object and its origin without enumerating sibling snapshots.
+metadata:
+  author: theFool001
+  tags: cubelet, rootfs, snapshot-lookup
 ---
 
 # Verify a retried rootfs snapshot by name
@@ -30,5 +33,11 @@ In v0.7.1 a successful create already returns its device path. On `SemAlreadyExi
 ## Verify and report
 
 From the skill directory run `python3 cases/origin-lookup/run.py`. This standard-library contract model compares both lookup paths over the same catalog and writes counters to `cases/origin-lookup/results/result.json`. It also replaces a verified child under the same name before path resolution and checks the modeled identity guard.
+
+From `Cubelet` on a supported v0.7.1 build host, run the upstream storage tests against both revisions. They exercise the actual Cubelet retry path using a fake engine for the same-origin and mismatched-origin outcomes.
+
+```sh
+go test -count=1 -run '^TestRollbackDeriveNewGen(AcceptsExistingSameOrigin|RejectsExistingDifferentOrigin)$' ./storage
+```
 
 On the target backend, exercise fresh creation, a same-source retry, a same-name conflict under a different source, an unsupported backend and deletion/recreation. Check returned path identity and error classes against the target contract. Repeat with small and large sibling sets. Report retry count, scoped list calls, inspected entries and keyed lookups for the same workload. A fresh create should use neither recovery lookup. The target integration check covers the native index, FFI and actual device resolution.

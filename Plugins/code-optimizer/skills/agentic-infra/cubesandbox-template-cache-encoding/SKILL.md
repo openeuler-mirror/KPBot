@@ -1,6 +1,9 @@
 ---
 name: cubesandbox-template-cache-encoding
-description: Reduce repeated JSON encoding on CubeMaster template-definition cache hits while returning an independently mutable request for every sandbox create. Use when repeated creates hit the same template definition and the hit path clones the full create request through JSON.
+description: Cache the encoded CubeMaster template definition when repeated cache hits clone the same request through JSON. Decode a private request for each caller.
+metadata:
+  author: theFool001
+  tags: cubemaster, template-cache, json
 ---
 
 # Encode once per template cache fill
@@ -21,5 +24,11 @@ In v0.7.1, a successful cache read calls `cloneCreateRequest`, which marshals an
 ## Reproduce and check
 
 From this skill directory run `python3 cases/cache-hit/run.py`. The standard-library contract model compares the two cache representations using identical JSON data. It exercises fill, two independent readers, scoped mutation, replacement, invalidation and an undecodable entry. The case writes `cases/cache-hit/results/result.json`; its counters cover cache-accessor encoding operations.
+
+From `CubeMaster` on v0.7.1, run the upstream accessor tests on the baseline and again after changing the cache representation. They exercise the Go request type and mutation on a returned request.
+
+```sh
+go test -count=1 -run '^(TestTemplateRequestCacheReturnsClone|TestInvalidateTemplateCachesClearsTemplateCaches)$' ./pkg/templatecenter
+```
 
 For target integration, use the actual Go request type and both loaders. Compare baseline and candidate returned fields, mutate a nested map and a container slice in one caller, then read the cache again. Exercise concurrent cold callers with the Go race detector, a subsequent warm hit, an invalidated definition, and a stored backend which changes the raw request. Use the target's normal RequestID checks. Count encodes and decodes separately at fill and hit, report the number of observed hits and retain one baseline/candidate result for comparison. Deliver the edited cache accessors, unchanged lifecycle contract, per-operation counts and correctness checks.

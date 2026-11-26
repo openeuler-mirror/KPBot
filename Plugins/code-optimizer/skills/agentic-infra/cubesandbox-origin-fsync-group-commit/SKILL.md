@@ -1,6 +1,9 @@
 ---
 name: cubesandbox-origin-fsync-group-commit
-description: Implement directory fsync batching for CubeSandbox rootfs adoptions when concurrent renames share one origin directory and the caller requires durable completion. Map each successful rename to a verifiable flush frontier and preserve the existing creation response contract.
+description: Batch directory fsyncs when concurrent Cubelet rootfs renames share an origin and each successful create must wait for its rename to become durable.
+metadata:
+  author: theFool001
+  tags: cubelet, rootfs, fsync
 ---
 
 # Group directory fsyncs for one rootfs origin
@@ -10,6 +13,8 @@ description: Implement directory fsync batching for CubeSandbox rootfs adoptions
 From the target revision, collect the storage backend, directory identities, rootfs rename and resize order, and the caller's definition of a successful create. Trace from Cubelet's `CreateSandboxRootfsFromTemplate` through the backend that owns the directory. A suitable path has multiple committed renames within the same parent directory, a way to sync that directory, and a completion point at which the caller can wait. Keep the existing synchronous path for other backends. [Cubelet storage entry in v0.7.1](https://github.com/TencentCloud/CubeSandbox/blob/31d911e430fdf8a8879bd062b8e78066c1a8e89d/Cubelet/storage/cubecow_volume_manager.go)
 
 The historical pool variant performs a rename, then signals a flusher that waits up to a configured batching interval and calls `FsyncSnapshotDir`. That variant returns independently of the flush. To implement durable-name acknowledgement, introduce an explicit ticket for each rename and connect it to the create response. Keep file-data sync, index updates, resize and any other required storage barriers at their existing completion points. A directory fsync covers directory entries on the filesystem hosting that directory. [Historical Cubelet and cubecow changes](https://gitcode.com/openeuler/KPBot/commit/175e562b8068b156377b9fbcfd446b524c3452d1)
+
+A refill permit accounts for background derive capacity. Releasing it or transferring a pool slot to the sandbox cannot acknowledge a pending rename. Gate the successful create response on the ticket for its own origin.
 
 ## Implement the coordinator
 
@@ -28,5 +33,7 @@ python3 cases/flush-frontier/run.py
 ```
 
 The result in `cases/flush-frontier/results/result.json` describes the logical protocol. For target integration, instrument the real backend's sync entry and create acknowledgement. Stall the first sync while publishing another rename. Release the first sync and check that only its captured generations can acknowledge. Repeat across two actual origins, inject an I/O error, and exercise shutdown with admitted producers. In a disposable filesystem, include recovery after interruption at the agreed acknowledgement boundary and verify the names and contents by the engine's normal reopen path.
+
+For an independent observation on Linux, trace the storage process that owns the directory handle during a short controlled run. Match successful directory `fsync` returns to the origin using the decoded file descriptor, then compare their times with the create completions recorded on the same clock. A request whose rename landed after the first flush cut must still be waiting when that flush returns. Use the historical pool or a migrated implementation for this check because stock v0.7.1 has no ticket coordinator.
 
 Return the target revision, backend, acknowledgement point and per-origin sequence of registered tickets, flush cuts, durable frontier, errors and request completions. Compare flush counts for the same rename sequence against one sync per rename. Keep directory identities, durability policy and foreground adoption logic fixed across the two runs.

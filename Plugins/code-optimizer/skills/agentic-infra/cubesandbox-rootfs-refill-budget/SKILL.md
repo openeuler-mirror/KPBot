@@ -1,6 +1,9 @@
 ---
 name: cubesandbox-rootfs-refill-budget
-description: Coordinate Cubelet rootfs pool refills across template generations on one storage node. Use when several active templates start independent builders and the operator needs explicit bounds on pool inventory and concurrent background derives.
+description: Bound rootfs pool inventory and concurrent background derives when multiple template generations refill pools on the same Cubelet storage node.
+metadata:
+  author: theFool001
+  tags: cubelet, rootfs, refill
 ---
 
 # Budget rootfs refills across templates
@@ -17,6 +20,8 @@ Use the target revision, the Cubelet processes serving the storage, the set of t
 4. Close admissions for a retiring generation and withdraw its queued demand. Keep in-flight work charged until its operation actually completes. Late completions from a retired generation belong to cleanup, even if a new generation uses the same template name. Charge failed or cancelled derives with a possible on-disk member until cleanup verifies deletion. Retire reserved members after their owner settles. Reconcile surviving pool objects and occupied slots during startup before admitting new builds.
 5. Instrument a snapshot of the ledger on each transition. Its charged inventory is the sum of granted derives, available members, foreground reservations and objects awaiting cleanup. Transfer charges between states under the same authority. Use bounded counters, explicit completion ownership and per-generation job IDs so duplicate callbacks cannot return a second grant.
 
+The inventory slot can transfer at adoption even while the create is waiting for directory durability. Keep the backend's acknowledgement point: if it requires a directory flush, the request waits for that flush independently of refill admission.
+
 ## Exercise a mixed-template workload
 
 Run this Python 3 contract from the skill directory. The deterministic scheduler models slot and permit ownership across interleaved operations. It reports the observed peaks, including completion of a retired generation and cleanup of a partial derive.
@@ -26,5 +31,7 @@ python3 cases/node-budget/run.py
 ```
 
 Read `cases/node-budget/results/result.json`. For the actual backend, record the current per-pool policy as a baseline, then enable the shared limits on the same storage and templates. Introduce several cold templates while a hot template continues creating, hold one derive open, retire its generation and resume it after a replacement generation appears. Exercise a full inventory, adoption and the normal empty-pool fallback. Check maximum charged slots and active derives, grant order across eligible pools, and charges after cancellation and cleanup. Check the mounted rootfs and selected template generation for each successful create.
+
+On the pool-enabled target, pause builders at the storage derive entry. Count operations that actually entered the backend before releasing any of them, then reconcile pool-owned members with a backend inventory after the builders settle. Compare both observations with the coordinator ledger. Use a build containing the pool for this check because stock v0.7.1 has no per-template refill workers.
 
 Return the chosen inventory and concurrency limits, their scope, per-template demand, admissions, adoptions, foreground fallbacks, queued or reclaimable inventory, and reconciled peaks. Record background I/O and request latency if the target exposes them. These observations distinguish budget enforcement from workload-specific performance.

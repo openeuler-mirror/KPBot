@@ -1,27 +1,27 @@
 name: binding-read
 skill: cubesandbox-snapshot-binding-read
 tier: A
-entrypoint: ["python3", "run.py"]
+entrypoint: ["python3", "cases/binding-read/run.py"]
 assert:
   - type: exit_code
     expect: 0
   - type: json_field
-    file: results/result.json
+    file: cases/binding-read/results/result.json
     field: fixed_view_baseline_selects
     expect: 2
   - type: json_field
-    file: results/result.json
+    file: cases/binding-read/results/result.json
     field: fixed_view_candidate_selects
     expect: 1
   - type: json_field
-    file: results/result.json
+    file: cases/binding-read/results/result.json
     field: live_view_selects
     expect: 2
   - type: json_field
-    file: results/result.json
+    file: cases/binding-read/results/result.json
     field: fixed_view_cases
     expect: 4
   - type: json_field
-    file: results/result.json
+    file: cases/binding-read/results/result.json
     field: live_view_cases
     expect: 4

@@ -1,6 +1,9 @@
 ---
 name: cubesandbox-spec-final-encoding
-description: Consolidate final JSON encoding in CubeMaster sandbox spec persistence when an accepted explicit backend causes the same canonical request to be encoded twice. Use to retain the persisted record and caller ownership while reducing final encodes on that branch.
+description: Encode the final CubeMaster sandbox spec once when normalizing an explicit storage backend would otherwise serialize the same request twice.
+metadata:
+  author: theFool001
+  tags: cubemaster, sandbox-spec, json
 ---
 
 # Finalize the sandbox spec before encoding
@@ -20,6 +23,19 @@ In v0.7.1, `doPut` validates the inputs and calls `CanonicalizeRequest`. That he
 
 ## Reproduce and check
 
-From the skill directory run `python3 cases/final-encoding/run.py`. The fixture models the record boundary with a private canonical request and a small representative backend policy. It compares independent baseline and candidate records, including encoded payload bytes, and counts payload encodes separately from the canonical copy. Results are written to `cases/final-encoding/results/result.json`.
+From the skill directory run `python3 cases/final-encoding/run.py`. The fixture models the record boundary with a private canonical request and the v0.7.1 backend decisions for XFS, S3, historical aliases, blank and invalid inputs. It compares independent baseline and candidate records, including encoded payload bytes, and counts payload encodes separately from the canonical copy. Results are written to `cases/final-encoding/results/result.json`.
+
+With Go on PATH, compare the fixture's ten backend decisions with the production `OptionalSnapshotBackend` function. From this skill directory run the following command, supplying a v0.7.1 checkout. The verifier compiles that checkout's `snapshot_backend.go` in a temporary directory and checks the value that would be stored in the backend column.
+
+```sh
+python3 cases/final-encoding/verify_backend.py /path/to/CubeSandbox
+```
+
+In a v0.7.1 checkout, verify the normalization rules separately using the production Go source and its upstream tests. The second command exercises canonicalization of real request types and requires the toolchain and dependencies declared by `CubeMaster/go.mod`. Run it on the baseline and on the candidate.
+
+```sh
+(cd CubeMaster/pkg/base/constants && GO111MODULE=off go test -count=1 snapshot_backend.go snapshot_backend_test.go)
+(cd CubeMaster && go test -count=1 -run '^TestCanonicalizeRequest' ./pkg/sandboxspec)
+```
 
 In the target Go package, use the real constants and codec for explicit, omitted and invalid backend fixtures. Include conflicting pre-existing storage annotations, missing annotations, runtime-only fields and nested container data. Exercise the same input after an unsuccessful canonicalization or encoding and verify that the store publishes no partial record for that invocation. Expected final-payload counts on v0.7.1 are two to one for an accepted explicit backend, and one to one on the other branches. Deliver the change, per-branch counts, byte and row comparisons, and the input-ownership check.
