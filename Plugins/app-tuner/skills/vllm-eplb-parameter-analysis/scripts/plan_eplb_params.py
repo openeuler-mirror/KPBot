@@ -163,6 +163,7 @@ def build_plan(verdict, args):
         "template_changes": {"env": {}, "unset_env": [], "add_flags": [],
                              "additional_config": {}},
         "source": {"analysis_memory_verdict": mem_hint.get("verdict"),
+                   "analysis_affordable_redundant": mem_hint.get("affordable_redundant"),
                    "analysis_next": rec.get("next"),
                    "analysis_notes": rec.get("notes") or []},
     }
@@ -217,11 +218,17 @@ def build_plan(verdict, args):
         return plan
 
     # Dynamic writes real memory-hungry copies; without evidence we must not ship it.
+    # The upstream `affordable_redundant` is itself a memory verdict, so it can stand
+    # in for a local free_gib/cost pair (the cap below still constrains the result).
     if args.free_gib is None or not cost:
-        warnings.append("缺少显存证据（--free-gib 与单副本成本），无法核实预算；按 hold 处理")
-        plan["rationale"].append("显存预算未知，停在参数分析交接，不要直接开 dynamic")
-        plan["mode"] = "hold"
-        return plan
+        if affordable is None:
+            warnings.append("缺少显存证据（--free-gib 与单副本成本，或 analysis 的 affordable_redundant）；"
+                            "无法核实预算；按 hold 处理")
+            plan["rationale"].append("显存预算未知，停在参数分析交接，不要直接开 dynamic")
+            plan["mode"] = "hold"
+            return plan
+        warnings.append("缺少 --free-gib/单副本成本：采用 analysis 的 affordable_redundant=%d "
+                        "作为显存预算上限（未做本地数值复核）" % int(affordable))
 
     if affordable is not None and redundant > affordable:
         capped = (int(affordable) // e) * e

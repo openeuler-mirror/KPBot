@@ -8,7 +8,7 @@ metadata:
   domain: vllm_moe_eplb
   activation_mode: active
   side_effect_free: "true"
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # EPLB 参数分析（vLLM MoE）
@@ -42,7 +42,7 @@ vllm-eplb-analysis --verdict.json--> 本技能 --eplb_parameter_plan.json-->（�
 | analysis 结论 | 本技能产出的 `mode` | 说明 |
 |---|---|---|
 | `imbalanced` + `optimize_dynamic/optimize_with_cap`，`handoff.redundant_experts` 非空 | `dynamic` | 直接采用 handoff 的 N/W/S，再做整除/显存/窗口校验 |
-| `imbalanced` + `optimize_with_cap`，`redundant_experts=null` | `dynamic`（待定） | 先补 `free_gib` + 单副本成本，按可负担上限定值；否则输出待测 |
+| `imbalanced` + `optimize_with_cap`，`redundant_experts=null` | `dynamic` | 优先用 `memory.affordable_redundant` 定值并按其收敛；没有该字段再补 `free_gib` + 单副本成本，两者都缺才 `hold` |
 | `imbalanced` + `free_memory_first` | `off` | 先释放/测量显存，不进入 dynamic |
 | `borderline` | `force` | 先做上限探针（只测不上线） |
 | `balanced` / `do_not_enable` | `off` | 不开，留档 |
@@ -105,7 +105,7 @@ python3 <skill>/scripts/recommend_redundancy.py --logical-experts 384 --ep-size 
 校验门禁（不满足就不产出 `dynamic`）：
 - `--branch` 必须显式给；`site-fork` 才允许 dynamic/force，`upstream` 判 off，未确认（默认 `unknown`）判 `hold`。
 - `verdict` 与 `recommendation.action` 必须一致；不一致（如 verdict=balanced 但 action=optimize_dynamic）判 `hold`。
-- dynamic 必须有显存证据（`--free-gib` + 单副本成本，或 analysis 的 `affordable_redundant`）；缺证据判 `hold`，不落未校验的副本数。
+- dynamic 必须有显存证据（`--free-gib` + 单副本成本，或 analysis 的 `affordable_redundant`）；两者都缺才判 `hold`，不落未校验的副本数。只给 `affordable_redundant` 时直接把它当上限收敛，不做本地数值复核（会在 `warnings` 与 `source.analysis_affordable_redundant` 标注）。
 - 冗余数取整到 EP 倍数后仍要过显存预算；`affordable_redundant` 与 `max_affordable_redundant_experts` 都会参与收敛。
 
 ## 输出契约（供落盘/人工使用）

@@ -161,11 +161,25 @@ def main():
         check("plan: verdict/action 冲突时 hold",
               d.get("mode") == "hold" and any("冲突" in w for w in d.get("warnings", [])))
 
-        # dynamic without memory evidence must hold
-        r, d = plan(["--verdict", verdict("verdict_optimize_dynamic.json"),
-                     "--ep-size", "16", "--logical-experts", "384", "--branch", "site-fork"])
-        check("plan: 缺显存证据时 dynamic 转 hold",
+        # dynamic without any memory evidence must hold
+        vnomem = os.path.join(tmp, "verdict_nomem.json")
+        json.dump({"verdict": "imbalanced",
+                   "recommendation": {"action": "optimize_dynamic",
+                                      "handoff": {"redundant_experts": 16,
+                                                  "window_size": 1000, "step_interval": 1000}}},
+                  open(vnomem, "w"))
+        r, d = plan(["--verdict", vnomem, "--ep-size", "16", "--logical-experts", "384",
+                     "--branch", "site-fork"])
+        check("plan: 完全缺显存证据时 dynamic 转 hold",
               d.get("mode") == "hold" and any("显存" in w for w in d.get("warnings", [])))
+
+        # upstream affordable_redundant can substitute for local free_gib/cost
+        r, d = plan(["--verdict", verdict("verdict_optimize_with_cap.json"),
+                     "--ep-size", "16", "--logical-experts", "384", "--branch", "site-fork"])
+        check("plan: 仅凭 analysis affordable_redundant 也可出 dynamic 并按上限收敛",
+              d.get("mode") == "dynamic" and d.get("redundant_experts") == 16
+              and (d.get("source") or {}).get("analysis_affordable_redundant") == 16
+              and any("affordable_redundant" in w for w in d.get("warnings", [])))
 
         # per-slot cost magnitude guard
         r = run([RECOMMEND, "--logical-experts", "384", "--ep-size", "16",
