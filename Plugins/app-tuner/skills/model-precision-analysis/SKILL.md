@@ -7,7 +7,7 @@ metadata:
   category: verification
   domain: model_precision
   activation_mode: passive
-  version: "1.2.0"
+  version: "1.2.1"
 ---
 
 # 模型精度分析
@@ -32,15 +32,17 @@ python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> --json [--
 脚本只读文件，不修改任何数据。报告含两次准确率、未答/截断数、逐题明细、回归项和改善项。
 `--json` 输出稳定 schema：`before/after` 摘要、`status_flip`、`regressions[]`、`improvements[]`、
 `gold_mismatch[]`、`only_one_side[]`、`comparable`、`verdict(pass|fail|undecidable)`、`exit_code`；
-`--out` 可同时落盘。退出码语义（CI/脚本化调用一律按此判断，**退出码 0 才是达标**）：
+`--out` 可同时落盘，但**拒绝覆盖任一输入结果文件**：路径相同、经符号链接的父目录、或符号/硬链接别名都会被识别，保留原件并以退出码 3 报错；落盘在打印报告之前完成，失败时不会先输出一份“看起来成功”的报告。退出码语义（CI/脚本化调用一律按此判断，**退出码 0 才是达标**）：
 
 | 退出码 | 含义 |
 |--------|------|
 | 0 | 两次运行可比，且没有回归 |
 | 1 | 两次运行可比，但存在“对→错”回归（无论是否传 `--fail-on-regression`） |
-| 2 | 两次运行**不可比**（gold 或题号不一致），结论为“不可判定”，不是达标 |
+| 2 | 两次运行**不可比**（gold 或题号不一致，或没有任何一道可比题），结论为“不可判定”，不是达标 |
+| 3 | `--out` 输出无法安全写入（会覆盖输入文件，或落盘失败）；这是输出错误，不代表任何精度结论 |
 
 退出码与开关已解耦：只要存在回归就以 1 退出，`--fail-on-regression` 仅为兼容旧调用保留（传与不传行为一致）。
+两次运行都为空（零道题）不属于“无回归”，会判为“不可判定”并退出 2，避免 CI 放行一次没有样本的评测。
 
 `--dataset-name` 指定的 json 不存在、或 `merge/` 下有多个 json 却没指定时，脚本直接报错退出，
 不会静默换成别的文件——否则会跨数据集比较，结论完全无效。
@@ -160,6 +162,7 @@ box 里混着多个不相关数字、或模型用的单位与 gold 不同但数�
 ```bash
 python3 tests/test_extraction.py   # 31 条抽取用例（含多 \boxed{} 与各类截断）
 python3 tests/test_pipeline.py     # 12 组端到端（准确率/回归题号/退出码 0/1/2/dataset-name 门禁）
+python3 tests/test_json_output.py  # 14 条 JSON/--out 契约（空运行不可判定、--out 防覆盖与落盘失败退出码 3）
 ```
 
 `evals/evals.json` 中的用例覆盖数字题、字母题、混合格式与干扰项场景，可直接用于技能效果对比。

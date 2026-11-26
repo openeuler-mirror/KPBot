@@ -12,8 +12,11 @@ Exit status:
     0 - comparable runs, no regression
     1 - comparable runs, at least one correct->wrong flip (gate failed, always
         returned regardless of the legacy --fail-on-regression flag)
-    2 - runs are not comparable (gold mismatch or case ids differ), so the
-        verdict is undecidable and must not be read as a pass
+    2 - runs are not comparable (gold mismatch, case ids differ, or no question
+        is comparable at all), so the verdict is undecidable and must not be
+        read as a pass
+    3 - the requested output could not be written safely (--out aliases an
+        input result file, or the write itself failed); never means a verdict
 
 Item schema (shared by all datasets in this tool):
     {"origin_prompt": str, "prediction": str, "gold": str, "exec_times": int}
@@ -22,9 +25,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+OUTPUT_ERROR_EXIT = 3
 
 BOXED_RE = re.compile(r"\\boxed\s*{([^{}]*(?:{[^{}]*}[^{}]*)*)}")
 NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
@@ -72,6 +78,25 @@ def find_json(run_dir: Path, dataset_name=None) -> Path | None:
         if cands:
             return cands[0]
     return None
+
+
+def same_identity(a: Path, b: Path) -> bool:
+    """True when two paths name the same file.
+
+    Covers the literal same path, symlinked parent directories, symlinks that point
+    at the input, and hardlink aliases (same device/inode). ``resolve()`` catches the
+    not-yet-existing output case so ``--out`` cannot be steered onto an input through
+    a symlinked directory before the file is created.
+    """
+    try:
+        if a.exists() and b.exists() and os.path.samefile(a, b):
+            return True
+    except OSError:
+        pass
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return False
 
 
 def is_truncated(text: str) -> bool:
@@ -275,11 +300,13 @@ def compare_runs(before: dict, after: dict) -> dict:
             improvements.append(cid)
         else:
             same += 1
+    compared = len(rows) - len(gold_mismatch)
     return {
         "bmap": bmap, "amap": amap, "rows": rows,
         "regressions": regressions, "improvements": improvements, "same": same,
         "gold_mismatch": gold_mismatch, "only_one_side": only_one_side,
-        "incomparable": bool(gold_mismatch or only_one_side),
+        "compared": compared,
+        "incomparable": bool(gold_mismatch or only_one_side or compared == 0),
     }
 
 
@@ -355,6 +382,8 @@ def render_md(result: dict, before: dict, after: dict) -> str:
         )
     if only_one_side:
         lines.append(f"⚠️ 题 {', '.join(only_one_side)} 只出现在其中一次运行，未参与对比")
+    if cmp["compared"] == 0:
+        lines.append("⚠️ 两次运行没有可比题目（需至少一道题号与 gold 都一致的题），无法判定精度")
     lines.append("")
 
     lines.append("### 逐题明细")
@@ -390,12 +419,16 @@ def render_md(result: dict, before: dict, after: dict) -> str:
             )
         lines.append("")
 
-    if gold_mismatch:
-        std = "未达标（存在回归）" if regressions else "不可判定（gold 不一致）"
+    if result["verdict"] == "pass":
+        std = "达标"
+    elif result["verdict"] == "fail":
+        std = "未达标（存在回归）"
+    elif gold_mismatch:
+        std = "不可判定（gold 不一致）"
     elif only_one_side:
-        std = "未达标（存在回归）" if regressions else "不可判定（题号不一致）"
+        std = "不可判定（题号不一致）"
     else:
-        std = "达标" if not regressions else "未达标（存在回归）"
+        std = "不可判定（无可比题目）"
     lines.append("### 结论")
     lines.append(
         f"精度标准：**{std}**。准确率 {before['accuracy']}% → {after['accuracy']}%"
@@ -452,9 +485,22 @@ def main():
         out = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     else:
         out = render_md(result, before_res, after_res) + "\n"
-    print(out, end="")
     if args.out:
-        Path(args.out).write_text(out, encoding="utf-8")
+        out_path = Path(args.out)
+        for src in (before_json, after_json):
+            if same_identity(out_path, src):
+                print(
+                    f"error: --out {out_path} 与输入结果文件 {src} 是同一文件"
+                    "（含符号链接/硬链接别名），拒绝覆盖原始评测数据；请换一个输出路径",
+                    file=sys.stderr,
+                )
+                sys.exit(OUTPUT_ERROR_EXIT)
+        try:
+            out_path.write_text(out, encoding="utf-8")
+        except OSError as exc:
+            print(f"error: 写入 --out {out_path} 失败：{exc}", file=sys.stderr)
+            sys.exit(OUTPUT_ERROR_EXIT)
+    print(out, end="")
     sys.exit(result["exit_code"])
 
 
