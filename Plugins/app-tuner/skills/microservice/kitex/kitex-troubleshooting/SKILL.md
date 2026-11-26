@@ -36,6 +36,7 @@ description: 当 Kitex 服务出现慢、抖动、连接异常或内存上涨但
 | P99 长尾、P50 正常 | 锁/阻塞 profile、复用连接后是否恶化 | 队头阻塞 / 锁争用 / GC 停顿 | `kitex-transport-tuning` 或 `go-runtime-tuning` |
 | 连接数、fd 暴涨 | 并发度、连接池参数、dial 次数 | 独占连接不合适 / 池参数过小 | `kitex-transport-tuning` |
 | GC 次数高、RSS 增长 | 堆采样、每请求分配 | 分配热点 / GC 参数过紧 | `kitex-allocation-hotspot-tuning` → `go-runtime-tuning` |
+| cache miss 高、跨核迁移或怀疑伪共享 | 缓存事件、字段归属、核读写分布 | 缓存行争用 / 真共享 / 容量 miss | `go-cacheline-optimization` |
 | 编解码帧占比高 | CPU profile、IDL 形态 | 实现选择或 payload 形态 | `kitex-thrift-codec-selection` |
 | 启用透传后变慢、分配上升 | header 数量与长度、协议 | 元信息开销 | `kitex-transport-protocol-selection` |
 | 跨节点部署后整体变慢 | 服务端与压测端/上游的节点位置 | 跨 NUMA 访存 | 先按 `kitex-transport-tuning` 的 NUMA 结论调整，绑核移交系统层 |
