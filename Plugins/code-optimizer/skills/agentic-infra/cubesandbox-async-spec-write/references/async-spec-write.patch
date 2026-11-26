@@ -1,0 +1,425 @@
+diff --git a/CubeMaster/pkg/sandboxspec/async.go b/CubeMaster/pkg/sandboxspec/async.go
+new file mode 100644
+index 0000000..9697da4
+--- /dev/null
++++ b/CubeMaster/pkg/sandboxspec/async.go
+@@ -0,0 +1,259 @@
++// Copyright (c) 2026 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++
++package sandboxspec
++
++import (
++	"context"
++	"sync"
++	"time"
++
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/constants"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/db/models"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/log"
++	sandboxtypes "github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/service/sandbox/types"
++)
++
++const (
++	asyncPutQueueSize = 512
++	asyncPutWorkers   = 2
++	// The worker's gate wait and all retry attempts share this deadline;
++	// time spent waiting in the queue is not part of it.
++	asyncPutTimeout = 10 * time.Second
++	asyncPutRetries = 3
++)
++
++// specWriteState belongs to one sandbox ID in this process. Its reference
++// count includes queued items and waiting/in-flight operations, so it cannot
++// expire while an old write is still capable of running.
++type specWriteState struct {
++	id         string
++	permit     chan struct{}
++	generation uint64              // protected by permit
++	pending    *models.SandboxSpec // immutable while queued; protected by permit
++	refs       int                 // protected by specWriteStatesMu
++}
++
++type asyncPutItem struct {
++	rec        *models.SandboxSpec
++	state      *specWriteState
++	generation uint64
++	enqueuedAt time.Time
++}
++
++var (
++	asyncPutOnce  sync.Once
++	asyncPutQueue chan asyncPutItem
++
++	specWriteStatesMu sync.Mutex
++	specWriteStates   = make(map[string]*specWriteState)
++)
++
++func retainSpecWriteState(id string) *specWriteState {
++	specWriteStatesMu.Lock()
++	defer specWriteStatesMu.Unlock()
++	state := specWriteStates[id]
++	if state == nil {
++		state = &specWriteState{id: id, permit: make(chan struct{}, 1)}
++		state.permit <- struct{}{}
++		specWriteStates[id] = state
++	}
++	state.refs++
++	return state
++}
++
++// readPendingSpec gives same-process readers the newest accepted create spec.
++// An in-flight worker holds the same permit, so a reader waits for it or ctx.
++func readPendingSpec(ctx context.Context, id string) (*models.SandboxSpec, error) {
++	specWriteStatesMu.Lock()
++	state := specWriteStates[id]
++	if state != nil {
++		state.refs++
++	}
++	specWriteStatesMu.Unlock()
++	if state == nil {
++		return nil, nil
++	}
++	defer releaseSpecWriteState(state)
++	if err := state.lock(ctx); err != nil {
++		return nil, err
++	}
++	defer state.unlock()
++	if state.pending == nil {
++		return nil, nil
++	}
++	record := *state.pending
++	return &record, nil
++}
++
++func releaseSpecWriteState(state *specWriteState) {
++	specWriteStatesMu.Lock()
++	defer specWriteStatesMu.Unlock()
++	state.refs--
++	if state.refs == 0 && specWriteStates[state.id] == state {
++		delete(specWriteStates, state.id)
++	}
++}
++
++func (state *specWriteState) lock(ctx context.Context) error {
++	select {
++	case <-ctx.Done():
++		return ctx.Err()
++	case <-state.permit:
++		if err := ctx.Err(); err != nil {
++			state.unlock()
++			return err
++		}
++		return nil
++	}
++}
++
++func (state *specWriteState) unlock() {
++	state.permit <- struct{}{}
++}
++
++// withSpecWrite linearizes a newer write/delete against all queued and
++// in-flight writes for this ID. The permit is held across the actual DB call.
++// This is a process-local protocol; other masters need database fencing.
++func withSpecWrite(ctx context.Context, id string, operation func() error) error {
++	state := retainSpecWriteState(id)
++	defer releaseSpecWriteState(state)
++	if err := state.lock(ctx); err != nil {
++		return err
++	}
++	defer state.unlock()
++	state.generation++
++	state.pending = nil
++	return operation()
++}
++
++func writeRecordOrdered(ctx context.Context, rec *models.SandboxSpec) error {
++	return withSpecWrite(ctx, rec.SandboxID, func() error { return upsertRecord(ctx, rec) })
++}
++
++func deleteRecordOrdered(ctx context.Context, id string) error {
++	return withSpecWrite(ctx, id, func() error { return deleteRecord(ctx, id) })
++}
++
++func startAsyncPutWorkers() {
++	asyncPutOnce.Do(func() {
++		asyncPutQueue = make(chan asyncPutItem, asyncPutQueueSize)
++		for i := 0; i < asyncPutWorkers; i++ {
++			go asyncPutWorker()
++		}
++	})
++}
++
++// PutAsync materializes an independent record on the caller goroutine and
++// hands it to a bounded queue. A full queue falls back to an ordered synchronous
++// write; an uninitialized store returns its explicit error. Persistence remains
++// best-effort, so callers must preserve their existing failure reporting.
++func PutAsync(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) error {
++	rec, err := buildRecord(sandboxID, req, opts)
++	if err != nil {
++		recordPersistFailure(persistFailureReason(err))
++		return err
++	}
++	if !IsReady() {
++		recordPersistFailure(persistFailureReason(ErrSandboxSpecStoreNotReady))
++		return ErrSandboxSpecStoreNotReady
++	}
++	startAsyncPutWorkers()
++	state := retainSpecWriteState(rec.SandboxID)
++	if err := state.lock(ctx); err != nil {
++		releaseSpecWriteState(state)
++		recordPersistFailure(persistFailureReason(err))
++		return err
++	}
++	queued := false
++	defer func() {
++		state.unlock()
++		if !queued {
++			releaseSpecWriteState(state)
++		}
++	}()
++	state.generation++
++	state.pending = nil
++	item := asyncPutItem{rec: rec, state: state, generation: state.generation, enqueuedAt: time.Now()}
++	select {
++	case asyncPutQueue <- item:
++		// The worker can receive the item now, but cannot take the permit yet.
++		state.pending = rec
++		queued = true
++		item.trace(ctx, "enqueued")
++		return nil
++	default:
++		item.trace(ctx, "sync_fallback")
++		if err := upsertRecord(ctx, rec); err != nil {
++			recordPersistFailure(persistFailureReason(err))
++			return err
++		}
++		return nil
++	}
++}
++
++// Debug events identify a submission by sandbox, generation and queued_at_ns.
++// They carry no request JSON and can be collected in a separate diagnostic run.
++func (item asyncPutItem) trace(ctx context.Context, event string) {
++	log.G(ctx).Debugf("async sandbox spec event=%s sandbox=%s generation=%d queued_at_ns=%d at_ns=%d",
++		event, item.rec.SandboxID, item.generation, item.enqueuedAt.UnixNano(), time.Now().UnixNano())
++}
++
++func asyncPutWorker() {
++	for item := range asyncPutQueue {
++		item.trace(context.Background(), "dequeued")
++		if err := persistAsyncPutItem(item); err != nil {
++			item.trace(context.Background(), "worker_failed")
++			recordPersistFailure(persistFailureReason(err))
++			log.G(context.Background()).Warnf("async persist sandbox spec failed sandbox=%s: %v", item.rec.SandboxID, err)
++		}
++	}
++}
++
++func persistAsyncPutItem(item asyncPutItem) error {
++	if item.state == nil {
++		return nil
++	}
++	defer releaseSpecWriteState(item.state)
++	if item.rec == nil {
++		return nil
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), asyncPutTimeout)
++	defer cancel()
++	if err := item.state.lock(ctx); err != nil {
++		return err
++	}
++	defer item.state.unlock()
++	if item.generation != item.state.generation {
++		item.trace(ctx, "superseded")
++		return nil
++	}
++	defer func() { item.state.pending = nil }()
++	var err error
++	for attempt := 1; attempt <= asyncPutRetries; attempt++ {
++		err = upsertRecord(ctx, item.rec)
++		if err == nil {
++			item.trace(ctx, "worker_committed")
++			return nil
++		}
++		if attempt == asyncPutRetries || ctx.Err() != nil {
++			return err
++		}
++		select {
++		case <-time.After(time.Duration(attempt) * 50 * time.Millisecond):
++		case <-ctx.Done():
++			return ctx.Err()
++		}
++	}
++	return err
++}
++
++func deleteRecord(ctx context.Context, sandboxID string) error {
++	client := getDB()
++	if client == nil {
++		return ErrSandboxSpecStoreNotReady
++	}
++	return client.WithContext(ctx).Table(constants.SandboxSpecTableName).
++		Where("sandbox_id = ?", sandboxID).
++		Delete(&models.SandboxSpec{}).Error
++}
+diff --git a/CubeMaster/pkg/sandboxspec/store.go b/CubeMaster/pkg/sandboxspec/store.go
+index d351aef..f624ddb 100644
+--- a/CubeMaster/pkg/sandboxspec/store.go
++++ b/CubeMaster/pkg/sandboxspec/store.go
+@@ -80,29 +80,35 @@ type PutOptions struct {
+ // should log and proceed, as the spec store is recovery-friendly: a missing
+ // record is later detected and backfilled best-effort.
+ func Put(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) error {
+-	err := doPut(ctx, sandboxID, req, opts)
++	rec, err := buildRecord(sandboxID, req, opts)
+ 	if err != nil {
+ 		recordPersistFailure(persistFailureReason(err))
++		return err
++	}
++	// Serialize the actual write with queued/in-flight create-time writes.
++	if err = writeRecordOrdered(ctx, rec); err != nil {
++		recordPersistFailure(persistFailureReason(err))
++		return err
+ 	}
+-	return err
++	return nil
+ }
+ 
+-func doPut(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) error {
+-	client := getDB()
+-	if client == nil {
+-		return ErrSandboxSpecStoreNotReady
+-	}
++// buildRecord canonicalizes the create request and materializes the row that
++// will be written. It performs no DB work, which lets the async create path do
++// the CPU-only part on the caller goroutine and leave only the UPSERT to the
++// background worker.
++func buildRecord(sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) (*models.SandboxSpec, error) {
+ 	sandboxID = strings.TrimSpace(sandboxID)
+ 	if sandboxID == "" || req == nil {
+-		return errors.New("sandboxspec.Put: sandbox_id and req are required")
++		return nil, errors.New("sandboxspec.Put: sandbox_id and req are required")
+ 	}
+ 	canonical, err := CanonicalizeRequest(req)
+ 	if err != nil {
+-		return err
++		return nil, err
+ 	}
+ 	payload, err := json.Marshal(canonical)
+ 	if err != nil {
+-		return err
++		return nil, err
+ 	}
+ 	templateID := ""
+ 	if canonical.Annotations != nil {
+@@ -118,10 +124,10 @@ func doPut(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSa
+ 		canonical.Annotations[constants.CubeAnnotationStorageBackend] = normalized
+ 		payload, err = json.Marshal(canonical)
+ 		if err != nil {
+-			return err
++			return nil, err
+ 		}
+ 	}
+-	rec := &models.SandboxSpec{
++	return &models.SandboxSpec{
+ 		SandboxID:    sandboxID,
+ 		TemplateID:   templateID,
+ 		InstanceType: canonical.InstanceType,
+@@ -131,6 +137,16 @@ func doPut(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSa
+ 		RequestJSON:  string(payload),
+ 		Backend:      backend,
+ 		Backfilled:   opts.Backfilled,
++	}, nil
++}
++
++func upsertRecord(ctx context.Context, rec *models.SandboxSpec) error {
++	client := getDB()
++	if client == nil {
++		return ErrSandboxSpecStoreNotReady
++	}
++	if rec == nil || strings.TrimSpace(rec.SandboxID) == "" {
++		return errors.New("sandboxspec.Put: sandbox_id and req are required")
+ 	}
+ 	// Single-roundtrip UPSERT keyed on the unique sandbox_id index so the
+ 	// hot create-success path doesn't pay for a SELECT+INSERT/UPDATE pair.
+@@ -176,6 +192,7 @@ func persistFailureReason(err error) string {
+ }
+ 
+ // Get returns a deep copy of the canonical request for sandboxID.
++// It includes a newer accepted create still queued in this Master process.
+ func Get(ctx context.Context, sandboxID string) (*sandboxtypes.CreateCubeSandboxReq, error) {
+ 	client := getDB()
+ 	if client == nil {
+@@ -185,6 +202,13 @@ func Get(ctx context.Context, sandboxID string) (*sandboxtypes.CreateCubeSandbox
+ 	if sandboxID == "" {
+ 		return nil, errors.New("sandboxspec.Get: sandbox_id is required")
+ 	}
++	pending, err := readPendingSpec(ctx, sandboxID)
++	if err != nil {
++		return nil, err
++	}
++	if pending != nil {
++		return decodeSpec(pending)
++	}
+ 	var rec models.SandboxSpec
+ 	if err := client.WithContext(ctx).Table(constants.SandboxSpecTableName).
+ 		Where("sandbox_id = ?", sandboxID).First(&rec).Error; err != nil {
+@@ -193,6 +217,10 @@ func Get(ctx context.Context, sandboxID string) (*sandboxtypes.CreateCubeSandbox
+ 		}
+ 		return nil, err
+ 	}
++	return decodeSpec(&rec)
++}
++
++func decodeSpec(rec *models.SandboxSpec) (*sandboxtypes.CreateCubeSandboxReq, error) {
+ 	out := &sandboxtypes.CreateCubeSandboxReq{}
+ 	if err := json.Unmarshal([]byte(rec.RequestJSON), out); err != nil {
+ 		return nil, err
+@@ -213,9 +241,8 @@ func Delete(ctx context.Context, sandboxID string) error {
+ 	if sandboxID == "" {
+ 		return errors.New("sandboxspec.Delete: sandbox_id is required")
+ 	}
+-	return client.WithContext(ctx).Table(constants.SandboxSpecTableName).
+-		Where("sandbox_id = ?", sandboxID).
+-		Delete(&models.SandboxSpec{}).Error
++	// Wait for an in-flight write and invalidate all older queued writes.
++	return deleteRecordOrdered(ctx, sandboxID)
+ }
+ 
+ // CanonicalizeRequest strips transient fields that are not part of the
+diff --git a/CubeMaster/pkg/templatecenter/store.go b/CubeMaster/pkg/templatecenter/store.go
+index 31312a3..fd319b6 100644
+--- a/CubeMaster/pkg/templatecenter/store.go
++++ b/CubeMaster/pkg/templatecenter/store.go
+@@ -9,6 +9,7 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
++	"os"
+ 	"regexp"
+ 	"strings"
+ 	"sync"
+@@ -419,13 +420,21 @@ func configureSnapshotRuntimeRefHooks() {
+ // spec store. Failures are swallowed by the sandbox layer (logged only); we
+ // still surface them here so future callers of the hook can react.
+ func configureSandboxSpecHooks() {
++	writeSpec := sandboxspec.Put
++	if os.Getenv("CUBEMASTER_ASYNC_SANDBOX_SPEC") == "1" {
++		writeSpec = sandboxspec.PutAsync
++	}
+ 	sandbox.SetAfterCreateSandboxSuccessHook(func(ctx context.Context, sandboxID, hostID, hostIP string, req *sandboxtypes.CreateCubeSandboxReq) error {
+ 		storedReq, err := cloneCreateRequest(req)
+ 		if err != nil {
+ 			return err
+ 		}
+ 		delete(storedReq.Annotations, sandbox.AnnotationPluginVolumeSources)
+-		return sandboxspec.Put(ctx, sandboxID, storedReq, sandboxspec.PutOptions{
++		// Best-effort spec persistence: building the row stays on the caller
++		// goroutine, but the MySQL UPSERT runs on a bounded background worker
++		// so it no longer sits on the create reply path. The Redis proxy route
++		// and the lifecycle publish remain synchronous.
++		return writeSpec(ctx, sandboxID, storedReq, sandboxspec.PutOptions{
+ 			HostID: hostID,
+ 			HostIP: hostIP,
+ 		})

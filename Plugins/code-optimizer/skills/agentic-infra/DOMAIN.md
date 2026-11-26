@@ -10,6 +10,7 @@ Agent 运行时基础设施的性能优化：microVM 沙箱（CubeSandbox）与 
 | [`cubesandbox-guest-rpc-overlap`](cubesandbox-guest-rpc-overlap/SKILL.md) | Evaluate concurrent guest clock setup and RNG reseeding during snapshot restore, including the create barrier and failure semantics. |
 | [`cubesandbox-create-optimize`](cubesandbox-create-optimize/SKILL.md) | CubeSandbox 完整创建路径与多机制组合调优：核对 Guest 预连接、Master 解析缓存与异步 spec、rootfs 影子预派生池之间的交互，做组合消融与端到端归因 |
 | [`cubesandbox-replica-metadata-ttl`](cubesandbox-replica-metadata-ttl/SKILL.md) | Opt-in, process-local reuse of READY replica metadata by template for one second, with per-request placement checks. The reference patch is mutually exclusive with `scheme2-rsi-cache.patch`. |
+| [`cubesandbox-async-spec-write`](cubesandbox-async-spec-write/SKILL.md) | Opt-in spec persistence with pending reads and queue tracing. Use this variant or the Scheme 2 writer exclusively. |
 
 **场景收益 / 定位**（原插件 README 技能表条目）：`cubesandbox-create-optimize` 面向完整创建路径与多机制组合调优，自带修订参考补丁、实施手册与消融工具；单项仅作为组合实验臂，不作为单一症状的专项入口。
 
