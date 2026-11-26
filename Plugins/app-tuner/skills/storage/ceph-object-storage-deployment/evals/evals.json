@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-object-storage-deployment",
+  "evals": [
+    {
+      "id": "COS-E01",
+      "prompt": "Ubuntu 22.04 或 openEuler 22.03 上用 cephadm 容器化部署 Ceph 17.2.8 对象存储集群，容器环境、cephadm 安装、bootstrap 和 RGW 怎么做？",
+      "expected_output": "按 object-storage-deployment.md cephadm 容器化路径：先按 OS 就绪容器环境——Ubuntu 用 Docker（版本 24 及以上，本地镜像仓库按鉴权 + HTTPS 信任：装入仓库 CA 并 docker login，不留 insecure 明文通道），openEuler 用 Podman（Ceph 17.2.x 需 2.0 及以上，以 3.4.4 为例，/etc/containers/registries.conf 配置信任仓库）；Ubuntu 直接 apt 安装 cephadm，openEuler 下载 quincy 分支 cephadm 脚本放入 /usr/sbin 并赋权，cephadm -h 验证；openEuler 推荐自制 Ceph 17.2.8 容器镜像（编译容器/部署容器 + rpmbuild 编译 + 推送本地 registry:2 仓库（htpasswd 鉴权 + TLS、digest 核对）+ 修改 cephadm 的 DEFAULT_IMAGE（按 sha256 digest 固定引用））；在 /root/ceph-mycluster/ 配置 ceph.conf（rgw_frontends = beast port=10000）后执行 cephadm bootstrap --config ceph.conf --mon-ip 198.51.100.166 --cluster-network 203.0.113.0/24 --allow-fqdn-hostname --skip-monitoring-stack，用 ssh-copy-id -f -i /etc/ceph/ceph.pub 分发公钥并 ceph orch host add 添加节点；OSD 用 osd_spec.yaml（paths 指定磁盘或 rotational/limit 自动选择）+ ceph orch apply -i 部署；RGW 用 ceph orch host add client1 --labels rgw 加 ceph orch apply rgw test_rgw --placement=\"label:rgw count-per-host:8\" --port=10000 部署；在 cephadm shell 中创建 default.rgw.buckets.index 与 default.rgw.buckets.data 存储池并使能 rgw，radosgw-admin user create/info 创建账户并获取 access_key/secret_key；卸载 Ceph 属破坏性操作需二次确认后按 fsid 执行 cephadm rm-cluster",
+      "files": [],
+      "expectations": [
+        "说明按 OS 选择容器技术：Ubuntu 用 Docker（24 及以上版本）配官方镜像 quay.io/ceph/ceph:v17，openEuler 用 Podman（2.0 及以上，如 3.4.4）配自制镜像，并保持全局容器技术一致",
+        "给出 cephadm 的安装与验证方式（Ubuntu 经 apt 包管理器安装 cephadm，openEuler 下载 quincy 分支脚本放入 /usr/sbin 并赋权后用 cephadm -h 验证）",
+        "给出 bootstrap 需传入 --config ceph.conf、--mon-ip、--cluster-network 等参数，随后分发 ceph.pub 公钥、ceph orch host add 添加节点并用 ceph -s 验证健康状态",
+        "给出 OSD 通过 osd_spec.yaml（paths 指定磁盘或 rotational/limit 自动选择）加 ceph orch apply 部署、RGW 通过 label 与端口用 ceph orch apply rgw 部署",
+        "说明对象存储功能在 cephadm shell 中完成：创建 default.rgw.buckets.index 与 default.rgw.buckets.data 存储池并使能 rgw、radosgw-admin 创建账户获取 access_key 与 secret_key，并标注卸载 Ceph 属破坏性操作需二次确认后按 fsid 执行 rm-cluster"
+      ]
+    },
+    {
+      "id": "COS-E02",
+      "prompt": "ceph-deploy 部署对象存储 RGW，存储池、RGW 实例、账户和压缩怎么配？",
+      "expected_output": "按 object-storage-deployment.md 路径一：部署 MON/MGR/OSD 后在 ceph.conf 配置 RGW 实例端口（如每节点 1 个实例、端口 10001~10003、网关名 bucket1~bucket3），ceph-deploy 部署 RGW 并查看进程在线；对象存储功能：先设置 crush 规则（SSD/HDD class 分别建 rule），创建 Data Pool 与 Index Pool（可 EC 4+2 profile）并修改存储池 crush 规则，curl 网关 IP:端口 验证出现 RGW 信息；radosgw-admin user create 创建账户并查询获取 access_key/secret_key；压缩：创建压缩存储池 + 新放置策略 compress-placement（--compression=zlib，可选 snappy/LZ4），导出用户元数据修改 default_placement 后导入，重启 radosgw 进程生效",
+      "files": [],
+      "expectations": [
+        "给出路径一在 ceph.conf 配置 RGW 实例端口并部署 RGW、查看进程在线的步骤",
+        "给出创建 Data Pool 与 Index Pool（可 EC profile）并修改 crush 规则、curl 网关验证的步骤",
+        "给出 radosgw-admin user create 创建账户并获取 access_key 与 secret_key",
+        "给出压缩放置策略 compress-placement 的创建与 --compression=zlib 使能步骤，说明修改用户元数据 default_placement 后需重启 radosgw 进程生效"
+      ]
+    },
+    {
+      "id": "COS-E03",
+      "prompt": "cephadm 部署的 Ceph 17.2.8 集群不要了，怎么卸载干净？",
+      "expected_output": "按 object-storage-deployment.md §2.8：在 ceph1 节点用 cephadm shell -- ceph orch pause 暂停后台进程，在宿主机 shell 用 cephadm shell -- ceph fsid 查询集群 fsid（变量必须在宿主机 shell 赋值，不得在 cephadm shell 交互块内赋值），执行 cephadm rm-cluster 按 fsid 删除集群（破坏性操作，执行前需与用户二次确认目标集群与 fsid），并在所有其他节点重复执行删除步骤",
+      "files": [],
+      "expectations": [
+        "给出暂停后台进程、查询 fsid、cephadm rm-cluster 按 fsid 删除集群的顺序",
+        "声明卸载属破坏性操作，执行前需二次确认目标集群与 fsid",
+        "说明需在所有其他节点重复执行删除步骤"
+      ]
+    }
+  ]
+}

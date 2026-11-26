@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-object-storage-deployment",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "Ceph 17.2.8 在 Ubuntu 上用 cephadm 容器化部署对象存储 RGW，bootstrap 和存储池怎么弄",
+      "should_trigger": true,
+      "note": "对象存储 cephadm 容器化路径"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "ceph-deploy 部署对象存储，RGW 实例端口和压缩放置策略怎么配",
+      "should_trigger": true,
+      "note": "对象存储 ceph-deploy 路径"
+    },
+    {
+      "id": "CQ-03",
+      "prompt": "radosgw-admin 创建账户后 access_key 和 secret_key 怎么获取",
+      "should_trigger": true,
+      "note": "RGW 账户创建"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "ceph-deploy 部署块存储，rbd 块设备创建和映射怎么做",
+      "should_trigger": false,
+      "note": "routes to ceph-block-storage-deployment（块存储路径）"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "CephFS 文件系统创建和客户机挂载怎么做",
+      "should_trigger": false,
+      "note": "routes to ceph-file-storage-deployment（文件存储路径）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "Ceph RGW 网关参数和缓存怎么调优",
+      "should_trigger": false,
+      "note": "routes to ceph-parameter-tuning（集群运行期参数调优）"
+    }
+  ]
+}
