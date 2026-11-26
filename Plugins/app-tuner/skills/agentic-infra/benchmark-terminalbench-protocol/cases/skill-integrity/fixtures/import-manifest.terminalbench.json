@@ -1,0 +1,18 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "terminalbench",
+ "cases": [
+  {"case_id": "terminalbench_01_analyze_access_logs", "image": "agbench-terminalbench_01_analyze_access_logs:v1", "steps": 29, "tokens_total": 561948},
+  {"case_id": "terminalbench_02_jsonl_aggregator", "image": "agbench-terminalbench_02_jsonl_aggregator:v1", "steps": 27, "tokens_total": 422177},
+  {"case_id": "terminalbench_03_log_summary", "image": "agbench-terminalbench_03_log_summary:v1", "steps": 32, "tokens_total": 570488},
+  {"case_id": "terminalbench_04_sql_query_optimization", "image": "agbench-terminalbench_04_sql_query_optimization:v1", "steps": 39, "tokens_total": 1038392}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}
