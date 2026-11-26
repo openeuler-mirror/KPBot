@@ -1,5 +1,5 @@
 {
-  "skill_name": "kptools-tpsplit-optimization-verify",
+  "skill_name": "kptools-tpsplit-optimization（配套 PR #442 交付）-verify",
   "evals": [
     {
       "id": 1,
@@ -12,21 +12,21 @@
       "id": 2,
       "eval_name": "l5-only-with-baseline",
       "prompt": "新拓扑已经在跑了，就压测对比一下性能达不达标。部署指南里有停服前采的旧基线和口径。",
-      "expected_output": "单层执行 L5：从部署指南读取旧基线与其负载/并发/计时口径，按相同口径（同数据集、请求长度分布、并发数、时长、预热、统计窗口）实测新集群；历史压测数据不得沿用（TP8 与 TP32 负载模型不同），只用停服前归档那份；输出新旧同口径对比表 + 达标判定；不达标给出调参（候选如 max-num-batched-tokens）与回滚两条走向供用户决策，执行转 kptools-tpsplit-optimization，本 skill 不代执行。验证报告中 L4/L6 标注「未覆盖」。",
+      "expected_output": "单层执行 L5：从部署指南读取旧基线与其负载/并发/计时口径，按相同口径（同数据集、请求长度分布、并发数、时长、预热、统计窗口）实测新集群；历史压测数据不得沿用（TP8 与 TP32 负载模型不同），只用停服前归档那份；输出新旧同口径对比表 + 达标判定；不达标给出调参（候选如 max-num-batched-tokens）与回滚两条走向供用户决策，执行转 kptools-tpsplit-optimization（配套 PR #442 交付），本 skill 不代执行。验证报告中 L4/L6 标注「未覆盖」。",
       "files": []
     },
     {
       "id": 3,
       "eval_name": "degraded-input-no-guide",
       "prompt": "集群是我们运维自己按变更单切的，没有部署指南，现在要验收。P 侧 10 台机器各 2 个 TP8 实例，网关地址给你。",
-      "expected_output": "输入降级路径：没有部署指南时按输入契约逐项向用户收集等价信息（集群访问方式/布局/L0-L3 是否已过/关键参数/旧基线）；验证报告标注「输入降级：无部署指南」；L0-L3 结论拿不到时不编造——让用户确认拉起验证已做或转 kptools-tpsplit-optimization 补做，未过 L3 不做 L4-L6；旧基线拿不到时 L5 降级为现状实测、不判定达标。",
+      "expected_output": "输入降级路径：没有部署指南时按输入契约逐项向用户收集等价信息（集群访问方式/布局/L0-L3 是否已过/关键参数/旧基线）；验证报告标注「输入降级：无部署指南」；L0-L3 结论拿不到时不编造——让用户确认拉起验证已做或转 kptools-tpsplit-optimization（配套 PR #442 交付） 补做，未过 L3 不做 L4-L6；旧基线拿不到时 L5 降级为现状实测、不判定达标。",
       "files": []
     },
     {
       "id": 4,
       "eval_name": "boundary-route-to-deploy",
       "prompt": "TP8 迁移完跑了两天，Decode 偶发报 KV 相关错误，偶尔还有 NPU 报错。",
-      "expected_output": "边界判定：这是迁移后故障排查（有故障征兆），不是计划性验证——转 kptools-tpsplit-optimization（其按迁移后故障路径排查 Mooncake tp/dp 错配/混跑并执行修复或回滚）；本 skill 不做故障排查、不做任何变更。若用户后续要稳定性观察窗口，排查收敛后再回来做 L6。",
+      "expected_output": "边界判定：这是迁移后故障排查（有故障征兆），不是计划性验证——转 kptools-tpsplit-optimization（配套 PR #442 交付）（其按迁移后故障路径排查 Mooncake tp/dp 错配/混跑并执行修复或回滚）；本 skill 不做故障排查、不做任何变更。若用户后续要稳定性观察窗口，排查收敛后再回来做 L6。",
       "files": []
     }
   ]

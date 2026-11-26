@@ -1,6 +1,6 @@
 # 交付验证细则（L4-L6）— kptools-tpsplit-optimization-verify
 
-承接 SKILL.md 的 L4-L6 总览表，展开每层的执行内容、通过标准与失败处理。前置：集群已拉起、L0-L3 拉起验证已过、网关已切流（由 `kptools-tpsplit-optimization` 完成并写入部署指南）；本 skill 只读验证，逐层执行不过不进下一层。
+承接 SKILL.md 的 L4-L6 总览表，展开每层的执行内容、通过标准与失败处理。前置：集群已拉起、L0-L3 拉起验证已过、网关已切流（由 `kptools-tpsplit-optimization（配套 PR #442 交付）` 完成并写入部署指南）；本 skill 只读验证，逐层执行不过不进下一层。
 
 ## L4 功能测试
 

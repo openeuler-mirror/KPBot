@@ -1,5 +1,5 @@
 {
-  "skill_name": "kptools-tpsplit-optimization-verify",
+  "skill_name": "kptools-tpsplit-optimization（配套 PR #442 交付）-verify",
   "eval_type": "trigger_rate",
   "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
   "queries": [
@@ -31,7 +31,7 @@
       "id": "VQ-05",
       "prompt": "把 Prefill 集群从跨机 TP32 拆成单机 TP8 重新部署",
       "should_trigger": false,
-      "note": "routes to kptools-tpsplit-optimization（部署执行面：拉起/L0-L3/切流/回滚）"
+      "note": "routes to kptools-tpsplit-optimization（配套 PR #442 交付）（部署执行面：拉起/L0-L3/切流/回滚）"
     },
     {
       "id": "VQ-06",
@@ -49,7 +49,7 @@
       "id": "VQ-08",
       "prompt": "TP8 迁移完跑了两天，Decode 偶发报 KV 相关错误，排查下根因",
       "should_trigger": false,
-      "note": "routes to kptools-tpsplit-optimization（迁移后故障排查 + 回滚执行面）；本 skill 只做计划性验证"
+      "note": "routes to kptools-tpsplit-optimization（配套 PR #442 交付）（迁移后故障排查 + 回滚执行面）；本 skill 只做计划性验证"
     },
     {
       "id": "VQ-09",
