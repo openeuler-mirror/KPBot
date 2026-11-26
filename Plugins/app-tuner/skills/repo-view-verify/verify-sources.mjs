@@ -43,7 +43,7 @@ const rev = String(repo.revision);
 if (!/^[0-9a-fA-F]{40}$/.test(rev)) failures.push({ subject: '(repository)', problem: `revision 不是 40 位 SHA: ${rev}` });
 
 function git(...a) {
-  return spawnSync('git', ['-C', repoRoot, ...a], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return spawnSync('git', ['-C', repoRoot, ...a], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024  // 256MB——64MB 对大文件不够，ENOBUFS 时 status=null });
 }
 
 // 1. revision 是真实 commit 对象
@@ -83,7 +83,7 @@ function fileLineCount(p) {
   if (lineCache.has(p)) return lineCache.get(p);
   const show = git('show', `${rev}:${p}`);
   let total;
-  if (show.status !== 0) total = -1;
+  if (show.status !== 0 || show.error) total = -1;  // status=null (ENOBUFS) 或非零
   else {
     const content = show.stdout;
     total = content.length === 0 ? 0 : content.split('\n').length - (content.endsWith('\n') ? 1 : 0);
@@ -94,8 +94,12 @@ function fileLineCount(p) {
 
 for (const s of sources) {
   const subject = `${s.container} -> ${s.path}:${s.line}${s.endLine !== s.line ? '-' + s.endLine : ''}`;
-  if (s.path.includes('..') || s.path.includes('\\') || path.isAbsolute(s.path) || s.path.startsWith('.git/')) {
-    failures.push({ subject, problem: 'path 必须是仓库相对 POSIX 路径（禁 ..、反斜杠、绝对路径）' });
+  // 路径段检查（非子串）：'src/a..b.py' 是合法文件名（含 .. 子串但
+  // 不是路径穿越），只有路径段恰好等于 '..' 才是穿越
+  const segments = s.path.split('/');
+  const hasDotDot = segments.some(seg => seg === '..' || seg === '.');
+  if (hasDotDot || s.path.includes('\\') || path.isAbsolute(s.path) || s.path.startsWith('.git/')) {
+    failures.push({ subject, problem: 'path 必须是仓库相对 POSIX 路径（禁 .. 路径段、反斜杠、绝对路径）' });
     continue;
   }
   const exists = git('cat-file', '-e', `${rev}:${s.path}`);
@@ -108,6 +112,7 @@ for (const s of sources) {
   const total = fileLineCount(s.path);
   if (total < 0) { failures.push({ subject, problem: `git show 读取失败` }); continue; }
   if (s.line < 1) failures.push({ subject, problem: `line 必须 >= 1` });
+  else if (total === 0) failures.push({ subject, problem: `文件为空（0 行），无证据可锚定` });
   else if (s.endLine < s.line) failures.push({ subject, problem: `end_line ${s.endLine} < line ${s.line}` });
   else if (s.endLine > total) failures.push({ subject, problem: `行号越界：请求到第 ${s.endLine} 行，文件在 commit 内共 ${total} 行 → 修 end_line 为 ${total}` });
 }

@@ -86,17 +86,25 @@ flowchart LR
     TOK["Tokenizer<br/>prompt → token ids"]
     SCH["Scheduler<br/>组批 · 分配块"]
   end
+  subgraph S2["执行"]
+    EXEC["Engine<br/>prefill / decode"]
+  end
   subgraph S3["KV 存储"]
     KV[("KV Cache 块<br/>HBM 分页")]
     DDR[("DDR 分层缓存<br/>（可选）")]
   end
+  subgraph S4["输出"]
+    RESP["HTTP 响应<br/>SSE 流"]
+  end
   REQ -->|"解析请求体"| TOK
   TOK -->|"token ids"| SCH
   SCH ==>|"批张量"| EXEC
+  EXEC -->|"采样 token"| RESP
   KV -.->|"offload / restore"| DDR
 ```
 
-- stages → `subgraph` 从左到右分带；存储节点用圆柱 `[()]`
+- stages → `subgraph` 从左到右分带（IR 的 `stages[]` 每项对应一个 subgraph，**不可缺**）；
+  存储节点用圆柱 `[()]`
 - 主数据链 `==>`；可选/旁路 `-.->`
 - 双向往返（offload/restore）合并一条双向语义边
 

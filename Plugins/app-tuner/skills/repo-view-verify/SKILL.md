@@ -6,7 +6,7 @@ description: >
   revision/路径/行号，输出结构化回执；含无 Node 环境的命令清单兜底与两轮修复纪律。回执 ok:true 是交付的前置条件。本
   skill 是执行链第二环，一般不直接响应用户请求。
 license: MulanPSL-2.0
-compatibility: Node.js >= 14（verify-sources.mjs）或本地 git（命令清单兜底）
+compatibility: Node.js >= 16（node: 前缀 ESM import 需 >= 14.13.1，取整 16）
 metadata:
   skill_type: tool_assisted
   category: code_analysis
