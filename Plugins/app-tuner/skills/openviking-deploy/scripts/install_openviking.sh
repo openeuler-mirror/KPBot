@@ -245,11 +245,17 @@ import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     doc = json.load(fh)
 server = doc.get("server") or {}
-print(server.get("host") or "127.0.0.1", server.get("port") or 1933,
-      1 if server.get("root_api_key") else 0)
+storage = doc.get("storage") or {}
+print(server.get("host") or "127.0.0.1")
+print(server.get("port") or 1933)
+print(1 if server.get("root_api_key") else 0)
+print(storage.get("workspace") or "")
 PY
   )
-  read -r conf_host conf_port conf_has_root <<<"$conf_info"
+  conf_host=$(sed -n '1p' <<<"$conf_info")
+  conf_port=$(sed -n '2p' <<<"$conf_info")
+  conf_has_root=$(sed -n '3p' <<<"$conf_info")
+  conf_workspace=$(sed -n '4p' <<<"$conf_info")
   if [[ "$HOST_SET" == "1" && "$HOST" != "$conf_host" ]]; then
     log_warn "--host 与 ov.conf server.host 不一致，探测以配置为准: $conf_host"
   fi
@@ -263,6 +269,18 @@ PY
     || die "ov.conf server.port 非法: $PORT"
   if [[ "$HOST" != "127.0.0.1" && "$HOST" != "localhost" && "$HOST" != "::1" && "$conf_has_root" != "1" ]]; then
     die "ov.conf 监听 $HOST 不是回环地址，但未配置 server.root_api_key"
+  fi
+  if [[ -n "$conf_workspace" ]]; then
+    if [[ "$conf_workspace" == /* ]]; then
+      WORKSPACE="$conf_workspace"
+    else
+      [[ "$conf_workspace" == *".."* ]] \
+        && die "ov.conf storage.workspace 相对路径不得包含 ..: $conf_workspace"
+      WORKSPACE=$(normalize_path "$DATA_DIR/$conf_workspace")
+    fi
+    WORKSPACE=$(trim_slash "$WORKSPACE")
+    secure_path WORKSPACE "$WORKSPACE"
+    log_info "采用 ov.conf storage.workspace: $WORKSPACE"
   fi
 else
   [[ -n "$PROVIDER" ]] || die "未提供 --ov-conf，必须提供 --provider/--embedding-model/--vlm-model（先与用户确认，不要猜测）"
@@ -325,6 +343,7 @@ OPENVIKING_COMMIT=""
 OPENVIKING_BRANCH=""
 OPENVIKING_PACKAGE_VERSION=""
 SIGNATURE_VERIFIED=0
+SCM_PRETEND_VERSION=""
 CONF_FILE="$CONF_DIR/ov.conf"
 RUN_GROUP=""
 PROBE_HOST="$HOST"
@@ -471,7 +490,7 @@ if [[ -z "$WHEEL" ]]; then
     || die "源码目录缺少 pyproject.toml 或 setup.py: $SRC_DIR"
   bad_entry=$(find "$SRC_DIR" \( ! -user 0 -o -type f -perm /022 -o -type d -perm /022 \) -print -quit)
   [[ -z "$bad_entry" ]] || die "源码目录存在非 root 属主或组/其他可写的文件/目录: $bad_entry"
-  if command -v git >/dev/null 2>&1 && [[ -d "$SRC_DIR/.git" ]]; then
+  if command -v git >/dev/null 2>&1 && [[ -e "$SRC_DIR/.git" ]]; then
     OPENVIKING_COMMIT=$(git -C "$SRC_DIR" rev-parse HEAD)
     OPENVIKING_BRANCH=$(git -C "$SRC_DIR" rev-parse --abbrev-ref HEAD)
     [[ "$OPENVIKING_BRANCH" == "HEAD" ]] && OPENVIKING_BRANCH="detached:${OPENVIKING_COMMIT:0:12}"
@@ -484,11 +503,48 @@ fi
 
 if [[ "$VERIFY_SIGNATURE" == "1" ]]; then
   [[ -z "$WHEEL" ]] || die "--verify-signature 不适用于 --wheel（请在源码部署时校验 tag/commit）"
-  log_info "校验源码签名（ref: $OPENVIKING_VERSION）"
-  if [[ "$OPENVIKING_VERSION" =~ ^v?[0-9] ]]; then
-    git -C "$SRC_DIR" verify-tag "$OPENVIKING_VERSION" || die "tag 签名校验失败: $OPENVIKING_VERSION"
+  if [[ -n "$SOURCE_DIR" ]]; then
+    log_info "校验源码签名（source-dir HEAD）"
   else
-    git -C "$SRC_DIR" verify-commit HEAD || die "commit 签名校验失败: $OPENVIKING_VERSION"
+    log_info "校验源码签名（ref: $OPENVIKING_VERSION）"
+  fi
+  if [[ -n "$SOURCE_DIR" ]]; then
+    [[ -e "$SRC_DIR/.git" ]] \
+      || die "--verify-signature 要求 --source-dir 是包含 .git 的 Git 工作树"
+    tag_at_head=""
+    for tag in $(git -C "$SRC_DIR" tag --points-at HEAD); do
+      if git -C "$SRC_DIR" verify-tag "$tag" 2>/dev/null; then
+        tag_at_head=$tag
+        break
+      fi
+    done
+    if [[ -z "$tag_at_head" ]]; then
+      git -C "$SRC_DIR" verify-commit HEAD || die "commit 签名校验失败: $OPENVIKING_COMMIT"
+    fi
+    clean_src="$WORK_DIR/clean-src"
+    mkdir -p "$clean_src"
+    git -C "$SRC_DIR" archive --format=tar HEAD | tar -x -C "$clean_src" \
+      || die "从验签对象生成干净构建树失败"
+    bad_entry=$(find "$clean_src" \( ! -user 0 -o -type f -perm /022 -o -type d -perm /022 \) -print -quit)
+    [[ -z "$bad_entry" ]] || die "干净构建树存在非 root 属主或组/其他可写: $bad_entry"
+    SRC_DIR="$clean_src"
+    if [[ "$tag_at_head" =~ ^v?[0-9]+(\.[0-9]+)*$ ]]; then
+      SCM_PRETEND_VERSION=${tag_at_head#v}
+    else
+      SCM_PRETEND_VERSION="0.0.0+source"
+    fi
+    log_info "从验签对象生成干净构建树（commit: $OPENVIKING_COMMIT，版本: $SCM_PRETEND_VERSION）"
+  else
+    target_commit=$(git -C "$SRC_DIR" rev-parse "$OPENVIKING_VERSION^{commit}") \
+      || die "无法把 ref 解析为 commit: $OPENVIKING_VERSION"
+    head_commit=$(git -C "$SRC_DIR" rev-parse HEAD)
+    [[ "$target_commit" == "$head_commit" ]] \
+      || die "checkout HEAD 与请求 ref 不一致（ref=$target_commit head=$head_commit）"
+    if git -C "$SRC_DIR" show-ref --verify --quiet "refs/tags/$OPENVIKING_VERSION"; then
+      git -C "$SRC_DIR" verify-tag "$OPENVIKING_VERSION" || die "tag 签名校验失败: $OPENVIKING_VERSION"
+    else
+      git -C "$SRC_DIR" verify-commit HEAD || die "commit 签名校验失败: $OPENVIKING_VERSION"
+    fi
   fi
   SIGNATURE_VERIFIED=1
 fi
@@ -540,9 +596,14 @@ if [[ -z "$WHEEL_PATH" ]]; then
   mkdir -p "$WORK_DIR/artifacts"
   build_env=("${PIP_ENV[@]}")
   [[ "$BUILD_STUDIO" == "1" ]] || build_env+=("OV_SKIP_STUDIO_BUILD=1")
-  if [[ -n "$SOURCE_DIR" && ! -d "$SRC_DIR/.git" ]]; then
-    build_env+=("SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.0.0.source" "OPENVIKING_VERSION=0.0.0.source")
-    log_warn "离线源码目录不含 .git，包版本记录为 0.0.0.source；需要精确版本请使用 tag 源码或 --wheel"
+  if [[ -n "$SCM_PRETEND_VERSION" ]]; then
+    build_env+=("SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=$SCM_PRETEND_VERSION" \
+      "OPENVIKING_VERSION=$SCM_PRETEND_VERSION")
+    log_info "构建包版本: $SCM_PRETEND_VERSION"
+  elif [[ -n "$SOURCE_DIR" && ! -e "$SRC_DIR/.git" ]]; then
+    build_env+=("SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.0.0+source" \
+      "OPENVIKING_VERSION=0.0.0+source")
+    log_warn "离线源码目录不含 .git，包版本记录为 0.0.0+source；需要精确版本请使用 tag 源码或 --wheel"
   fi
   if ! "${build_env[@]}" "$VENV_BIN/python" -m pip wheel --no-deps --no-build-isolation \
     -w "$WORK_DIR/artifacts" "$SRC_DIR" >"$RESULT_DIR/logs/build.log" 2>&1; then
@@ -596,9 +657,39 @@ else
   RUN_GROUP=$(id -gn "$RUN_AS")
 fi
 
+prepare_workspace() {
+  local ws=$1
+  local ws_uid
+  local reason
+  case "$ws" in
+    "$DATA_DIR"|"$DATA_DIR"/*) ;;
+    *)
+      if ! reason=$(untrusted_parent_reason "$ws" "$(id -u "$RUN_AS")"); then
+        die "workspace 的父目录不可信: $reason"
+      fi
+      ;;
+  esac
+  if [[ ! -e "$ws" ]]; then
+    mkdir -p "$(dirname "$ws")" || die "创建 workspace 父目录失败: $(dirname "$ws")"
+    install -d -m 0750 -o "$RUN_AS" -g "$RUN_GROUP" "$ws" || die "创建 workspace 失败: $ws"
+    return 0
+  fi
+  [[ -d "$ws" ]] || die "workspace 不是目录: $ws"
+  ws_uid=$(stat -c '%u' "$ws")
+  if [[ "$ws_uid" != "0" && "$ws_uid" != "$(id -u "$RUN_AS")" ]]; then
+    die "workspace 属于其他用户（uid=$ws_uid），拒绝改属主: $ws"
+  fi
+  if [[ "$ws_uid" == "0" ]]; then
+    log_warn "workspace 属主为 root，改属主为 $RUN_AS；请确认目录内数据权限: $ws"
+    chown "$RUN_AS:$RUN_GROUP" "$ws" || die "无法把 workspace 改属主: $ws"
+  fi
+  chmod 0750 "$ws" || die "无法设置 workspace 权限: $ws"
+}
+
 install -d -m 0750 -o root -g "$RUN_GROUP" "$CONF_DIR"
-install -d -m 0750 -o "$RUN_AS" -g "$RUN_GROUP" "$DATA_DIR" "$WORKSPACE" /var/log/openviking
-install -d -m 0750 -o "$RUN_AS" -g "$RUN_GROUP" "$DATA_DIR/run"
+install -d -m 0750 -o "$RUN_AS" -g "$RUN_GROUP" "$DATA_DIR" /var/log/openviking
+install -d -m 0750 -o root -g "$RUN_GROUP" "$DATA_DIR/run"
+prepare_workspace "$WORKSPACE"
 
 if [[ -n "$OV_CONF" ]]; then
   if [[ "$OV_CONF" != "$CONF_FILE" ]]; then
@@ -638,14 +729,15 @@ log_info "阶段 5/7: openviking-server doctor"
 doctor_log="$RESULT_DIR/logs/doctor.log"
 doctor_cmd=(timeout 300 "$VENV_BIN/openviking-server" doctor --config "$CONF_FILE")
 if [[ "$RUN_AS" == "root" ]]; then
-  if ! env HOME="$DATA_DIR" OPENVIKING_CONFIG_FILE="$CONF_FILE" PATH="$VENV_BIN:/usr/local/bin:/usr/bin:/bin" \
-    "${doctor_cmd[@]}" >"$doctor_log" 2>&1; then
+  if ! ( cd "$DATA_DIR" && env HOME="$DATA_DIR" OPENVIKING_CONFIG_FILE="$CONF_FILE" \
+    PATH="$VENV_BIN:/usr/local/bin:/usr/bin:/bin" "${doctor_cmd[@]}" ) >"$doctor_log" 2>&1; then
     tail -n 60 "$doctor_log" >&2 || true
     die "doctor 检查失败，完整日志: $doctor_log"
   fi
 else
-  if ! runuser -u "$RUN_AS" -- env HOME="$DATA_DIR" OPENVIKING_CONFIG_FILE="$CONF_FILE" \
-    PATH="$VENV_BIN:/usr/local/bin:/usr/bin:/bin" "${doctor_cmd[@]}" >"$doctor_log" 2>&1; then
+  if ! runuser -u "$RUN_AS" -- bash -c \
+    "cd '$DATA_DIR' && exec env HOME='$DATA_DIR' OPENVIKING_CONFIG_FILE='$CONF_FILE' PATH='$VENV_BIN:/usr/local/bin:/usr/bin:/bin' timeout 300 '$VENV_BIN/openviking-server' doctor --config '$CONF_FILE'" \
+    >"$doctor_log" 2>&1; then
     tail -n 60 "$doctor_log" >&2 || true
     die "doctor 检查失败，完整日志: $doctor_log"
   fi
@@ -658,15 +750,40 @@ log_info "阶段 6/7: 安装并启动服务"
 SERVER_BIN="$PREFIX/current/venv/bin/openviking-server"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 
+verify_openviking_pid() {
+  local pid=$1
+  local recorded_start=$2
+  local current_start pid_uid expected_uid pid_exe expected_exe pid_cmd
+  [[ "$pid" =~ ^[0-9]+$ ]] || die "pid 文件非法: ${pid:-empty}"
+  kill -0 "$pid" 2>/dev/null || die "后台 OpenViking 进程未存活（pid=$pid）"
+  current_start=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null || true)
+  if [[ -n "$recorded_start" && -n "$current_start" && "$recorded_start" != "$current_start" ]]; then
+    die "pid $pid 启动时间不匹配（PID 可能被复用），停止部署"
+  fi
+  pid_uid=$(awk '/^Uid:/ {print $2}' "/proc/$pid/status" 2>/dev/null || true)
+  expected_uid=$(id -u "$RUN_AS")
+  [[ "$pid_uid" == "$expected_uid" ]] \
+    || die "pid $pid 属主不是 $RUN_AS（uid=${pid_uid:-unknown}），停止部署"
+  pid_exe=$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)
+  expected_exe=$(readlink -f "$PREFIX/current/venv/bin/python" 2>/dev/null || true)
+  [[ -n "$expected_exe" && "$pid_exe" == "$expected_exe" ]] \
+    || die "pid $pid 可执行文件不是当前 release 的 python，停止部署"
+  pid_cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
+  [[ "$pid_cmd" == *"$SERVER_BIN"* ]] \
+    || die "pid $pid 命令行不是 $SERVER_BIN，停止部署"
+}
+
 stop_existing() {
   if [[ "$NO_SYSTEMD" == "1" ]]; then
     local pid_file="$DATA_DIR/run/openviking.pid"
     if [[ -f "$pid_file" ]]; then
-      local pid
-      pid=$(cat "$pid_file" 2>/dev/null || true)
-      if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      local pid recorded_start
+      read -r pid recorded_start <"$pid_file" || true
+      [[ "$pid" =~ ^[0-9]+$ ]] || die "pid 文件非法: $pid_file"
+      if kill -0 "$pid" 2>/dev/null; then
+        verify_openviking_pid "$pid" "$recorded_start"
         log_info "停止既有后台进程: $pid"
-        kill "$pid" 2>/dev/null || true
+        kill "$pid" 2>/dev/null || die "发送 TERM 失败: pid=$pid"
         for _ in $(seq 1 30); do
           kill -0 "$pid" 2>/dev/null || break
           sleep 1
@@ -689,14 +806,21 @@ if [[ "$NO_SYSTEMD" == "1" ]]; then
   SERVER_LOG=/var/log/openviking/server.log
   chown "$RUN_AS:$RUN_GROUP" "$SERVER_LOG" 2>/dev/null || true
   if [[ "$RUN_AS" == "root" ]]; then
-    env HOME="$DATA_DIR" OPENVIKING_CONFIG_FILE="$CONF_FILE" PATH="$VENV_BIN:/usr/local/bin:/usr/bin:/bin" \
-      nohup "$SERVER_BIN" >>"$SERVER_LOG" 2>&1 &
-    echo $! >"$DATA_DIR/run/openviking.pid"
+    ( cd "$DATA_DIR" && exec env HOME="$DATA_DIR" OPENVIKING_CONFIG_FILE="$CONF_FILE" \
+      PATH="$VENV_BIN:/usr/local/bin:/usr/bin:/bin" nohup "$SERVER_BIN" >>"$SERVER_LOG" 2>&1 ) &
+    pid=$!
   else
-    runuser -u "$RUN_AS" -- bash -c \
-      "cd '$DATA_DIR' && HOME='$DATA_DIR' OPENVIKING_CONFIG_FILE='$CONF_FILE' PATH='$VENV_BIN:/usr/local/bin:/usr/bin:/bin' nohup '$SERVER_BIN' >>'$SERVER_LOG' 2>&1 & echo \$! >'$DATA_DIR/run/openviking.pid'"
+    pid=$(runuser -u "$RUN_AS" -- bash -c \
+      "cd '$DATA_DIR' && HOME='$DATA_DIR' OPENVIKING_CONFIG_FILE='$CONF_FILE' PATH='$VENV_BIN:/usr/local/bin:/usr/bin:/bin' nohup '$SERVER_BIN' >>'$SERVER_LOG' 2>&1 & echo \$!") \
+      || die "启动后台进程失败"
   fi
-  sleep 2
+  [[ "$pid" =~ ^[0-9]+$ ]] || die "无法获取后台进程 PID: ${pid:-empty}"
+  sleep 1
+  start_time=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null || true)
+  printf '%s %s\n' "$pid" "$start_time" >"$DATA_DIR/run/openviking.pid"
+  chown "root:$RUN_GROUP" "$DATA_DIR/run/openviking.pid" 2>/dev/null || true
+  chmod 0640 "$DATA_DIR/run/openviking.pid" 2>/dev/null || true
+  sleep 1
 else
   unit_tmp="$WORK_DIR/openviking.service"
   sed -e "s|__RUN_USER__|$RUN_AS|g" \
@@ -756,7 +880,7 @@ if ! python3 - "$health_body" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     doc = json.load(fh)
-ok = doc.get("status") == "ok" and doc.get("healthy", True) is not False
+ok = doc.get("status") == "ok" and doc.get("healthy") is True
 raise SystemExit(0 if ok else 1)
 PY
 then
@@ -783,9 +907,8 @@ log_ok "/ready 通过"
 if [[ "$NO_SYSTEMD" == "1" ]]; then
   pid_file="$DATA_DIR/run/openviking.pid"
   [[ -f "$pid_file" ]] || die "缺少 pid 文件: $pid_file"
-  pid=$(cat "$pid_file" 2>/dev/null || true)
-  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null \
-    || die "后台 OpenViking 进程未存活（pid=${pid:-empty}）"
+  read -r pid recorded_start <"$pid_file" || true
+  verify_openviking_pid "$pid" "$recorded_start"
 else
   systemctl is-active --quiet "$SERVICE_NAME" || die "服务不是 active: $SERVICE_NAME"
 fi

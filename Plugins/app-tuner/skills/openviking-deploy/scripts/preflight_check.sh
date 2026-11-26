@@ -386,12 +386,19 @@ import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     doc = json.load(fh)
 server = doc.get("server") or {}
-print(server.get("host") or "127.0.0.1", server.get("port") or 1933,
-      1 if server.get("root_api_key") else 0)
+storage = doc.get("storage") or {}
+print(server.get("host") or "127.0.0.1")
+print(server.get("port") or 1933)
+print(1 if server.get("root_api_key") else 0)
+print(storage.get("workspace") or "")
 PY
       )
-      read -r conf_host conf_port conf_has_root <<<"$conf_info"
+      conf_host=$(sed -n '1p' <<<"$conf_info")
+      conf_port=$(sed -n '2p' <<<"$conf_info")
+      conf_has_root=$(sed -n '3p' <<<"$conf_info")
+      conf_workspace=$(sed -n '4p' <<<"$conf_info")
       info "ov.conf 监听: $conf_host:$conf_port（root_api_key=${conf_has_root}）"
+      info "ov.conf storage.workspace: $conf_workspace"
       if [[ "$conf_host" != "127.0.0.1" && "$conf_host" != "localhost" && "$conf_host" != "::1" && "$conf_has_root" != "1" ]]; then
         fail "ov.conf 监听 $conf_host 不是回环地址，但未配置 server.root_api_key"
       fi

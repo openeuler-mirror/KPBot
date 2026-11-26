@@ -78,6 +78,7 @@ secure_path() {
 
 untrusted_parent_reason() {
   local dir=$1
+  local allow_uid=${2:-0}
   local parent perm owner bits
   parent=$(dirname "$dir")
   while [[ "$parent" != "/" && "$parent" != "." ]]; do
@@ -85,8 +86,8 @@ untrusted_parent_reason() {
       owner=$(stat -c '%u' "$parent")
       perm=$(stat -c '%a' "$parent")
       bits=$((8#$perm))
-      if [[ "$owner" != "0" ]]; then
-        printf '%s 不属于 root' "$parent"
+      if [[ "$owner" != "0" && "$owner" != "$allow_uid" ]]; then
+        printf '%s 不属于 root 或允许的运行用户（uid=%s）' "$parent" "$owner"
         return 1
       fi
       if (((bits & 0022) != 0 && (bits & 01000) == 0)); then

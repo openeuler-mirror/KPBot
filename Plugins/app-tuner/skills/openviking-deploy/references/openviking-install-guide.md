@@ -42,9 +42,14 @@
 - 默认分支是移动分支：部署完成后必须把 `git rev-parse HEAD` 写入 `deploy.env` 的
   `OPENVIKING_COMMIT`，同时记录 `OPENVIKING_BRANCH` 与 `OPENVIKING_PACKAGE_VERSION`。
 - 指定 tag（如 `v0.3.22`）、分支或 commit 时按 ref checkout；tag 与 commit 更适合可复现环境。
-  需要 GPG 校验时加 `--verify-signature`，脚本对 tag 执行 `git verify-tag`，对分支/commit
-  执行 `git verify-commit`，结果写入 `OPENVIKING_SIGNATURE_VERIFIED`。
-- 离线部署用 `--source-dir`，使用目录当前内容；目录自带版本，不能再指定非 main 的 `--version`。
+  需要 GPG 校验时加 `--verify-signature`：脚本按 ref 类型选择 `git verify-tag` 或
+  `git verify-commit`，并用 `git rev-parse <ref>^{commit}` 核对 checkout 的 HEAD，结果写入
+  `OPENVIKING_SIGNATURE_VERIFIED`。
+- `--verify-signature` 与 `--source-dir` 同用时，要求目录是含 `.git` 的工作树；脚本先验签
+  HEAD，再用 `git archive HEAD` 生成干净构建树，避免本地修改/未跟踪文件进入 wheel。
+  无 tag 时构建版本使用 PEP 440 本地版本 `0.0.0+source`。
+- 离线部署用 `--source-dir`，使用目录自带版本；目录自带版本，不能再指定非 main 的 `--version`。
+  未加 `--verify-signature` 时按目录当前内容构建，不声称源码与 commit 完全一致。
 - 已有预编译 wheel 时用 `--wheel`；wheel 的哈希会写入 release 标识，不与源码版本声明混用。
 - 上游推荐的普通用户路径是 `uv tool install openviking --upgrade`；本技能按部署需求默认源码构建，
   不把预编译包当作默认分支。
@@ -175,8 +180,10 @@ bash scripts/install_openviking.sh --ov-conf /root/ov.conf
 脚本会调用 `gen_ov_conf.py --check` 校验 JSON、`embedding.dense`、`vlm`、`storage.workspace`
 及模型/凭据字段，备份旧配置后安装到 `/etc/openviking/ov.conf`。探测监听地址时以配置内
 `server.host`/`server.port` 为准，而不是命令行默认值；配置监听非回环地址时必须包含
-`server.root_api_key`。混合 provider（如 volcengine Embedding + Codex/Kimi/GLM VLM）
-应使用这种方式，不要用共享参数强行生成。
+`server.root_api_key`。`storage.workspace` 也以配置为准：绝对路径直接使用，相对路径按
+服务 `WorkingDirectory`（默认数据目录）解析；脚本会校验父目录、准备实际目录权限，并把
+实际路径写入 `deploy.env` 的 `OPENVIKING_WORKSPACE`。混合 provider（如 volcengine
+Embedding + Codex/Kimi/GLM VLM）应使用这种方式，不要用共享参数强行生成。
 
 ### 4.3 交互式向导
 
@@ -202,8 +209,12 @@ bash scripts/install_openviking.sh --ov-conf /root/ov.conf
 - 数据目录与 workspace 属于运行用户；服务 unit 设置 `HOME` 与 `OPENVIKING_CONFIG_FILE`。
 - unit 使用 `Restart=always`、`RestartSec=5`、`LimitNOFILE=65535`。
 - 覆盖已有 unit 前生成 `.bak.<时间戳>`，然后 `systemctl daemon-reload` 并重启。
-- `--no-systemd` 时使用 `nohup` 后台进程与 pid 文件，日志写入 `/var/log/openviking/server.log`；
-  该模式不提供开机自启与自动重启。
+- 优先使用 systemd 托管。`--no-systemd` 时使用 `nohup` 后台进程与 pid 文件，日志写入
+  `/var/log/openviking/server.log`；该模式不提供开机自启与自动重启。
+- 无 systemd 重装时，`run/` 目录为 `root:<运行组> 0750`，pid 文件由 root 写入
+  （`root:<运行组> 0640`），记录 `PID + /proc/<pid>/stat 启动时间`；发信号前校验启动时间、
+  进程属主、`/proc/<pid>/exe` 与命令行中的 release 路径，任一不符即停止部署，避免 PID 复用
+  误停其他服务。不要手工编辑 pid 文件。
 
 ## 6. 验收
 
@@ -217,7 +228,7 @@ curl -fsS http://127.0.0.1:1933/ready
 
 判定：
 
-- `/health`：进程存活，返回 `status: ok` 且 `healthy: true`
+- `/health`：进程存活，返回 `status: ok` 且 `healthy` 必须为 JSON 布尔 `true`（缺失、null、0 均不通过）
 - `/ready`：依赖就绪，返回 `status: ready`；模型不可用时会给出具体检查项
 - `doctor`：配置、模型访问与认证检查通过，退出码 0
 - `deploy.env`：`DEPLOY_STATUS=ok`、`OPENVIKING_HEALTH=ok`、`OPENVIKING_READY=ok`

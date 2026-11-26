@@ -194,6 +194,14 @@ for marker in (
     "url_has_userinfo",
     "set_deploy_failed",
     "!/^DEPLOY_STATUS=/",
+    "verify_openviking_pid",
+    "recorded_start",
+    "archive --format=tar",
+    "refs/tags/",
+    "0.0.0+source",
+    "conf_workspace",
+    "prepare_workspace",
+    'doc.get("healthy") is True',
     "chmod -R u=rwX",
     "0640",
 ):
@@ -537,9 +545,33 @@ with tempfile.TemporaryDirectory(prefix="openviking-deploy-check-") as tmp:
             and ("userinfo" in detail or "用户名/密码" in detail),
             detail,
         )
+
+        custom_ws = tmp_dir / "custom-ws"
+        ov_conf = tmp_dir / "ov.conf"
+        ov_conf.write_text(
+            json.dumps(
+                {
+                    "server": {"host": "127.0.0.1", "port": 1933},
+                    "storage": {"workspace": str(custom_ws)},
+                    "embedding": {"dense": {"provider": "ollama", "model": "m"}},
+                    "vlm": {"provider": "ollama", "model": "v"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        proc = run_process(
+            [bash_bin, str(installer), "--ov-conf", str(ov_conf), "--dry-run"]
+        )
+        detail = "" if proc is None else (proc.stdout or "") + (proc.stderr or "")
+        record_behavior(
+            "ov_conf_workspace_used",
+            proc is not None and proc.returncode == 0 and str(custom_ws) in detail,
+            detail,
+        )
     else:
         record_behavior("untrusted_source_dir_rejected", False, "bash not found")
         record_behavior("git_url_userinfo_rejected", False, "bash not found")
+        record_behavior("ov_conf_workspace_used", False, "bash not found")
 
 # ---- 8. documented flags must exist in scripts ----
 script_text = "\n".join(read(p) for p in sorted(SCRIPTS_DIR.glob("*.sh"))) + "\n" + read(gen_script)

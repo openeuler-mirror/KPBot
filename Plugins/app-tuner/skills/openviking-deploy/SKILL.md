@@ -69,8 +69,10 @@ bash scripts/install_openviking.sh --version v0.3.22 --provider openai \
 bash scripts/install_openviking.sh --ov-conf /root/ov.conf
 bash scripts/install_openviking.sh --source-dir /root/OpenViking --provider ollama \
   --embedding-model nomic-embed-text --vlm-model llava
-bash scripts/install_openviking.sh --wheel /root/openviking-*.whl
-bash scripts/install_openviking.sh --dry-run
+bash scripts/install_openviking.sh --wheel /root/openviking-*.whl \
+  --provider ollama --embedding-model nomic-embed-text --vlm-model llava
+bash scripts/install_openviking.sh --dry-run \
+  --provider ollama --embedding-model nomic-embed-text --vlm-model llava
 ```
 
 模型信息不全时先确认 provider、Embedding/VLM 模型、API Base、workspace 与 API key 交付方式，
@@ -95,11 +97,11 @@ bash scripts/install_openviking.sh --dry-run
 | 参数 | 说明 |
 |------|------|
 | `--version REF` | 版本/分支/commit，默认 main |
-| `--verify-signature` | 对 tag/commit 做 GPG 校验（需已导入公钥） |
+| `--verify-signature` | 对 tag/commit 做 GPG 校验；source-dir 从验签对象生成干净构建树 |
 | `--git-url URL` | 仅 http(s)://，不得含 userinfo；本地源码用 `--source-dir` |
 | `--source-dir DIR` / `--wheel FILE` | 离线源码 / 预编译 wheel（root 属主，组/其他不可写） |
 | `--prefix` / `--build-root` / `--result-dir` | 安装前缀 / 构建缓存（root:root 0700）/ 日志与产物 |
-| `--ov-conf FILE` | 接管已有配置；监听地址与端口以配置内 `server.host/port` 为准 |
+| `--ov-conf FILE` | 接管已有配置；监听地址、端口与 workspace 以配置内 `server.*`/`storage.workspace` 为准 |
 | `--provider` / `--api-base` / `--embedding-model` / `--vlm-model` | 生成配置所需的模型信息 |
 | `--api-key-file` / `--root-api-key-file` | API key / 非回环监听的 root key（均要求 0600） |
 | `--workspace` / `--host` / `--port` | workspace / 监听地址 / 端口（默认 127.0.0.1:1933） |
@@ -119,6 +121,8 @@ bash scripts/install_openviking.sh --dry-run
 - Rust 缺失时默认失败；仅 `--install-rust` 才下载 rustup-init 并做官方 `.sha256` 校验，
   禁止把下载内容直接管道给 shell，禁止关闭 TLS 校验。
 - 服务以专用用户运行；不自动改防火墙、SELinux、内核参数；不删除旧 release、配置与数据。
+- 无 systemd 重装时 pid 文件记录 PID 与启动时间；发信号前校验启动时间、属主、可执行文件与
+  命令行，身份不符直接停止部署。
 - 结果目录 `logs/`、`env/` 为 0750，日志与 `deploy.env` 为 0640，避免凭据类残留被本地用户读取。
 
 ## 模型配置（先问再做）
