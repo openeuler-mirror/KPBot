@@ -8,8 +8,8 @@ description: >
   --burst-gap、看 TTFT 各环节占比、TTFT 长尾 P90/P99、定位首 token 延迟在
   tokenize/queue/forward/KV 哪一环。即使用户只说"帮我把这轮压测的 TTFT 日志解析
   一下"或"看看 TTFT 拆解在哪一环"，也应使用此技能。只做本地解析出表，不连远端：
-  日志还在远端时先转 kpbot-tpsplit-log-collector 采集回传（配套 PR 交付），
-  打点 patch 部署归 kptools-tpsplit-log-trace（配套 PR 交付）。
+  日志还在远端时先转 kpbot-tpsplit-log-collector 采集回传（配套 PR #398 交付），
+  打点 patch 部署归 kptools-tpsplit-log-trace（配套 PR #340 交付）。
 license: Proprietary
 compatibility: >
   本地 Windows/Linux（Python 3 + openpyxl，xlsx 输出必需）；不连远端、只读输入
@@ -17,7 +17,8 @@ compatibility: >
   同一次压测、压测需 --save-detailed；采集回传由 kpbot-tpsplit-log-collector
   完成或用户自行回传）；打点须已部署且输出 v3 格式（[TTFT][BREAKDOWN] /
   [TTFT_KVXFER] / [SHM_DEQUEUE] / [LB_DISPATCH] / [TTFT_DRAFT]）；ttft_table.csv
-  契约见本 skill references/ttft_table_contract.md，供下游收益对比分析消费。
+  契约见本 skill references/ttft_table_contract.md，下游收益对比由仓内
+  kptools-tpsplit-report（#329 已合入）消费。
 metadata:
   skill_type: tool_assisted
   category: diagnostics
@@ -125,7 +126,8 @@ D节点Decode / P节点KV传输 / LB分发 / 回传对账。终端另出文字�
 decode、LB、KV、对账、长尾 P90/P99、预热/冷启动警示）。
 
 **CSV 导出（下游对接）**：加 `--csv-out ttft_table.csv` 额外输出一份 10 阶段表，
-供下游 TP 拆分收益对比分析消费（消费方暂在仓外）。首行表头
+供下游 TP 拆分收益对比分析消费（仓内消费方：kptools-tpsplit-report，#329 已合入，
+其表头 10 阶段列与本契约逐一匹配）。首行表头
 `ts,request_id,input_len,ttft_ms,net_lb_ms,fe_inputq_ms,fe_addreq_ms,sched_qwait_ms,
 sched_total_ms,fwd_pure_ms,draft_ms,kv_xfer_ms,shm_dq_ms,other_ms`，每请求一行。
 **完整机器可读契约（表头/守恒式/阶段映射/容差/缺列约定）见
