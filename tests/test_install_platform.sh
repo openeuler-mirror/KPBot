@@ -199,6 +199,8 @@ run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
 check "installs code-optimizer skills"        '[ -d "$CLAUDE_SKILLS/kpbot-code-optimizer" ]'
 check "installs app-tuner skills"             '[ -d "$CLAUDE_SKILLS/kpbot-app-tuner" ]'
+check "installs dplb optimization skill"     '[ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/SKILL.md" ]'
+check "dplb optimization templates survive install" '[ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/references/templates/user_config.json" ] && [ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/references/templates/register.sh" ] && [ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/references/templates/start_motor.sh" ]'
 check "installs prompt capture runtime"       '[ -f "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capture_runtime.py" ]'
 check "prompt capture controller loads"       '"$PY3" "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capturectl.py" --help >/dev/null'
 check "prompt capture report assets load"     '"$PY3" "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/session_view.py" --help >/dev/null'
@@ -222,6 +224,8 @@ run_install opencode
 OPENCODE_SKILLS="$TMPROOT/opencode/.opencode/skills"
 check "installs code-optimizer skills"        '[ -d "$OPENCODE_SKILLS/kpbot-code-optimizer" ]'
 check "installs app-tuner skills"             '[ -d "$OPENCODE_SKILLS/kpbot-app-tuner" ]'
+check "installs dplb optimization skill"     '[ -f "$OPENCODE_SKILLS/kptools-dplb-optimization/SKILL.md" ]'
+check "dplb optimization templates survive install" '[ -f "$OPENCODE_SKILLS/kptools-dplb-optimization/references/templates/user_config.json" ]'
 check "installs prompt capture entry"         '[ -f "$OPENCODE_SKILLS/kptools-prompt-capture/SKILL.md" ]'
 check "prompt capture assets survive install" '[ -f "$OPENCODE_SKILLS/kptools-prompt-capture/assets/session.json" ]'
 check "prompt capture analysis loads"         '"$PY3" "$OPENCODE_SKILLS/kptools-prompt-capture/scripts/analyze.py" --help >/dev/null'
