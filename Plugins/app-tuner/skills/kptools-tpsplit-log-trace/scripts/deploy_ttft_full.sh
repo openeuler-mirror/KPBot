@@ -211,6 +211,23 @@ if [ "${#HOST_FILES[@]}" -gt 0 ]; then
         [[ "$in_md5" = "${HOST_FP[$hf]}"* ]] \
             || die "输入指纹不符: $hf md5=${in_md5:0:8} 期望=${HOST_FP[$hf]} —— 禁止携带未验证版本"
     done
+    # 目标路径预检（同样在写入前完成）：PROXY_TGT/BENCH_TGT 写错（父目录不存在、
+    # BENCH_TGT 不是目录）时，cp 失败会发生在容器 16 文件已被覆盖之后——留下
+    # 『容器已打点、proxy/压测端未打点』的半部署。这里提前拦截，任一目标不可用
+    # 都在覆盖任何文件之前停止。
+    if [ -n "${PROXY_TGT:-}" ]; then
+        ptgt_pre="$(resolve_host_tgt "$PROXY_TGT" "proxy/load_balance_proxy_server_example.py")"
+        pdir="$(dirname "$ptgt_pre")"
+        [ -d "$pdir" ] || die "PROXY_TGT 目标父目录不存在: $pdir（解析自 PROXY_TGT=$PROXY_TGT）—— 写入前停止，未覆盖任何文件"
+        [ -w "$pdir" ] || die "PROXY_TGT 目标父目录不可写: $pdir —— 写入前停止，未覆盖任何文件"
+        if [ -f "$ptgt_pre" ] && [ ! -w "$ptgt_pre" ]; then
+            die "PROXY_TGT 目标文件已存在但不可写: $ptgt_pre —— 写入前停止，未覆盖任何文件"
+        fi
+    fi
+    if [ -n "${BENCH_TGT:-}" ]; then
+        [ -d "$BENCH_TGT" ] || die "BENCH_TGT 必须是已存在且可写的目录（当前不存在或不是目录）: $BENCH_TGT —— 写入前停止，未覆盖任何文件"
+        [ -w "$BENCH_TGT" ] || die "BENCH_TGT 目录不可写: $BENCH_TGT —— 写入前停止，未覆盖任何文件"
+    fi
 fi
 PYC_ERR=0
 for f in "${VLLM_FILES[@]}" "${SP_FILES[@]}"; do
