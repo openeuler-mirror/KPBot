@@ -13,7 +13,7 @@ if grep -q $'\r' "$0" 2>/dev/null; then
   exit 9
 fi
 
-die() { echo "[FATAL] $*" >&2; exit 1; }
+die() { printf '[FATAL] %b\n' "$*" >&2; exit 1; }
 info() { echo "[INFO] $*"; }
 
 usage() {
