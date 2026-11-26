@@ -5,8 +5,8 @@ cd "$(dirname "$0")/.."
 mkdir -p .work
 run_dir=$(mktemp -d .work/eval-XXXXXXXX)
 report="$run_dir/report.json"
-printf '逐项结果 %s\n' "$report"
-python3 bench.py > "$report"
+printf '逐项结果 %s，benchmark 诊断 %s/bench.stderr\n' "$report" "$run_dir"
+python3 bench.py > "$report" 2> "$run_dir/bench.stderr"
 python3 - "$report" <<'PY'
 import json
 import math

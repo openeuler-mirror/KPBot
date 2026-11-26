@@ -11,3 +11,4 @@ assert:
   - type: exit_code
     expect: 0
 # 检查器独立核对三个分数：原版 1，正确候选 8，答错一个用例的候选 0。
+# benchmark 异常退出、输出非 JSON、分数非有限值时，评分入口须非零退出，且 stdout/stderr 均不泄漏可提取的分数。

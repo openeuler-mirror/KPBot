@@ -15,11 +15,13 @@ description: 当用户已有 benchmark，想让 EAT 围绕它做多轮性能优�
 
 ## 写任务说明和评分入口
 
-- **`eat/task.md` 给做优化的 agent 读。** 写清目标、可改的源码、需要固定的评测脚本和参照数据、执行命令及通过条件。以任务能用到的精度写规则，例如“在同一输入上比较每秒完成的请求数”。接原版 EAT 时，把每个角色都要遵守的限制放在 `## Hard Requirements (MUST be in every agent's prompt)` 下。
+- **`eat/task.md` 给做优化的 agent 读。** 写清目标、可改的源码、需要固定的评测脚本和参照数据、执行命令及通过条件。以任务能用到的精度写规则，例如“在同一输入上比较每秒完成的请求数”。接原版 EAT 时，把每个角色都要遵守的限制放在 `## Hard Requirements (MUST be in every agent's prompt)` 下。[EAT 任务文件约定](https://github.com/caoshiyi/EAT/blob/31588e67ef7b44ccc2233b087bd108733960e441/SKILL.md#L49-L56)
 - **`eat/eval.sh` 给控制器运行。** 从当前候选调用现有构建和评测入口。项目已有总分时直接转交，需要换算时只实现已约定的公式。保留逐项原始结果或打印它们的保存位置。每次调用使用独立结果，防止失败后读到上一次的分数。
 - **`eat/env.sh` 按需提供。** 若项目已有工具链或运行环境脚本，优先复用。沿用项目指定的输入、预热、线程和绑核设置。
 
-让 stdout 的最后一行是 `SCORE: <有限数值>`，分数越大越好。原版 EAT 的分数提取器读取普通十进制，输出时将科学计数法展开。评测完整结束且规则判零时，给出原因并正常返回零分。依赖缺失、进程中断或缺少必测用例时，保留诊断并按目标运行器的失败约定退出。KPRSICore 只把退出码为 0 且末行分数有效的运行记作有效测量。
+按 EAT 的任务约定，评测完成后在最后一行打印 `SCORE: <数值>`，越大越好。正确性检查判错时打印 `SCORE: 0`。确认得分是有限数值，并用普通十进制输出。EAT `31588e6` 的提取器会把 `SCORE: 1e-3` 读成 `1`。[EAT 评分约定](https://github.com/caoshiyi/EAT/blob/31588e67ef7b44ccc2233b087bd108733960e441/SKILL.md#L49-L53) · [分数提取源码](https://github.com/caoshiyi/EAT/blob/31588e67ef7b44ccc2233b087bd108733960e441/agent_team/launch_stateless.sh#L91-L98)
+
+**评测中途失败，EAT 仍可能读到失败前打印的分数。** 这个版本的 EAT 把评测的 stdout 和 stderr 合写到 `official_eval.txt`，通过 `|| true` 继续执行，再从日志中取最后一个匹配的 `SCORE:`。找不到匹配时返回 `N/A`。把 benchmark 的原始输出单独留档，等必测用例和结果解析都完成后再打印最终分数。若进程中断或报告无效，给出诊断位置、以非零状态退出，并让两个输出流都不含可被提取的分数。[评测调用与日志重定向](https://github.com/caoshiyi/EAT/blob/31588e67ef7b44ccc2233b087bd108733960e441/agent_team/launch_team.sh#L111-L114) · [日志取分逻辑](https://github.com/caoshiyi/EAT/blob/31588e67ef7b44ccc2233b087bd108733960e441/agent_team/launch_stateless.sh#L91-L98)
 
 ## 交付前，换一个候选试试
 
@@ -28,4 +30,4 @@ description: 当用户已有 benchmark，想让 EAT 围绕它做多轮性能优�
 
 交付任务文件、复验命令和两次结果。若只能离线回放评分，要标明真机上待验证的部分。用户可以手工复验分数即完成任务准备。
 
-随包的[评分验收用例](cases/score-contract/case.yaml)用数组读取次数代替墙钟计时，可在普通机器上复验一次正确提分和一次更快但答错的候选。
+随包的[评分验收用例](cases/score-contract/case.yaml)用数组读取次数代替墙钟计时。可在普通机器上核对正确提分和答错判零，并验证 benchmark 异常退出、输出非 JSON、分数非有限值时，评分入口均以非零状态退出。
