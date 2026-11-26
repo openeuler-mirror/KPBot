@@ -1,0 +1,21 @@
+name: workflow-contract
+skill: kptools-kernel-switch
+tier: A
+# 在技能根目录用 Python 3.8+ 与本地 Git 运行。输入为临时仓库、合成启动记录和业务探针。
+# 可直接在本地离线运行，也可从 app-tuner 插件根构建用例镜像。
+build:
+  context: ../../../../../../..
+  dockerfile: skills/agentic-infra/kptools-agentenv-tuning/skills/kptools-kernel-switch/cases/workflow-contract/Dockerfile
+entrypoint: ["python3", "cases/workflow-contract/run.py", "--results-dir", "results"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: tests_run
+    op: gte
+    expect: 12
