@@ -1,0 +1,53 @@
+# 用例：tier A —— ceph-block-storage-deployment skill 契约与部署知识单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 触发语、metadata.category=deployment、
+#                  metadata.domain=distributed_storage、license 对齐域内惯例 MulanPSL-2.0）
+#   引用完整性     references/block-storage-deployment.md 存在，含 "来源 + 文档版本 07" 标注，
+#                  关键内容抽查（ceph-deploy、mon_host、系统配置七项、残留分区清理）
+#   安全守卫       TLS 校验保持开启（update-ca-trust，git 仅命令级绕过且不进代码块）、禁止范围式直清
+#                  （逐机核准 /dev/disk/by-id 清单，排除根盘/挂载盘/现役 OSD）、业务客户端不下发
+#                  client.admin（client.<rbd-app> 限权 keyring）、分阶段验收（mon stat/mgr stat/
+#                  osd stat/整体 HEALTH_OK）、OSD 普通与 DB/WAL 外置互斥分支、
+#                  mon_host 与 MON 节点规划逐项核对（不含 client1 的 .160、补齐 ceph3）、
+#                  §3.3 分区指针指向 §6.2 且单 NVMe 布局（无 nvme1n1）、§7.2 setfacl 仅授
+#                  client.ro-status 只读 keyring（不对 client.admin keyring 授 ACL，排障后回收）、
+#                  OS 矩阵命令（yum 安装 acl、pip/pip3，无 apt install/pip2）、备份 cp -n +
+#                  .bak.<run_id>（无固定 .bak 裸名与 mv 覆盖）、免密信任域最小化（ssh-copy-id
+#                  循环仅覆盖服务端）、ceph-deploy 固定 v2.1.0 克隆 + rev-parse 核对
+#   边界表         SKILL.md 含姊妹 skill ceph-ansible-deployment / ceph-object-storage-deployment /
+#                  ceph-file-storage-deployment 路由且带同批 PR #445/#447/#448「尚未合入」标注，
+#                  表格管道平衡
+#   evals 契约     evals.json（CBD-E 前缀、expectations 全中文、禁乱码、禁命令注入模式）、
+#                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to）
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/storage/ceph-block-storage-deployment/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/静态，python3+bash 标准库，无真机依赖）。
+
+name: skill-integrity
+skill: ceph-block-storage-deployment
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: integrity_ran
+    op: gte
+    expect: 24
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: integrity_failures
+    expect: 0
