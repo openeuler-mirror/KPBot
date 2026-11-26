@@ -4,8 +4,8 @@
     { "id": "AQ-01", "prompt": "帮我装个负载均衡器，后端是 4 个 vLLM 实例", "should_trigger": true, "note": "core scenario: deploy LB for multi-instance inference" },
     { "id": "AQ-02", "prompt": "推理请求分发不均，想用 MindIE Motor 做负载均衡，帮我在这台机器上部署", "should_trigger": true, "note": "explicit MindIE Motor deployment" },
     { "id": "AQ-03", "prompt": "远端已经 pip 装好 motor 了，帮我生成 user_config.json、register.sh 和 start_motor.sh", "should_trigger": true, "note": "config-only generation (stage 4 entry)" },
-    { "id": "AQ-04", "prompt": "我有 motor 编译好的 whl 包，帮我装到远端并把负载均衡配好", "should_trigger": true, "note": "end-to-end LB deployment entry: install part delegates to kptools-dplb-optimization-install (method A), config trio generated here after motor ready" },
-    { "id": "AQ-05", "prompt": "内网容器没法访问外网，从源码编译安装 MindIE Motor 做负载均衡", "should_trigger": false, "note": "routes to kptools-dplb-optimization-install（源码编译/安装诉求；装好后由本 skill 续接配置部署）" },
+    { "id": "AQ-04", "prompt": "我有 motor 编译好的 whl 包，帮我装到远端并把负载均衡配好", "should_trigger": true, "note": "end-to-end LB deployment entry: install part delegates to kptools-dplb-optimization-install（配套 PR #440 交付） (method A), config trio generated here after motor ready" },
+    { "id": "AQ-05", "prompt": "内网容器没法访问外网，从源码编译安装 MindIE Motor 做负载均衡", "should_trigger": false, "note": "routes to kptools-dplb-optimization-install（配套 PR #440 交付）（源码编译/安装诉求；装好后由本 skill 续接配置部署）" },
     { "id": "AQ-06", "prompt": "模型负载不均衡想优化，多实例的请求分发怎么弄均匀", "should_trigger": false, "note": "symptom-only wording, no deploy intent: do not auto-trigger; confirm with user first (deploy -> this skill, analysis -> kptools-dplb-profiler, same query family as profiler AQ-01/AQ-02)" },
     { "id": "AQ-07", "prompt": "PD 分离的 prefill 和 decode 实例怎么注册到 coordinator", "should_trigger": true, "note": "PD registration with --prefill/--decode" },
     { "id": "AQ-08", "prompt": "coordinator 默认端口被占了，怎么换端口重新配", "should_trigger": true, "note": "port conflict handling, config regeneration" },
@@ -15,6 +15,6 @@
     { "id": "NQ-04", "prompt": "vLLM 首 token 延迟太长，帮忙定位一下", "should_trigger": false, "note": "routes to kptools-vllm-ttft" },
     { "id": "NQ-05", "prompt": "Java 服务 CPU 高，看看哪个方法在烧", "should_trigger": false, "note": "routes to kptools-arthas" },
     { "id": "NQ-06", "prompt": "Nginx https 短连接场景怎么压测调优", "should_trigger": false, "note": "routes to nginx-optimization" },
-    { "id": "NQ-07", "prompt": "把 motor 升级到新版本，先停掉在跑的 coordinator 再装，配置不动", "should_trigger": false, "note": "routes to kptools-dplb-optimization-install（纯安装/升级/重装诉求，含停旧停服纪律）；装好后需配置/注册再回本 skill" }
+    { "id": "NQ-07", "prompt": "把 motor 升级到新版本，先停掉在跑的 coordinator 再装，配置不动", "should_trigger": false, "note": "routes to kptools-dplb-optimization-install（配套 PR #440 交付）（纯安装/升级/重装诉求，含停旧停服纪律）；装好后需配置/注册再回本 skill" }
   ]
 }

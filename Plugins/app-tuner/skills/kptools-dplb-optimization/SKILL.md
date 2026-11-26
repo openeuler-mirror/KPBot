@@ -5,7 +5,7 @@ description: >
   提出部署/配置负载均衡组件的动作时使用本技能：生成或修改 user_config.json / register.sh /
   start_motor.sh 配置三件套、启动 coordinator 并注册后端实例、调整 vLLM 或 MindIE 多实例的
   LB 策略配置。MindIE Motor 软件本体的安装/编译/升级/重装（自备 whl、源码编译、cargo 离线、
-  依赖补装）归 kptools-dplb-optimization-install——本 skill 发现未安装或需升级时转它，
+  依赖补装）归 kptools-dplb-optimization-install（配套 PR #440 交付）——本 skill 发现未安装或需升级时转它，
   纯安装/编译/出 whl 类请求不要发给本 skill。用户只描述负载不均衡、推理请求分发不均等
   现象而未提出部署/配置诉求的（如"负载不均想优化"），不要直接触发本技能——先向用户确认
   是否需要部署负载均衡组件；仅要采集负载指标、出均衡性分析或对比报告的诉求，改用
@@ -15,7 +15,7 @@ compatibility: >
   远端 Linux（openEuler/EulerOS 等，aarch64/x86_64）；需要 SSH 访问远端机器；远端需有
   Python >= 3.11（motor 3.x 运行要求；安装前置与解释器一致性检查见阶段 3）；MindIE Motor
   软件本体的安装/编译/升级（含离线 Rust 工具链、grpcio-tools 版本匹配、运行依赖全量补装）
-  归 kptools-dplb-optimization-install
+  归 kptools-dplb-optimization-install（配套 PR #440 交付）
 metadata:
   skill_type: tool_assisted
   category: deployment
@@ -25,7 +25,7 @@ metadata:
 
 # kptools-dplb-optimization：MindIE Motor 负载均衡部署与优化
 
-连接远端机器部署 MindIE Motor 负载均衡（前提：motor 已安装——未装先转 `kptools-dplb-optimization-install`），生成 `user_config.json`、`register.sh`、`start_motor.sh` 三件套配置，启动 coordinator、注册后端实例，并产出一份部署指南 `.md` 告诉用户如何运行 MindIE Motor。
+连接远端机器部署 MindIE Motor 负载均衡（前提：motor 已安装——未装先转 `kptools-dplb-optimization-install（配套 PR #440 交付）`），生成 `user_config.json`、`register.sh`、`start_motor.sh` 三件套配置，启动 coordinator、注册后端实例，并产出一份部署指南 `.md` 告诉用户如何运行 MindIE Motor。
 
 核心原则：
 
@@ -34,17 +34,17 @@ metadata:
 
 ## 快速决策
 
-1. 用户给了远端机器 + 要求部署/优化负载均衡 → 先做安装前置确认（阶段 3）：motor 未装或需升级/重装 → 转 `kptools-dplb-optimization-install`；就绪后走完整流程（阶段 1 → 5）
+1. 用户给了远端机器 + 要求部署/优化负载均衡 → 先做安装前置确认（阶段 3）：motor 未装或需升级/重装 → 转 `kptools-dplb-optimization-install（配套 PR #440 交付）`；就绪后走完整流程（阶段 1 → 5）
 2. 用户只要生成配置文件（远端已装好）→ 跳到阶段 4
 3. 用户已有配置但负载仍不均 → 先读现有 `user_config.json`（端口/策略）与 `register.sh`（后端实例列表）检查字段，再决定是否重新生成；**部署后需要量化评估均衡效果时，衔接 `kptools-dplb-profiler` 技能**（采集 dp_load_metrics 出单池/A-B 对比报告，本 skill 负责部署、profiler 负责度量）
-4. 用户只要 MindIE Motor 本体的安装/编译/升级（装 whl、源码编译、cargo 离线），不涉及配置启动与策略 → 转 `kptools-dplb-optimization-install`
+4. 用户只要 MindIE Motor 本体的安装/编译/升级（装 whl、源码编译、cargo 离线），不涉及配置启动与策略 → 转 `kptools-dplb-optimization-install（配套 PR #440 交付）`
 5. 用户只描述负载不均衡现象、未提部署/配置诉求 → 先向用户确认意图：要部署负载均衡组件（MindIE Motor）才走本 skill，只要采集指标/分析报告转 `kptools-dplb-profiler`；意图不明时不要直接生成部署配置
 
 ## 阶段 1：信息收集（缺什么问什么，不要猜）
 
 - **远端机器**：SSH 地址（IP、用户名、认证方式）。多台时要明确装在哪台（通常 LB 独占一台，或与某个后端同机）
 - **连接方式**：优先使用 `ssh-mcp-server` 的 `upload` / `execute-command` / `download` 工具；无 MCP 时回退本地 `ssh`/`scp` 命令
-- **安装前置确认**：确认目标机器上 MindIE Motor 已装可用（检查命令见阶段 3）。未装 / 需升级重装 → 转 `kptools-dplb-optimization-install`，装好后回来继续阶段 4；本 skill 不做任何 pip install
+- **安装前置确认**：确认目标机器上 MindIE Motor 已装可用（检查命令见阶段 3）。未装 / 需升级重装 → 转 `kptools-dplb-optimization-install（配套 PR #440 交付）`，装好后回来继续阶段 4；本 skill 不做任何 pip install
 - **后端实例列表**：LB 后面挂的推理实例（vLLM 或 MindIE，均可能），每个实例形如 `ip:port[,ip:port...]`——**同一实例的多个 DP endpoint 用逗号连接**（与 kptools-dplb-profiler 的 DP endpoint 口径一致），不同实例才分开列；询问后端引擎类型（用于网络预检与验证命令，如 vLLM 的 `/v1/models` 探活路径）
 - **网络拓扑**：coordinator 与后端实例是同机、同容器网络还是跨容器/跨机——跨容器部署时，后端地址必须是 **coordinator 所在网络命名空间内可达**的地址（容器网 IP 或已发布端口），否则会出现注册显示健康、推理请求却 500 的情况；推理客户端需要跨机访问 coordinator 时，须把 `coordinator_api_host` 改绑非回环地址（实际 IP / `0.0.0.0`），**且必须先按阶段 4 的管理面鉴权要点开启管理面 API Key**（`start_motor.sh` 内置"非回环 ⇒ 鉴权必须开启"门禁，未开启会拒绝启动）
 - **安装路径**：默认建议 `/opt/mindie-motor`，用户可指定
@@ -64,13 +64,13 @@ ss -ltn 2>/dev/null | grep -E ':(7200|7201|7202)\b' || echo PORTS_FREE
 curl -m 3 -s -o /dev/null http://127.0.0.1:7200/ && echo PORT_7200_ANSWERED
 ```
 
-- 运行依赖预检（whl 未声明 Requires-Dist，按上游 requirements.txt 全量口径）与编译工具链预检（源码编译的 git/gcc/cargo/grpcio-tools、外网连通性）均由 `kptools-dplb-optimization-install` 承担；本 skill 只做阶段 3 的安装前置确认，不做依赖补装
+- 运行依赖预检（whl 未声明 Requires-Dist，按上游 requirements.txt 全量口径）与编译工具链预检（源码编译的 git/gcc/cargo/grpcio-tools、外网连通性）均由 `kptools-dplb-optimization-install（配套 PR #440 交付）` 承担；本 skill 只做阶段 3 的安装前置确认，不做依赖补装
 
 ## 阶段 3：安装前置检查与移交
 
 > **部署形态说明（务必让用户知晓）**：MindIE Motor 采用**独立部署 coordinator** 的方式——它只做负载均衡（请求分发），**不管理 vLLM/MindIE 实例的拉起与生命周期**。后端实例由用户原有方式启动和运维，Motor 通过 register.sh 动态注册感知它们。这样设计是为了让负载均衡器对原有部署方式的影响最小。用户如果以为装了 Motor 会帮忙拉起推理实例，要主动纠正这个预期。
 
-确认 motor 就绪（**只检查，不安装**——安装/编译/升级/重装是 `kptools-dplb-optimization-install` 的职责）：
+确认 motor 就绪（**只检查，不安装**——安装/编译/升级/重装是 `kptools-dplb-optimization-install（配套 PR #440 交付）` 的职责）：
 
 ```
 pip3 show motor            # 包名是 motor（3.x）；早期 1.x whl 包名是 mindie_motor
@@ -78,7 +78,7 @@ python3 -c "import motor; print(motor.__file__)"   # 必须在源码目录之外
 python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn" 2>/dev/null && echo DEPS_OK || echo DEPS_MISSING
 ```
 
-- **pip3 show 查不到 / import 失败 / DEPS_MISSING** → 转 `kptools-dplb-optimization-install`（运行依赖按上游 requirements.txt 全量补装、方式 A whl / 方式 B 源码编译、cargo 离线手册都在该 skill），装好后回本 skill 阶段 4；**不要在本 skill 里直接 pip install**
+- **pip3 show 查不到 / import 失败 / DEPS_MISSING** → 转 `kptools-dplb-optimization-install（配套 PR #440 交付）`（运行依赖按上游 requirements.txt 全量补装、方式 A whl / 方式 B 源码编译、cargo 离线手册都在该 skill），装好后回本 skill 阶段 4；**不要在本 skill 里直接 pip install**
 - **已有旧版本要升级/重装** → 同样转 install（其内置「重装前停旧 coordinator」停服纪律：核对 PID 文件对应进程身份后 kill、等退出再重装）；重装完成后回本 skill，**必须重新走阶段 4/5 并重新执行 register.sh**（注册表是内存态，重启即清空）
 - **解释器一致性**：pip3 装进哪个 Python（系统 / venv / 容器内自编译解释器），start_motor.sh 里的 `python3` 就必须解析到**同一个**——部署前 `which python3` 与 `pip3 show motor`（Location 字段）核对两者指向一致
 - **严禁用 `--help` 做验证**：`python3 -m motor.coordinator.main --help` 不打印帮助，而是直接启动 Coordinator Daemon，占用内置默认端口 1025（推理）/ 1026（管理）/ 1027（观测）；误启动的清理方法见阶段 5 常见问题
@@ -109,7 +109,7 @@ python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvi
 
 在用户指定目录（或安装路径）生成 `MindIE_Motor_部署指南.md`，包含：
 
-1. 本次部署的信息摘要（机器、coordinator 绑定地址与三个端口、prefill/decode 实例列表、模型名、调度策略；motor 安装方式与版本可标注「见 kptools-dplb-optimization-install 交付记录」）；**跨机部署必检项：管理面 API Key 已启用**（`mgmt_api_key_config.enable_api_key: true`、密钥文件存在且权限 600、register 命令带 `--mgmt-api-key-file`）——绑定地址非回环而未开启鉴权时 start_motor.sh 门禁会直接拒绝启动；同机回环部署（127.0.0.1）标注"仅本机监听，管理面未对外暴露"
+1. 本次部署的信息摘要（机器、coordinator 绑定地址与三个端口、prefill/decode 实例列表、模型名、调度策略；motor 安装方式与版本可标注「见 kptools-dplb-optimization-install（配套 PR #440 交付） 交付记录」）；**跨机部署必检项：管理面 API Key 已启用**（`mgmt_api_key_config.enable_api_key: true`、密钥文件存在且权限 600、register 命令带 `--mgmt-api-key-file`）——绑定地址非回环而未开启鉴权时 start_motor.sh 门禁会直接拒绝启动；同机回环部署（127.0.0.1）标注"仅本机监听，管理面未对外暴露"
 2. **部署形态说明**：MindIE Motor 为独立部署的 coordinator，不管理 vLLM/MindIE 实例的拉起——后端实例需由用户按原有方式先行启动，再通过 register.sh 注册
 3. 启动步骤：执行 `bash start_motor.sh`（脚本内置 `mkdir -p ./log` 与 PID 落盘），通过 `tail -f ./log/motor_coordinator.log` 与 `curl -s http://<coordinator_api_host>:<coordinator_api_mgmt_port>/liveness`、`curl -s http://<coordinator_api_host>:<coordinator_api_mgmt_port>/readiness` 确认管理端口就绪——地址与端口取 user_config.json 实际配置（绑实际网卡 IP 时用该 IP，不要写死 127.0.0.1）
 4. 后端网络预检：在 coordinator 所在机器/容器内 `curl -m 5 http://<backend_ip>:<port>/v1/models` 逐个确认后端可达——这是端到端推理的前置条件，宿主机可达不代表 coordinator 容器内可达
@@ -119,20 +119,20 @@ python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvi
    - **推理请求 HTTP 500 `{"detail":"No instance available for role PDRole.ROLE_P"}`，coordinator 日志出现 `All connection attempts failed` / `Connection refused`**：后端在 coordinator 所在网络不可达（典型为跨容器/网络命名空间端口未互通），**不是配置字段错误**。处理：在 coordinator 容器内 `curl http://<backend>:<port>/v1/models` 复核；将后端端口发布到 coordinator 所在网络，或改用容器网内可达地址；修复后复测端到端推理。注意 register.sh 健康检查通过不能证明 coordinator 可达后端
    - **端口占用**：`ss -ltn | grep -E ':(<三个端口>)\b'` 检查；被占用则整套换端口（如 7300/7301/7302），并同步 user_config.json 与 register.sh 的 `--mgmt-port`
    - **误启动占用 1025/1026/1027**（如误用 `--help`）：`ps -ef | grep motor.coordinator.main` 找到 PID 后 `kill <PID>`，勿用 `pkill -f`（会误杀当前 shell）
-   - **离线依赖缺失**：`ModuleNotFoundError`（fastapi/pydantic/zmq/msgspec/OpenSSL/watchdog 等任意模块）→ whl 不带依赖声明，依赖补装归 `kptools-dplb-optimization-install`（按上游 `requirements.txt` 全量补装，离线走上游 standalone.md 附录 A 的 pip download 方式），**不要只补报错的那一个模块**
+   - **离线依赖缺失**：`ModuleNotFoundError`（fastapi/pydantic/zmq/msgspec/OpenSSL/watchdog 等任意模块）→ whl 不带依赖声明，依赖补装归 `kptools-dplb-optimization-install（配套 PR #440 交付）`（按上游 `requirements.txt` 全量补装，离线走上游 standalone.md 附录 A 的 pip download 方式），**不要只补报错的那一个模块**
    - **管理端口裸暴露**：`coordinator_api_host` 绑非回环地址（实际 IP / `0.0.0.0`）或 mgmt 端口可被本机以外访问而未开启管理面 API Key 时，任何可达主体都能操作管理接口（注册自有后端劫持推理流量 / 注销真实后端致推理 500）。模板默认绑 `127.0.0.1` 规避此问题；确需跨机时按上游 standalone.md 附录 E 配置 `mgmt_api_key_config`（生成密钥文件 + `enable_api_key: true` + `api_key_file`，权限 600/目录 700），register 命令追加 `--mgmt-api-key-file`。start_motor.sh 已内置"非回环 ⇒ 鉴权必须开启"门禁：若手动改绑后未开鉴权，启动被拒绝并给出二选一提示（改回 127.0.0.1 / 补齐鉴权），按提示处理后重试
-   - **coordinator 启动报找不到 `libmindie_workload_shm.so` / 装的是 1.2MB 左右的小 whl**：装到了 `pip3 wheel .` 产出的空壳包（未含 Rust 原生库，coordinator 无 Python 兜底）。处理：转 `kptools-dplb-optimization-install`（空壳拦截、`bash build.sh` 重新编译并重装、无 cargo 时按其离线手册处理）
+   - **coordinator 启动报找不到 `libmindie_workload_shm.so` / 装的是 1.2MB 左右的小 whl**：装到了 `pip3 wheel .` 产出的空壳包（未含 Rust 原生库，coordinator 无 Python 兜底）。处理：转 `kptools-dplb-optimization-install（配套 PR #440 交付）`（空壳拦截、`bash build.sh` 重新编译并重装、无 cargo 时按其离线手册处理）
    - **`import motor` 成功但路径指向源码目录**：在源码目录内执行 import 会命中源码而非 site-packages，验证安装结果必须 `cd` 到源码目录之外再执行
    - **readiness 返回 `{"status":"ok","ready":false}`**：coordinator 已存活但还没有后端注册——启动后、register.sh 执行前的**正常状态**，不是故障（liveness ok + readiness not ready = 等 register）；注册成功后才应变为 `"ready":true`
-   - **重装/重启后"行为没变"**：两种常见原因——① 旧 coordinator 进程没停（停服纪律——核对 PID 文件对应进程身份后才 kill 并等退出——及重装流程见 `kptools-dplb-optimization-install`）；② 重启后忘记重新执行 register.sh（注册表是内存态，重启即清空）
-   - **容器化部署的易失性**：whl 装在容器内 site-packages，容器重建即丢失——持久化要么固化进镜像，要么保留离线安装包与部署流程（安装手册见 `kptools-dplb-optimization-install`）随时可重建；把"容器重建后如何快速恢复"写进部署指南
+   - **重装/重启后"行为没变"**：两种常见原因——① 旧 coordinator 进程没停（停服纪律——核对 PID 文件对应进程身份后才 kill 并等退出——及重装流程见 `kptools-dplb-optimization-install（配套 PR #440 交付）`）；② 重启后忘记重新执行 register.sh（注册表是内存态，重启即清空）
+   - **容器化部署的易失性**：whl 装在容器内 site-packages，容器重建即丢失——持久化要么固化进镜像，要么保留离线安装包与部署流程（安装手册见 `kptools-dplb-optimization-install（配套 PR #440 交付）`）随时可重建；把"容器重建后如何快速恢复"写进部署指南
    - **代理变量未清理导致注册失败**：start_motor.sh 与 register.sh 模板均已内置 unset 代理；手动执行命令（如直接 curl/pip）时需自查
 
 指南中的命令必须与实际生成的文件路径和端口一致，不要写通用化占位路径。
 
 ## 边界与配套拆分说明
 
-- **本 skill 只做部署执行面**（信息收集/环境与端口预检/三件套生成/启动/注册/策略调整/部署指南）；MindIE Motor 软件本体的安装/编译/升级/重装（方式 A 自备 whl / 方式 B 源码编译、运行依赖全量补装、空壳 whl 拦截、cargo 离线安装、重装停服纪律）由 `kptools-dplb-optimization-install` 承载（独立 PR 交付）：本 skill 在阶段 3 发现未装或需升级时转它，装好后回来继续阶段 4。两 PR 建议同批合入，避免过渡期安装触发面悬空。
+- **本 skill 只做部署执行面**（信息收集/环境与端口预检/三件套生成/启动/注册/策略调整/部署指南）；MindIE Motor 软件本体的安装/编译/升级/重装（方式 A 自备 whl / 方式 B 源码编译、运行依赖全量补装、空壳 whl 拦截、cargo 离线安装、重装停服纪律）由 `kptools-dplb-optimization-install（配套 PR #440 交付）` 承载（独立 PR 交付）：本 skill 在阶段 3 发现未装或需升级时转它，装好后回来继续阶段 4。两 PR 建议同批合入，避免过渡期安装触发面悬空。
 - 本 skill 由原「安装+部署一体」形态（v1.0.0 及之前，阶段 3 含安装）拆分而来：方式 A/B、依赖清单、cargo 离线手册（`field-playbook-offline-build.md`）随拆分迁至 install 侧，本仓不再维护。
 - 相邻边界：均衡效果的量化评估（采集 dp_load_metrics CSV / 生成均衡性 HTML 报告）归 `kptools-dplb-profiler` + `kptools-dplb-report`——本 skill 负责部署，profiler 负责度量。
 
