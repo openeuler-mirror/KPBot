@@ -1,0 +1,35 @@
+{
+  "skill_name": "libco-stack-copy-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我们在 AArch64 上使用 libco，共享栈切换成本高，并且协程里的 double 偶尔串值。应该先用这个 skill 吗？",
+      "expected_output": "应该。libco 是本 skill 的首要目标：先冻结 libco 基线，修 ABI 与栈正确性（上下文保存、16B 对齐、d8-d15、共享栈 save/restore 成对性），再判断共享栈拷贝是否为主瓶颈，最后用目标机 ns/switch 和逐字节矩阵验收。",
+      "expectations": [
+        "确认 libco 是首要目标，直接按 libco 文件/结构定位",
+        "先正确性后性能：d8-d15、栈对齐、共享栈 save/restore",
+        "用目标机 ns/switch 和逐字节矩阵验收"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我们的 Go async 服务没有共享栈，也没有用户态上下文切换，能用这个 skill 优化吗？",
+      "expected_output": "不应作为主要方案。async/await 是状态机，不涉及栈切换；本 skill 的首要目标是 libco，其他应用只有具备共享栈、用户态切换或 AArch64 大块拷贝等匹配特征时才参考复用指南。",
+      "expectations": [
+        "识别 async/await 无栈切换，不属于首要适用范围",
+        "不强行套用 d8-d15、save/swap 或块内核",
+        "只在特征匹配时参考次级复用指南"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我们有一个自研 C++ 栈式协程库，AArch64 共享栈，但不是 libco。能否复用这套方法？",
+      "expected_output": "可以作为次级复用：先确认共享栈、用户态切换、AArch64 等特征，再把上下文结构、切换入口、save_buffer 和拷贝层映射到目标代码；接口、阈值和块大小必须按目标应用重测，不能照搬 libco 的结构体偏移或性能数字。",
+      "expectations": [
+        "确认属于次级复用而非 libco 主路径",
+        "要求先做特征匹配和接口映射",
+        "不照搬阈值/结构体偏移/性能数字"
+      ]
+    }
+  ]
+}
