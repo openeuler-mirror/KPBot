@@ -1,0 +1,59 @@
+# 用例：tier A —— ceph-file-expansion skill 契约与文件存储扩容知识单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 触发语、metadata.category=expansion、
+#                  metadata.domain=distributed_storage、license 对齐域内惯例 MulanPSL-2.0）
+#   引用完整性     references/file-expansion.md 存在，含 "来源 + 文档版本 07" 标注，
+#                  关键内容抽查（鲲鹏节点加入 x86 集群、文件存储扩容路径、ceph osd df 容量验证）
+#   边界表         SKILL.md 含姊妹 skill ceph-file-storage-deployment（同批 PR #446，
+#                  尚未合入）、ceph-block-expansion（同批 PR #452，尚未合入）/
+#                  ceph-object-expansion（同批 PR #454，尚未合入）与
+#                  ceph-parameter-tuning / ceph-build（已合入）路由，表格管道平衡
+#   单路径守卫     不含块/对象存储扩容章节标题与两路径专属命令事实（rgw/rbd 等），
+#                  无私网示例 IP 字面量（仅允许 RFC 5737 文档保留地址）
+#   检视闭环守卫   客户端重新挂载步骤 umount 拼写正确（无误拼 umoun）、验证节含
+#                  stat -f / df -h CephFS 挂载验证、NTP 服务端指向 ceph1 198.51.100.156、
+#                  来源标题为 BoostKit 版官方全称
+#   二轮检视守卫   建 OSD 前逐机核对设备标识（by-id/遇错即停）、防火墙收敛需授权、
+#                  pg_num 不可调低且原值采集、密钥不回显不进 argv（受限身份+secretfile）、
+#                  config push 替代 admin 分发、yum 源 https+repo_gpgcheck+精确包名、
+#                  PG 公式官方口径（无 pool_count）、max_mds/ceph fs status 验证、
+#                  §3.2 步骤重新起号、回退步骤环境类还原项、降防护动作授权门禁
+#   三轮检视守卫   mount secretfile 指向纯 key 文件（12.2.11 mount.ceph 语义，keyring 留作
+#                  ceph -s --name 验证，ssh 提取 + scp 传输步骤在位）、未合入姊妹带同批
+#                  PR 编号标注（计数=3）、SELinux permissive 仅新增节点（授权确认 + cp -n
+#                  备份 + 收尾恢复）、免密安全基线（ed25519 -a 100 口令私钥 + agent、
+#                  ssh-keyscan 预填 + StrictHostKeyChecking=yes、from= 来源限定、收尾撤销，
+#                  无 rsa 裸回车形态、StrictHostKeyChecking 新取值字面量禁入、命令块无禁用写法）
+#   evals 契约     evals.json（CFX-E 前缀、expectations 全中文、禁乱码、禁命令注入模式）、
+#                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to 且带 PR 标注）
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/storage/ceph-file-expansion/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/静态，python3+bash 标准库，无真机依赖）。
+
+name: skill-integrity
+skill: ceph-file-expansion
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: integrity_ran
+    expect: 34
+  - type: json_field
+    file: results/result.json
+    field: integrity_failures
+    expect: 0

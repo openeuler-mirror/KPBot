@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-file-expansion",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "鲲鹏节点加入 x86 Ceph 集群扩容，文件存储（CephFS/MDS）路径怎么做",
+      "should_trigger": true,
+      "note": "文件存储扩容路径（Monitor/MGR/MDS/OSD/pgnum）"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "Ceph 集群扩容后文件存储客户端要重新挂载吗，MDS 怎么扩",
+      "should_trigger": true,
+      "note": "文件存储扩容：CephFS 客户端重挂载（受限身份 secretfile）与 MDS 扩容（max_mds、ceph fs status 验证）"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "从零部署一套新的 CephFS 文件存储集群",
+      "should_trigger": false,
+      "note": "routes to ceph-file-storage-deployment（同批 PR #446，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」）"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "Ceph 集群 PG 分布不均，balancer upmap 怎么调",
+      "should_trigger": false,
+      "note": "routes to ceph-parameter-tuning（集群运行期参数调优）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "块存储扩容后怎么在 RBD 存储池创建块设备",
+      "should_trigger": false,
+      "note": "routes to ceph-block-expansion（同批 PR #452，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」）"
+    },
+    {
+      "id": "NQ-04",
+      "prompt": "Ceph 对象存储集群扩容，新增 RGW 实例怎么加",
+      "should_trigger": false,
+      "note": "routes to ceph-object-expansion（同批 PR #454，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」）"
+    }
+  ]
+}
