@@ -99,7 +99,8 @@ proxy：`[LB_DISPATCH] req= wall_recv= client_send= client2proxy_ms= dispatch_ms
 python "<skill目录>/scripts/analyze_ttft.py" "P:prefill.log" -o TTFT.xlsx --one-burst \
     --decode "D:decode.log" --kvxfer "P:prefill.log" \
     --lb "PROXY:load_balance.log" \
-    --detailed "BENCH:manual_xxx_dumpjsonl.json"
+    --detailed "BENCH:manual_xxx_dumpjsonl.json" \
+    --csv-out ttft_table.csv
 ```
 
 - 输入形如 `LABEL:path`：P 节点 LABEL 用机器 IP（如 102/103），D/PROXY/BENCH 用角色名
@@ -118,7 +119,8 @@ python "<skill目录>/scripts/analyze_ttft.py" "P:prefill.log" -o TTFT.xlsx --on
 python analyze_ttft.py "102:P102_prefill.log" "103:P103_prefill.log" -o TTFT_full.xlsx \
     --merge-p --one-burst --decode "D:D103_decode.log" \
     --kvxfer "102:P102_prefill.log" --kvxfer "103:P103_prefill.log" \
-    --lb "PROXY:load_balance.log" --detailed "BENCH:manual_xxx_dumpjsonl.json"
+    --lb "PROXY:load_balance.log" --detailed "BENCH:manual_xxx_dumpjsonl.json" \
+    --csv-out ttft_table.csv
 ```
 
 **输出 Excel 8 个 Sheet**：总览 / Burst各环节 / 逐请求明细 / 机器对比(delta) /
@@ -135,8 +137,14 @@ sched_total_ms,fwd_pure_ms,draft_ms,kv_xfer_ms,shm_dq_ms,other_ms`，每请求�
 时间边界：`ttft_ms = net_lb + 引擎侧 ttft`，与 Σ10 阶段同边界（比 BREAKDOWN
 行的 `ttft=` 多一个 net_lb，回溯日志行时注意差值）；正常行精确守恒且 `other`
 （兜底项）≥ 0；回填增量超出 step_other 信封的行（对应 v3 conserv_err>0）
-other 钳 0、溢出量以守恒差值暴露给下游质量检查并打 stderr 告警；
-input_len 需打点行携带，缺省输出 0。
+other 钳 0、溢出量以守恒差值暴露给下游质量检查并打 stderr 告警。
+**ts 形态与下游限制**：epoch 秒导出为可读时间；相对时钟（≤1e9 小数值）原样
+输出相对秒——下游 kptools-tpsplit-report 只解析日期时间，相对秒形态下其时间
+过滤（如 `--warmup-seconds` 预热过滤）不生效、整轮保留预热请求；脚本检测到
+整轮相对秒时打 stderr 告警，交接 CSV 时须向下游说明该限制。
+**input_len 缺失约定**：需打点行携带，缺失输出**空单元格**（与 ts 缺失同约定，
+0 仅在打点确实为 0 时出现）——下游不得把空值当有效长度，两轮都缺数据时也不会
+误报输入分布一致。
 
 ## 4. 列口径（v3，当前生效）
 
