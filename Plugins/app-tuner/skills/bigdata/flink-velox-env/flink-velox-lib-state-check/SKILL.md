@@ -4,9 +4,9 @@ description: >
   Flink + GlutenFlink（velox 向量化栈）在 `$FLINK_HOME/lib` 里部署状态的只读检查：按 jar 把 lib 判成三种构建之一——
   native（没有任何 gluten/velox jar）、gfv（planner + runtime + loader + velox4j + 14 个运行依赖齐全）、partial（只有一部分，
   类加载会在半途炸）；同一 artifact 多版本并存给 warn；`--expect native|gfv` 声明想要的构建，其它判 fail 并给到达它的动作。
-  逐项 ok/warn/fail + fix + 唯一 next_step。只扫不改：不挪 jar、不重启集群。触发词：lib 里是 native 还是 GFV、
+  逐项 ok/warn/fail + fix + 唯一 next_step。只扫不改：不挪 jar、不重启集群。触发词：lib 里是 native 还是 GlutenFlink、
   部署齐不齐、gluten jar 在不在、多版本并存、partial。不负责：集群实际加载了哪套 → flink-velox-cluster-check；
-  编译并部署进 lib → 构建部署类 skill（审中 !324）；"能不能编译 GFV 栈"的总裁决 → flink-velox-env-check。
+  编译并部署进 lib → 构建部署类 skill（审中 !324）；"能不能编译 GlutenFlink 栈"的总裁决 → flink-velox-env-check。
 compatibility: Linux (aarch64/x86_64)，Python 3.7+ 标准库
 metadata:
   skill_type: tool_assisted
@@ -18,13 +18,17 @@ metadata:
 
 # Flink lib 部署状态检查
 
-GFV 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime / loader 三个 jar、velox4j，以及构建脚本一并拷进去的 14 个运行依赖（guava、arrow 系列、jackson 系列等）。lib 里**没有**这些 jar 就是 native 构建；**全有**是 GFV 构建；**只有一部分**是最坏的状态——作业提交后类加载在半途失败，报错离"少拷了一个 jar"很远。本 skill 只做一件事：**按 jar 名把 lib 判成三种构建之一，缺的点名，多版本的提示**。它是 `flink-velox-env` 检查家族里"lib 部署状态"这一具体项：只读、不改动机器、不挪 jar、不重启集群。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+GlutenFlink 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime / loader 三个 jar、velox4j，以及构建脚本一并拷进去的 14 个运行依赖（guava、arrow 系列、jackson 系列等）。lib 里**没有**这些 jar 就是 native 构建；**全有**是 GlutenFlink 构建；**只有一部分**是最坏的状态——作业提交后类加载在半途失败，报错离"少拷了一个 jar"很远。本 skill 只做一件事：**按 jar 名把 lib 判成三种构建之一，缺的点名，多版本的提示**。它是 `flink-velox-env` 检查家族里"lib 部署状态"这一具体项：只读、不改动机器、不挪 jar、不重启集群。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+
+## 术语
+
+这套栈的官方叫法是 GlutenFlink；`gfv` / `GFV` 是代码与契约层沿用的缩写，指同一构建，按既有契约保留原名——CLI 取值与 JSON 值 `gfv`（`--expect gfv`、`build: gfv`）、JSON 键 `gfv_jars`、脚本与用例里的变量名（`GFV_JAR_RE` / `GFV_JARS`）、项目名 GFVBot。
 
 ## 使用场景
 
 ### 适用（应使用本 skill）
 
-- 编译部署之后，确认 GFV 构建完整地进了 lib（没有漏掉运行依赖）
+- 编译部署之后，确认 GlutenFlink 构建完整地进了 lib（没有漏掉运行依赖）
 - 作业报 `ClassNotFoundException` / `NoClassDefFoundError` 时先看 lib 是不是 partial
 - 跑 native 侧之前确认 lib 里没有 gluten/velox jar（`--expect native`）
 - lib 里出现同一 artifact 的多个版本（多次部署没清理）时点名多余 jar
@@ -35,7 +39,7 @@ GFV 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime
 - 集群进程**实际加载**了哪套、lib 改了之后集群是否还在跑旧的 → `flink-velox-cluster-check`
 - Flink 安装本身是否完整、版本线 → `flink-velox-flink-dist-check`
 - 编译 velox4j / gluten-flink 并部署进 lib → 构建部署类 skill（审中 !324）
-- "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`
+- "这台机器能不能编译 GlutenFlink 栈"的总裁决 → 统筹 `flink-velox-env-check`
 
 ## 期望（--expect）
 
@@ -43,7 +47,7 @@ GFV 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime
 |---|---|---|
 | `any`（默认） | 只问 lib 里是哪套、齐不齐 | partial；找不到安装 |
 | `native` | 要跑 native 侧：lib 里不能有 gluten/velox jar | gfv、partial |
-| `gfv` | 要跑 GFV 构建：lib 里必须是完整 GFV 集 | native、partial |
+| `gfv` | 要跑 GlutenFlink 构建：lib 里必须是完整 GlutenFlink 集 | native、partial |
 
 ## 检查项
 
@@ -61,7 +65,7 @@ GFV 栈的产物部署在 `$FLINK_HOME/lib`：gluten-flink 的 planner / runtime
 python3 <skill_dir>/scripts/lib_state_check.py [--expect any|native|gfv] [--json] [--out FILE [--overwrite]]
 ```
 
-输出是人读报告：齐了一行 `lib-state   OK       gfv build in /usr/local/flink/lib: complete GFV set: planner runtime loader + velox4j + 14 runtime deps`；不符期望或缺件逐项 `FAIL build: …` 并附 `fix:`；多版本 `WARN duplicates: …`；末尾是 `READY` / `NOT READY` 与 `next:`。要机器消费时加 `--json`（只输出 JSON），要留档再加 `--out <项目内路径>/lib-state-check.json`（留档规则见「环境约定」）。
+输出是人读报告：齐了一行 `lib-state   OK       gfv build in /usr/local/flink/lib: complete GlutenFlink set: planner runtime loader + velox4j + 14 runtime deps`；不符期望或缺件逐项 `FAIL build: …` 并附 `fix:`；多版本 `WARN duplicates: …`；末尾是 `READY` / `NOT READY` 与 `next:`。要机器消费时加 `--json`（只输出 JSON），要留档再加 `--out <项目内路径>/lib-state-check.json`（留档规则见「环境约定」）。
 
 退出码：**0** lib 持有期望的构建且不是 partial（warn 允许）；**1** 不符期望、partial 或找不到安装；**2** 检查本身出错（`error_message` 以 `check aborted:` 开头，此时结论不可信，先看报错）、`--out` 被拒绝（见「环境约定」）或命令行参数非法（stderr 为用法提示，无 JSON）。
 
@@ -98,17 +102,17 @@ python3 <skill_dir>/scripts/lib_state_check.py [--expect any|native|gfv] [--json
       "duplicates": {}, "missing_parts": ["jackson-core", "jackson-databind", "jackson-datatype-jdk8", "jackson-datatype-jsr310"]
     },
     "items": [
-      {"name": "build", "status": "fail", "detail": "an incomplete GFV set is in lib: missing jackson-core, jackson-databind, jackson-datatype-jdk8, jackson-datatype-jsr310 (4 gluten/velox jar(s): …) — half a stack fails at class-loading", "fix": "deploy the complete GFV build into lib, or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent)"}
+      {"name": "build", "status": "fail", "detail": "an incomplete GlutenFlink set is in lib: missing jackson-core, jackson-databind, jackson-datatype-jdk8, jackson-datatype-jsr310 (4 gluten/velox jar(s): …) — half a stack fails at class-loading", "fix": "deploy the complete GlutenFlink build into lib, or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent)"}
     ],
-    "missing": ["build: an incomplete GFV set is in lib: …"],
-    "next_step": "deploy the complete GFV build into lib (missing jackson-core, jackson-databind, jackson-datatype-jdk8, jackson-datatype-jsr310) or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent), then rerun",
+    "missing": ["build: an incomplete GlutenFlink set is in lib: …"],
+    "next_step": "deploy the complete GlutenFlink build into lib (missing jackson-core, jackson-databind, jackson-datatype-jdk8, jackson-datatype-jsr310) or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent), then rerun",
     "error_message": "1 item(s) missing: build"
   }
 }
 ```
 
 - 原始观测 `lib_state`：`build`（native / gfv / partial / null）、`lib`、`flink_home` / `found_via`、`gfv_jars`（所有 gluten/velox jar，按名序）、`gluten_jars`（三个 artifact 各自的 jar）、`velox4j_jars`、`runtime_deps`（`expected` 14 / `missing` artifactId 列表）、`duplicates`（artifact → jar 列表；gluten 三件、velox4j 与运行依赖都算）、`missing_parts`；`items` 是逐项判定（`name` / `status` / `detail`，fail 另带 `fix`），`status` 是全部条目的最差值
-- `success`：没有 fail。`missing`：fail 条目，形如 `build: an incomplete GFV set …`
+- `success`：没有 fail。`missing`：fail 条目，形如 `build: an incomplete GlutenFlink set …`
 - 失败形态：`success: false`，`error_message` 形如 `1 item(s) missing: build`；检查崩溃：退出码 2，JSON 仍是完整契约形态（`status: fail`、空观测与条目、`next_step` 指向先修检查错误），`error_message` 以 `check aborted:` 开头
 
 ## 边界与相邻 skill

@@ -23,6 +23,10 @@ metadata:
 
 velox 及 gluten-flink 原生部分依赖一批 C++ 库：一半来自发行版包管理器（libevent、openssl、re2、zstd、lz4 …），另一半由 velox 自己的 setup 脚本从源码构建装进 `/usr/local`（boost/folly 链、protobuf、arrow …）。缺哪个，编译都在半途才炸成一句 `fatal error: xxx.h: No such file or directory`，看不出还缺几个。本 skill 只做一件事：**把这批库按两层逐个探测一遍，缺的说清该装哪个包、该跑哪个安装函数**。它是 `flink-velox-env` 检查家族里"C++ 依赖"这一具体项：只读、不改动机器、不装包、不编译。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
+## 术语
+
+这套栈的官方叫法是 GlutenFlink；`GFV` 是代码与契约层沿用的缩写，指同一生态，按既有契约保留原名——环境变量 `GFV_REPOS_DIR`（GFV 各仓库的检出根）、项目名 GFVBot。
+
 ## 使用场景
 
 ### 适用（应使用本 skill）

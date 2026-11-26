@@ -39,4 +39,4 @@
 
 ## 5. 来源
 
-nexmark 的两件（jar 进 Flink lib、可运行树 = `nexmark-flink/src/main/resources`）与构建命令（`mvn -pl nexmark-flink -am package`）来自 GFV 安装器的 nexmark 构建步骤；可运行树的三个候选位置与安装器落盘位置一致。
+nexmark 的两件（jar 进 Flink lib、可运行树 = `nexmark-flink/src/main/resources`）与构建命令（`mvn -pl nexmark-flink -am package`）来自 GFVBot 安装器的 nexmark 构建步骤；可运行树的三个候选位置与安装器落盘位置一致。
