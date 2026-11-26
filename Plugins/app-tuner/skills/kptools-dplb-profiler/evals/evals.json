@@ -3,28 +3,18 @@
   "evals": [
     {
       "id": "DP-E01",
-      "query": "推理集群各引擎忙闲不均，现场采集 30 分钟分析下负载均衡状况",
-      "expected": "触发 kptools-dplb-profiler，走流程 A：urls.txt + extract_metric_v2.sh 现场轮询，下载 CSV 后 generate_report.py 出单池报告，按效应量（LIF/失衡比）与业务影响判读，短窗口附范围说明"
+      "query": "推理集群各引擎忙闲不均，现场采集 30 分钟的负载数据",
+      "expected": "触发 kptools-dplb-profiler，走流程 A：urls.txt + extract_metric_v2.sh 现场轮询（节点列表查 cluster_registry.md 或问用户），下载 CSV 后按 A4 验证质量并按上下文命名，然后交接给 kptools-dplb-report 生成单池报告（报告侧由配套 PR openeuler/KPBot#331 合入，先于/同批于本 PR 合入后期望可满足；未合入环境按 SKILL.md 降级路径：交付 CSV 与获取指引，不自行生成报告）"
     },
     {
       "id": "DP-E02",
-      "query": "从 Prometheus 回采昨天 10:00-18:00 这段时间的负载数据，出均衡性报告",
-      "expected": "走流程 A2：extract_metric_prom.py 直连 Prometheus（--list-jobs 先确认窗口内有效 job），回采产出 30 列 CSV 后进报告；job 查空时按模糊建议修正前缀"
+      "query": "从 Prometheus 回采昨天 10:00-18:00 这段时间的负载数据",
+      "expected": "走流程 A2：extract_metric_prom.py 直连 Prometheus（--list-jobs 先确认窗口内有效 job），回采产出 30 列 CSV；job 查空时按模糊建议修正前缀；PD 双池用 --pool 一次回采"
     },
     {
       "id": "DP-E03",
-      "query": "PD 分离集群，P 池和 D 池同时采集负载指标对比均衡性",
-      "expected": "流程 A 的 A-PD 小节：extract_metric_pd.sh 双 urls 同轮并行采集，产出 _P_/_D_ 两份 CSV，各自生成单池报告（不做 A vs B 对比）"
-    },
-    {
-      "id": "DP-E04",
-      "query": "我这里已经有一份 dp_load_metrics CSV，帮我直接出分析报告",
-      "expected": "流程 B：跳过采集，直接 generate_report.py 解析；单份出单池报告，两份出 A/B 对比；PD 双池 CSV 提醒各自出单池报告"
-    },
-    {
-      "id": "DP-E05",
-      "query": "对比 proxy 和 coordinator 两种路由策略哪个分发更均衡",
-      "expected": "需要两份等时长等步长 CSV（现场切换策略各采一段，或 Prometheus 回采两个时段），生成 A/B 对比报告：逐指标对照、占优方与改善幅度；两窗均短时提示长时间窗复核"
+      "query": "PD 分离集群，P 池和 D 池同时采集负载指标",
+      "expected": "流程 A 的 A-PD 小节：extract_metric_pd.sh 双 urls 同轮并行采集，产出 _P_/_D_ 两份 CSV（或流程 A2 的 --pool 一次回采）；交接时说明 P、D 各出一份单池报告，不做 A vs B 对比"
     }
   ]
 }
