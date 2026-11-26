@@ -3,38 +3,36 @@
   "evals": [
     {
       "id": 0,
-      "eval_name": "shorter-than-wide-copy",
-      "prompt": "20 字节字符串能从头和尾各复制 16 字节。我想直接把同一个公式套到 13 字节且没有填充的输入上。业务输出必须逐字节相同。该怎么处理？",
-      "expected_output": "13 字节不能直接用尾部回退 16 字节的公式。只在读写范围有证明时走候选，13–15 字节增加安全专用实现或回退。检查逻辑值与实际可访问边界并逐字节比较序列化输出。",
+      "eval_name": "single-writer-hotspot",
+      "prompt": "热点已明确在 Shuffle writer 的 20 字节 memcpy，只允许改这个循环，应该从哪个 skill 实施？",
+      "expected_output": "直接使用 sql-shuffle-fixed-width-copy；总入口只提供阶段选择，不同时执行物化、reader 或 LZ4 改动。",
       "files": [],
       "assertions": [
-        "指出 13 字节直接用通用公式的范围问题",
-        "保留安全回退",
-        "验证实际读写边界和完整输出"
+        "选择写端专用单元",
+        "保留单项修改范围"
       ]
     },
     {
       "id": 1,
-      "eval_name": "codec-compatibility",
-      "prompt": "输入文件用 Snappy Parquet，中间 Shuffle 用 LZ4 Frame。AArch64 的压缩候选查找改用五字节后，部分压缩流发生变化。我该验证什么？",
-      "expected_output": "确认命中的是 Shuffle LZ4，验证实际加载宽度和尾部安全、候选后的真实匹配、双向交叉解码、字节数和耗时。编码流可不同，若项目要求逐字节一致则按契约验证。",
+      "eval_name": "combined-lifetime-and-reader",
+      "prompt": "连接物化与 Shuffle reader 均在热点里，输入缓冲释放后还有悬空视图，如何组织工作？",
+      "expected_output": "由总入口分别选择物化与读端重建单元，分别证明各自缓冲拥有方，再验证缓冲交接和完整行值；不能复用一个阶段的寿命证明。",
       "files": [],
       "assertions": [
-        "区分文件读取和 Shuffle 两条压缩路径",
-        "区分输出流兼容与压缩字节完全一致",
-        "分别核对边界、大小和耗时"
+        "选择两个相关单元",
+        "分开拥有方证据",
+        "组合结果对照"
       ]
     },
     {
       "id": 2,
-      "eval_name": "lifetime-and-sanitizer-failure",
-      "prompt": "复制长串 StringView 指针后马上释放输入。LZ4 两版在同种子 Sanitizer 都失败，是否可以标兼容性通过？",
-      "expected_output": "目标需持有输入或复制到自己拥有的空间；双边同种子失败需定位，不能记为通过。真实四向编解码分别验证。",
+      "eval_name": "locate-codec-before-editing",
+      "prompt": "输入文件是 Snappy Parquet，但 profile 中出现 LZ4；还没确定来自何处，要不要先改 reader？",
+      "expected_output": "先由总入口定位文件与 Exchange 调用链及实际加载库，再决定是否进入 LZ4 单元，不预先改 reader。",
       "files": [],
       "assertions": [
-        "识别悬空引用",
-        "失败未解决不标通过",
-        "要求真实编解码器四组合检查"
+        "区分文件与 Shuffle codec",
+        "先定位后选择"
       ]
     }
   ]

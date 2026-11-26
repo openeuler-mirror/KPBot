@@ -1,0 +1,82 @@
+{
+  "skill_name": "sql-q72-parquet-split-pruning",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "missing-partition",
+      "prompt": "分区键缺失，先当 0 做 Bloom 可以吗？",
+      "expected_output": "不能虚构值，按原 split 提交并记录解析/缺键回退。",
+      "files": [],
+      "assertions": [
+        "未知不剪枝",
+        "原类型解析"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "null-result",
+      "prompt": "原生 Bloom 求值返回 NULL，我想把它当 false 跳过。",
+      "expected_output": "只有成功且非 NULL false 才跳过，NULL 保留原提交。",
+      "files": [],
+      "assertions": [
+        "保持三值保守行为",
+        "保留原求值器"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "bloom-positive",
+      "prompt": "Bloom 为 true，可删除后续日期连接吗？",
+      "expected_output": "true 允许假阳性；提交 split、保留剩余过滤及精确连接。",
+      "files": [],
+      "assertions": [
+        "保留精确验证",
+        "区分可能命中"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "physical-evidence",
+      "prompt": "计划有 Bloom 且 split 文件总大小下降，就能报告实读节省吗？",
+      "expected_output": "还需实际打开及实读字节，提交/跳过计数与文件理论大小分开报告。",
+      "files": [],
+      "assertions": [
+        "真实 IO 证据",
+        "单项配对归因"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "evaluation-error-contract",
+      "prompt": "求值抛了可恢复表达式错误或者内存不足，可以统一忽略并提交 split 吗？",
+      "expected_output": "按目标接口区分错误：可恢复表达式错误回退到原提交，任务取消或内存不足等致命错误保持原传播协议；不能将异常当 false 剪枝。",
+      "files": [],
+      "assertions": [
+        "区分可恢复与致命错误",
+        "保留错误和任务协议"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "all-splits-pruned",
+      "prompt": "所有 split 均由有效原探针判为非 NULL false，返回空清单就证明原生查询能正常结束吗？",
+      "expected_output": "本地空清单只验证提交选择，还需目标引擎验证 no-more-input/任务结束信号、资源释放及空结果；不得用模型空清单替代原生协议证据。",
+      "files": [],
+      "assertions": [
+        "验证原生结束与资源协议",
+        "区分本地模型与引擎证据"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "missing-safe-binding",
+      "prompt": "只有 OR 内的 Bloom 且没有合法绑定，能在提交 split 时顺便提取并拒绝吗？",
+      "expected_output": "由 sql-q72-bloom-partition-binding 判断必要条件；OR 内候选不合法，当前按原提交。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
+    }
+  ]
+}

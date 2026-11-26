@@ -1,0 +1,61 @@
+{
+  "skill_name": "sql-shuffle-fixed-width-copy",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "shorter-than-width",
+      "prompt": "想把 20 字节头尾各 16 字节的公式用到无填充的 13 字节串。",
+      "expected_output": "13 字节尾端回退 16 会越界，回退或另行证明短分支。",
+      "files": [],
+      "assertions": [
+        "识别负偏移",
+        "保留安全回退"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "alias-is-not-tail-overlap",
+      "prompt": "两次目标写重叠安全，所以源目标部分重叠也可以直接做吧？",
+      "expected_output": "区分目标内部重叠与源目标别名；后者可能破坏未读源，沿原 memmove 语义或回退。",
+      "files": [],
+      "assertions": [
+        "区分别名与目标内部重叠",
+        "验证双向别名"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "exact-capacity",
+      "prompt": "目标容量正好等于 offset+length，需要额外 16 字节 padding 吗？",
+      "expected_output": "该头尾公式对合法 16–32 字节无需额外目标空间，所有实际读写仍须在边界内；验证非零偏移及区域外不变。",
+      "files": [],
+      "assertions": [
+        "保留等容量合法路径",
+        "逐字节验证边界"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "chain-not-yet-located",
+      "prompt": "只知道字符串与压缩总耗时高，尚无 writer 热点证据，是否直接套固定拷贝？",
+      "expected_output": "先使用 sql-shuffle-string-codec 定位阶段，再决定是否进入写端实施。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "overlap-source-not-invariant",
+      "prompt": "同一缓冲区目标比源右移一字节，合法 memmove 后源区间部分字节改变，要判失败吗？",
+      "expected_output": "不能把不重叠时的源不变约束用于别名回退。按操作前快照计算整个缓冲的 memmove 期望值，核对目标区外字节不变；源区间内与目标重叠的字节可合法改变。",
+      "files": [],
+      "assertions": [
+        "限定源不变适用范围",
+        "用操作前快照比较整个缓冲",
+        "核对目标区外不变"
+      ]
+    }
+  ]
+}

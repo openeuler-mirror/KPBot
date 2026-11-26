@@ -1,0 +1,50 @@
+{
+  "skill_name": "lz4-hash-candidate-optimization",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "hash-load-width",
+      "prompt": "候选哈希只取五字节，缓冲区剩五字节就能读了吗？",
+      "expected_output": "核实实际机器加载宽度与尾部条件，不能把五字节输入当成五字节加载。",
+      "files": [],
+      "assertions": [
+        "区分哈希输入和加载宽度",
+        "保留尾部路径"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "changed-compressed-stream",
+      "prompt": "输入是 Snappy Parquet，Shuffle 用 LZ4 Frame；候选压缩流不同算失败吗？",
+      "expected_output": "确认热点在 Shuffle LZ4，依契约验证四向真实解码与行值，单独报告流变化及压缩率。",
+      "files": [],
+      "assertions": [
+        "区分两个 codec",
+        "四向真实解码",
+        "测压缩大小"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "both-fail",
+      "prompt": "两版 Sanitizer 同种子都失败，可以视为兼容通过吗？",
+      "expected_output": "不能，保存失败输入并定位；未解决项不得标通过。",
+      "files": [],
+      "assertions": [
+        "失败不冒充通过",
+        "报告未覆盖证据"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "reader-is-not-codec",
+      "prompt": "LZ4 四向解码通过，但 reader 的长串在缓冲复用后损坏，继续改哈希吗？",
+      "expected_output": "进入 sql-shuffle-string-reconstruction 检查 reader 引用寿命，不能用 codec 通过替代行值和拥有方验证。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
+    }
+  ]
+}
