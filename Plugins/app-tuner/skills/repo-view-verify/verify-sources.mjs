@@ -100,6 +100,11 @@ for (const s of sources) {
   }
   const exists = git('cat-file', '-e', `${rev}:${s.path}`);
   if (exists.status !== 0) { failures.push({ subject, problem: `路径在 commit ${rev.slice(0, 12)} 中不存在` }); continue; }
+  // 路径必须指向 blob（文件）——目录（tree）上没有行号可验
+  const type = git('cat-file', '-t', `${rev}:${s.path}`);
+  if (type.status !== 0 || type.stdout.trim() !== 'blob') {
+    failures.push({ subject, problem: `路径在 commit 中是 ${type.stdout.trim() || '不可读'}，不是文件（blob）` }); continue;
+  }
   const total = fileLineCount(s.path);
   if (total < 0) { failures.push({ subject, problem: `git show 读取失败` }); continue; }
   if (s.line < 1) failures.push({ subject, problem: `line 必须 >= 1` });

@@ -38,7 +38,8 @@ node <本skill目录>/verify-sources.mjs <candidate.ir.json> --repo-root <repo-r
 
 # 命令清单方式（无 Node 环境兜底）
 
-逐条执行并把结果附进报告"验证"章节：
+逐条执行并把结果附进报告"验证"章节。**超过 10 条引用时写 shell 脚本批量执行**，
+不要在命令行逐条手打（命令行长度有限制，且容易漏条）：
 
 ```
 git -C <repo> rev-parse --verify <sha>^{commit}
