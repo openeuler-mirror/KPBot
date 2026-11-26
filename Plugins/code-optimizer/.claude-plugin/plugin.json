@@ -99,7 +99,13 @@
     "memory-cost-attribution",
     "memory-lever",
     "hydration",
-    "read-scaling"
+    "read-scaling",
+    "flink",
+    "streaming",
+    "velox",
+    "jni",
+    "wire-format",
+    "changelog"
   ],
   "platforms": [
     "claude",

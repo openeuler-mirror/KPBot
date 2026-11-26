@@ -1,0 +1,50 @@
+{
+  "skill_name": "flink-native-bench-protocol",
+  "evals": [
+    {
+      "id": "same-day-rule",
+      "query": "昨天跑的 native 栈数据和今天跑的原生 Flink 数据能直接算比值吗",
+      "expected": "触发本 skill：判不可比（同日锚定纪元纪律），要求双端同日重跑"
+    },
+    {
+      "id": "tm-heap-misaligned",
+      "query": "native 端 8GB 堆正常跑完、原生端 OOM 后放大到 64GB 重跑，能不能直接出双端倍数",
+      "expected": "触发本 skill：判口径不成立——须双端同口径重跑（对照端同 TM 堆同 JVM 参数），异堆配置轮次不进双端比值；无法对齐只能作带口径差异的参考结论归档"
+    },
+    {
+      "id": "rss-window",
+      "query": "多轮查询复用同一个 TaskManager，RSS 峰值怎么采才不被上一轮重查询污染",
+      "expected": "触发本 skill：采样窗口限定本轮提交至 FINISHED、记录 PID 与采样间隔、禁用 VmHWM 生命周期高点，或每轮独立进程"
+    },
+    {
+      "id": "changelog-tiering",
+      "query": "性能优化前后 print sink 输出折叠结果一致，是不是就可以出性能结论了",
+      "expected": "触发本 skill：先分级——终态承诺用例折叠一致即可；逐条 changelog 承诺用例还须按 key 核对 RowKind、字段与顺序（+I 后 -D 与未发折叠同为空的反例）"
+    },
+    {
+      "id": "duration-only-invalid",
+      "query": "只测了每轮耗时，没记 wire 和 RSS，这轮数据能进汇总吗",
+      "expected": "触发本 skill：不可用于归因——三指标每轮同采，只报 duration 不报资源判废轮"
+    },
+    {
+      "id": "not-code-optimize",
+      "query": "Top-N 算子内存占用比原生高好几倍，怎么优化",
+      "expected": "不触发：改码优化属 code-optimizer 侧 flink-native-stateful-operator-tuning"
+    },
+    {
+      "id": "not-env-check",
+      "query": "GlutenFlink 构建环境缺哪些工具，先检查一下",
+      "expected": "不触发：环境检查属 flink-velox-env 子域"
+    },
+    {
+      "id": "not-config-tuning",
+      "query": "TaskManager 内存和并行度参数怎么配",
+      "expected": "不触发：配置建议属 bigdata-playbook"
+    },
+    {
+      "id": "not-tpcds",
+      "query": "跑一套 TPC-DS 离线批基准对比吞吐",
+      "expected": "不触发：本协议面向流式 nexmark 类双端对比，TPC-DS 口径另立"
+    }
+  ]
+}
