@@ -1,0 +1,12 @@
+name: import-gate
+skill: doris-deployment-benchmark
+tier: A
+entrypoint: ["bash", "cases/import-gate/run.sh"]
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: cases/import-gate/results/result.json
+    field: success
+    expect: true

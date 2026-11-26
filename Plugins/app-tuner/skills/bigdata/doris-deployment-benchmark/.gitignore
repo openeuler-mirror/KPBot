@@ -1,0 +1,5 @@
+/results/
+/experiment/
+/cases/*/results/
+__pycache__/
+/doris-source/

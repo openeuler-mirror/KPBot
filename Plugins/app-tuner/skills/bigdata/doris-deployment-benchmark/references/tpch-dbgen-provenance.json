@@ -1,0 +1,22 @@
+{
+  "artifact": "TPC-H_Tools_v3.0.0new.zip",
+  "url": "https://qa-build.oss-cn-beijing.aliyuncs.com/tools/TPC-H_Tools_v3.0.0new.zip",
+  "sha256": "30f0884c5b89fcddebf7daed264691a46d9e07049a3b89dfeb191b189c30cee3",
+  "size_bytes": 26025147,
+  "digest_kind": "project-pinned",
+  "digest_scope": "SHA-256 over the exact ZIP bytes obtained from url",
+  "source_apache_commit": "09b0cc49a60ffdd444df3e40e5f3dc180299b561",
+  "source_build_script": "tools/tpch-tools/bin/build-tpch-dbgen.sh",
+  "source_build_script_sha256": "d632bcc2d35b5da6f61026c697b8d53dde1ec58f5f42a9847c1d230ae7c9c7d2",
+  "source_note": "The pinned Apache Doris build script at source_apache_commit downloads this exact URL before unzip and make.",
+  "provenance": "The digest was computed on 2026-11-23 from the URL over certificate-validated HTTPS and recorded by this project. It is a project-pinned artifact digest, not a publisher signature; prefer an independently published authoritative checksum if one becomes available.",
+  "inspected_contents": {
+    "entries": 8771,
+    "top_level": "TPC-H_Tools_v3.0.0/",
+    "includes": [
+      "TPC-H_Tools_v3.0.0/dbgen/",
+      "TPC-H_Tools_v3.0.0/dbgen/makefile.suite",
+      "TPC-H_Tools_v3.0.0/dbgen/dss.ddl"
+    ]
+  }
+}
