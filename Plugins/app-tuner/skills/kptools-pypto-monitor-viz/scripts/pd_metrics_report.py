@@ -68,6 +68,12 @@ def read_logs(paths):
                         raise ValueError("expected PyPTO diagnostic version 2")
                     if not isinstance(row.get("event"), str):
                         raise ValueError("event must be a string")
+                    # 只消费 span 类型——PD_DIAG v2 的 event 还有其他类型
+                    # （如 counter/gauge），它们没有 span 字段，混入会令
+                    # metrics()/group_rows() 产生幽灵匹配（span 字段在非
+                    # span 行上可能有残留值或缺失）
+                    if row["event"] != "span":
+                        continue
                     for key in ("request_id", "role", "span", "host", "run_id"):
                         if row.get(key) is not None and not isinstance(row[key], str):
                             raise ValueError(f"{key} must be a string")
