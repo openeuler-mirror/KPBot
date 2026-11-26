@@ -1,0 +1,127 @@
+{
+  "skill_name": "kml-fft-tuning",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "我们气象代码从 x86 迁到鲲鹏以后，FFT 那块想换成厂商的数学库，kml_fft_plan_dft 的参数顺序和 FFTW 一样吗",
+      "should_trigger": true,
+      "note": "KML 接口与迁移信号（kml_fft_plan_dft / 厂商数学库）"
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "kml 的 plan 建完是不是每次都要 destroy_plan，我这边是每秒建几百次，感觉全耗在规划上了",
+      "should_trigger": true,
+      "note": "plan 生命周期与规划成本信号（destroy_plan / 每秒建 plan）"
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "鲲鹏上这份气象代码只跑一次 FFT，KML 的 ESTIMATE 和 PATIENT 到底差多少，直接 ESTIMATE 行不行",
+      "should_trigger": true,
+      "note": "flags 两档语义信号（ESTIMATE / PATIENT）"
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "鲲鹏上把 4096 点实数序列做 KML 的 R2C 变换，out 数组到底开多大才不会越界",
+      "should_trigger": true,
+      "note": "R2C 输出尺寸信号（半复数 out 大小）"
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "kml_fft_plan_with_nthreads 我调了 8，但是 perf 看还是一个线程在跑，是不是顺序搞错了",
+      "should_trigger": true,
+      "note": "线程数不生效信号（plan_with_nthreads 顺序）"
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "多机 FFT 的时候 kml_fft_mpi_local_size 返回的到底是元素个数还是字节，我要按它 malloc 吗",
+      "should_trigger": true,
+      "note": "MPI 本地尺寸信号（local_size 元素数 vs 字节）"
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "3D FFT 15 个进程，SCALFFT_PROC_GRID 设成 1,3,5 对不对，还需要动别的环境变量吗",
+      "should_trigger": true,
+      "note": "3D 扩展环境变量信号（SCALFFT_PROC_GRID）"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "DCT 用 KML 的 r2r 接口，kind 数组每一维都要填吗，REDFT10 和 REDFT01 有什么区别",
+      "should_trigger": true,
+      "note": "r2r kind 语义信号（REDFT10 / REDFT01）"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "c2r 变换回去以后数值比原来大好几倍，是不是要自己除 N",
+      "should_trigger": true,
+      "note": "c2r 归一化信号（数值放大是否除 N）"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "我们自己有 split 格式的复数数组（实部虚部分开存），KML 有没有不用先交错的办法",
+      "should_trigger": true,
+      "note": "split 布局信号（实虚分开存的 guru_split）"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "FFTW 的 wisdom 文件能不能换机器复用，用不用重新生成",
+      "should_trigger": false,
+      "note": "第三方库自身 wisdom 语义，无对应技能——不得命中本技能"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "FFTW_MEASURE 太慢了，只想缓存 plan 避免每次重建，怎么写",
+      "should_trigger": false,
+      "note": "第三方库自身 plan 缓存语义，无对应技能——不得命中本技能"
+    },
+    {
+      "id": "EQ-13",
+      "prompt": "cuFFT 在 A100 上 batched 变换怎么开多个 stream",
+      "should_trigger": false,
+      "note": "cuFFT / 昇腾以外 GPU 侧 API，无对应技能——不得命中本技能"
+    },
+    {
+      "id": "EQ-14",
+      "prompt": "MPI Allreduce 之后结果差最后几位，是不是归约顺序的问题",
+      "should_trigger": false,
+      "note": "跨架构归约顺序差异 → precision 域（一致性判定），不属本域"
+    },
+    {
+      "id": "EQ-15",
+      "prompt": "鲲鹏上矩阵乘的结果和 x86 差在末位，编译器选项要怎么调",
+      "should_trigger": false,
+      "note": "跨架构末位差与编译选项 → precision 域，不属本域"
+    },
+    {
+      "id": "EQ-16",
+      "prompt": "numpy.fft 和 scipy.fft 哪个处理长序列更快",
+      "should_trigger": false,
+      "note": "numpy/scipy 库选型，无对应技能——不得命中本技能"
+    },
+    {
+      "id": "EQ-17",
+      "prompt": "用 rfft 之后怎么把频谱画成对数坐标的图",
+      "should_trigger": false,
+      "note": "绘图任务，无对应技能——不得命中本技能"
+    },
+    {
+      "id": "EQ-18",
+      "prompt": "Faiss 建 1 亿向量索引要预留多少内存",
+      "should_trigger": false,
+      "note": "向量索引内存 → vectordb 域，不属本域"
+    },
+    {
+      "id": "EQ-19",
+      "prompt": "我这段 C 代码 gcc 编不过，提示 undefined reference to `fftw_execute'",
+      "should_trigger": false,
+      "note": "第三方库链接错误（fftw_execute），无对应技能——不得命中本技能"
+    },
+    {
+      "id": "EQ-20",
+      "prompt": "想批量把 wav 转成 mp3，顺便做个降噪",
+      "should_trigger": false,
+      "note": "音频转码任务，无对应技能——不得命中本技能"
+    }
+  ]
+}
