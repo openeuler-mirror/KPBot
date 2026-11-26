@@ -1,5 +1,5 @@
 {
-  "skill_name": "kptools-tpsplit-optimization（配套 PR #442 交付）-verify",
+  "skill_name": "kptools-tpsplit-optimization-verify",
   "eval_type": "trigger_rate",
   "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
   "queries": [
