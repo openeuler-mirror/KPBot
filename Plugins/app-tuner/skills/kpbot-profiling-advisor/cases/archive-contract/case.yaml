@@ -1,0 +1,17 @@
+# tier A —— archive_report.py 归档契约（ZIP 产出/链接重写/sha256/重名去重/保留名/错误路径）
+# 运行（技能根目录）: python3 cases/archive-contract/run.py
+name: archive-contract
+skill: kpbot-profiling-advisor
+tier: A
+entrypoint: ["python3", "cases/archive-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0

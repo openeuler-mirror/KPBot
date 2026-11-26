@@ -1,0 +1,17 @@
+# tier A —— post_reboot_verify（快照比对/Redfish 需确认路径）+ collect_bmc_credentials（凭据经 env 传递、密码不落盘）
+# 运行（技能根目录）: bash cases/post-reboot-and-credentials-contract/run.sh
+name: post-reboot-and-credentials-contract
+skill: bios-optimization
+tier: A
+entrypoint: ["bash", "cases/post-reboot-and-credentials-contract/run.sh"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0
