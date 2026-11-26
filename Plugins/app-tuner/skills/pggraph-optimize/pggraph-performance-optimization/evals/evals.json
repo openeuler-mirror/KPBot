@@ -1,0 +1,63 @@
+{
+  "skill_name": "pggraph-performance-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "`graph.component_stats()` 是热点。请给出按优先级排列的源码优化、每项的机制/预期收益/风险，以及验证顺序；不要执行命令。",
+      "expected_output": "优先 UnionFind::find 迭代化+path halving（消除递归调用，源资料 component -18.6%），其次 node_deleted 只读快速路径（thread_local 标志跳过 RefCell，component -19.6%），再 component_sizes HashMap→Vec（根节点直接下标，component -6.8%）。每项单变量：备份/基线→改一个→单测/冒烟→SQL JOIN/不变量→同口径 A/B（≥3 轮）→保留/回滚。风险：UnionFind 算法等价但树形变化；node_deleted 必须保证写路径正确设置标志；Vec 内存 O(n) 且墓碑处理要一致。不要同时改三项后再归因。",
+      "files": [],
+      "expectations": [
+        "优先 UnionFind 迭代化+path halving，说明递归开销与实测收益",
+        "提出 node_deleted 快速路径，说明 thread_local/RefCell 开销",
+        "提出 component_sizes HashMap→Vec，说明下标计数",
+        "强调单变量、正确性门禁、同口径 A/B",
+        "说明每项风险（标志正确性/墓碑/内存/算法等价）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "2-hop `graph.traverse`（hydrate=false）延迟高。请给出最值得先做的源码/使用层优化，并解释为什么不是先做 SIMD/预取；不要执行命令。",
+      "expected_output": "先看结果规模与后处理：排序键从 node_id String 改 node_idx（源资料 2-hop -20~29%），减少不必要的 String/路径/JSON，分页后再格式化，必要时降 max_rows/只返回需要列；hydrate=false 已关闭 SPI。SIMD/预取不适合：2-hop 瓶颈常在 String 分配/排序/JSON，不是 BFS 规则循环；源资料 ARM prfm 预取 -18%、密集位图 -28%、NEON/SVE gather 也负收益；图访问不规则且数据多在 cache。先做算法/数据布局/分配优化，再考虑编译器自动向量化（约 -2.5%）。",
+      "files": [],
+      "expectations": [
+        "优先数值排序键 node_idx 替代 String，说明 2-hop 实测收益",
+        "提出减少 String/路径/JSON、分页后再格式化、控制 max_rows",
+        "说明 hydrate=false 已避免 SPI，但仍有坐标/路径成本",
+        "解释 SIMD/预取为何不适合（不规则访问/数据在 cache/负结果）",
+        "提到编译器自动向量化收益小（约 2.5%）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "是否应该用 `target-cpu=native` 和手动 SVE gather 来优化 pgGraph？请给出源资料的结果、收益拆解、适用条件和风险；不要执行命令。",
+      "expected_output": "target-cpu=native 实测 TOTAL -2.5%，全部来自 SVE 自动向量化（排序/计数/数组初始化）；native-nosve 与 generic 相同，LSE/AES/CRC/FP16 无收益。手动 SVE gather find 慢约 20%，SVE gather is_active 慢 9~39%，NEON 批量 is_active 不适用（无 gather）；原因是浅树/小位图 L1 命中、gather 延迟、谓词/同步开销、CPU OoO 已并行标量。适用：构建/运行 CPU 一致、规则循环、A/B 证明 >噪声；风险：跨代 CPU 非法指令。手动 gather 不建议。收益远小于算法优化（约 -30.8%）。",
+      "files": [],
+      "expectations": [
+        "说明 target-cpu=native 约 -2.5%，收益来自 SVE 自动向量化",
+        "说明 native-nosve 无收益，LSE/AES/CRC/FP16 未被利用",
+        "说明手动 SVE gather find/is_active 是负收益及原因",
+        "说明 NEON 无 gather，不适用",
+        "说明可移植性风险（构建机/运行机 CPU 一致）",
+        "说明算法优化收益远大于 SIMD",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "96 并发下 QPS 不再增长、CPU 利用率不高。请给出配置/部署层的优化顺序，以及“反向 CSR 共享”“跳过 CRC”这两个候选的定位、风险和验证方式；不要执行命令。",
+      "expected_output": "先做容量扫描找 QPS 峰值/拐点，用连接池限制活跃并发；区分客户端 GIL（--mp（站点自建验证包装器的多进程模式，契约见 ../../pggraph-test-verification/references/benchmark-harness.md）/异步）与服务端私有内存/缓存争用；绑 NUMA/CCL、优先 primary 线程；固定/调整 PG shared_buffers/work_mem/jit/synchronous_commit（只读基准）并单变量 A/B。反向 CSR 持久化/mmap 共享、FilterIndex 直接 mmap、受控跳过 CRC 是未实现候选：预期降低每 backend 私有内存/加载，但需改工件格式/mmap 生命周期，校验风险高；先原型+小图功能对账+并发 A/B，不能写成已收益。跳过 CRC 只用于可信/可重建场景，显式开关。",
+      "files": [],
+      "expectations": [
+        "先容量扫描/连接池限制活跃并发",
+        "区分客户端 GIL 与服务端私有内存/缓存争用",
+        "提到 NUMA/CCL/primary 线程与 PG 参数单变量 A/B",
+        "说明反向 CSR 共享是未实现候选，需改工件格式/mmap，预期降低私有内存",
+        "说明跳过 CRC 是未实现候选，有完整性风险，需显式开关",
+        "要求原型/功能对账/并发 A/B，不把预期写成已收益",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

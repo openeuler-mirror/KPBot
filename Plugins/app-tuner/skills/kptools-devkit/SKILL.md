@@ -17,6 +17,9 @@ metadata:
   version: "1.1.0"
 ---
 
+
+> **采集契约（主动测量）**：本 skill 不修改系统配置、不写入被测环境（报告产物写入输出目录）。**已知副作用**：测量工具自身消耗少量 CPU（采样期间）；DevKit 工具部署可能安装依赖包（deploy.sh 单独触发，采集时只调 run）；`java-perf` 还会在 DevKit 安装目录写 `java-perf/log` 与 `config/`，因此即使 `-o` 可写，安装目录也必须可写（共享只读安装请改用用户目录部署）。需要变更的优化动作归属对应调优 skill。
+
 # kptools-devkit — 鲲鹏 DevKit 性能采集
 
 ## 工作流程

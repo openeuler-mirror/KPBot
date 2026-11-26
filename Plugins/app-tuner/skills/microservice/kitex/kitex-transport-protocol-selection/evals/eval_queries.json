@@ -1,0 +1,43 @@
+{
+  "skill_name": "kitex-transport-protocol-selection",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-protocol-choice",
+      "prompt": "Framed、TTHeader、gRPC 三种协议怎么选",
+      "should_trigger": true,
+      "note": "选型类触发词：Framed、TTHeader、gRPC"
+    },
+    {
+      "id": "q-metainfo-cost",
+      "prompt": "启用透传以后分配和延迟都涨了，值不值",
+      "should_trigger": true,
+      "note": "元信息开销类触发词：透传、header 成本"
+    },
+    {
+      "id": "q-generic-arm64",
+      "prompt": "ARM64 上泛化调用很慢，有降级告警",
+      "should_trigger": true,
+      "note": "平台类触发词：ARM64、泛化调用、降级"
+    },
+    {
+      "id": "q-poller",
+      "prompt": "事件循环线程数设多少",
+      "should_trigger": false,
+      "note": "连接容量 → kitex-transport-tuning"
+    },
+    {
+      "id": "q-pool",
+      "prompt": "空闲连接数怎么配",
+      "should_trigger": false,
+      "note": "连接容量 → kitex-transport-tuning"
+    },
+    {
+      "id": "q-codec",
+      "prompt": "fastcodec 和 frugal 哪个快",
+      "should_trigger": false,
+      "note": "编解码实现 → kitex-thrift-codec-selection"
+    }
+  ]
+}

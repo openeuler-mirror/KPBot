@@ -178,8 +178,9 @@ def discover(api_base, version, arch, mirror, timeout):
         with_download_urls(selected, mirror)
         print(
             "cubesandbox release discovery: WARNING: GitHub API unavailable; using the official "
-            "CNB/GitHub asset URL without an API-provided SHA-256 (set GITHUB_TOKEN or provide "
-            "CUBE_SANDBOX_DOWNLOAD_URL plus CUBE_SANDBOX_SHA256 for digest pinning): " + str(api_error),
+            "CNB/GitHub asset URL, but no API-provided SHA-256 is available; deploy.sh will refuse "
+            "this unpinned record (retry with GITHUB_TOKEN or provide CUBE_SANDBOX_DOWNLOAD_URL "
+            "plus CUBE_SANDBOX_SHA256 after independent verification): " + str(api_error),
             file=sys.stderr,
         )
         return selected
