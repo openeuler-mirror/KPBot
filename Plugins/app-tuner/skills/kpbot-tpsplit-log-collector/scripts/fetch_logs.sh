@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # fetch_logs.sh — 在 P/D/proxy 宿主机侧定位 TTFT 打点日志并校验/暂存。
 #
-# 用法（在宿主机上执行；/data 是共享挂载，容器内日志宿主机可见）：
-#   bash fetch_logs.sh                          # 未给 --root 时才用默认根 /data
-#   bash fetch_logs.sh --root /data/user1       # 首个 --root 替换默认根（不扫整个 /data）
+# 用法（在宿主机上执行；--root 必填：/data 是共享挂载，不给根直接退出，
+#       防止递归扫描把其他用户目录下可读的同名日志也扫进来）：
+#   bash fetch_logs.sh --root /data/user1       # 首个 --root 即扫描根（共享根必须显式给）
 #   bash fetch_logs.sh --root /a --root /b      # 多根追加
-#   bash fetch_logs.sh --stage /tmp/ttft_fetch  # 暂存待下载（文件名含完整来源路径，防同名覆盖）
-#   bash fetch_logs.sh --expect-req 100         # P 侧 BREAKDOWN 总行数（多 P 求和）低于门槛 → 退出码非 0
+#   bash fetch_logs.sh --root /data/<user> --stage /tmp/ttft_fetch  # 暂存待下载（文件名含完整来源路径，防同名覆盖）
+#   bash fetch_logs.sh --root /data/<user> --expect-req 100         # P 侧 BREAKDOWN 总行数（多 P 求和）低于门槛 → 退出码非 0
+#   bash fetch_logs.sh <prefill.log> <manual_xxx_dumpjsonl.json> ...  # 位置参数传文件清单：多轮压测残留时
+#                                                                    # 按文件选定本轮，计数/暂存只算清单内文件
 #
 # 定位目标：
 #   P   日志   prefill.log                     （[TTFT][BREAKDOWN] + KVXFER + pool + shm + draft）
@@ -20,8 +22,7 @@
 
 set -u
 
-DEFAULT_ROOT="/data"
-ROOTS=()
+ROOTS=()          # 扫描根：必填（/data 是共享挂载，缺 --root 直接退出，防误扫他人目录）
 ROOTS_EXPLICIT=0
 STAGE=""
 EXPECT_REQ=0
@@ -29,6 +30,7 @@ FAIL=0
 declare -A SEEN     # realpath → 1，去重
 P_BREAKDOWN_COUNTS=()
 BENCH_LINE_TOTAL=0
+BENCH_TS_VALID_TOTAL=0   # 含 client_send_ts 的压测记录数（与记录总数分开累计、分开报告）
 
 add_root() {
   if [ "$ROOTS_EXPLICIT" -eq 0 ]; then
@@ -49,7 +51,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ "${#ROOTS[@]}" -eq 0 ]; then
-  ROOTS=("$DEFAULT_ROOT")
+  echo "!! 未指定扫描根（--root 必填）：/data 是共享挂载，默认递归整个根会把其他用户目录下的同名日志也扫进来" >&2
+  echo "   请显式指定获准采集的目录（如 --root /data/<user>），可多根追加" >&2
+  exit 2
 fi
 
 case "$EXPECT_REQ" in
@@ -69,52 +73,63 @@ count_marker() {  # count_marker FILE MARKER → 标记出现次数（grep -oF �
   fi
 }
 
-count_bench_records() {  # count_bench_records FILE → 压测记录条数（按 JSON 解析计）
+count_bench_records() {  # count_bench_records FILE → 输出 "记录总数 有效时间戳数"（空格分隔）
   # 与 analyze_ttft.py load_bench 同口径：'[' 开头整文件按 JSON 数组解析，
   # 否则按 jsonl 逐行解析；每条 dict 记录计 1。不数字符串出现次数——
   # 单条记录的字段值恰含 "client_send_ts" 字样时会误计（检视复核意见）。
-  if command -v python3 >/dev/null 2>&1; then
+  # 有效时间戳数 = 含 client_send_ts 键的记录数：记录总数与有效数分开报告，
+  # 数量恰好相等但全部缺字段时也能看出无法对账（缺字段记录不参与下游 ttft 对账）。
+  # python3 探测加可执行性验证（Windows Git Bash 环境下 python3 可能是 Store stub，
+  # command -v 命中但执行即失败——输出为空会让调用方的整数比较崩溃）
+  if command -v python3 >/dev/null 2>&1 && python3 -c "pass" >/dev/null 2>&1; then
     python3 - "$1" <<'PYEOF'
 import json, sys
 try:
     text = open(sys.argv[1], "r", encoding="utf-8", errors="replace").read().strip()
 except OSError:
-    print(-1); sys.exit(0)
+    print(-1, -1); sys.exit(0)
 if not text:
-    print(0); sys.exit(0)
-def count(obj):
+    print(0, 0); sys.exit(0)
+def count(obj, out):
     if isinstance(obj, dict):
-        return 1
+        out[0] += 1
+        if "client_send_ts" in obj:
+            out[1] += 1
+        return
     if isinstance(obj, list):
-        return sum(count(x) for x in obj)
-    return 0
-n, bad = 0, 0
+        for x in obj:
+            count(x, out)
+n = [0, 0]
 if text.startswith("["):
     try:
-        n = count(json.loads(text))
+        count(json.loads(text), n)
     except ValueError:
-        bad = 1  # 整文件解析失败 → 退回逐行（解析器侧会显式报错）
+        pass  # 整文件解析失败 → 退回逐行（解析器侧会显式报错）
     else:
-        print(n); sys.exit(0)
+        print(n[0], n[1]); sys.exit(0)
+bad = 0
 for line in text.splitlines():
     s = line.strip().rstrip(",").strip()
     if not s or s in ("[", "]"):
         continue
     try:
-        n += count(json.loads(s))
+        count(json.loads(s), n)
     except ValueError:
         bad += 1
 if bad:
     print("[warn] %s 存在无法按 JSON 解析的内容（本地 analyze_ttft.py 解析时会显式报错）"
           % sys.argv[1], file=sys.stderr)
-print(n)
+print(n[0], n[1])
 PYEOF
     return
   fi
   # 宿主机无 python3 时的兜底：按 JSON 键字面量计数（“键”: 才计入，纯值不匹配；
-  # 仍可能漏计罕见转义形态，完整口径以本地 analyze_ttft.py 解析为准）
-  echo "[warn] 宿主机无 python3，压测请求数退化为键字面量计数，可能存在偏差" >&2
-  grep -oE '"client_send_ts"[[:space:]]*:' -- "$1" 2>/dev/null | wc -l
+  # 仍可能漏计罕见转义形态，完整口径以本地 analyze_ttft.py 解析为准）。
+  # 兜底只有键出现数一个口径，记录总数拿不到——两数同值输出并在 stderr 告警降级。
+  echo "[warn] 宿主机无 python3，压测请求数退化为键字面量计数（无记录总数口径，缺字段告警不可用）" >&2
+  local c
+  c=$(grep -oE '"client_send_ts"[[:space:]]*:' -- "$1" 2>/dev/null | wc -l | tr -d '[:space:]')
+  echo "${c:-0} ${c:-0}"
 }
 
 found_prefill=0; found_decode=0; found_lb=0; found_bench=0
@@ -133,9 +148,16 @@ scan_one() {  # scan_one PATH KIND MARKER ROOT
   n=$(count_marker "$f" "$marker")
   if [ "$kind" = BENCH ]; then
     # 压测请求数按解析出的请求记录计数（与 analyze_ttft.py load_bench 同口径），
-    # 不数字符串出现次数——jsonl / 单行多行 JSON 数组均按记录条数计
-    n=$(count_bench_records "$f")
-    [ "$n" -lt 0 ] && n=0
+    # 不数字符串出现次数——jsonl / 单行多行 JSON 数组均按记录条数计；
+    # 双口径输出：记录总数 + 含 client_send_ts 的有效数，缺字段记录告警
+    local bvalid
+    read -r n bvalid < <(count_bench_records "$f")
+    # 防御：解析输出为空或非数字（解释器异常等）时按 0 处理，不让整数比较崩溃
+    case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    case "$bvalid" in ''|*[!0-9]*) bvalid=0 ;; esac
+    if [ "$bvalid" -lt "$n" ]; then
+      echo "        [warn] $n 条记录中仅 $bvalid 条含 client_send_ts（缺字段记录无法参与 ttft 对账，请确认压测是否 --save-detailed）"
+    fi
   fi
   size=$(du -h "$f" 2>/dev/null | cut -f1)
   mtime=$(date -r "$f" "+%F %T" 2>/dev/null || stat -c '%y' "$f" 2>/dev/null)
@@ -153,27 +175,32 @@ scan_one() {  # scan_one PATH KIND MARKER ROOT
     fi
   fi
   if [ "$kind" = BENCH ]; then
-    # n 已是解析出的记录条数（见上），直接累计为压测请求数
+    # n=记录总数、bvalid=有效时间戳数（见上），两个口径分开累计：记录数与 P 侧对账，
+    # 有效数暴露"总数恰好相等但全部缺 client_send_ts、对不上账"的情形
     BENCH_LINE_TOTAL=$(( BENCH_LINE_TOTAL + n ))
+    BENCH_TS_VALID_TOTAL=$(( BENCH_TS_VALID_TOTAL + bvalid ))
   fi
   if [ -n "$STAGE" ]; then
     # 唯一目标名：完整路径的 / 换成 __（':' 一并换掉，防 Windows 盘符字符），
-    # 多 P 同名 prefill.log 不会互相覆盖
+    # 多 P 同名 prefill.log 不会互相覆盖；
+    # 排他创建（noclobber 占位，O_EXCL 语义）：两个采集进程共用暂存目录时，
+    # 都可能通过普通存在性检查后用 cp -f 互相覆盖——占位创建失败即并发冲突，返回失败
     local dest rel
     rel="${f#/}"
     dest="$STAGE/${rel//[\/:]/__}"
-    if [ -e "$dest" ]; then
-      echo "!! 暂存冲突：$dest 已存在（来源 $f）" >&2
+    mkdir -p "$STAGE"
+    if [ -e "$dest" ] || ! ( set -o noclobber; : > "$dest.claim" ) 2>/dev/null; then
+      echo "!! 暂存冲突：$dest 已存在或被并发采集进程占用（来源 $f）" >&2
       FAIL=1
       return 0
     fi
-    mkdir -p "$STAGE"
-    if ! cp -f "$f" "$dest"; then
+    if cp -f "$f" "$dest"; then
+      echo "        → staged: $dest"
+    else
       echo "!! 暂存失败：$f → $dest" >&2
       FAIL=1
-    else
-      echo "        → staged: $dest"
     fi
+    rm -f "$dest.claim"   # 释放占位：防 .claim 残留污染暂存目录、阻塞下一轮采集
   fi
   return 0
 }
@@ -182,8 +209,24 @@ echo "== TTFT 日志扫描 roots: ${ROOTS[*]} =="
 echo "（四份必须是同一次压测；breakdown 行数应 ≈ 压测请求数）"
 echo
 
+scan_file() {  # scan_file FILE：文件清单直传——按文件名分派类型，多轮压测残留时只算清单内文件
+  local f="$1" base
+  base=$(basename "$f")
+  case "$base" in
+    prefill.log)             scan_one "$f" P "[TTFT][BREAKDOWN]" "$f" && found_prefill=$((found_prefill+1)) || true ;;
+    decode.log)              scan_one "$f" D "[TTFT_DECODE]" "$f" && found_decode=$((found_decode+1)) || true ;;
+    load_balance.log)        scan_one "$f" PROXY "[LB_DISPATCH]" "$f" && found_lb=$((found_lb+1)) || true ;;
+    manual_*_dumpjsonl.json) scan_one "$f" BENCH "client_send_ts" "$f" && found_bench=$((found_bench+1)) || true ;;
+    *) echo "!! 无法识别文件类型（仅支持 prefill.log / decode.log / load_balance.log / manual_*_dumpjsonl.json）：$f" >&2; FAIL=1 ;;
+  esac
+}
+
 for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
-  [ -d "$root" ] || { echo "!! 目录不存在：$root"; continue; }
+  if [ -f "$root" ]; then
+    scan_file "$root"          # 文件清单项：只对本文件计数/暂存
+    continue
+  fi
+  [ -d "$root" ] || { echo "!! 路径不存在（既非采集目录也非清单文件）：$root"; continue; }
   # P 日志：所有 prefill.log（多 P 各一份）
   while IFS= read -r -d '' f; do
     scan_one "$f" P "[TTFT][BREAKDOWN]" "$root" && found_prefill=$((found_prefill+1)) || true
@@ -214,9 +257,13 @@ P_TOTAL=0
 for n in ${P_BREAKDOWN_COUNTS[@]+"${P_BREAKDOWN_COUNTS[@]}"}; do
   P_TOTAL=$(( P_TOTAL + n ))
 done
-if [ "$found_prefill" -gt 0 ] && [ "$found_bench" -gt 0 ] && [ "$BENCH_LINE_TOTAL" -gt 0 ]; then
-  if [ "$P_TOTAL" -ne "$BENCH_LINE_TOTAL" ]; then
-    echo "!! 告警：P 侧 BREAKDOWN 总行数 $P_TOTAL ≠ 压测请求数 $BENCH_LINE_TOTAL（请确认四份日志是否同一次压测）"
+if [ "$found_prefill" -gt 0 ] && [ "$found_bench" -gt 0 ]; then
+  # 两侧文件均找到即比较（含压测文件为空数组 / 零条记录的情形——
+  # BENCH_LINE_TOTAL=0 与 P_TOTAL>0 不等也要触发偏差告警，不能被 -gt 0 跳过）；
+  # 记录总数与有效 client_send_ts 数分开报告并分别对账——总数恰好相等但全部缺
+  # 字段（有效数 0）时同样触发告警，不把"数量相等"误当"能对上账"
+  if [ "$P_TOTAL" -ne "$BENCH_LINE_TOTAL" ] || [ "$P_TOTAL" -ne "$BENCH_TS_VALID_TOTAL" ]; then
+    echo "!! 告警：P 侧 BREAKDOWN 总行数 $P_TOTAL ≠ 压测请求数（记录 $BENCH_LINE_TOTAL 条 / 有效 client_send_ts $BENCH_TS_VALID_TOTAL 条；请确认四份日志是否同一次压测、压测是否 --save-detailed）"
   fi
 fi
 
