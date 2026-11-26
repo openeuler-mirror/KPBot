@@ -1,0 +1,18 @@
+{
+  "skill_name": "kptools-ascend-profiling-host-dispatch",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "帮我看看这份 profiling 的 host 下发耗时，enqueue 和 launch 各花多少", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "这个 trace 里下发到设备启动延迟有多久，哪些算子最慢", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "统计 enqueue p50/p95/p99，以及下发和设备执行的重叠比", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "host 侧下发阻塞严重吗？给出每 step 的下发总量和 Top 算子", "should_trigger": true },
+    { "id": "EQ-05", "prompt": "用 db 的 connectionId 把 op 和 device task 配对，算下发延迟", "should_trigger": true },
+    { "id": "EQ-06", "prompt": "只有 trace_view.json，帮我估一下 dequeue 到设备启动的间隔", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "分析一下 Free 时间都是什么造成的", "should_trigger": false, "note": "routes to kptools-ascend-profiling-free-breakdown" },
+    { "id": "EQ-08", "prompt": "对比优化前后两份 trace 的 enqueue 时延变化", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-enqueue" },
+    { "id": "EQ-09", "prompt": "分析这份无栈 trace 的 P1/P2/P3", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis-nostack" },
+    { "id": "EQ-10", "prompt": "看看设备时间轴上哪些区间是气泡", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-bubble" },
+    { "id": "EQ-11", "prompt": "这两份 trace 的算子种类和数量有什么变化", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-opstats" }
+  ]
+}
