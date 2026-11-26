@@ -111,9 +111,11 @@ self 口径的定义与边界：`self = 帧样本 − 直接子帧样本和`。�
 
 ### Step 5：变体构建与验证（安全模式）
 
-远程变体构建照抄安全模板（完整模板与坑清单见
-[变体构建安全参考](references/variant-build-safety.md)）：文件备份 + trap
-还原 + 前后 marker 校验 + CRLF 树先洗行尾 + patch 用 `git diff` 生成。
+远程变体构建照抄安全模板（完整模板与坑清单见 `variant-build-safety` skill 的
+`references/build-safety-guide.md`——该 skill 的 references/ 目录随安装平铺到
+`<tool>/skills/variant-build-safety/`）：基线校验先行 + 本轮快照独立目录 +
+快照完整后注册 trap 还原 + 前后 marker 校验 + CRLF 树先洗行尾 + patch 用
+`git diff` 生成。
 
 **链接指纹验证（性能归因前的前置门禁）**：变体 bench 构建必须验证实际链接
 对象——cmake `find_package` 类工程漏传 `CMAKE_PREFIX_PATH` 时会**静默落到
@@ -135,9 +137,8 @@ references/negative-results.md。
 
 ### Step 7：换目标库参数核对
 
-从一个库换到另一个库时，逐项核对（完整 10 项参数表见
-[变体构建安全参考](references/variant-build-safety.md) 第 3 节），其中
-三项最常翻车：
+从一个库换到另一个库时，逐项核对（完整 10 项参数表见 `variant-build-safety`
+skill 的 `references/build-safety-guide.md` 第 3 节），其中三项最常翻车：
 
 | # | 项 | 换库时必须重新确认 |
 |---|---|---|

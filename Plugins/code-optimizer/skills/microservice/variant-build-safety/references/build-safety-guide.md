@@ -12,10 +12,14 @@
 #!/bin/bash
 ROOT=<远程工作根>; TREE=<目标库源码树>; cd "$TREE"
 FILES="src/file1.cc src/file2.h ..."          # 本次 patch 触及的文件
-trap 'for f in $FILES; do [ -f "$f.bak" ] && cp -f "$f.bak" "$f"; done' EXIT
-# 前置校验：树必须处于 BASE 状态（marker = BASE 里没有、patch 会引入的特征串）
+SNAP="$ROOT/backup-$(date +%Y%m%d%H%M%S)"     # 本轮快照独立目录（不与上轮 .bak 混）
+# 基线校验先行：树必须处于 BASE 状态（marker = BASE 里没有、patch 会引入的特征串）。
+# 此时无 trap 挂着——树脏直接退出，不会用上一轮残留的备份覆盖当前改动。
 for f in $FILES; do grep -q "<marker>" "$f" && { echo "FATAL: tree not BASE"; exit 1; }; done
-for f in $FILES; do cp -f "$f" "$f.bak"; done
+# 本轮快照到独立目录；快照完整（逐文件非空）后才注册恢复动作
+for f in $FILES; do mkdir -p "$SNAP/$(dirname "$f")"; cp -f "$f" "$SNAP/$f"; done
+for f in $FILES; do [ -s "$SNAP/$f" ] || { echo "FATAL: snapshot incomplete"; exit 1; }; done
+trap 'for f in $FILES; do cp -f "$SNAP/$f" "$f"; done' EXIT
 # CRLF 树先洗行尾（Windows 同步产物），LF 树此步无害
 for f in $FILES; do tr -d "\r" < "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
 patch -p1 < "$ROOT/patches/<patch>.patch" > /dev/null || { echo "APPLY FAILED"; exit 1; }
@@ -30,6 +34,10 @@ bash "$ROOT/build_lib.sh" <变体名>    # 快照语义：构建当前树状态�
   "树已脏"和"patch 没打上"两类事故
 - **trap 还原**：无论构建成败，树回到 BASE；构建产物的变体性由"构建当前
   树状态"的快照语义保证
+- **基线校验先于 trap 注册**：树脏时（上轮 patch 未还原/marker 已存在）
+  直接退出且无任何恢复动作——挂在检查之前的 trap 会拿旧备份覆盖本轮改动
+- **快照独立目录**：`backup-<时间戳>/` 按轮隔离，上一轮残留的 .bak 不参与
+  本轮还原；快照完整性（逐文件非空）校验通过后才注册 trap
 - **patch 文件用 `git diff` 生成**：手工写 hunk 行号必错
 - **脚本上传必须 LF**：Windows 侧用字节精确写文件（PowerShell 的
   `WriteAllLines` 强制 CRLF 会毒化 bash 脚本；用 `WriteAllText` 或专用工具）
@@ -44,10 +52,17 @@ bash "$ROOT/build_lib.sh" <变体名>    # 快照语义：构建当前树状态�
 
 **验证三件套（每个变体 bench 构建后必做）**：
 
-1. `ldd <bench 二进制> | grep <库名>`：链接的库路径指向变体 install 目录
-2. 二进制体积对比：变体间体积应与代码改动量相称（体积完全相同 = 可疑）
-3. 生成物指纹：protoc/代码生成器类工具，对比生成文件 md5（生成器版本
-   错则生成物必错）
+1. `ldd <bench 二进制> | grep <库名>`：链接的库路径指向变体 install 目录；
+   动态链接形态另核对实际加载的共享库路径与构建标识（`readelf -n` 的
+   build-id）
+2. 比对产物按链接方式选择：静态链接比可执行文件（变体间体积应与代码
+   改动量相称，体积完全相同 = 可疑）；动态链接比变体共享库的字节/构建
+   标识——只重编 .so 就能让新实现生效，可执行文件字节可完全不变，要求
+   它变大反而会把有效变体误判为没生效
+3. 生成器指纹：protoc/代码生成器类工具，用编译器路径、版本与生成记录
+   （时间戳/构建日志）核验是否重跑；生成文件 md5 仅在补丁预期改变头
+   文件时要求不同——仅改运行库、或换用对当前 schema 生成相同代码的
+   protoc 时，重跑后的 .pb.h 可以逐字节相同（生成器版本错则生成物必错）
 
 **两类工程的行为差异**：
 
@@ -64,7 +79,7 @@ bash "$ROOT/build_lib.sh" <变体名>    # 快照语义：构建当前树状态�
 
 | # | 项 | 需要重新确认什么 |
 |---|---|---|
-| 1 | 库帧在火焰图里的定位 | 命名空间模式（前缀帧/模板实例化帧/lambda 帧）；模板名含逗号空格的解析（见火焰图解析参考 §5-6） |
+| 1 | 库帧在火焰图里的定位 | 命名空间模式（前缀帧/模板实例化帧/lambda 帧）；模板名含逗号空格的解析（见 flamegraph-parsing skill 的 references/parsing-guide.md §5-6） |
 | 2 | 源码树 | 生产用的是 fork 还是官方版本？fork 自带哪些既有优化（先 diff 再判断） |
 | 3 | 上游参照树 | 官方高版本源码（"上游已做什么"用 diff 回答） |
 | 4 | 构建链 | 库的依赖与变体构建方式；header-heavy 库无独立 .a 可换（见 #9） |

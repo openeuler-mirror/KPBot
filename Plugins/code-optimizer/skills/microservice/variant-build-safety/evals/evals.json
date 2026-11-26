@@ -1,0 +1,1 @@
+{"skill_name":"variant-build-safety","evals":[{"id":0,"name":"link-fingerprint","prompt":"构建成功了但 bench 数字很奇怪，怎么确认链接的是变体库？","expected_output":"三重链接指纹：ldd 指向变体 install 路径、二进制体积相称、protoc 生成物 md5。漏传 CMAKE_PREFIX_PATH 会静默回退系统库——构建成功不构成任何证据。","files":[]}]}
