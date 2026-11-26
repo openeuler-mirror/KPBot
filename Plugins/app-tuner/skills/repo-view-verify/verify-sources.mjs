@@ -108,15 +108,17 @@ for (const s of sources) {
 }
 
 const ok = failures.length === 0;
+// verified 计数：排除根级失败（'(root)' = 空 IR、'(repository)' = revision 问题），
+// 只扣逐条 source 失败；下限 0——revision 验证失败时 sources.length 可能为 0，
+// 直接相减会得 -1
+const verifiedCount = Math.max(0,
+  sources.length - failures.filter(f =>
+    f.subject !== '(root)' && f.subject !== '(repository)').length);
 const receipt = {
   ok,
   revision: rev,
   repoRoot,
-  // 修复：只排除根级空 IR 失败（subject === '(root)'），walk 产出的
-  // subject 如 "(root).elements[0] -> path:line" 也是以 '(' 开头但必须计入
-  // 扣减——此前 startsWith('(') 把所有逐条失败都跳过了，verified 恒等于
-  // totalReferences（计数虚报）
-  verified: sources.length - failures.filter(f => f.subject !== '(root)').length,
+  verified: verifiedCount,
   totalReferences: sources.length,
   failures,
 };

@@ -85,7 +85,7 @@ metadata:
 <verify-sources 回执 或 命令清单结果>
 ```
 
-**forge 证据链接规则**：`<repository.url>/blob/<revision>/<path>#L<line>-L<end_line>`；GitHub/GitLab 均适用；目录引用（无行号）用 `/tree/<revision>/<path>`。
+**forge 证据链接规则**：`<repository.url>/blob/<revision>/<path>#L<line>-L<end_line>`；GitHub/GitLab 均适用；目录引用（无行号）用 `/tree/<revision>/<path>`。URL 必须是 **HTTPS 格式**（SSH `git@host:org/repo.git` 先转 `https://host/org/repo`，见 engine 冻结身份节），否则 `/blob/...` 路径不成立。
 
 # 回复契约
 

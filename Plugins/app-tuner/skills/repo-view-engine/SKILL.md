@@ -35,9 +35,15 @@ metadata:
 
 ```
 git rev-parse HEAD          # 40 位 SHA
-git remote get-url origin   # 去掉 URL 内凭据
+git remote get-url origin   # 去掉 URL 内凭据；SSH 格式须转 HTTPS
 git status --short          # 脏工作树必须声明
 ```
+
+**URL 规范化**：
+- 去凭据：`https://user:pass@host/org/repo` → `https://host/org/repo`
+- SSH 转 HTTPS：`git@host:org/repo.git` → `https://host/org/repo`（forge 链接
+  的 `/blob/...` 路径只在 HTTPS URL 上成立；SSH 格式直接拼会产出死链）
+- 去尾 `.git`：`https://host/org/repo.git` → `https://host/org/repo`
 
 - SHA 与无凭据 URL 写进 IR 的 `meta.repository`，并写进报告头部
 - **工作树是脏的必须处理**：未提交字节不得当作 HEAD 的证据。标准做法是开干净 worktree 取证：
