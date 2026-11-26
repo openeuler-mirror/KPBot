@@ -57,7 +57,7 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 
 | 字段 | 类型/单位 | 语义 |
 |---|---|---|
-| `keys` | int | 本批 key 数（与 MKT_TTF 的 keys 一致，配对键） |
+| `keys` | int | **内存子批 batch_keys 的数量**——`RealClient::batch_get_into_multi_buffers` 按 replica 类型分流后，只有内存路径（MEMORY/NOF）的 key 进入本函数；批次混合命中（部分内存部分磁盘）时 `MKT_FINE.keys < MKT_TTF.keys`，纯内存批次才相等；**不要用 keys 相等做 TTF/FINE 配对**（配对依据见 §6 第 3 条）。全磁盘命中批次（mem=0）不产生 FINE 行 |
 | `open_ms` | float/ms | 传输引擎会话/segment 打开 |
 | `build_ms` | float/ms | 传输请求构建（batch/slice 组装） |
 | `alloc_ms` | float/ms | 传输缓冲分配（如需要） |
@@ -102,7 +102,7 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 **get 链：**
 1. 等尺寸 block 时 `keys × size = bytes`（样例 49×12,189,696=597,295,104 ✓）
 2. `getmem_ms ≈ FINE 五段之和 + 调度开销`，差值容差 `≤ max(1.5ms, 2% getmem_ms)`（绝对+相对双口径：小批次保绝对下限、大批次按比例放宽；样例 67.9937 vs 66.9895，差 1.004ms ≤ 1.5ms ✓）——FINE 是 TTF 中 getmem 的子阶段分解
-3. 同批次两行相邻（<数 ms）、同线程 id、同 keys 值
+3. **TTF/FINE 配对**：同批次两行相邻（<数 ms）且**同线程 id** 为配对依据；**不得用 keys 相等配对**——MKT_TTF.keys 是整批入参数量，MKT_FINE.keys 是内存子批数量（见 §3），混合命中批次两者必然不等；纯内存批次（TTF 的 mem == keys 且 locdisk=disk=0）才应有 keys 相等；**全磁盘命中批次（mem=0）不产生 FINE 行**，解析器不得为其期待 FINE
 4. 六相中非本批次路径的相为 0（内存路径批次 offload/checksum/diskio 均 0）
 5. 有效带宽 ≈ `bytes / total_ms`（样例 ≈8.67 GB/s，可与网卡规格对账）
 

@@ -21,14 +21,26 @@ cmake ..                      # 默认模式；集群用 etcd 时 -DSTORE_USE_ET
 make -j$(nproc)
 ```
 
+**以下校验/登记命令一律在源码根目录执行**（上一段已 `cd build`，先 `cd ..` 回根——
+否则相对路径 `build/mooncake-store/src/` 会在 build/build/ 下找产物，散列与 strings 全部落空）。
+
 - 产物在 `build/mooncake-store/src/`（客户端库 + master 可执行文件）。
 - 确认**实际要替换的 .so 产物名**：以探测到的容器现役 .so 文件名为准（如 `libmooncake-store.so` / `store_c` 系 / `mooncake/_store.*.so`，不同版本不同）。编译产物与现役文件名不一致时，先弄清 Python 侧加载方式（ctypes 文件名 / C 扩展模块名）再动，禁止想当然改名。
-- 全量记录本次产物 sha256：`sha256sum build/mooncake-store/src/*.so* > /tmp/mkt_build_manifest.sha256`（部署侧按同口径逐文件核对）。
+- 全量记录本次产物 sha256（先确认产物存在再写清单——glob 落空时直接重定向会创建/清空空清单文件）：
+
+```bash
+cd <mooncake 源码根>
+ls build/mooncake-store/src/*.so* >/dev/null 2>&1 \
+  && sha256sum build/mooncake-store/src/*.so* > /tmp/mkt_build_manifest.sha256 \
+  || echo "[FATAL] build/mooncake-store/src/ 下未找到 .so 产物（编译失败或路径不对），禁止交付空清单"
+```
+
 - **产物交接**：编译产物 + sha256 清单 + strings 校验确认（四 tag MKT_TTF/MKT_FINE/MKT_PUT/MKT_PFINE 各 ≥1）一并交付给 `kptools-mooncake-log-trace`（配套 PR #404 交付）执行容器内替换；本 skill 不做 .so 替换与引擎重启。
 
 ## 3. 验证编译产物含打点
 
 ```bash
+# 在源码根目录执行（不要在 build/ 内——相对路径会错位到 build/build/）
 # 四个 MKT tag 分别计数（get/put 两链都必须编进目标库）
 for t in MKT_TTF MKT_FINE MKT_PUT MKT_PFINE; do
   printf '%s=%s\n' "$t" "$(strings build/mooncake-store/src/<目标.so> | grep -c "$t")"

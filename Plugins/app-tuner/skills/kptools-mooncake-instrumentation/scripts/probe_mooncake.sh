@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # probe_mooncake.sh — 在目标容器内运行：探测现役 mooncake 版本、.so、加载路径、构建工具链
-# 用法（宿主机）: docker exec <容器名> bash -s < probe_mooncake.sh
+# 用法（宿主机）: docker exec -i <容器名> bash -s < probe_mooncake.sh
+#                 （-i 必带：bash -s 从 stdin 读脚本，无 -i 时重定向传不进容器、
+#                   bash 读到 EOF 即退出、宿主机拿不到探测结果；
+#                   以收到完整的 PROBE_JSON_BEGIN/END 摘要为成功判据）
 # 输出: 人读文本 + 末尾 JSON 摘要（供部署决策消费）
 set -u
 
@@ -60,8 +63,19 @@ section "8. 容器内源码/构建残留"
 ls -d /workspace/*mooncake* /root/*mooncake* /opt/*mooncake* /data/*mooncake* /usr/local/src/*mooncake* 2>/dev/null || echo "无源码目录"
 find / -name "real_client.cpp" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -5
 
-section "9. glog / 日志级别相关环境"
-env 2>/dev/null | grep -iE "GLOG|MOONCAKE|RAY_DEDUP" || echo "无相关环境变量"
+section "9. glog / 日志级别相关环境（白名单变量）"
+# 白名单逐变量读取，不做整行 env grep——MOONCAKE_API_TOKEN 之类的凭据变量
+# 名称或值都可能命中宽匹配，整行输出会把令牌原值写进探测报告
+PROBE_ENV_WHITELIST="GLOG_minloglevel GLOG_v GLOG_logtostderr GLOG_log_dir MOONCAKE_LOG_LEVEL RAY_DEDUP_LOGS"
+found=0
+for var in $PROBE_ENV_WHITELIST; do
+  val=$(printenv "$var" 2>/dev/null || true)
+  if [ -n "$val" ]; then
+    printf '%s=%s\n' "$var" "$val"
+    found=1
+  fi
+done
+[ "$found" -eq 1 ] || echo "白名单变量（$PROBE_ENV_WHITELIST）均未设置"
 
 # ---- JSON 摘要 ----
 PY_PKGS=$(pip list 2>/dev/null | grep -i mooncake | tr '\n' ';' | sed 's/;*$//')
@@ -80,15 +94,23 @@ SRC_RES=$(find / -name "real_client.cpp" -not -path "/proc/*" -not -path "/sys/*
 
 echo
 echo "PROBE_JSON_BEGIN"
-cat <<EOF
-{
-  "pip_packages": "$PY_PKGS",
-  "so_files": "$SO_LIST",
-  "engine_mapped_so": "$MAP_SO",
-  "engine_pids_truncated": $ENGINE_PIDS_TRUNCATED,
-  "cmake": $CMAKE_OK,
-  "gpp": $GPP_OK,
-  "source_residue": "$SRC_RES"
+# JSON 摘要由 python3 json.dumps 生成：手工 heredoc 拼接时 .so 路径含
+# 双引号/反斜杠会使整个摘要不可解析——序列化器保证任意路径值合法
+if command -v python3 >/dev/null 2>&1 && python3 -c "pass" >/dev/null 2>&1; then
+  python3 - "$PY_PKGS" "$SO_LIST" "$MAP_SO" "$ENGINE_PIDS_TRUNCATED" "$CMAKE_OK" "$GPP_OK" "$SRC_RES" <<'PYEOF2'
+import json, sys
+obj = {
+    "pip_packages": sys.argv[1],
+    "so_files": sys.argv[2],
+    "engine_mapped_so": sys.argv[3],
+    "engine_pids_truncated": sys.argv[4] == "true",
+    "cmake": sys.argv[5] == "true",
+    "gpp": sys.argv[6] == "true",
+    "source_residue": sys.argv[7],
 }
-EOF
+print(json.dumps(obj, ensure_ascii=False))
+PYEOF2
+else
+  echo '{"error": "容器内无可用 python3，JSON 摘要生成失败——人读文本节（1-9）仍可作探测依据"}'
+fi
 echo "PROBE_JSON_END"
