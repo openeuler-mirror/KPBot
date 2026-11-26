@@ -81,32 +81,198 @@ if not (leaf_style or hub_style):
 # a future commit dropping credentials into a script (e.g. scripts/deploy.sh) is
 # caught. cases/ harness is intentionally excluded (template code, self-referential
 # regex literals, no project content).
+# 值侧形状：引号字符串，或不含空白/引号/括号/尖括号的 ASCII 字面量。
+# 无引号分支要求首字符为字母数字、总长 >=3，且后随空白/行尾/分隔符，用来排除
+# response[...] / config.get(...) / ${VAR} 这类索引与调用表达式；限定 ASCII 是为了
+# 不把中文散文（`token: 用于认证的令牌`）误判成凭据；`access_key = obj.access_key`
+# 这类属性链是代码而非字面量，用负向断言排除。
+_VAL = r"""(?:['"][^'"\n]{1,}['"]|(?![A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+(?=\s|$|[,;}\]#]))[A-Za-z0-9][A-Za-z0-9._~+/=:@!#$%^&*\-]{2,}(?=\s|$|[,;}\]#]))"""
+# 裸词（token/secret/pwd/Authorization）的误报面更大：无引号分支沿用旧模板的 8 位下限。
+_VAL_BARE = r"""(?:['"][^'"\n]{1,}['"]|(?![A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+(?=\s|$|[,;}\]#]))[A-Za-z0-9][A-Za-z0-9._~+/=:@!#$%^&*\-]{7,}(?=\s|$|[,;}\]#]))"""
+
 SENSITIVE = [
-    (r"\b(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b", "private IP"),
-    (r"(?i)password\s*[:=]\s*['\"]?\S+", "credential-like literal"),
-    (r"/home/(?!<|\$|\{)[A-Za-z0-9_.-]+/", "personal home path"),
-    (r"\bsshpass\b", "ssh credential tool"),
-    (r"(?i)\b(api[_-]?key|api[_-]?token|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret)\b\s*[:=]\s*['\"]?\S+", "api key/token/secret"),
-    (r"(?i)\btoken\s*[:=]\s*['\"]?[A-Za-z0-9_.\-]{8,}", "bearer-ish token literal"),
-    (r"(?i)\bAuthorization\s*[:=]\s*['\"]?\S+", "authorization header"),
-    (r"-----BEGIN [A-Z ]*PRIVATE KEY-----", "private key block"),
-    (r"\bAKIA[0-9A-Z]{16}\b", "AWS access key id"),
-    (r"\bsk-[A-Za-z0-9]{20,}\b", "openai-style secret key"),
+    # (正则, 说明, 是否脱敏回显)：内部地址 / 个人路径 / 工具本身不是凭据，可原样回显
+    # 便于修复；凭据类一律脱敏，避免原文落进 results/result.json（install.sh 会
+    # cp -r 整个 skill 目录）与 stdout/CI 日志。
+    (r"\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b", "private IPv4", False),
+    (r"\b(?:169\.254|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\.\d{1,3}\.\d{1,3}\b", "link-local/CGNAT IPv4", False),
+    (r"(?i)\b(?:f[cd][0-9a-f]{2}|fe80):[0-9a-f:]{2,}", "private IPv6", False),
+    (r"/(?:home|Users)/(?!<|\$|\{)[A-Za-z0-9_.-]+/", "personal home path", False),
+    (r"(?i)[A-Z]:\\Users\\[A-Za-z0-9_.-]+\\", "windows user path", False),
+    (r"/root/(?!<|\$|\{)[A-Za-z0-9_.-]+/", "root home path", False),
+    (r"\bsshpass\b", "ssh credential tool", False),
+    (r"-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----", "private key block", False),
+
+    # 键名式凭据：键名与值都可能带引号（JSON/YAML/dict），键名允许命名空间前缀。
+    # 不用 \b：_ 属于 \w，`_token` / `secret_` 处 \b 不成立会整体漏检。
+    # 四条键名规则都以 ['\"]? 收尾，容忍 {"KEY": "value"} 这类闭合引号形态。
+    # 1) 大写 ENV 风格：GITHUB_TOKEN / MEM0_API_TOKEN / AWS_SECRET_ACCESS_KEY ...
+    (r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|PASSPHRASE|CREDENTIAL)['\"]?\s*[:=]\s*" + _VAL,
+     "credential-like literal", True),
+    # 2) 显式凭据键名（可带命名空间前缀与引号）：client_secret / access_key / db_password ...
+    (r"(?i)(?<![A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])*['\"]?(?:api[_-]?key|apikey|api[_-]?token|access[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|id[_-]?token|bearer[_-]?token|session[_-]?token|private[_-]?token|github[_-]?token|secret[_-]?access[_-]?key|secret[_-]?key|client[_-]?secret|app[_-]?secret|password|passwd|passphrase|credential)['\"]?\s*[:=]\s*" + _VAL,
+     "credential-like literal", True),
+    # 3) 裸写 token / secret：值须为 8 位以上 ASCII 字面量
+    (r"(?i)(?<![A-Za-z0-9_])['\"]?(?:token|secret)['\"]?\s*[:=]\s*" + _VAL_BARE,
+     "credential-like literal", True),
+    # 4) 裸写 pwd（值不能是 $(pwd) 这类命令替换）
+    (r"(?i)(?<![A-Za-z0-9_])['\"]?pwd['\"]?\s*[:=]\s*" + _VAL_BARE,
+     "credential-like literal", True),
+    # 5) Authorization 头：允许 Bearer/Basic/Token 方案，值须为 8 位以上 ASCII 字面量
+    (r"(?i)(?<![A-Za-z0-9_])['\"]?authorization['\"]?\s*[:=]\s*['\"]?(?:(?:bearer|basic|token)\s+)?[A-Za-z0-9._~+/=\-]{8,}",
+     "authorization header", True),
+
+    # 已知厂商前缀 / JWT 字面量：形状固定，误报极低
+    (r"\bAKIA[0-9A-Z]{16}\b", "AWS access key id", True),
+    (r"\bsk-[A-Za-z0-9_-]{20,}", "openai-style secret key", True),
+    (r"\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b", "github token literal", True),
+    (r"\bgithub_pat_[A-Za-z0-9_]{20,}\b", "github fine-grained token", True),
+    (r"\bglpat-[A-Za-z0-9_-]{20,}", "gitlab token literal", True),
+    (r"\bxox[baprs]-[A-Za-z0-9-]{10,}", "slack token literal", True),
+    (r"\bAIza[0-9A-Za-z_-]{30,}", "google api key literal", True),
+    (r"\bhf_[A-Za-z0-9]{20,}\b", "huggingface token literal", True),
+    (r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", "JWT literal", True),
 ]
-scan_files = [SKILL_MD] + sorted(REFS_DIR.glob("*.md"))
+
+
+def redact(matched, mask):
+    """凭据类命中只保留键名，值以长度占位，防止原文进入结果文件与日志。"""
+    if not mask:
+        return matched
+    m = re.match(r"\s*(.*?)\s*[:=]\s*(\S.*)$", matched, re.DOTALL)
+    if not m:
+        return "<redacted>"
+    key = m.group(1).strip().strip("'\"")  # 去掉 JSON/YAML 形态残留的引号
+    return f"{key}=<redacted len={len(m.group(2))}>"
+
+
+# references/ 递归扫描（reference 子目录里的文件同样算文档面）
+scan_files = [SKILL_MD] + sorted(REFS_DIR.rglob("*.md"))
 if SCRIPTS_DIR.is_dir():
-    for ext in ("*.py", "*.sh", "*.md", "*.yaml", "*.yml", "*.json"):
+    for ext in ("*.py", "*.sh", "*.md", "*.yaml", "*.yml", "*.json", "*.toml"):
         scan_files.extend(SCRIPTS_DIR.rglob(ext))
 scan_files = sorted(set(scan_files))
+
+
+def _scan_text(rel, body):
+    """按 (文件, 行号, 命中起点) 去重：同一凭据被多条规则命中只记一次，
+    同一行上的不同凭据各自保留（只按行去重会把第二条吞掉）。"""
+    out = []
+    seen = set()
+    for pattern, why, mask in SENSITIVE:
+        for hit in re.finditer(pattern, body):
+            line_no = body[: hit.start()].count("\n") + 1
+            key = (rel, line_no, hit.start())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(f"{rel}:{line_no}: {why}: {redact(hit.group(0), mask)}")
+    return out
+
+
 for path in scan_files:
     body = path.read_text(encoding="utf-8").replace("\r\n", "\n")
-    for pattern, why in SENSITIVE:
-        for hit in re.finditer(pattern, body):
-            line_no = body[:hit.start()].count("\n") + 1
-            rel = path.relative_to(SKILL_DIR).as_posix()
-            sensitive_findings.append(f"{rel}:{line_no}: {why}: {hit.group(0)!r}")
+    rel = path.relative_to(SKILL_DIR).as_posix()
+    sensitive_findings.extend(_scan_text(rel, body))
 if sensitive_findings:
     fail(f"sensitive content found: {len(sensitive_findings)} hit(s)")
+
+# ---- 规则自检：证明上面的规则与脱敏不是空转 -------------------------------
+# 正样本必须至少被一条规则命中，负样本必须一条都不命中，凭据类回显必须脱敏。
+# 这些假凭据只出现在 cases/ 下，而 scan_files 只覆盖 SKILL.md / references / scripts，
+# 所以不会 self-trigger；自检结果写入 result.json 供 case.yaml 断言。
+SELFTEST_POSITIVE = [
+    "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwx1234",
+    '{"HF_TOKEN": "genericsecretvalue123"}',
+    '{"MY_PWD": "mypasswordvalue1"}',
+    "HF_TOKEN=hf_abcdefghijklmnopqrstuvwxyz",
+    "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz012345",
+    'API_KEY="ak_live_abcdef"',
+    '{"api_key": "ak_live_abcdef", "token": "eyJhbGciOiJIUzI1NiJ9"}',
+    '"password": "s3cr3t-value"',
+    "'secret': 'abc123'",
+    "aws_secret_access_key=wJalrXUtnFEMIvGr5",
+    "client_secret=abc123def456",
+    'access_key = "mykeyvalue123"',
+    '{"access_key": "mykeyvalue123"}',
+    "token=abcdefgh1234",
+    "password=hunter2",
+    "pwd=abc12345",
+    "Authorization: Bearer abcdef123456",
+    "AKIAIOSFODNN7EXAMPLE",
+    "github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz",
+    "glpat-abcdefghij1234567890",
+    "xoxb-1234567890-abcdefghij",
+    "AIzaSyA1234567890abcdefghijklmnopqrstu",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
+    "10.11.12.13",
+    "169.254.1.1",
+    "100.64.3.4",
+    "fd00::1",
+    "/home/alice/project",
+    r"copy C:\Users\alice\secrets.txt .",
+    "/root/.ssh/id_rsa",
+    "-----BEGIN RSA PRIVATE KEY-----",
+    "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+    "sshpass -p x ssh host",
+]
+SELFTEST_NEGATIVE = [
+    "sort_key = lambda x: x",
+    'next_page_token = response["nextPageToken"]',
+    'primary_key = "name"',
+    "cache_key = build_cache_key(item)",
+    "key = cache_key(name, item, args, kwargs)",
+    "keys=some_value",
+    "sort_keys=True",
+    'raise KeyError("missing")',
+    "PWD=$(pwd)",
+    "token = abc",
+    "token: 用于认证的令牌",
+    "password: 这里填写你的密码",
+    "refresh token: 说明如何刷新",
+    "Authorization: header 认证头字段",
+    'token = response["nextPageToken"]',
+    "access_key = obj.access_key",
+    "password = cfg.password",
+    'db_password = config.get("db_password")',
+    'secret = os.environ.get("SECRET")',
+    'return {"token": resp["token"]}',
+    "kubectl get pods -n default",
+    "1721.1.1.1",
+    "step3: do it",
+]
+# 同一行两条不同凭据必须都被报出来（只按行去重会吞掉第二条）
+SELFTEST_MULTI = "password=hunter2pass token=abcdefgh1234"
+
+
+def _selftest_scan(sample):
+    return [
+        (why, redact(hit.group(0), mask), mask)
+        for pattern, why, mask in SENSITIVE
+        for hit in re.finditer(pattern, sample)
+    ]
+
+
+selftest_positive_missed = 0
+selftest_negative_flagged = 0
+selftest_redaction_ok = True
+for sample in SELFTEST_POSITIVE:
+    hits = _selftest_scan(sample)
+    if not hits:
+        selftest_positive_missed += 1
+        fail(f"sensitive selftest: positive sample not caught: {sample!r}")
+    for why, echo, mask in hits:
+        if mask and "<redacted" not in echo:
+            selftest_redaction_ok = False
+            fail(f"sensitive selftest: credential echo not redacted: {why}: {echo!r}")
+for sample in SELFTEST_NEGATIVE:
+    hits = _selftest_scan(sample)
+    if hits:
+        selftest_negative_flagged += 1
+        fail(f"sensitive selftest: negative sample flagged: {sample!r} -> {hits[0][:2]}")
+selftest_multi_ok = len(_scan_text("<selftest>", SELFTEST_MULTI)) >= 2
+if not selftest_multi_ok:
+    fail(f"sensitive selftest: same-line credentials collapsed: {SELFTEST_MULTI!r}")
 
 RESULTS.parent.mkdir(parents=True, exist_ok=True)
 result = {
@@ -117,6 +283,12 @@ result = {
     "scripts_checked": scripts_checked,
     "sensitive_findings": len(sensitive_findings),
     "sensitive_details": sensitive_findings,
+    "sensitive_selftest_positive_total": len(SELFTEST_POSITIVE),
+    "sensitive_selftest_positive_missed": selftest_positive_missed,
+    "sensitive_selftest_negative_total": len(SELFTEST_NEGATIVE),
+    "sensitive_selftest_negative_flagged": selftest_negative_flagged,
+    "sensitive_selftest_redaction_ok": selftest_redaction_ok,
+    "sensitive_selftest_multi_ok": selftest_multi_ok,
 }
 RESULTS.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
 print(json.dumps(result, indent=2, ensure_ascii=False))
