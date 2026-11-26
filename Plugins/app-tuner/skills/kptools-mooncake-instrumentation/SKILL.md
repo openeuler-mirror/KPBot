@@ -9,7 +9,8 @@ description: >
   给 mooncake 加日志、编译 mooncake .so、mooncake 版本探测/锚定、KV 传输耗时要看
   C++ 层细分（put 存 KV 或 get 拉 KV）、mooncake instrumentation。即使用户只说
   "给 mooncake 加个打点"或"编个带日志的 mooncake"，也应使用此技能。只做打点+编译，
-  产物交付给 kptools-mooncake-log-trace 部署；.so 替换部署与日志解析出表不归本 skill。
+  产物交付给 kptools-mooncake-log-trace（配套 PR #404 交付）部署；.so 替换部署与
+  日志解析出表不归本 skill。
 license: Proprietary
 compatibility: 本地 Windows（写出的 .sh 需去 CR）；SSH 访问目标宿主机（使用调用方已授权的目标连接，认证失败即停止）；目标容器内需 git/cmake/g++ 与 mooncake 构建依赖（由探测步骤确认）；源码从 kvcache-ai/Mooncake（GitHub 失败切 Gitee 镜像）按现役版本拉取
 metadata:
@@ -26,9 +27,9 @@ metadata:
 打点覆盖两条链：**get 链（D 侧拉 KV）** `[MKT_TTF]` 批次摘要 + `[MKT_FINE]` getmem 内部五相；**put 链（P 侧存 KV）** `[MKT_PUT]` 批次摘要 + `[MKT_PFINE]` BatchPut 内部相（含 master 副本分配等 put 特有阶段）。
 
 与姊妹技能的分工：
-- `kptools-mooncake-log-trace`：接收本 skill 产物，做 .so 备份/替换/md5 回读/重启指引/smoke/回滚
-- `kptools-tpsplit-log-analysis`：后续解析 MKT 日志出表（MKT 字段契约由本 skill 的打点规格定义）
-- `kptools-tpsplit-log-trace`：vLLM/vLLM-Ascend Python 层 TTFT 打点部署（.py 文件级，无需编译）
+- `kptools-mooncake-log-trace`（配套 PR #404 交付，建议与本 skill 同批合入）：接收本 skill 产物，做 .so 备份/替换/md5 回读/重启指引/smoke/回滚。**其未合入期间的降级路径**：本 skill 停在产物交付——输出待部署产物清单（.so 路径 + md5）与人工替换/重启步骤指引（按 references/build.md 末节的交接说明），**不自行替换容器内 .so**（无备份/回读/回滚保障的替换是明令禁止行为）
+- `kptools-tpsplit-log-analysis`（仓内已合入）：后续解析 MKT 日志出表（MKT 字段契约由本 skill 的打点规格定义）
+- `kptools-tpsplit-log-trace`（仓内已合入）：vLLM/vLLM-Ascend Python 层 TTFT 打点部署（.py 文件级，无需编译）
 
 本 skill 处理的是 Python 层打点看不到的盲区：vLLM 侧只能测到 `backend.put/get` 的 Python 主机侧总耗时，RDMA 传输内部阶段（open/build/alloc/submit/wait）只有 C++ 层打点才可见。
 
@@ -37,7 +38,7 @@ metadata:
 1. 用户要给 Mooncake 加打点（默认场景）→ 走完整流程：探测 → 源码准备 → 打点 → 编译 → 产物校验 → 交接部署
 2. 用户只问"容器里 mooncake 是什么版本/哪个 .so" → 只跑探测（`scripts/probe_mooncake.sh`）
 3. 探测出的版本拉不到对应源码，或容器内缺构建工具链 → **停下问用户**，不要拿相近版本硬编（ABI 不匹配会运行时崩）
-4. 编译产物已就绪、用户要替换容器里的 .so → 转 `kptools-mooncake-log-trace`
+4. 编译产物已就绪、用户要替换容器里的 .so → 转 `kptools-mooncake-log-trace`（配套 PR #404 交付；未合入期间按分工说明的降级路径停在产物交付，不自行替换）
 5. 用户要解析 MKT 日志出表 → 转 `kptools-tpsplit-log-analysis`
 
 ## 1. 工作流程总览
@@ -48,7 +49,7 @@ metadata:
   → 应用 MKT 打点（按 references/instrumentation.md，函数级挂点）
   → 容器内编译成 .so（references/build.md）
   → 产物校验（strings 验 MKT 串 ≥2 + md5 清单）
-  → 交接：产物 + md5 清单交给 kptools-mooncake-log-trace 部署
+  → 交接：产物 + md5 清单交给 kptools-mooncake-log-trace（配套 PR #404）部署
 ```
 
 ## 2. 探测（第一步，必做）
@@ -86,13 +87,13 @@ metadata:
 
 ## 6. 交接（产物契约）
 
-交付给 `kptools-mooncake-log-trace` 的产物契约：
+交付给 `kptools-mooncake-log-trace`（配套 PR #404 交付）的产物契约：
 
 1. 打点 .so 集合（文件名与容器现役 .so 一致）
 2. md5 清单（逐文件）
 3. strings MKT 串校验通过的确认（≥2）
 
-交接时说明：.so 替换对运行中进程无效（已 mmap 旧库），部署方会提示用户重启；smoke 需发真实请求并 grep `[MKT_TTF]`/`[MKT_FINE]` 成对输出；MKT 走 `LOG(INFO)`，worker 侧输出需 `RAY_DEDUP_LOGS=0` 且确认 glog 级别（详见 kptools-mooncake-log-trace 的部署文档）。
+交接时说明：.so 替换对运行中进程无效（已 mmap 旧库），部署方会提示用户重启；smoke 需发真实请求并 grep `[MKT_TTF]`/`[MKT_FINE]` 成对输出；MKT 走 `LOG(INFO)`，worker 侧输出需 `RAY_DEDUP_LOGS=0` 且确认 glog 级别（详见 kptools-mooncake-log-trace 的部署文档，配套 PR #404）。
 
 ## 7. 使用边界与踩坑
 

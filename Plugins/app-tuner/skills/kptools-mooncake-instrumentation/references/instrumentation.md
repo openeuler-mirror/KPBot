@@ -15,14 +15,14 @@ glog INFO 级，输出到引擎进程 stdout（Ray 汇总到 head 日志）。
 
 ```
 I20261118 10:58:41.143564 719011 client_service.cpp:1219] [MKT_FINE] keys=49 open_ms=0.03536 build_ms=0.082311 alloc_ms=0.01996 submit_ms=2.24474 wait_ms=64.6071
-I20261118 10:58:41.144507 719011 real_client.cpp:4783] [MKT_TTF] keys=49 mem=49 locdisk=0 disk=0 bytes=597295104 total_ms=68.8998 query_ms=0.693005 select_ms=0.1137 getmem_ms=67.9937 offload_ms=0 checksum_ms=0 diskio_ms=0 src_ep=7.150.0.11:15418 kv_addr=0x12f1c0c00000 dst_addr=0x12d8b68a0000 key=GLM-5.2-W4A8@pcp0@dcp0@head_or_tp_rank:0@pp_rank:0@group:0@cache_role:kv@cache_family:c1@013e... size=12189696
+I20261118 10:58:41.144507 719011 real_client.cpp:4783] [MKT_TTF] keys=49 mem=49 locdisk=0 disk=0 bytes=597295104 total_ms=68.8998 query_ms=0.693005 select_ms=0.1137 getmem_ms=67.9937 offload_ms=0 checksum_ms=0 diskio_ms=0 src_ep=192.0.2.11:15418 kv_addr=0x000012f1c0c00000 dst_addr=0x000012d8b68a00000 key=<model>@pcp0@dcp0@head_or_tp_rank:0@pp_rank:0@group:0@cache_role:kv@cache_family:c1@<hash>... size=12189696
 ```
 
 **put 链（设计格式串，待实测校准——字段名/顺序为契约，具体数值为示意）：**
 
 ```
 I20261118 11:02:05.201443 707880 client_service.cpp:3715] [MKT_PFINE] keys=32 build_ms=0.1137 checksum_ms=1.8056 alloc_ms=3.2107 stage_ms=0.0221 submit_ms=2.4474 wait_ms=52.1071 dfs_ms=0 final_ms=0.8841
-I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=390070272 total_ms=61.1137 build_ms=0.2413 put_ms=60.7296 dst_ep=7.150.0.11:15418 kv_addr=0x12f1c0c00000 dst_addr=0x12d8b68a0000 key=GLM-5.2-W4A8@pcp0@dcp0@head_or_tp_rank:0@pp_rank:0@group:0@cache_role:kv@cache_family:c1@013e... size=12189696
+I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=390070272 total_ms=61.1137 build_ms=0.2413 put_ms=60.7296 dst_ep=192.0.2.11:15418 kv_addr=0x000012f1c0c00000 dst_addr=0x000012d8b68a00000 key=<model>@pcp0@dcp0@head_or_tp_rank:0@pp_rank:0@group:0@cache_role:kv@cache_family:c1@<hash>... size=12189696
 ```
 
 ## 2. MKT_TTF 字段契约（get 链批次摘要，real_client.cpp）
@@ -43,7 +43,7 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 | `offload_ms` | float/ms | LOCAL_DISK offload RPC 路径耗时 |
 | `checksum_ms` | float/ms | DISK/DFS 数据校验耗时 |
 | `diskio_ms` | float/ms | DISK/DFS 读盘耗时 |
-| `src_ep` | str | 采样传输的源端点（如 `7.150.0.11:15418`，取首个内存副本传输任务的 source endpoint） |
+| `src_ep` | str | 采样传输的源端点（如 `192.0.2.11:15418`，RFC 5737 文档保留段示例，取首个内存副本传输任务的 source endpoint） |
 | `kv_addr` | hex | 采样传输的远端源地址（source address） |
 | `dst_addr` | hex | 采样传输的本地目的地址（destination buffer） |
 | `key` | str | 采样 key（批内首个内存路径 key，完整 Mooncake key 格式） |

@@ -22,7 +22,13 @@ find / -name "libstore_c*.so*" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/n
 
 section "4. 引擎进程实际 mmap 的 mooncake 库 (最权威)"
 # 找 vLLM 引擎进程: EngineCore / vllm / ray
-ENG_PIDS=$(ps -eo pid,cmd 2>/dev/null | grep -E "EngineCore|vllm|raylet" | grep -v grep | awk '{print $1}' | head -5)
+# head -5 截断：多引擎进程场景可能截断（engine_pids_truncated 见 JSON 摘要），
+# 真正持有 mmap 的进程被截掉时按第 3 节 find 结果 + JSON 的 so_files 兜底
+ENG_PIDS_RAW=$(ps -eo pid,cmd 2>/dev/null | grep -E "EngineCore|vllm|raylet" | grep -v grep | awk '{print $1}')
+ENG_COUNT=$(echo "$ENG_PIDS_RAW" | grep -c . || true)
+ENG_PIDS=$(echo "$ENG_PIDS_RAW" | head -5)
+ENGINE_PIDS_TRUNCATED=false
+[ "$ENG_COUNT" -gt 5 ] && ENGINE_PIDS_TRUNCATED=true
 if [ -z "$ENG_PIDS" ]; then
   echo "未发现运行中的引擎进程（可能 stopped）；改用第 3 节 find 结果定位"
 else
@@ -59,7 +65,13 @@ env 2>/dev/null | grep -iE "GLOG|MOONCAKE|RAY_DEDUP" || echo "无相关环境变
 PY_PKGS=$(pip list 2>/dev/null | grep -i mooncake | tr '\n' ';' | sed 's/;*$//')
 SO_LIST=$(find / -name "*mooncake*.so*" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | sort -u | head -20 | tr '\n' ';')
 MAP_SO=""
-[ -n "$ENG_PIDS" ] && MAP_SO=$(grep -ih mooncake /proc/$ENG_PIDS/maps 2>/dev/null | awk '{print $NF}' | sort -u | tr '\n' ';')
+# 按 pid 循环累积（不能把多 pid 拼进单个 /proc 路径：$ENG_PIDS 展开为
+# "/proc/<pid1> <pid2>/maps" 会让 grep 收到非法路径、字段恒为空）
+if [ -n "$ENG_PIDS" ]; then
+  MAP_SO=$(for pid in $ENG_PIDS; do
+             grep -ih mooncake /proc/$pid/maps 2>/dev/null
+           done | awk '{print $NF}' | sort -u | tr '\n' ';')
+fi
 CMAKE_OK=$(command -v cmake >/dev/null 2>&1 && echo true || echo false)
 GPP_OK=$(command -v g++ >/dev/null 2>&1 && echo true || echo false)
 SRC_RES=$(find / -name "real_client.cpp" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -1)
@@ -71,6 +83,7 @@ cat <<EOF
   "pip_packages": "$PY_PKGS",
   "so_files": "$SO_LIST",
   "engine_mapped_so": "$MAP_SO",
+  "engine_pids_truncated": $ENGINE_PIDS_TRUNCATED,
   "cmake": $CMAKE_OK,
   "gpp": $GPP_OK,
   "source_residue": "$SRC_RES"
