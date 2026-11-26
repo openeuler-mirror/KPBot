@@ -1,0 +1,70 @@
+{
+ "skill_name": "oceanbase-hotspot-analysis",
+ "version": "1.0.0",
+ "notes": "热点归因类评估；不实际执行采集。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "火焰图里 ApplySrv 占比很高，insert 场景落后对照，怎么归因？不要执行命令。",
+   "expected_output": "ApplySrv 是回放应用线程：insert 写入触发 redo→回放链路，其占比高说明时间耗在回放应用而非 SQL 执行本身。归因前先固定场景身份（同口径窗口、同基线），结合线程 CPU%（ApplySrv 单线程饱和?）、GV$SYSSTAT 写入相关增量、redo/转储指标互证；单 ApplySrv 打满即回放成为串行点——这是 ApplySrv 自适应线程源码优化的典型证据形态（决策入口在 performance-optimization）。",
+   "files": [
+    "references/thread-and-queue-model.md",
+    "references/scenario-hotspots.md"
+   ],
+   "expectations": [
+    "解释 ApplySrv 职责与 insert 链路关系",
+    "给出线程归因的证据组合（CPU%/SYSSTAT/redo）",
+    "指出单线程饱和→串行点结论",
+    "归因后指向优化 skill",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "CPU 不饱和但 TPS 上不去，先看什么？on-CPU 火焰图为什么看不出问题？不要执行命令。",
+   "expected_output": "CPU 不饱和先分等待形态：off-CPU（offcputime 睡眠原因链）与等待队列/锁（LATCH_WAIT、线程状态视图）、客户端驱动（sysbench 端 CPU/连接模型）、跨 NUMA/跨 P 请求。on-CPU 火焰图只采样正在 CPU 上执行的栈，阻塞睡眠时间不进栈——锁等待/队列等待在 on-CPU 图上不可见，需 off-CPU 与线程状态互补。",
+   "files": [
+    "references/profiling-playbook.md",
+    "references/stats-topdown.md"
+   ],
+   "expectations": [
+    "区分 on-CPU 与 off-CPU 证据形态",
+    "列出 CPU 不饱和的首查顺序",
+    "提到线程状态/LATCH_WAIT 视图",
+    "提到客户端与 NUMA 因素",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "同一 sysbench 负载在 950 和 920B 上的 topdown 数字能直接对比吗？L3 Bound 高说明什么？不要执行命令。",
+   "expected_output": "不能直接横比：两机型微架构不同（L1D MPKI、L3 时延、uncore/频率特性不同），topdown 数字必须同机型同口径系列内比较；跨机型只能看结构性结论（如 950 的 L3 private/cluster 时延更明显、访存更重）。L3 Bound 高提示访存瓶颈（缓存容量/一致性/预取），要配 cache/TLB 指标与火焰图访存热点互证，不能只凭单一 topdown 项下结论。",
+   "files": [
+    "references/stats-topdown.md",
+    "references/scenario-hotspots.md"
+   ],
+   "expectations": [
+    "指出跨机型不可直接横比",
+    "说明只能比较结构性结论",
+    "L3 Bound 与 cache/TLB 互证",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "GV$SYSSTAT 的值是时点值还是累计值？怎么用它解释一次压测的瓶颈？不要执行命令。",
+   "expected_output": "GV$SYSSTAT 是累计计数器（时点查询是快照），解释单次压测要用窗口前后快照的**增量**：取窗口边界两次快照按 STAT_ID 求差，再结合 QPS/RT 归一化。常见误判：拿时点值当窗口值、或把其他负载累计值算进本次窗口。审计视图（GV$OB_SQL_AUDIT）按 ELAPSED/QUEUE 拆每条 SQL 的耗时分布，与线程归因互补。",
+   "files": [
+    "references/stats-topdown.md",
+    "references/profiling-playbook.md"
+   ],
+   "expectations": [
+    "指出累计值+快照差分口径",
+    "说明增量与 QPS 归一化",
+    "提到 SQL 审计视图互补",
+    "点出常见误判",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
