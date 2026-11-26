@@ -1,0 +1,20 @@
+{
+  "skill_name": "kptools-vllm-src-analysis",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "ModelRunnerV2 是 vLLM-Ascend 哪个版本引入的？v1 又是从哪版开始的？", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "ModelRunner v1 和 v2 的实现有什么区别，v2 在哪一版默认开启？", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "0.30.0rc1 相比 0.19.1rc1 改了什么，对 NPU 和 CPU 性能有什么影响？", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "这份 trace 里的 sample_tokens 帧，在 v0.30.0rc1 里对应哪个文件和行号？", "should_trigger": true },
+    { "id": "EQ-05", "prompt": "给我 vllm-ascend 各版本和 vLLM、CANN、torch_npu 的兼容矩阵", "should_trigger": true },
+    { "id": "EQ-06", "prompt": "从 v0.13.0rc1 到 v0.30.0rc1，worker 和 model_runner 有哪些新增、删除和行号漂移？", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "vLLM 在 Ascend 上的架构演进趋势是什么，MRV2 后面会怎么走？", "should_trigger": true },
+    { "id": "EQ-08", "prompt": "某函数在 v0.23.0rc1 和 v0.30.0rc1 的调用位置变了吗，给我源码证据", "should_trigger": true },
+    { "id": "EQ-09", "prompt": "分析这份 trace 的 P1/P2/P3 阶段和 Free 时间去哪了", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis-nostack" },
+    { "id": "EQ-10", "prompt": "对比优化前后两份 profiling 的步耗时、气泡和算子变化", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-hub" },
+    { "id": "EQ-11", "prompt": "给正在跑的 vllm 进程采集一下 topdown 和线程热点", "should_trigger": false, "note": "routes to kptools-proc-collector / kptools-py-spy" },
+    { "id": "EQ-12", "prompt": "帮我给 vLLM-Ascend 的 prefill 路径打 TTFT 点并回滚", "should_trigger": false, "note": "routes to kptools-vllm-ascend-ttft-instrumentation" },
+    { "id": "EQ-13", "prompt": "判断这个 vLLM MoE 服务的专家负载是否均衡", "should_trigger": false, "note": "routes to vllm-eplb-analysis" }
+  ]
+}
