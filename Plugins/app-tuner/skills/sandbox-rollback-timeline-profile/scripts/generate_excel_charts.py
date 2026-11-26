@@ -61,13 +61,17 @@ def auto_width(ws):
                 pass
         ws.column_dimensions[col_letter].width = min(max_len + 4, 30)
 
+def fmt_num(value, digits=1, suffix=""):
+    """数值格式化；None（上游无 host 采样/全轮失败时为 null）显示 n/a"""
+    return f"{value:.{digits}f}{suffix}" if isinstance(value, (int, float)) else "n/a"
+
 def write_benchmark_sheet(wb, data):
     """写入bench总体结果"""
     ws = wb.create_sheet("Bench总体", 0)
 
     bench = data.get("benchmark", {})
-    wall = bench.get("wall_ms", {})
-    per = bench.get("per_rollback_ms", {})
+    wall = bench.get("wall_ms") or {}
+    per = bench.get("per_rollback_ms") or {}
 
     headers = ["指标", "值"]
     for col, h in enumerate(headers, 1):
@@ -81,21 +85,21 @@ def write_benchmark_sheet(wb, data):
         ("dirty_mb", bench.get("dirty_mb", "")),
         ("successful", bench.get("successful", "")),
         ("errors", bench.get("errors", "")),
-        ("success_rate", f"{bench.get('success_rate', 0)*100:.1f}%"),
-        ("throughput_rps", f"{bench.get('throughput_rps', 0):.1f}"),
-        ("total_time_s", f"{bench.get('total_time_s', 0):.3f}"),
+        ("success_rate", fmt_num((bench.get("success_rate") or 0) * 100, 1, "%")),
+        ("throughput_rps", fmt_num(bench.get("throughput_rps"), 1)),
+        ("total_time_s", fmt_num(bench.get("total_time_s"), 3)),
         ("", ""),
         ("batch wall latency", ""),
-        ("min", f"{wall.get('min', 0):.1f}ms"),
-        ("avg", f"{wall.get('avg', 0):.1f}ms"),
-        ("P50", f"{wall.get('p50', 0):.1f}ms"),
-        ("P95", f"{wall.get('p95', 0):.1f}ms"),
-        ("max", f"{wall.get('max', 0):.1f}ms"),
+        ("min", fmt_num(wall.get("min"), 1, "ms")),
+        ("avg", fmt_num(wall.get("avg"), 1, "ms")),
+        ("P50", fmt_num(wall.get("p50"), 1, "ms")),
+        ("P95", fmt_num(wall.get("p95"), 1, "ms")),
+        ("max", fmt_num(wall.get("max"), 1, "ms")),
         ("", ""),
         ("per-rollback latency", ""),
-        ("avg", f"{per.get('avg', 0):.1f}ms"),
-        ("P50", f"{per.get('p50', 0):.1f}ms"),
-        ("P95", f"{per.get('p95', 0):.1f}ms"),
+        ("avg", fmt_num(per.get("avg"), 1, "ms")),
+        ("P50", fmt_num(per.get("p50"), 1, "ms")),
+        ("P95", fmt_num(per.get("p95"), 1, "ms")),
     ]
 
     for row_idx, (label, value) in enumerate(rows, 2):
@@ -187,7 +191,7 @@ def write_host_sheet(wb, data):
     """写入host资源"""
     ws = wb.create_sheet("Host资源")
 
-    summary = data.get("host_summary", {})
+    summary = data.get("host_summary") or {}
     headers = ["指标", "值"]
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col, value=h)
@@ -200,10 +204,10 @@ def write_host_sheet(wb, data):
         ("max_procs_blocked", summary.get("max_procs_blocked", "")),
         ("max_threads", summary.get("max_threads", "")),
         ("max_shims", summary.get("max_shims", "")),
-        ("max_iowait_pct", f"{summary.get('max_iowait_pct', 0):.3f}%"),
-        ("max_system_pct", f"{summary.get('max_system_pct', 0):.2f}%"),
-        ("max_ctxt_per_s", f"{summary.get('max_ctxt_per_s', 0):.0f}"),
-        ("max_processes_per_s", f"{summary.get('max_processes_per_s', 0):.0f}"),
+        ("max_iowait_pct", fmt_num(summary.get("max_iowait_pct"), 3, "%")),
+        ("max_system_pct", fmt_num(summary.get("max_system_pct"), 2, "%")),
+        ("max_ctxt_per_s", fmt_num(summary.get("max_ctxt_per_s"), 0)),
+        ("max_processes_per_s", fmt_num(summary.get("max_processes_per_s"), 0)),
     ]
 
     for row_idx, (label, value) in enumerate(rows, 2):

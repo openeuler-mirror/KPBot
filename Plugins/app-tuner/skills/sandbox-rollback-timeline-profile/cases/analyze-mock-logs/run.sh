@@ -68,6 +68,34 @@ check("benchmark successful == 2", analysis.get("benchmark", {}).get("successful
 check("benchmark wall_ms avg == 70", approx(analysis.get("benchmark", {}).get("wall_ms", {}).get("avg"), 70))
 check("master snapshot-rollback avg == 68", approx(analysis.get("cubemaster_stages", {}).get("snapshot-rollback", {}).get("avg"), 68))
 
+# 同一沙箱多次回滚：明细按 rollback attempt 分段，RollbackSnapshot 耗时按尝试序配对
+rb_detail = analysis.get("rollback_detail", {})
+check("rollback attempt count == 3 (sb-rb-001 rolled back twice)",
+      rb_detail.get("rollback_attempt_count") == 3, rb_detail.get("rollback_attempt_count"))
+check("rollback instance count == 2", rb_detail.get("instance_count") == 2,
+      rb_detail.get("instance_count"))
+
+with open(os.path.join(work, "rollback-details.jsonl")) as f:
+    detail_rows = [json.loads(line) for line in f if line.strip()]
+att1 = next((d for d in detail_rows
+             if d.get("instance_id") == "sb-rb-001" and d.get("rollback_attempt") == 1), None)
+att2 = next((d for d in detail_rows
+             if d.get("instance_id") == "sb-rb-001" and d.get("rollback_attempt") == 2), None)
+check("sb-rb-001 attempt 1 exists", att1 is not None)
+check("sb-rb-001 attempt 2 exists (second rollback of same sandbox)", att2 is not None)
+check("sb-rb-001 attempt 2 rollback_request_total == 55ms",
+      att2 is not None and approx(att2.get("rollback_request_total_ms"), 55),
+      None if att2 is None else att2.get("rollback_request_total_ms"))
+check("sb-rb-001 attempt 2 vm_downtime == 44ms",
+      att2 is not None and approx(att2.get("vm_downtime_ms"), 44),
+      None if att2 is None else att2.get("vm_downtime_ms"))
+check("sb-rb-001 attempt 1 pairs RollbackSnapshot cost 40",
+      att1 is not None and approx(att1.get("shim_rollback_snapshot_ms"), 40),
+      None if att1 is None else att1.get("shim_rollback_snapshot_ms"))
+check("sb-rb-001 attempt 2 has no RollbackSnapshot cost (paired by attempt order)",
+      att2 is not None and att2.get("shim_rollback_snapshot_ms") is None,
+      None if att2 is None else att2.get("shim_rollback_snapshot_ms"))
+
 passed = sum(1 for c in checks if c["pass"])
 result = {
     "success": passed == len(checks),

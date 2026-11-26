@@ -39,13 +39,14 @@ description: 沙箱回滚（Rollback）时序图采集与分析——在并发�
   └── 按偏移量切割出 delta 增量日志
 
 阶段 2: 阶段统计 (analyze_rollback_profile.mjs)
+  ├── 解析 run.log 的 ROLLBACK_BEGIN/END 时间窗 → 按窗口把日志关联到对应 case
   ├── 读取 rollback-latency/*.summary.json → 回滚总体延迟（wall_ms / per_rollback_ms）
   ├── 读取 cubelet_stat-delta.log → cubelet 各阶段 (groupStageStats by Callee)
   ├── 读取 shim_stat-delta.log → shim 各阶段 (groupStageStats by CalleeAction)
-  ├── 读取 shim_req-delta.log → 回滚详细子阶段（嵌入式时间戳解析）
+  ├── 读取 shim_req-delta.log → 回滚详细子阶段（嵌入式时间戳解析，按回滚尝试分段）
   ├── 读取 master-delta.log → CubeMaster ext_info 阶段（snapshot-rollback/job-validate/runtime-ref）
   ├── 构建阶段关系拓扑 CSV (parent/child/containment/sequence/additivity)
-  └── 输出 stage-latency.csv + analysis JSON
+  └── 输出 stage-latency.csv + analysis JSON（顶层对第一组 case，cases 字段为各组分段统计）
 
 阶段 3: 时序图渲染 (gen_timeline.py)
   ├── 从 Excel/CSV 读取阶段数据 (stage_id → avg_ms, parent_id, depth)
@@ -91,10 +92,24 @@ profile-rb-c5-n5 5 5 0
 profile-rb-c10-n5 10 5 0"
 ```
 
-格式：`case_name concurrency rounds dirty_mb`。每轮调用一次
-`bench_rollback_concurrency.py -c <concurrency> -n 1 -d <dirty_mb> --no-header`，
-捕获该轮的 wall_ms 与 per-rollback ms，写入 `rollback-latency/<case>.json` 的 raw 数组
-（每个元素 = 1 轮）。`dirty_mb>0` 时每轮回滚前先向 guest 写脏页，用于量化 **内存恢复（RestoreVm）** 的成本。
+格式：`case_name concurrency rounds dirty_mb`（case_name 必须是单个文件名安全
+token：`[A-Za-z0-9][A-Za-z0-9._-]*`，用于构造输出路径）。每轮调用一次
+`bench_rollback_concurrency.py -c <concurrency> -n 1 -d <dirty_mb>`，从输出中取
+最后一条可解析的数据行（wall=$3、per=$7）捕获该轮的 wall_ms 与 per-rollback ms，
+写入 `rollback-latency/<case>.json` 的 raw 数组（每个元素 = 1 轮）。bench 非零
+退出或输出不可解析即计为失败轮：不计入成功轮/吞吐量，也不写入 raw。`dirty_mb>0`
+时每轮回滚前先向 guest 写脏页，用于量化 **内存恢复（RestoreVm）** 的成本。
+每组用例向 run.log 写 `ROLLBACK_BEGIN`/`ROLLBACK_END` 时间窗口标记，阶段 2 按
+窗口把组件日志关联到对应 case（多组并发度不互相混入；warm-up 落在窗口内，
+见下方已知局限）。
+
+**沙箱清理语义**：基准执行器只删除本次运行新建的沙箱（与 case 开始时的基线集合
+做差）；API 密钥可见的既有沙箱默认仅记录告警（`pre-existing-sandboxes-*.txt`）、
+不删除，确需全局清场时显式设置 `ALLOW_GLOBAL_CLEANUP=1`（仅独占基准机时使用）。
+
+**已知局限**：bench 每次调用内部的 warm-up 回滚同样落在该 case 的窗口内，组件
+日志无法区分 warm-up 与测量请求，阶段统计会把 warm-up 一并计入（如需纯净样本，
+可将 rounds=1 的一次单独采集作为 warm-up 基线并人工剔除）。
 
 ## 阶段 2：阶段统计
 
@@ -140,6 +155,11 @@ Shim 的 req 日志（`shim_req-delta.log`）包含嵌入式时间戳和事件�
 - `guest_receive_to_restore_branch` = guest_restore_branch - guest_restore_receive
 - `restore_path_unresolved` = shim_restore - guest_receive_to_restore_branch（诊断残差）
 
+**同一沙箱多次回滚**：明细按"每次回滚尝试"（rollback attempt）分段——同一实例再次
+出现 `rollback req start` 即开启新 attempt，RollbackSnapshot 耗时按实例内第 N 次
+回滚与第 N 条 stat 记录配对（`rollback_attempt` 字段为尝试序号），避免多次回滚
+漏记或首末轮错配。
+
 ### 2.4 阶段拓扑定义
 
 这是时序图的核心——定义各阶段的父子包含关系、顺序关系、可加性。拓扑定义见
@@ -164,16 +184,19 @@ api.rollback (depth 0, root)
     │   │   ├── shim.ResetVm (depth 5, reset_guest)
     │   │   ├── shim.ConnectAgent (depth 5, guest agent 重连)
     │   │   ├── shim.rollback-request-total (depth 5, 边界标记)
-    │   │   └── shim.vm-downtime (depth 5, 重叠窗口)
+    │   │   ├── shim.vm-downtime (depth 5, 重叠窗口)
+    │   │   └── shim.memory-restore-cumulative (depth 5, 内存恢复累计标记)
     │   ├── cubelet.persist-rootfs (depth 3, 后处理)
     │   └── cubelet.network-bump (depth 3, 阈值采样, best-effort)
     └── master.runtime-ref (depth 2, RECOVERING: 运行时引用绑定)
 ```
 
-**containment 关系类型**（沿用创建场景并补充）：
+**containment 关系类型**（回滚链实际使用的取值）：
 - `root` / `observed_within` / `remote_child` / `inside` / `partial_observation`
 - `cross_component_inside` / `equivalent_window` / `overlapping_window`
-- `derived_from` / `propagated_copy` / `aggregate_of`
+- `derived_from` / `cumulative_from_origin`（从 req 起点累计的位置标记，非独立可加阶段）
+
+（创建场景孪生中的 `propagated_copy` / `aggregate_of` 未在回滚链出现。）
 
 ### 2.5 输出 CSV 格式
 
@@ -210,6 +233,7 @@ min_ms, p50_ms, p95_ms, max_ms, notes
 | shim.ConnectAgent | 49 | bar | Agent 重连 |
 | shim.vm-downtime | 30 | span | guest 停机窗口 |
 | shim.rollback-request-total | 28 | span | 请求边界 |
+| shim.memory-restore-cumulative | 33 | span | 内存恢复累计标记 |
 | cubelet.persist-rootfs | 55 | bar | 后处理 |
 | cubelet.network-bump | 56 | parallel | 网络代际 bump |
 | master.runtime-ref | 58 | bar | 运行时引用 |
@@ -267,8 +291,9 @@ min_ms, p50_ms, p95_ms, max_ms, notes
 2. 工具依赖：`node`（analyze 脚本）、`python3` + `openpyxl` + `matplotlib`（Excel/PNG/SVG）、`bpftrace`（on-CPU profiling，可选）、`cubesandbox` Python SDK（回滚基准脚本依赖）
 3. 环境变量：
    - **必填**：`BASE_DIR`（CubeSandbox examples 目录）、`TEMPLATE_ID`（沙箱模板 ID）、`API_KEY`（CubeSandbox API 密钥）、`BENCH_SCRIPT`（`bench_rollback_concurrency.py` 路径，默认 `$BASE_DIR/snapshot-rollback-clone/bench_rollback_concurrency.py`）
-   - **可选**：`OUT_DIR`（默认 `$BASE_DIR/rollback-profile-results`）、`CASE_NAME`（默认 `profile-rb-c1-n5`）、`LOG_DIR`（默认 `/data/log`）、`METRICS_URL`（默认 `http://127.0.0.1:9998/v1/metrics`）、`API_URL`（默认 `http://127.0.0.1:3000`）、`SHIM_PATTERN` / `VMM_PATTERN`（host 采样进程匹配模式）、`PYTHON_BIN`（默认 python3，需已安装 cubesandbox SDK）
+   - **可选**：`OUT_DIR`（默认 `$BASE_DIR/rollback-profile-results`）、`CASE_NAME`（默认 `profile-rb-c1-n5`，仅用于单 case 默认矩阵命名；触发检测匹配 `CASE_MATRIX` 中任意 case 名）、`LOG_DIR`（默认 `/data/log`）、`METRICS_URL`（默认 `http://127.0.0.1:9998/v1/metrics`）、`API_URL`（默认 `http://127.0.0.1:3000`）、`SHIM_PATTERN` / `VMM_PATTERN`（host 采样进程匹配模式）、`PYTHON_BIN`（默认 python3，需已安装 cubesandbox SDK）、`ALLOW_GLOBAL_CLEANUP`（默认 0；=1 时允许删除 API 密钥可见的全部遗留沙箱，见 §1.3 沙箱清理语义）
    - 脚本不内置任何用户名路径、内部部署路径或占位凭证，未设置必填变量时会立即报错退出
+   - `API_KEY` 仅经环境变量传递；基准执行器的 curl 经 0600 临时配置文件携带鉴权头，密钥不会进入进程命令行（argv 可被同机用户经 `ps`/`/proc/<pid>/cmdline` 读取）
 
 ### 移植适配点
 
@@ -277,7 +302,7 @@ min_ms, p50_ms, p95_ms, max_ms, notes
 2. `analyze_rollback_profile.mjs` 的 `definitions` 阶段拓扑与日志字段名（Callee/CalleeAction/CostTime/InstanceId）——组件日志格式变化时需同步修改；尤其回滚的 `Action` 值（当前假设为 `Rollback`）与 Master 响应 `RollbackSnapshot_rsp:` 前缀
 3. `gen_timeline.py` 的 `LAYOUT`（阶段 ID + 估计偏移）——阶段增删时同步修改
 4. `run_rollback_profile.sh` 中 bpftrace 的进程名列表（cubelet/cubemaster/network-agent/vcpu*/cloud-hypervis/cube-vmm）
-5. 回滚基准脚本 `bench_rollback_concurrency.py` 的 `-n 1` 逐轮驱动方式（每轮含 1 次 warm-up），输出行格式变化需同步修改 `run_rollback_perf.sh` 的解析
+5. 回滚基准脚本 `bench_rollback_concurrency.py` 的 `-n 1` 逐轮驱动方式（每轮含 1 次 warm-up），输出行格式（wall=$3、per=$7）变化需同步修改 `run_rollback_perf.sh` 的解析
 
 ### 步骤 1：确认环境
 
@@ -308,7 +333,7 @@ python3 $SKILL_DIR/scripts/export_to_excel.py <profile_dir>/analysis.json <profi
 python3 $SKILL_DIR/scripts/gen_timeline.py <out_dir>/rollback-profile-results.xlsx
 ```
 
-输出：`rollback-timeline.svg`（生成在 gen_timeline.py 所在目录）
+输出：`rollback-timeline.svg`（默认生成在输入 xlsx 所在目录）
 
 ### 步骤 5：生成完整报表（可选，替代步骤 2-4）
 
@@ -326,3 +351,5 @@ python3 $SKILL_DIR/scripts/generate_excel_charts.py <profile_dir> <out_dir>
 4. **部分观测阶段**：`resolve-targets`/`mount-metadata`/`network-bump`/`derive-rootfs` 只记录超过日志阈值的样本，count 不足时不能代表全部请求。
 5. **脏页对比**：用 `dirty_mb` 从 0 扫到 2048/8192，对比 RestoreVm 与 vm-downtime 的增幅，即可量化"内存全量恢复"瓶颈（回滚读侧无增量优化）。
 6. **日志轮转风险**：若测试期间日志发生轮转（inode 变化），delta 切割会回退为全量复制，需检查 `log-rotation-warnings.txt`。
+7. **采样生命周期**：host 采样 / bpftrace / 进程快照自基准触发后启动、随 runner 退出而停止，覆盖全部 case 的采集窗口；进程快照只保留进程标识与资源字段（不含 `args` 完整命令行），避免无关进程的凭证进入证据文件。
+8. **空值兜底**：全部轮次失败或缺少 host 采样时，analysis.json 中相应统计为 null，Excel 报表对应单元格显示 `n/a`（不会崩溃）；`rollback-latency/<case>.summary.json` 仍为合法 JSON。

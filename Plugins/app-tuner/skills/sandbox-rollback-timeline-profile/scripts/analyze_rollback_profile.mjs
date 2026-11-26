@@ -5,8 +5,10 @@
 //   node analyze_rollback_profile.mjs PROFILE_DIR \
 //     [--details-out FILE] [--csv-out FILE]
 //
-// 输入: PROFILE_DIR/evidence/*-delta.log, PROFILE_DIR/rollback-latency/*.summary.json
-// 输出: stdout 为 analysis.json, 同时生成 stage-latency.csv 与 rollback-details.jsonl
+// 输入: PROFILE_DIR/evidence/*-delta.log, PROFILE_DIR/rollback-latency/*.summary.json,
+//       PROFILE_DIR/run.log（ROLLBACK_BEGIN/END 时间窗标记，可选）
+// 输出: stdout 为 analysis.json（顶层对应第一组 case，cases 字段为各组分段统计）,
+//       同时生成 stage-latency.csv 与 rollback-details.jsonl
 
 import fs from "node:fs";
 import path from "node:path";
@@ -33,12 +35,13 @@ for (let index = 3; index < process.argv.length; index += 1) {
 
 const evidenceDir = path.join(profileDir, "evidence");
 const latencyDir = path.join(profileDir, "rollback-latency");
-const caseName = fs
+const caseSummaries = fs
   .readdirSync(latencyDir)
-  .find((name) => name.endsWith(".summary.json"))
-  ?.replace(".summary.json", "");
+  .map((name) => (name.endsWith(".summary.json") ? name.slice(0, -".summary.json".length) : null))
+  .filter(Boolean)
+  .sort();
 
-if (!caseName) {
+if (caseSummaries.length === 0) {
   throw new Error(`no case summary found under ${latencyDir}`);
 }
 
@@ -351,43 +354,67 @@ function buildStageRelationshipCsv(result) {
 }
 
 // ── 回滚详细子阶段（嵌入式时间戳解析）──────────────────────────────────
+// 同一沙箱可能被多次回滚（多轮基准/重试）：明细按"每次回滚尝试"分段——同一实例
+// 再次出现 "rollback req start" 即开启新的 attempt；RollbackSnapshot 耗时
+// 按实例内第 N 次回滚与第 N 条 stat 记录配对，避免多次回滚漏记或错配。
 function buildRollbackDetail(shimRequestRecords, shimRollbackRecords, ids, eventSource) {
-  const byInstance = new Map([...ids].map((id) => [id, { instance_id: id }]));
-  const outerRollbackSnapshot = new Map(
-    shimRollbackRecords
-      .filter((record) => record.CalleeAction === "RollbackSnapshot")
-      .map((record) => [record.InstanceId, Number(record.CostTime)]),
-  );
-
+  const requestsByInstance = new Map();
   for (const record of shimRequestRecords) {
-    if (!byInstance.has(record.InstanceId) || typeof record.LogContent !== "string") continue;
-    const detail = byInstance.get(record.InstanceId);
-    const content = record.LogContent.trim();
-    const hostTimestamp = parseTimestamp(record.Timestamp);
+    if (!ids.has(record.InstanceId) || typeof record.LogContent !== "string") continue;
+    if (!requestsByInstance.has(record.InstanceId)) requestsByInstance.set(record.InstanceId, []);
+    requestsByInstance.get(record.InstanceId).push(record);
+  }
 
-    if (content === "rollback req start") setFirst(detail, "rollback_req_start_host_ms", hostTimestamp);
-    else if (content === "delete vm start") setFirst(detail, "delete_vm_start_host_ms", hostTimestamp);
-    else if (content === "delete vm finish") setFirst(detail, "delete_vm_finish_host_ms", hostTimestamp);
-    else if (content === "restore start") setFirst(detail, "restore_start_host_ms", hostTimestamp);
-    else if (content === "restore finish") setFirst(detail, "restore_finish_host_ms", hostTimestamp);
-    else if (content === "agent is ready") setFirst(detail, "agent_ready_host_ms", hostTimestamp);
-    else if (content === "rollback req finish") setFirst(detail, "rollback_req_finish_host_ms", hostTimestamp);
+  const snapshotCostsByInstance = new Map();
+  for (const record of shimRollbackRecords) {
+    if (record.CalleeAction !== "RollbackSnapshot") continue;
+    const cost = Number(record.CostTime);
+    if (!Number.isFinite(cost)) continue;
+    if (!snapshotCostsByInstance.has(record.InstanceId)) {
+      snapshotCostsByInstance.set(record.InstanceId, []);
+    }
+    snapshotCostsByInstance.get(record.InstanceId).push(cost);
+  }
 
-    const memoryRestore = content.match(/^memory restore finish at:(\d+(?:\.\d+)?)$/);
-    if (memoryRestore) detail.memory_restore_cumulative_ms = Number(memoryRestore[1]);
+  const details = [];
+  for (const [instanceId, records] of requestsByInstance) {
+    let attempt = null;
+    let attemptIndex = 0;
+    const openAttempt = () => {
+      attemptIndex += 1;
+      attempt = { instance_id: instanceId, rollback_attempt: attemptIndex, path: "unknown" };
+      details.push(attempt);
+    };
+    for (const record of records) {
+      const content = record.LogContent.trim();
+      const hostTimestamp = parseTimestamp(record.Timestamp);
+      if (content === "rollback req start" || !attempt) openAttempt();
 
-    const embedded = parseEmbeddedLog(content);
-    if (embedded?.msg === "[cube-strace]recv restore") {
-      setFirst(detail, "guest_restore_receive_ms", parseTimestamp(embedded.ts));
-    } else if (embedded?.msg === "restore by snapshot") {
-      detail.path = "snapshot-restore";
-      setFirst(detail, "guest_restore_branch_ms", parseTimestamp(embedded.ts));
+      if (content === "rollback req start") setFirst(attempt, "rollback_req_start_host_ms", hostTimestamp);
+      else if (content === "delete vm start") setFirst(attempt, "delete_vm_start_host_ms", hostTimestamp);
+      else if (content === "delete vm finish") setFirst(attempt, "delete_vm_finish_host_ms", hostTimestamp);
+      else if (content === "restore start") setFirst(attempt, "restore_start_host_ms", hostTimestamp);
+      else if (content === "restore finish") setFirst(attempt, "restore_finish_host_ms", hostTimestamp);
+      else if (content === "agent is ready") setFirst(attempt, "agent_ready_host_ms", hostTimestamp);
+      else if (content === "rollback req finish") setFirst(attempt, "rollback_req_finish_host_ms", hostTimestamp);
+
+      const memoryRestore = content.match(/^memory restore finish at:(\d+(?:\.\d+)?)$/);
+      if (memoryRestore) attempt.memory_restore_cumulative_ms = Number(memoryRestore[1]);
+
+      const embedded = parseEmbeddedLog(content);
+      if (embedded?.msg === "[cube-strace]recv restore") {
+        setFirst(attempt, "guest_restore_receive_ms", parseTimestamp(embedded.ts));
+      } else if (embedded?.msg === "restore by snapshot") {
+        attempt.path = "snapshot-restore";
+        setFirst(attempt, "guest_restore_branch_ms", parseTimestamp(embedded.ts));
+      }
     }
   }
 
-  const details = [...byInstance.values()].map((detail) => {
+  for (const detail of details) {
     detail.path ??= "unknown";
-    detail.shim_rollback_snapshot_ms = outerRollbackSnapshot.get(detail.instance_id) ?? null;
+    const costs = snapshotCostsByInstance.get(detail.instance_id) ?? [];
+    detail.shim_rollback_snapshot_ms = costs[detail.rollback_attempt - 1] ?? null;
     detail.rollback_request_total_ms = difference(
       detail.rollback_req_finish_host_ms,
       detail.rollback_req_start_host_ms,
@@ -412,8 +439,7 @@ function buildRollbackDetail(shimRequestRecords, shimRollbackRecords, ids, event
       detail.restore_ms,
       detail.guest_receive_to_restore_branch_ms,
     );
-    return detail;
-  });
+  }
 
   const markerKeys = [
     "shim_rollback_snapshot_ms", "rollback_request_total_ms", "delete_vm_ms",
@@ -431,7 +457,8 @@ function buildRollbackDetail(shimRequestRecords, shimRollbackRecords, ids, event
       schema_version: 1,
       event_source: eventSource,
       raw_event_count: shimRequestRecords.length,
-      instance_count: details.length,
+      instance_count: new Set(details.map((detail) => detail.instance_id)).size,
+      rollback_attempt_count: details.length,
       path_counts: pathCounts,
       marker_coverage: coverage,
       direct_timings_ms: {
@@ -453,6 +480,7 @@ function buildRollbackDetail(shimRequestRecords, shimRollbackRecords, ids, event
         vm_downtime: "delete_vm_start → agent_ready; guest fully unavailable, overlaps DeleteVm/RestoreVm/ResetVm/ConnectAgent.",
         rollback_request_total: "Equivalent window of RollbackSnapshot; do not add to sub-stages.",
         restore_path_unresolved: "Shim RestoreVm minus guest branch-selection time; includes request/RPC and restore dispatch.",
+        rollback_attempt: "Details are segmented per rollback attempt (a new 'rollback req start' opens a new attempt); RollbackSnapshot cost is paired by attempt order.",
       },
     },
     details,
@@ -460,74 +488,140 @@ function buildRollbackDetail(shimRequestRecords, shimRollbackRecords, ids, event
 }
 
 // ── 主流程 ─────────────────────────────────────────────────────────────
-const summary = JSON.parse(
-  fs.readFileSync(path.join(latencyDir, `${caseName}.summary.json`), "utf8"),
-);
-const benchmarkRaw = JSON.parse(
-  fs.readFileSync(path.join(latencyDir, `${caseName}.json`), "utf8"),
-);
-const benchmark = {
-  case: summary.case,
-  concurrency: summary.concurrency,
-  rounds: summary.rounds,
-  dirty_mb: summary.dirty_mb,
-  bench_exit: summary.bench_exit,
-  successful: summary.successful,
-  errors: summary.errors,
-  success_rate: summary.success_rate,
-  total_time_s: summary.total_time_s,
-  throughput_rps: summary.throughput_rps,
-  wall_ms: summary.wall_ms,
-  per_rollback_ms: summary.per_rollback_ms,
-};
-const benchmarkRounds = benchmarkRaw.raw ?? [];
-
-const cubeletRecords = readJsonLines(path.join(evidenceDir, "cubelet_stat-delta.log"));
-const rollbackRoots = cubeletRecords.filter(
-  (record) => record.Action === "Rollback" && record.Callee === "rollback-service",
-);
-const instanceIds = new Set(rollbackRoots.map((record) => record.InstanceId));
-const cubeletRollback = cubeletRecords.filter(
-  (record) => record.Action === "Rollback" && instanceIds.has(record.InstanceId),
-);
-
-const shimRecords = readJsonLines(path.join(evidenceDir, "shim_stat-delta.log"));
-const shimRollback = shimRecords.filter(
-  (record) => record.Action === "Rollback" && instanceIds.has(record.InstanceId),
-);
-const focusedRollbackFile = path.join(evidenceDir, "rollback-events.jsonl");
-const shimRequestFile = fs.existsSync(focusedRollbackFile)
-  ? focusedRollbackFile
-  : path.join(evidenceDir, "shim_req-delta.log");
-const shimRequestRecords = fs.existsSync(shimRequestFile) ? readJsonLines(shimRequestFile) : [];
-const rollbackDetail = buildRollbackDetail(
-  shimRequestRecords,
-  shimRollback,
-  instanceIds,
-  path.relative(profileDir, shimRequestFile),
-);
-
-const masterRecords = readJsonLines(path.join(evidenceDir, "master-delta.log"));
-const masterExtensions = [];
-for (const record of masterRecords) {
-  if (typeof record.LogContent !== "string") continue;
-  if (!record.LogContent.startsWith("RollbackSnapshot_rsp:")) continue;
-  try {
-    const response = JSON.parse(record.LogContent.slice("RollbackSnapshot_rsp:".length));
-    if (instanceIds.has(response.sandbox_id)) masterExtensions.push(response.ext_info ?? {});
-  } catch {
-    // Ignore incomplete or unrelated request log records.
+// run.log 中 ROLLBACK_BEGIN/ROLLBACK_END 标记给出每组用例的采集时间窗，
+// 阶段日志按窗口关联到对应 case（多组并发度互不混入；run.log 缺失时回退为不过滤）
+const caseWindows = new Map();
+const runLogFile = path.join(profileDir, "run.log");
+if (fs.existsSync(runLogFile)) {
+  for (const line of fs.readFileSync(runLogFile, "utf8").split("\n")) {
+    let match = line.match(/^(\S+)\s+ROLLBACK_BEGIN name=(\S+)/);
+    if (match) {
+      const begin = parseTimestamp(match[1]);
+      if (begin != null) caseWindows.set(match[2], { begin, end: null });
+      continue;
+    }
+    match = line.match(/^(\S+)\s+ROLLBACK_END name=(\S+)/);
+    if (match) {
+      const rollbackWindow = caseWindows.get(match[2]);
+      const end = parseTimestamp(match[1]);
+      if (rollbackWindow && end != null) rollbackWindow.end = end;
+    }
   }
 }
 
-const masterStages = {};
-for (const stage of ["snapshot-rollback", "job-validate", "runtime-ref"]) {
-  masterStages[stage] = stats(
-    masterExtensions
-      .map((extension) => Number(extension[stage]))
-      .filter(Number.isFinite),
+function analyzeCase(currentCaseName) {
+  const analysisWindow = caseWindows.get(currentCaseName) ?? null;
+  const inWindow = analysisWindow && analysisWindow.begin != null
+    ? (record) => {
+        const timestamp = parseTimestamp(record.Timestamp);
+        return timestamp != null && timestamp >= analysisWindow.begin &&
+          (analysisWindow.end == null || timestamp <= analysisWindow.end);
+      }
+    : () => true;
+
+  const summary = JSON.parse(
+    fs.readFileSync(path.join(latencyDir, `${currentCaseName}.summary.json`), "utf8"),
   );
+  const benchmarkRaw = JSON.parse(
+    fs.readFileSync(path.join(latencyDir, `${currentCaseName}.json`), "utf8"),
+  );
+  const benchmark = {
+    case: summary.case,
+    concurrency: summary.concurrency,
+    rounds: summary.rounds,
+    dirty_mb: summary.dirty_mb,
+    bench_exit: summary.bench_exit,
+    successful: summary.successful,
+    errors: summary.errors,
+    success_rate: summary.success_rate,
+    total_time_s: summary.total_time_s,
+    throughput_rps: summary.throughput_rps,
+    wall_ms: summary.wall_ms,
+    per_rollback_ms: summary.per_rollback_ms,
+  };
+  const benchmarkRounds = benchmarkRaw.raw ?? [];
+
+  const cubeletRecords = readJsonLines(path.join(evidenceDir, "cubelet_stat-delta.log"))
+    .filter(inWindow);
+  const rollbackRoots = cubeletRecords.filter(
+    (record) => record.Action === "Rollback" && record.Callee === "rollback-service",
+  );
+  const instanceIds = new Set(rollbackRoots.map((record) => record.InstanceId));
+  const cubeletRollback = cubeletRecords.filter(
+    (record) => record.Action === "Rollback" && instanceIds.has(record.InstanceId),
+  );
+
+  const shimRecords = readJsonLines(path.join(evidenceDir, "shim_stat-delta.log"))
+    .filter(inWindow);
+  const shimRollback = shimRecords.filter(
+    (record) => record.Action === "Rollback" && instanceIds.has(record.InstanceId),
+  );
+  const focusedRollbackFile = path.join(evidenceDir, "rollback-events.jsonl");
+  const shimRequestFile = fs.existsSync(focusedRollbackFile)
+    ? focusedRollbackFile
+    : path.join(evidenceDir, "shim_req-delta.log");
+  const shimRequestRecords = fs.existsSync(shimRequestFile)
+    ? readJsonLines(shimRequestFile).filter(inWindow)
+    : [];
+  const rollbackDetail = buildRollbackDetail(
+    shimRequestRecords,
+    shimRollback,
+    instanceIds,
+    path.relative(profileDir, shimRequestFile),
+  );
+
+  const masterRecords = readJsonLines(path.join(evidenceDir, "master-delta.log"))
+    .filter(inWindow);
+  const masterExtensions = [];
+  for (const record of masterRecords) {
+    if (typeof record.LogContent !== "string") continue;
+    if (!record.LogContent.startsWith("RollbackSnapshot_rsp:")) continue;
+    try {
+      const response = JSON.parse(record.LogContent.slice("RollbackSnapshot_rsp:".length));
+      if (instanceIds.has(response.sandbox_id)) masterExtensions.push(response.ext_info ?? {});
+    } catch {
+      // Ignore incomplete or unrelated request log records.
+    }
+  }
+
+  const masterStages = {};
+  for (const stage of ["snapshot-rollback", "job-validate", "runtime-ref"]) {
+    masterStages[stage] = stats(
+      masterExtensions
+        .map((extension) => Number(extension[stage]))
+        .filter(Number.isFinite),
+    );
+  }
+
+  return {
+    section: {
+      case: currentCaseName,
+      benchmark,
+      benchmark_rounds: benchmarkRounds,
+      case_window: analysisWindow
+        ? { begin: analysisWindow.begin, end: analysisWindow.end }
+        : null,
+      correlated_instances: instanceIds.size,
+      cubelet_stages: groupStageStats(cubeletRollback, "Callee"),
+      shim_stages: groupStageStats(shimRollback, "CalleeAction"),
+      rollback_detail: rollbackDetail.summary,
+      cubemaster_stages: masterStages,
+    },
+    details: rollbackDetail.details,
+  };
 }
+
+const cases = {};
+const detailsByCase = {};
+for (const name of caseSummaries) {
+  const analysis = analyzeCase(name);
+  cases[name] = analysis.section;
+  detailsByCase[name] = analysis.details;
+}
+// 顶层字段对第一组 case（沿用 stage-latency.csv / Excel 报表的口径）；
+// cases 字段携带每组 case 的分段统计
+const primaryCase = caseSummaries[0];
+const primary = cases[primaryCase];
 
 const hostSamplesFile = path.join(evidenceDir, "host-samples.csv");
 const hostLines = fs.existsSync(hostSamplesFile)
@@ -576,32 +670,39 @@ const migrationSamples = [...bpfText.matchAll(/@(vm_kernel\[[\s\S]*?migration_en
   .map((match) => Number(match[2]))
   .reduce((sum, value) => sum + value, 0);
 
+const maxHostValue = (field) =>
+  hostRows.length > 0 ? Math.max(...hostRows.map((row) => row[field])) : null;
+const maxIntervalValue = (field) =>
+  hostIntervals.length > 0 ? Math.max(...hostIntervals.map((row) => row[field])) : null;
+
 const result = {
-  case: caseName,
-  benchmark,
-  benchmark_rounds: benchmarkRounds,
-  correlated_instances: instanceIds.size,
-  cubelet_stages: groupStageStats(cubeletRollback, "Callee"),
-  shim_stages: groupStageStats(shimRollback, "CalleeAction"),
-  rollback_detail: rollbackDetail.summary,
-  cubemaster_stages: masterStages,
+  case: primary.case,
+  benchmark: primary.benchmark,
+  benchmark_rounds: primary.benchmark_rounds,
+  case_window: primary.case_window,
+  correlated_instances: primary.correlated_instances,
+  cubelet_stages: primary.cubelet_stages,
+  shim_stages: primary.shim_stages,
+  rollback_detail: primary.rollback_detail,
+  cubemaster_stages: primary.cubemaster_stages,
   host_summary:
     hostRows.length > 0
       ? {
           sample_count: hostRows.length,
-          max_runnable: Math.max(...hostRows.map((row) => row.runnable)),
-          max_procs_running: Math.max(...hostRows.map((row) => row.procs_running)),
-          max_procs_blocked: Math.max(...hostRows.map((row) => row.procs_blocked)),
-          max_threads: Math.max(...hostRows.map((row) => row.threads)),
-          max_shims: Math.max(...hostRows.map((row) => row.shim_count)),
-          max_iowait_pct: Math.max(...hostIntervals.map((row) => row.iowait_pct)),
-          max_system_pct: Math.max(...hostIntervals.map((row) => row.system_pct)),
-          max_ctxt_per_s: Math.max(...hostIntervals.map((row) => row.ctxt_per_s)),
-          max_processes_per_s: Math.max(...hostIntervals.map((row) => row.processes_per_s)),
+          max_runnable: maxHostValue("runnable"),
+          max_procs_running: maxHostValue("procs_running"),
+          max_procs_blocked: maxHostValue("procs_blocked"),
+          max_threads: maxHostValue("threads"),
+          max_shims: maxHostValue("shim_count"),
+          max_iowait_pct: maxIntervalValue("iowait_pct"),
+          max_system_pct: maxIntervalValue("system_pct"),
+          max_ctxt_per_s: maxIntervalValue("ctxt_per_s"),
+          max_processes_per_s: maxIntervalValue("processes_per_s"),
         }
       : null,
   host_intervals: hostIntervals,
   bpftrace: { migration_entry_wait_samples: migrationSamples },
+  cases,
   generated_files: {
     stage_latency_csv: path.relative(profileDir, csvOut),
     rollback_details_jsonl: detailsOut
@@ -614,7 +715,7 @@ if (detailsOut) {
   fs.mkdirSync(path.dirname(detailsOut), { recursive: true });
   fs.writeFileSync(
     detailsOut,
-    `${rollbackDetail.details.map((detail) => JSON.stringify(detail)).join("\n")}\n`,
+    `${detailsByCase[primaryCase].map((detail) => JSON.stringify(detail)).join("\n")}\n`,
   );
 }
 

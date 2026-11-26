@@ -73,36 +73,44 @@ ws.freeze_panes = "A2"
 ws2 = wb.create_sheet("Summary")
 ws2.column_dimensions["A"].width = 30
 ws2.column_dimensions["B"].width = 20
-b, wall, per = data["benchmark"], data["benchmark"]["wall_ms"], data["benchmark"]["per_rollback_ms"]
+# 上游在缺 host 采样/全部轮次失败时会输出 null，消费端统一兜底
+b = data.get("benchmark") or {}
+wall = b.get("wall_ms") or {}
+per = b.get("per_rollback_ms") or {}
+host = data.get("host_summary") or {}
+
+def stat_or_na(value, digits=2):
+    return round(value, digits) if isinstance(value, (int, float)) else "n/a"
+
 items = [
-    ("Case", data["case"]),
-    ("Correlated Instances", data["correlated_instances"]),
-    ("Concurrency", b["concurrency"]),
-    ("Rounds", b["rounds"]),
-    ("Dirty MB", b["dirty_mb"]),
+    ("Case", data.get("case", "")),
+    ("Correlated Instances", data.get("correlated_instances", "")),
+    ("Concurrency", b.get("concurrency", "")),
+    ("Rounds", b.get("rounds", "")),
+    ("Dirty MB", b.get("dirty_mb", "")),
     ("", ""),
-    ("Errors", b["errors"]),
-    ("Success Rate", f"{b['success_rate'] * 100}%"),
-    ("Throughput (RPS)", round(b["throughput_rps"], 1)),
-    ("Total Time (s)", round(b["total_time_s"], 2)),
+    ("Errors", b.get("errors", "")),
+    ("Success Rate", f"{(b.get('success_rate') or 0) * 100}%"),
+    ("Throughput (RPS)", stat_or_na(b.get("throughput_rps"), 1)),
+    ("Total Time (s)", stat_or_na(b.get("total_time_s"))),
     ("", ""),
-    ("Batch Wall Avg (ms)", round(wall["avg"], 2)),
-    ("Batch Wall P50 (ms)", round(wall["p50"], 2)),
-    ("Batch Wall P95 (ms)", round(wall["p95"], 2)),
-    ("Batch Wall Max (ms)", round(wall["max"], 2)),
-    ("Per-Rollback Avg (ms)", round(per["avg"], 2)),
-    ("Per-Rollback P50 (ms)", round(per["p50"], 2)),
-    ("Per-Rollback P95 (ms)", round(per["p95"], 2)),
-    ("Per-Rollback Max (ms)", round(per["max"], 2)),
+    ("Batch Wall Avg (ms)", stat_or_na(wall.get("avg"))),
+    ("Batch Wall P50 (ms)", stat_or_na(wall.get("p50"))),
+    ("Batch Wall P95 (ms)", stat_or_na(wall.get("p95"))),
+    ("Batch Wall Max (ms)", stat_or_na(wall.get("max"))),
+    ("Per-Rollback Avg (ms)", stat_or_na(per.get("avg"))),
+    ("Per-Rollback P50 (ms)", stat_or_na(per.get("p50"))),
+    ("Per-Rollback P95 (ms)", stat_or_na(per.get("p95"))),
+    ("Per-Rollback Max (ms)", stat_or_na(per.get("max"))),
     ("", ""),
-    ("Max Runnable", data["host_summary"]["max_runnable"]),
-    ("Max Shims", data["host_summary"]["max_shims"]),
-    ("Max IOWait %", round(data["host_summary"]["max_iowait_pct"], 3)),
-    ("Max System %", round(data["host_summary"]["max_system_pct"], 2)),
+    ("Max Runnable", host.get("max_runnable", "n/a")),
+    ("Max Shims", host.get("max_shims", "n/a")),
+    ("Max IOWait %", stat_or_na(host.get("max_iowait_pct"), 3)),
+    ("Max System %", stat_or_na(host.get("max_system_pct"))),
     ("", ""),
     ("Rollback path counts", ""),
 ]
-cd = data.get("rollback_detail", {})
+cd = data.get("rollback_detail") or {}
 for path, cnt in cd.get("path_counts", {}).items():
     items.append((f"  {path}", cnt))
 for metric, value in items:

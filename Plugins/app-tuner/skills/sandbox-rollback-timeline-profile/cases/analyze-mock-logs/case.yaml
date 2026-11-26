@@ -5,8 +5,9 @@
 #
 # 说明：tier A。不依赖 CubeSandbox 真机——fixtures/ 下是手工合成的
 # cubelet/shim/master delta 日志与回滚基准报告（2 个实例 sb-rb-001/sb-rb-002，
-# 耗时值已知），驱动 analyze 脚本后对 stage-latency.csv 与 analysis.json
-# 做 22 项断言（阶段存在性、avg 手算值、父子拓扑、回滚子阶段派生指标）。
+# 其中 sb-rb-001 被回滚两次，耗时值已知），驱动 analyze 脚本后对
+# stage-latency.csv 与 analysis.json 做 30 项断言（阶段存在性、avg 手算值、
+# 父子拓扑、回滚子阶段派生指标、同一沙箱多次回滚按尝试分段配对）。
 # 阶段 1 数据采集（run_rollback_profile.sh）需 CubeSandbox 真机，属 tier C，不在本用例覆盖。
 
 name: analyze-mock-logs
@@ -29,7 +30,7 @@ assert:
   - type: json_field
     file: results/result.json
     field: checks_passed
-    expect: 22
+    expect: 30
 
 # tier C（真机采集）待办：run_rollback_profile.sh 端到端用例需声明 CubeSandbox
 # 组件运行、bench_rollback_concurrency.py、bpftrace 等前置，按 case-spec「真机项可 SKIP」处理。

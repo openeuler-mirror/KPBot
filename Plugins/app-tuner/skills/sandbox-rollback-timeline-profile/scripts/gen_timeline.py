@@ -10,6 +10,9 @@ even when avg durations don't compose across components.
 
 Usage:
     python gen_timeline.py [path/to/rollback-profile-results.xlsx] [output.svg]
+
+    If output.svg is omitted, it is written next to the input xlsx
+    (not into this script's directory, to avoid polluting the skill checkout).
 """
 
 import math
@@ -269,7 +272,8 @@ if __name__ == "__main__":
         print(f"ERROR: {xlsx} not found")
         sys.exit(1)
 
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else script_dir / "rollback-timeline.svg"
+    # 默认输出到输入 xlsx 同目录（skill 安装目录可能只读，也不应被产物污染）
+    out = Path(sys.argv[2]) if len(sys.argv) > 2 else xlsx.parent / "rollback-timeline.svg"
 
     stages = load_data(str(xlsx))
     print(f"Loaded {len(stages)} stages from {xlsx.name}")

@@ -4,6 +4,9 @@
 # 与 sandbox-timeline-profile 的 run_c50_profile.sh 机制一致，仅基准从 cube-bench
 # 换成 bench_rollback_concurrency.py（每个沙箱自建快照后并发回滚，按轮重复）。
 #
+# host 采样 / bpftrace / 进程快照的生命周期跟随 runner：基准触发后启动，runner
+# 退出后经停止标记结束，保证多 case 采集全程都有资源证据。
+#
 # 用法: bash run_rollback_profile.sh
 # 必填环境变量: BASE_DIR TEMPLATE_ID API_KEY
 # 可选: OUT_DIR CASE_NAME LOG_DIR METRICS_URL BENCH_SCRIPT RUNNER PYTHON_BIN
@@ -26,6 +29,7 @@ log_dir=${LOG_DIR:-/data/log}
 metrics_url=${METRICS_URL:-http://127.0.0.1:9998/v1/metrics}
 api_log=${API_LOG:-$(find "$log_dir/CubeAPI" -maxdepth 1 -type f -name 'cube-api-*.log' -printf '%T@ %p
 ' | sort -nr | head -1 | cut -d' ' -f2-)}
+case_matrix=${CASE_MATRIX:-$case_name 1 5 0}
 
 if [[ -z "$api_log" ]]; then
   printf 'no CubeAPI log found under %s/CubeAPI\n' "$log_dir" >&2
@@ -50,11 +54,25 @@ done >"$out_dir/evidence/log-offsets-before.txt"
 
 curl -fsS "$metrics_url" >"$out_dir/evidence/metrics-before.prom" || true
 
+# 触发检测匹配 CASE_MATRIX 中任意 case 名（与 CASE_NAME 解耦）：
+# 只要矩阵中任一 case 开始，即视为基准已触发
+mapfile -t trigger_names < <(printf '%s\n' "$case_matrix" | awk 'NF {print $1}')
+if (( ${#trigger_names[@]} == 0 )); then
+  trigger_names=("$case_name")
+fi
+
+stop_flag="$out_dir/.sampling-stop"
+rm -f "$stop_flag"
+
 (
+  grep_args=()
+  for watch_name in "${trigger_names[@]}"; do
+    grep_args+=(-e "ROLLBACK_BEGIN name=$watch_name ")
+  done
   deadline=$((SECONDS + 60))
-  while ! grep -qF "ROLLBACK_BEGIN name=${case_name} " "$out_dir/run.log" 2>/dev/null; do
+  while ! grep -qF "${grep_args[@]}" "$out_dir/run.log" 2>/dev/null; do
     if (( SECONDS >= deadline )); then
-      printf 'profile trigger timed out for case %s\n' "$case_name" \
+      printf 'profile trigger timed out for cases: %s\n' "${trigger_names[*]}" \
         >"$out_dir/evidence/profile-trigger-error.txt"
       exit 1
     fi
@@ -62,8 +80,9 @@ curl -fsS "$metrics_url" >"$out_dir/evidence/metrics-before.prom" || true
   done
 
   date -Is >"$out_dir/evidence/profile-triggered-at.txt"
-  "$tools_dir/sample_host.sh" \
-    "$out_dir/evidence/host-samples.csv" 12 0.1 &
+  # 采样时长仅作上限保护，实际由 runner 退出后的 stop 标记停止
+  bash "$tools_dir/sample_host.sh" \
+    "$out_dir/evidence/host-samples.csv" 86400 0.1 &
   sampler_pid=$!
 
   bpftrace -o "$out_dir/evidence/bpftrace-profile.txt" -e '
@@ -74,35 +93,41 @@ curl -fsS "$metrics_url" >"$out_dir/evidence/metrics-before.prom" || true
     profile:hz:19 /comm == "vcpu0" || comm == "vcpu1" || comm == "cloud-hypervis" || comm == "cube-vmm"/ {
       @vm_kernel[comm, kstack] = count();
     }
-    interval:s:8 { exit(); }
   ' >"$out_dir/evidence/bpftrace-launch.log" 2>&1 &
   tracer_pid=$!
 
-  for second in $(seq 0 8); do
+  second=0
+  while [[ ! -f "$stop_flag" ]]; do
     {
       printf 'snapshot_at=%s second=%s\n' "$(date -Is)" "$second"
-      ps -eLo pid,tid,ppid,psr,stat,pcpu,pmem,comm,wchan:32,args \
-        --sort=-pcpu | head -400 \
-        | sed -E 's/-api-key [^ ]+/-api-key <redacted>/g; s/Authorization: Bearer [^ ]+/Authorization: Bearer <redacted>/g'
+      # 不采集 args 列，避免无关进程的完整命令行（可能含凭证）进入证据文件；
+      # awk 读取全部输入后截取前 400 行，规避 head 提前关管道导致的 SIGPIPE
+      ps -eLo pid,tid,ppid,psr,stat,pcpu,pmem,comm,wchan:32 \
+        --sort=-pcpu | awk 'NR<=400'
     } >"$out_dir/evidence/process-snapshot-$second.txt"
+    second=$((second + 1))
     sleep 1
   done
 
-  wait "$sampler_pid" || true
-  wait "$tracer_pid" || true
+  kill "$sampler_pid" "$tracer_pid" 2>/dev/null || true
+  wait "$sampler_pid" 2>/dev/null || true
+  wait "$tracer_pid" 2>/dev/null || true
 ) &
 watcher_pid=$!
 
 set +e
 WORKDIR="$out_dir" \
 TEMPLATE_ID="$template_id" \
-CASE_MATRIX="${CASE_MATRIX:-$case_name 1 5 0}" \
-  "$runner"
+CASE_MATRIX="$case_matrix" \
+  bash "$runner"
 runner_rc=$?
 set -e
 
+# 通知 watcher 停止采样并等待其退出
+: >"$stop_flag"
 watcher_rc=0
 wait "$watcher_pid" || watcher_rc=$?
+rm -f "$stop_flag"
 
 curl -fsS "$metrics_url" >"$out_dir/evidence/metrics-after.prom" || true
 
@@ -115,7 +140,17 @@ while read -r name log_path before_size before_inode; do
 
   delta_path="$out_dir/evidence/$name-delta.log"
   if [[ "$current_inode" == "$before_inode" && "$current_size" -ge "$before_size" ]]; then
-    tail -c "+$((before_size + 1))" "$log_path" >"$delta_path"
+    # 从 before_size 起精确读取 current_size - before_size 字节：组件持续写日志时，
+    # 记录 after 快照之后新增的内容不会混进 delta（与 offsets-before/after 回放一致）
+    expected=$((current_size - before_size))
+    dd if="$log_path" of="$delta_path" bs=4096 skip="$before_size" count="$expected" \
+      iflag=skip_bytes,count_bytes status=none 2>/dev/null || true
+    written=$(stat -c %s "$delta_path" 2>/dev/null || printf '0')
+    if (( written < expected )); then
+      printf '%s short_read expected_bytes=%s got_bytes=%s\n' \
+        "$name" "$expected" "$written" \
+        >>"$out_dir/evidence/log-rotation-warnings.txt"
+    fi
   else
     cp "$log_path" "$delta_path"
     printf '%s inode_or_size_changed before_size=%s before_inode=%s after_size=%s after_inode=%s\n' \

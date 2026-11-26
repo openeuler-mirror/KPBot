@@ -17,7 +17,7 @@ deadline=$(awk -v now="$(cut -d' ' -f1 /proc/uptime)" -v duration="$duration" \
 
 while :; do
     uptime_s=$(cut -d' ' -f1 /proc/uptime)
-    awk -v uptime_s="$uptime_s" '
+    line=$(awk -v uptime_s="$uptime_s" '
         FILENAME == "/proc/stat" && $1 == "cpu" {
             user=$2; nice=$3; sys=$4; idle=$5; iowait=$6; irq=$7;
             softirq=$8; steal=$9
@@ -40,11 +40,12 @@ while :; do
                 running,blocked,intr,softirq_total,load1,runnable,threads,mem_available, \
                 dirty,writeback
         }
-    ' /proc/stat /proc/loadavg /proc/meminfo >>"$output"
+    ' /proc/stat /proc/loadavg /proc/meminfo)
 
     shim_count=$(pgrep -fc "${SHIM_PATTERN:-containerd-shim-cube-rs}" || true)
     vmm_processes=$(pgrep -fc "${VMM_PATTERN:-/cloud-hypervisor|/cube-vmm|/vmm }" || true)
-    printf ',%s,%s\n' "$shim_count" "$vmm_processes" >>"$output"
+    # 整行单次 append 写入：被 kill 终止时不会在输出中留下半行
+    printf '%s,%s,%s\n' "$line" "$shim_count" "$vmm_processes" >>"$output"
 
     awk -v now="$uptime_s" -v deadline="$deadline" 'BEGIN { exit !(now >= deadline) }' && break
     sleep "$interval"
