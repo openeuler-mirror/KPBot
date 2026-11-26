@@ -1,0 +1,11 @@
+name: build-contract
+skill: flink-velox-stack-build
+tier: A
+entrypoint: ["python3", "cases/build-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
