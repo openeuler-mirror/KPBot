@@ -70,6 +70,16 @@
       "version": "1.0.0",
       "platforms": ["claude", "opencode"],
       "tags": ["skill", "quality", "static-review"]
+    },
+    {
+      "name": "kpbot-pr-maintainer",
+      "description": "向 GitCode 上的 KPBot 仓库提交改动，跟踪 PR 检视和门禁，并验证修复",
+      "author": {"name": "attack_city_lion"},
+      "category": "development",
+      "source": "./Plugins/public/kpbot-pr-maintainer",
+      "version": "1.0.0",
+      "platforms": ["claude", "opencode", "codex", "dsh"],
+      "tags": ["gitcode", "pull-request", "review", "automation"]
     }
   ]
 }

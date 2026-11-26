@@ -27,7 +27,7 @@ python adapters/codex/install.py uninstall project codex "C:\my project"
 
 ## 适配范围
 
-- 安装声明 `platforms: [ ..., "codex" ]` 的插件，当前包含 code-optimizer、app-tuner 和 openwiki-sync。
+- 安装器读取插件的 `.claude-plugin/plugin.json`。其中 `platforms` 包含 `codex` 的插件会参与技能发现，例如 `kpbot-pr-maintainer`。
 - 从 `Plugins/` 的分组目录递归发现插件，遇到 `.claude-plugin/plugin.json` 即停止扫描包内资源；嵌入的插件清单作为资源保留，不会产生第二份安装。未声明 Codex 的插件也遵守该包边界，领域拆分时不要在分组目录保留旧聚合清单。
 - 按插件的 `codex.exclude` 跳过依赖其他工具专用工作流的技能。kunpeng-knowledge 的 OpenCode 账户授权流程尚未适配，不在 Codex 中安装。
 - 在安装副本中加入 Codex 工具映射说明，将 Claude/OpenCode 的技能目录改为 `.agents/skills/`；源技能保持原样。
@@ -58,21 +58,22 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-在 `d6379ba6` 加入 `kpbot-training-inference-host-insights` 后，安装结果如下。
+在 PR 基线 `de731ebc` 加入 `kpbot-pr-maintainer` 后，安装结果如下。
 
 | 口径 | 数量 |
 | --- | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 341 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 387 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 450 |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 345 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 391 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 454 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
 未绑定可复现的树状态，不应用作当前版本的验证结论。
 计数快照保存在 `tests/fixtures/codex-skill-counts.json`，仓库安装回归精确断言三种数量。
-技能增删时应重新测量，并同步更新快照和本文；不要只放宽测试断言。
+增删技能后重新运行项目级安装，并同步更新快照和本文。如果多个 PR 同时修改技能目录，后合入的 PR 应在新的目标基线上重新安装、核对三个计数。可在候选合并树的仓库根目录单独运行计数回归，再运行全套安装测试。
 
 ```bash
+python3 -m unittest discover -s tests -p test_codex_install.py -k test_repository_catalog_matches_measured_counts
 python3 -m unittest discover -s tests -p test_codex_install.py
 ```
 

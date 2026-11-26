@@ -1,0 +1,8 @@
+{
+  "name": "kpbot-pr-maintainer",
+  "version": "1.0.0",
+  "description": "向 GitCode 上的 KPBot 仓库提交改动，跟踪 PR 检视和门禁，并验证修复",
+  "license": "MulanPSL-2.0",
+  "agents": ["./skills/kpbot-pr-maintainer/agents/kpbot-pr-maintainer.md"],
+  "platforms": ["claude", "opencode", "codex", "dsh"]
+}

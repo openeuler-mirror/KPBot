@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { apply, inject } from '../adapters/dsh/index.mjs';
+import { installSkills } from '../adapters/dsh/install.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -63,6 +64,23 @@ test('native provider lists the real package and loads DSH instructions with can
     assert.equal((await provider.get(grouped)).name, grouped.name);
     assert.ok((await fs.stat(path.join(grouped.resourceBase.path, 'references/workflow.md'))).isFile());
   } finally { dispose(); }
+});
+
+test('installs the public PR maintainer plugin with the DSH runtime', async t => {
+  const directory = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'kpbot-dsh-maintainer-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const plugin = 'Plugins/public/kpbot-pr-maintainer';
+  const runtime = 'adapters/dsh/runtime.md';
+  await fs.cp(path.join(root, plugin), path.join(directory, plugin), { recursive: true });
+  await fs.mkdir(path.join(directory, path.dirname(runtime)), { recursive: true });
+  await fs.copyFile(path.join(root, runtime), path.join(directory, runtime));
+
+  const result = await installSkills({ repositoryRoot: directory, installPath: directory });
+  assert.deepEqual(result.installed, ['kpbot-pr-maintainer']);
+  const skill = path.join(result.root, 'skills', 'kpbot-pr-maintainer');
+  assert.match(await fs.readFile(path.join(skill, 'SKILL.md'), 'utf8'), /KPBot 的 DSH 运行协议/);
+  assert.ok((await fs.stat(path.join(skill, 'agents/kpbot-pr-maintainer.md'))).isFile());
+  assert.ok((await fs.stat(path.join(skill, 'references/gitcode-status.md'))).isFile());
 });
 
 test('native lookup rejects aborted requests and stale name selections', async () => {

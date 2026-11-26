@@ -856,17 +856,38 @@ class CodexInstallTests(unittest.TestCase):
             self.install()
         self.assertEqual((outside / "SKILL.md").read_text(encoding="utf-8"), "preserve")
 
-    def test_repository_catalog_installs_with_nested_resources(self):
+    def test_installs_public_pr_maintainer_plugin(self):
+        plugin = Path("Plugins/public/kpbot-pr-maintainer")
+        shutil.copytree(REPOSITORY / plugin, self.repository / plugin)
+        self.install()
+        installed = self.installed("kpbot-pr-maintainer")
+        self.assertEqual(codex.skill_document(installed / "SKILL.md")[0], "kpbot-pr-maintainer")
+        self.assertTrue((installed / "agents/openai.yaml").is_file())
+        self.assertTrue((installed / "references/gitcode-status.md").is_file())
+
+    def test_repository_catalog_matches_measured_counts(self):
         expected = json.loads((REPOSITORY / "tests/fixtures/codex-skill-counts.json").read_text(encoding="utf-8"))
         count = codex.install(REPOSITORY, self.root, "project")
-        self.assertEqual(count, expected["manifest_skills"], "Update the measured count fixture and docs/codex.md together when skill inventory changes")
         manifest = json.loads((self.root / codex.MANIFEST).read_text(encoding="utf-8"))
-        self.assertEqual(len(manifest["installed_skills"]), expected["manifest_skills"])
-        self.assertEqual(set(manifest["installed_skills"]), {path.name for path in (self.root / "skills").iterdir()})
+        skills = self.root / "skills"
+        names = [codex.skill_document(document)[0] for document in skills.rglob("SKILL.md")]
         source_count = sum(len(list((metadata.parent.parent / "skills").rglob("SKILL.md")))
                            for metadata in codex.plugin_manifests(REPOSITORY / "Plugins")
                            if codex.plugin_config(metadata) is not None)
-        self.assertEqual(source_count, expected["source_skill_documents_before_exclusions"])
+        measured = {
+            "manifest_skills": len(manifest["installed_skills"]),
+            "installed_skill_documents": len(names),
+            "source_skill_documents_before_exclusions": source_count,
+        }
+        self.assertEqual(measured, {key: expected[key] for key in measured},
+                         "Update the measured count fixture and docs/codex.md together when skill inventory changes")
+        self.assertEqual(count, len(manifest["installed_skills"]))
+        self.assertEqual(set(manifest["installed_skills"]), {path.name for path in skills.iterdir()})
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(codex.uninstall(self.root), count)
+
+    def test_repository_catalog_installs_with_nested_resources(self):
+        codex.install(REPOSITORY, self.root, "project")
         for name in ("kpbot-code-optimizer", "faiss-build", "kptools-openeuler-agentenv", "openwiki-sync"):
             self.assertTrue((self.installed(name) / "SKILL.md").is_file(), name)
         for name in ("drive-claude-optimize-pipeline", "multimedia-code-optimizer", "kunpeng-knowledge"):
@@ -875,10 +896,6 @@ class CodexInstallTests(unittest.TestCase):
         nested = self.installed("kptools-agentenv-tuning") / "skills/agentenv-cluster-tlbi/SKILL.md"
         self.assertTrue(nested.is_file())
         self.assertFalse(self.installed("agentenv-cluster-tlbi").exists())
-        names = [codex.skill_document(document)[0] for document in (self.root / "skills").rglob("SKILL.md")]
-        self.assertEqual(len(names), expected["installed_skill_documents"])
-        self.assertEqual(len(names), len(set(names)))
-        self.assertEqual(codex.uninstall(self.root), count)
 
     @unittest.skipUnless(BASH.is_file(), "Bash is required for CLI integration")
     def test_cli_install_and_uninstall_project_and_global_with_spaces(self):
