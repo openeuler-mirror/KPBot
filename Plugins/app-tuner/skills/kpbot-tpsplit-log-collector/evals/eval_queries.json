@@ -10,7 +10,7 @@
     {"id": "AQ-07", "prompt": "采集输出里没看到 [SHM_DEQUEUE_BATCH] 的计数行，这正常吗？对后面的解析有影响吗", "should_trigger": true, "note": "标记缺失检出与下游影响解读"},
     {"id": "NQ-01", "prompt": "帮我把这轮压测的 TTFT 日志解析一下", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis（解析出表）"},
     {"id": "NQ-02", "prompt": "TTFT breakdown 出个表，看首 token 延迟耗在 tokenize/queue/forward/KV 哪一环", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis"},
-    {"id": "NQ-03", "prompt": "把 TTFT 打点 patch 部署到远端 vLLM 容器里", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace（打点部署，配套 PR 交付）"},
+    {"id": "NQ-03", "prompt": "把 TTFT 打点 patch 部署到远端 vLLM 容器里", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace（打点部署，配套 PR #340 交付）"},
     {"id": "NQ-04", "prompt": "帮我执行一轮压测，并发 16、8k5 序列，看吞吐和 P99", "should_trigger": false, "note": "独立压测/性能评估不归本 skill（本 skill 仅在日志链路缺数据时补跑 --save-detailed）"},
     {"id": "NQ-05", "prompt": "对比 TP 拆分前后的收益，出一份对比报告", "should_trigger": false, "note": "routes to kptools-tpsplit-report"},
     {"id": "NQ-06", "prompt": "dequeue 列全是 0，是解析器 bug 吗", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis（解析侧诊断；归因到采集缺数据源时会指引回本 skill）"},

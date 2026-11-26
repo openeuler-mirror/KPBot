@@ -9,7 +9,7 @@ description: >
   同一次压测、多 P 同名 prefill.log 暂存防覆盖、压测结果 json 回传。即使用户只说
   "把日志拉下来"或"去 /data 找一下这轮压测的打点日志"，也应使用此技能。本 skill
   只做采集与校验；解析出表（Excel/CSV/对账/回填）归 kptools-tpsplit-log-analysis，
-  打点 patch 部署与生效排查归 kptools-tpsplit-log-trace（配套 PR 交付）。
+  打点 patch 部署与生效排查归 kptools-tpsplit-log-trace（配套 PR #340 交付）。
 license: Proprietary
 compatibility: >
   本地 Windows/Linux（发起方）；SSH 访问 P/D/proxy 宿主机（优先 ssh-mcp-server 的
@@ -151,12 +151,16 @@ kptools-tpsplit-log-analysis 的 `scripts/analyze_ttft.py` 完成。本 skill �
 ## 边界与注意
 
 - 本 skill 只做采集与校验：解析出表（Excel 8 Sheet / ttft_table.csv / 对账 / 长尾
-  归因）转 kptools-tpsplit-log-analysis；打点 patch 部署与「打点没输出」排查转
-  kptools-tpsplit-log-trace；TP 拆分前后收益对比转 kptools-tpsplit-report
+  归因）转 kptools-tpsplit-log-analysis（配套 PR #399）；打点 patch 部署与「打点
+  没输出」排查转 kptools-tpsplit-log-trace（配套 PR #340）；TP 拆分前后收益对比转
+  kptools-tpsplit-report
 - **配套拆分说明**：本 skill 由 kptools-tpsplit-log-analysis 的采集侧拆出
-  （`fetch_logs.sh` 与采集流程迁入本 skill，脚本实现与拆分前逐字节一致）。与解析
-  侧收窄 PR 改动不相交、任意先后合入无冲突；建议同批合入，避免采集触发面在
-  过渡期与解析侧重叠
+  （`fetch_logs.sh` 与采集流程迁入本 skill）。**脚本与拆分前并非逐字节一致**：
+  迁入后按检视意见有修复——BSD/macOS wc 输出填充（count_marker 与无 python3 兜底
+  两处）、`--root` 必填（防误扫共享根）、`--stage` 排他创建（防并发覆盖）、压测
+  记录总数/有效 client_send_ts 数双口径、空数组偏差告警；采集语义零变化，差异
+  以 git 历史为准。与解析侧收窄 PR（#399）改动不相交、任意先后合入无冲突；
+  建议同批合入，避免采集触发面在过渡期与解析侧重叠
 - 只读远端（find/grep/du、cp 仅写入 `--stage` 指定的暂存目录）：不改配置、不重启
   引擎、不动集群；不内置任何节点/路径列表
 
