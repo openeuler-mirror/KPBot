@@ -1,0 +1,18 @@
+{
+  "skill_name": "kptools-mooncake-instrumentation",
+  "queries": [
+    { "id": "AQ-01", "prompt": "给 mooncake 加 MKT 打点，编个带日志的 .so 给 D 侧用", "should_trigger": true, "note": "核心场景：打点+编译" },
+    { "id": "AQ-02", "prompt": "我想看 Mooncake KV 传输耗时的 C++ 层细分，put 链每个阶段多少毫秒", "should_trigger": true, "note": "put 链打点诉求（MKT_PUT/MKT_PFINE），Python 层看不到的盲区" },
+    { "id": "AQ-03", "prompt": "容器里的 mooncake 是什么版本、哪个 .so 正在被进程加载", "should_trigger": true, "note": "探测场景（probe_mooncake.sh）" },
+    { "id": "AQ-04", "prompt": "探测下集群现役 mooncake 版本和构建工具链齐不齐", "should_trigger": true, "note": "探测场景（编译前置检查）" },
+    { "id": "AQ-05", "prompt": "给 Mooncake 客户端源码插桩埋点，输出 [MKT_TTF]/[MKT_FINE] 日志", "should_trigger": true, "note": "核心场景口语化（get 链打点）" },
+    { "id": "NQ-01", "prompt": "把带打点的 mooncake .so 换到容器里", "should_trigger": false, "note": "routes to kptools-mooncake-log-trace（配套 PR #404）——本 skill 只打点+编译，不替换部署" },
+    { "id": "NQ-02", "prompt": "解析 MKT 日志出个耗时分布表", "should_trigger": false, "note": "routes to kptools-tpsplit-log-analysis（日志解析出表）" },
+    { "id": "NQ-03", "prompt": "给 vLLM 的 Python 层加 TTFT 打点", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace / kptools-vllm-ttft-instrumentation 家族（Python 层 .py 打点，非 C++ 编译）" },
+    { "id": "NQ-04", "prompt": "mooncake 打点部署后没有 MKT 输出，帮我排查", "should_trigger": false, "note": "routes to kptools-mooncake-log-trace（部署生效排查，配套 PR #404）" },
+    { "id": "NQ-05", "prompt": "重启引擎让新 .so 生效，然后发个请求验证", "should_trigger": false, "note": "重启/验证动作归 kptools-mooncake-log-trace（配套 PR #404），本 skill 不重启不 smoke" },
+    { "id": "NQ-06", "prompt": "把容器里的 mooncake 升级到 0.3.14", "should_trigger": false, "note": "安装/升级 wheel 非本 skill 范围（本 skill 只做打点+编译产物）" },
+    { "id": "NQ-07", "prompt": "跑一轮压测看看 KV 传输带宽", "should_trigger": false, "note": "压测执行不归本 skill（解析侧归 kptools-tpsplit-log-analysis 生态的采集/压测链路）" },
+    { "id": "NQ-08", "prompt": "mooncake master 起不来，查一下 master 进程状态", "should_trigger": false, "note": "服务运维排查不归本 skill" }
+  ]
+}

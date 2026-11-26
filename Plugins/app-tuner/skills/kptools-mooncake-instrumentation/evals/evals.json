@@ -1,0 +1,36 @@
+{
+  "skill_name": "kptools-mooncake-instrumentation",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "plan-instrumentation-build",
+      "prompt": "我们 PD 集群想看 Mooncake KV 传输的耗时分布，Python 层的 put 计时太粗了。帮我给 mooncake 的 C++ 层加上 MKT 打点（就是那种 [MKT_TTF] / [MKT_FINE] 的日志），编译成 .so 部署到 D 侧引擎容器里。集群现在跑的 mooncake 版本我也不确定。先出完整方案，我确认后再动远端。",
+      "expected_output": "方案覆盖打点+编译全流程：容器内探测（probe_mooncake.sh，以 /proc/<pid>/maps 为权威版本锚定）→ 按版本拉源码（GitHub 失败切 Gitee，版本拿不准即停）→ 按 references/instrumentation.md 打点（get 链 MKT_TTF 六相挂 RealClient::batch_get_into_multi_buffers（vLLM connector 实际入口）+ MKT_FINE 五相挂内存路径；put 链 MKT_PUT 挂批量 put 入口 + MKT_PFINE 挂 Client::BatchPut 收束点；函数级定位禁止按行号）→ 容器内 cmake 编译 → 产物校验（四 tag MKT_TTF/MKT_FINE/MKT_PUT/MKT_PFINE 各 ≥1 + sha256 清单）→ 明确把部署环节交接给 kptools-mooncake-log-trace（产物契约），不自行替换 .so、不自动重启。",
+      "files": [],
+      "assertions": [
+        "方案第一步为容器内探测，且版本锚定以运行中进程 /proc/<pid>/maps 实际 mmap 的 .so 为准（不是仅凭 pip 元数据）",
+        "方案包含版本拿不准即停的门禁，明确禁止拿相近版本硬编（ABI 错配风险）",
+        "打点环节引用 MKT 规格：get 链 MKT_TTF 挂 RealClient::batch_get_into_multi_buffers（vLLM connector 实际入口，六相 query/select/getmem/offload/checksum/diskio）+ MKT_FINE 挂内存路径批量传输（五相 open/build/alloc/submit/wait），并强调函数级定位、禁止按行号",
+        "打点方案覆盖 put 路径：MKT_PUT 挂 real_client 批量 put 入口（batch_put_from 系），MKT_PFINE 挂 Client::BatchPut 收束点（含 StartBatchPut 副本分配等 put 特有相）",
+        "方案要求在目标容器内编译，禁止容器外或异版本环境编译后直塞",
+        "产物校验包含四 tag（MKT_TTF/MKT_FINE/MKT_PUT/MKT_PFINE）各 ≥1 + sha256 清单",
+        "明确部署环节交接给 kptools-mooncake-log-trace（含已验证产物契约），不自行替换 .so、不重启引擎",
+        "方案明确日志解析出表不归本 skill（归 kptools-tpsplit-log-analysis）"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "version-anchor-discipline",
+      "prompt": "我在容器里跑了探测，pip 显示装的是 mooncake-store 0.3.7，但 .so 里的版本串显示是别的，容器里也没有源码残留。git clone 下来发现 0.3.7 的 tag 拉不下来（404）。要不就用 0.3.8 的源码编吧，反正差不多？帮我继续走完部署。",
+      "expected_output": "拒绝用 0.3.8 硬编：版本错配的 .so 替换后可能 import 失败或运行时崩（ABI 不匹配），这是使用边界里的硬规则。正确动作：指出 pip 版本与 .so 版本串矛盾说明可能内部 fork 或 .so 被覆盖，停下来向用户要源码来源（内部 wheel 的构建仓库 / 当初安装包），或建议从 .so 的 git 残留串/符号表进一步锚定（有 commit 哈希直接 checkout commit）。不提供任何『先试试 0.3.8』的绕行。",
+      "files": [],
+      "assertions": [
+        "明确拒绝用 0.3.8 源码编译替代 0.3.7",
+        "以 ABI 错配风险（import 失败或运行时崩溃）作为拒绝理由之一",
+        "指出 pip 版本与 .so 版本串矛盾本身是需要解释的线索（可能内部 fork 或 .so 被覆盖）",
+        "给出可操作的后续锚定路径（提取 .so 版本串/git commit 残留后 checkout、或向用户索要源码来源/内部 wheel）",
+        "明确在拿到真实版本锚点之前不进行打点、编译或部署"
+      ]
+    }
+  ]
+}
