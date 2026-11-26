@@ -152,7 +152,11 @@ scan_one() {  # scan_one PATH KIND MARKER ROOT
     # 双口径输出：记录总数 + 含 client_send_ts 的有效数，缺字段记录告警
     local bvalid
     read -r n bvalid < <(count_bench_records "$f")
-    # 防御：解析输出为空或非数字（解释器异常等）时按 0 处理，不让整数比较崩溃
+    # 防御：解析输出为空或非数字（解释器异常等）时按 0 处理，不让整数比较崩溃；
+    # 先剥掉行尾 \r——Windows python print 输出 CRLF，read 后尾随 \r 会让下面
+    # 的非数字分支把本有效的计数值误归 0（Linux 宿主机无此问题，剥了也无副作用）
+    n="${n%%$'\r'}"
+    bvalid="${bvalid%%$'\r'}"
     case "$n" in ''|*[!0-9]*) n=0 ;; esac
     case "$bvalid" in ''|*[!0-9]*) bvalid=0 ;; esac
     if [ "$bvalid" -lt "$n" ]; then
