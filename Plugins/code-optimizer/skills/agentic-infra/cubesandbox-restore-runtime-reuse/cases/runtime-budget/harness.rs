@@ -12,11 +12,23 @@ static LIMIT: AtomicUsize = AtomicUsize::new(3);
 static RESIDENT: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 static BUILDS: AtomicUsize = AtomicUsize::new(0);
+static SUBMISSIONS: AtomicUsize = AtomicUsize::new(0);
 
 // Enforce an explicit worker quota at the builder boundary. Successful builds
 // and device tasks execute on a real Tokio pool.
 mod tokio {
-    pub use ::tokio::{spawn, task};
+    pub use ::tokio::task;
+    use std::future::Future;
+
+    pub fn spawn<F>(future: F) -> task::JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        crate::SUBMISSIONS.fetch_add(1, crate::SeqCst);
+        ::tokio::spawn(future)
+    }
+
     pub mod runtime {
         use crate::{BUILDS, LIMIT, PEAK, RESIDENT, SeqCst};
         use std::future::Future;
@@ -68,12 +80,14 @@ enum Device {
     Record(Arc<Mutex<Vec<usize>>>),
     Fail(Arc<Barrier>),
     Finish(Arc<Barrier>, Arc<AtomicBool>),
+    Panic,
 }
 impl Device {
     fn pause(&mut self) -> Result<(), MigratableError> { Ok(()) }
     fn restore(&mut self, marker: usize) -> Result<(), MigratableError> {
         match self {
             Self::Record(output) => output.lock().unwrap().push(marker),
+            Self::Panic => panic!("fixture device panicked"),
             Self::Fail(barrier) => {
                 barrier.wait();
                 return Err(MigratableError::Restore("device failed".into()));
@@ -103,9 +117,16 @@ fn snapshot(entries: &[(&str, usize)]) -> Snapshot {
 }
 
 #[test]
-fn switches_layout_within_quota_and_recovers_after_build_failure() {
+fn restore_runtime_lifecycle() {
+    // The pool and quota counters are process-wide. Exercise these scenarios
+    // in one test so each assertion sees the preceding lifecycle transition.
     let mut manager = DeviceManager;
     let restored = Arc::new(Mutex::new(Vec::new()));
+    manager.restore_device_node((vec![], vec![]), snapshot(&[])).unwrap();
+    assert_eq!(BUILDS.load(SeqCst), 0, "empty restore must not build a pool");
+    assert_eq!(PEAK.load(SeqCst), 0, "empty restore must not reserve workers");
+    assert_eq!(SUBMISSIONS.load(SeqCst), 0, "empty restore must not submit tasks");
+
     for (count, marker) in [(2, 1), (2, 2), (3, 3)] {
         let mut devices = layout(count - 1);
         devices.push(node("tracked", Device::Record(restored.clone())));
@@ -124,6 +145,24 @@ fn switches_layout_within_quota_and_recovers_after_build_failure() {
     assert!(matches!(failure, MigratableError::Restore(reason) if reason == "device failed"));
     assert!(completed.load(SeqCst), "running sibling must finish before error returns");
     assert_eq!(*restored.lock().unwrap(), vec![1, 2, 3], "later group must not start");
+
+    let before = SUBMISSIONS.load(SeqCst);
+    let missing = manager.restore_device_node((
+        vec![node("valid", Device::Record(restored.clone())), node("missing", Device::Record(restored.clone()))],
+        vec![node("later", Device::Record(restored.clone()))],
+    ), snapshot(&[("valid", 4), ("later", 5)])).unwrap_err();
+    assert!(matches!(missing, MigratableError::Restore(reason) if reason == "Missing device missing"),
+            "missing snapshot must identify the device");
+    assert_eq!(SUBMISSIONS.load(SeqCst), before, "validate the entire group before submitting even its first device");
+
+    let panicked = manager.restore_device_node((
+        vec![node("panics", Device::Panic)],
+        vec![node("later", Device::Record(restored.clone())), node("last", Device::Record(restored.clone()))],
+    ), snapshot(&[("panics", 4), ("later", 5), ("last", 6)])).unwrap_err();
+    assert!(matches!(panicked, MigratableError::Restore(reason) if reason.starts_with("Device restore task failed:")),
+            "a task panic must be reported as a device restore task failure");
+    assert_eq!(SUBMISSIONS.load(SeqCst), before + 1, "only the panicking task should be submitted");
+    assert_eq!(*restored.lock().unwrap(), vec![1, 2, 3], "later group ran after a panic");
 
     LIMIT.store(1, SeqCst);
     let error = manager.restore_device_node((layout(2), vec![]), snapshot(&[])).unwrap_err();
