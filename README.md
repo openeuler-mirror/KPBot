@@ -3,7 +3,7 @@
 [![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](LICENSE)
 [![Scenarios: 18](https://img.shields.io/badge/Scenarios-18-brightgreen.svg)](#optimization-scenarios)
 
-面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code 和 OpenCode 提供专业的性能分析与优化插件。
+面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code、OpenCode、Codex 和 DSH 提供专业的性能分析与优化插件。
 
 
 
@@ -73,6 +73,8 @@ npm install -g @kunpengbot/kpbot
 
 # 安装 skills 到目标工具
 kpbot install global opencode      # 全局安装到 OpenCode
+kpbot install project codex        # 项目级安装到 Codex
+kpbot install global codex         # 全局安装到 Codex
 kpbot install project claude       # 项目级安装到 Claude Code
 kpbot install project opencode /path/to/project  # 指定路径
 ```
@@ -90,7 +92,7 @@ kpbot uninstall global opencode
 
 ### 方式二：git clone（开发者，获取最新 HEAD）
 
-从源码安装时，Linux 和 macOS 使用 `install.sh`，Windows 使用 `install.ps1`。两个入口均支持 Claude Code、OpenCode 和 DSH。
+从源码安装时，Linux 和 macOS 使用 `install.sh`，支持 Claude Code、OpenCode、Codex 和 DSH；Windows 原生 `install.ps1` 支持 Claude Code、OpenCode 和 DSH。Codex 的安装、卸载与 Windows 使用方式见 [Codex 指南](docs/codex.md)。
 
 ### 前置条件
 
@@ -108,7 +110,7 @@ install.sh [level] [tool] [install_path]
 | 参数 | 可选值 | 默认值 | 说明 |
 |------|--------|--------|------|
 | `level` | `project` / `global` | `project` | 安装级别：项目级或全局级 |
-| `tool` | `claude` / `opencode` / `dsh` | `claude` | 目标 AI 编码工具 |
+| `tool` | `claude` / `opencode` / `codex` / `dsh` | `claude` | 目标 AI 编码工具（Codex 使用 Bash/Python 入口） |
 | `install_path` | 任意路径 | 当前目录（项目级） | 项目根目录，或全局 DSH 安装目录 |
 
 ### 安装示例
@@ -151,6 +153,7 @@ Claude Code 和 OpenCode 的技能目录使用 Win32 扩展路径复制和清理
 |------|--------|------|
 | Claude Code | `.claude/skills/` + `CLAUDE.md` | `~/.claude/skills/` + `~/.claude/CLAUDE.md` |
 | OpenCode | `.opencode/skills/` + `AGENTS.md` | `~/.config/opencode/skills/` + `AGENTS.md` |
+| Codex | `.agents/skills/` | `~/.agents/skills/` |
 | DSH | `.dsh/skills/` | `$env:DSH_HOME/skills/` 或 `~/.dsh/skills/` |
 
 PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能装到该目录下的 `opencode/skills/`。
@@ -163,6 +166,12 @@ PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能�
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
+
+Claude/OpenCode 安装的用户技能保留范围：新版生成的清单只记录 KPBot 管理的技能。
+旧版曾把用户自建目录一并写入清单，缺少归属信息；首次升级安装或卸载时，旧清单中名称合规的用户技能
+仍会按清单清理。升级前请备份安装目录并核对旧清单；如包含误记的用户技能，备份后移除
+`<配置目录>/kpbot-manifest.json` 再重装。名称含空格、中文等不合规条目会停止操作并给出具体恢复提示，
+不会自动删除清单。与当前 KPBot 技能同名的目录仍会被重装替换。
 
 ### 验证安装
 
@@ -196,7 +205,7 @@ powershell.exe -NoProfile -NonInteractive -File .\tests\test_install_platform.ps
 
 ### 快速上手：一句话优化
 
-安装后直接在 Claude Code 或 OpenCode 中用自然语言描述你的优化需求：
+安装后直接在 Claude Code、OpenCode 或 Codex 中用自然语言描述你的优化需求：
 
 ```
 帮我优化 matrix_multiply 函数，目标平台是 Kunpeng-0xd01
