@@ -44,12 +44,13 @@ metadata:
 
 ### Step 1：火焰图解析（先自检，再引用任何数字）
 
-用 `scripts/parse_flamegraph_svg.py` 解析 SVG（详细算法与坑见
-[火焰图解析参考](references/flamegraph-parsing.md)）：
+用 `flamegraph-parsing` skill 的 `scripts/parse_flamegraph_svg.py` 解析 SVG
+（源码树与安装平铺布局下两个 skill 为同级目录；详细算法与坑见
+[火焰图解析参考](../flamegraph-parsing/references/parsing-guide.md)）：
 
 ```bash
 # 安装布局（主形态）
-python3 scripts/parse_flamegraph_svg.py <火焰图.svg> --lib <库名模式>
+python3 ../flamegraph-parsing/scripts/parse_flamegraph_svg.py <火焰图.svg> --lib <库名模式>
 # 自检：Σ(self)==100%（树构建回归的必要条件）+ 结构门禁（负 self、同父兄弟帧
 # 重叠——子帧挂错祖先在此拦截）。任一门禁失败禁止引用任何数字。
 # 聚合：--denest 开启同名帧去嵌套（每条调用栈同名帧只计一次，见下）
@@ -148,12 +149,12 @@ references/negative-results.md。
 
 ```bash
 # SVG 火焰图解析 + 自检 + 库帧聚合（纯标准库，Python >= 3.8）
-python3 scripts/parse_flamegraph_svg.py graph.svg --lib "google::protobuf"
-python3 scripts/parse_flamegraph_svg.py graph.svg --lib "folly" --denest --top 20
+python3 ../flamegraph-parsing/scripts/parse_flamegraph_svg.py graph.svg --lib "google::protobuf"
+python3 ../flamegraph-parsing/scripts/parse_flamegraph_svg.py graph.svg --lib "folly" --denest --top 20
 # 输出：Σself 自检结果 / 库总 self / 类别分解 / 热点函数排行（去嵌套口径可选）
 ```
 
-脚本依赖与边界见 `scripts/README.md`。
+解析脚本已拆分至 `flamegraph-parsing` skill：脚本依赖与边界见该 skill 的 `scripts/README.md`。
 
 ## 常见误区
 

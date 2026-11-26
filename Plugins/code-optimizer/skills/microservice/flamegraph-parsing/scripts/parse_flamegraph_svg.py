@@ -132,7 +132,18 @@ def detect_orientation(frames):
     The label describes geometry only — never assume it from the tool name.
     """
     root = max(frames, key=lambda f: f["samples"])
-    median_y = sorted(f["y"] for f in frames)[len(frames) // 2]
+    ys = [f["y"] for f in frames]
+    y_min, y_max = min(ys), max(ys)
+    if y_max == y_min:
+        return "root-bottom"
+    # 判向看候选根所在的边界层：根帧落在最大 y 边界 => 标准火焰图（根在
+    # 底部）；落在最小 y => icicle。两帧图（根 y=32、子帧 y=16）的中位数
+    # 恰为根 y，严格大于比较会误判——边界层判定不受帧数影响。
+    if root["y"] == y_max:
+        return "root-bottom"
+    if root["y"] == y_min:
+        return "root-top"
+    median_y = sorted(ys)[len(ys) // 2]
     return "root-bottom" if root["y"] > median_y else "root-top"
 
 
@@ -286,8 +297,11 @@ def structure_check(frames, tol_px=1.0):
     warnings = []
     for f in frames:
         self_n = self_samples(f)
-        if self_n < -1:
+        if self_n < 0:
             msg = "negative self: %r self=%d samples" % (f["name"], self_n)
+            # 普通图：任何负值（含 -1 的单样本越界）都是门禁违例——子帧样本
+            # 合计超过父帧只能是重复挂载；合并图：亚像素量化可合法产生
+            # 该形态，降级为 warning（仍逐帧披露，不静默）。
             (warnings if merged else violations).append(msg)
     for f in frames:
         kids = f["children"]

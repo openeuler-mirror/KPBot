@@ -1,0 +1,40 @@
+# 验证 tier-A 用例：flamegraph-parsing 完整性契约 + 解析器功能
+#
+# 验证内容：
+#   skill     SKILL.md 自身格式（frontmatter name/description 与目录一致）
+#   links     SKILL.md 的 references/scripts 链接（解析参考 + 脚本用法）必须存在
+#   invariants 方法论锚点（Σself 自检/去嵌套/方向/结构门禁/self 口径）
+#   sensitive 敏感内容看护（SKILL.md + references + scripts + evals 全覆盖：
+#             私网 IP/IPv6/凭据/私钥/个人路径，凭据命中脱敏）+ BOM 检查
+#   parser    解析器功能测试（17 项合成 SVG fixture）：完整性自检双路径、
+#             布局方向判定（含两帧标准图回归）、naive vs de-nest、参数列表
+#             误命中、千分位、孤儿帧、层内重叠、退出码契约、重挂父检测、
+#             浮点边界、打印漂移、self=-1 门禁（普通图任何负值）、合并图
+#             严格标记降级边界（深度/松散子串攻击）
+#
+# 运行（在技能根目录下）：
+#   python3 cases/skill-integrity/checks.py
+#   # 或完整入口：bash cases/skill-integrity/run.sh
+#   # 产出 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier-A，仅依赖 python3 标准库；不需要 perf/火焰图环境。
+
+name: skill-integrity
+skill: flamegraph-parsing
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  # parser_tests_passed 的 expect 与 checks.py 的 PARSER_TESTS_TOTAL 联动：
+  # checks.py 侧有交叉校验，增删用例时两处不同步会先在 contract sync 响。
+  - type: json_field
+    file: results/result.json
+    field: parser_tests_passed
+    expect: 17

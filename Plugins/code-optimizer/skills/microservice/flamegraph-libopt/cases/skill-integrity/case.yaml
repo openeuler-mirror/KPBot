@@ -1,14 +1,16 @@
-# 验证 tier-A 用例：flamegraph-libopt 完整性契约 + 解析器功能
+# 验证 tier-A 用例：flamegraph-libopt 完整性契约
 #
 # 验证内容：
 #   skill     SKILL.md 自身格式（frontmatter name/description 与目录一致）
-#   links     SKILL.md 引用的 references/*.md 与 scripts/* 必须在磁盘上存在
+#   links     SKILL.md 的参考文档链接（本地 references/ 与跨 skill
+#             ../<skill>/references/）必须在磁盘上存在且 >=1
 #   invariants 方法论不变量仍在语料中（self 口径自检/去嵌套/链接指纹验证/
-#             上游 diff 先验/形态前提/换库参数表）
+#             上游 diff 先验/形态前提）
 #   sensitive 敏感内容看护（私网 IP / 凭据 / 个人家目录路径）
-#   parser    解析器功能测试（合成 SVG fixture）：完整性自检通过/失败双路径、
-#             布局方向判定、naive vs de-nest 去嵌套、参数列表误命中防护、
-#             千分位样本数、孤儿帧检测
+#
+# 解析器功能测试（15 项合成 SVG fixture）已随 parse_flamegraph_svg.py
+# 迁至 flamegraph-parsing skill 的 cases/skill-integrity（含两帧布局与
+# self=-1 门禁两项新回归），本用例不再覆盖。
 #
 # 运行（在技能根目录下）：
 #   python3 cases/skill-integrity/checks.py
@@ -30,9 +32,3 @@ assert:
     file: results/result.json
     field: success
     expect: true
-  # parser_tests_passed 的 expect 与 checks.py 的 PARSER_TESTS_TOTAL 联动：
-  # checks.py 侧有交叉校验，增删用例时两处不同步会先在 contract sync 响。
-  - type: json_field
-    file: results/result.json
-    field: parser_tests_passed
-    expect: 15

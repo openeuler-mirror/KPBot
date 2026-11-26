@@ -1,0 +1,11 @@
+{
+  "skill_name": "flamegraph-parsing",
+  "evals": [
+    {
+      "id": 0, "name": "denest-vs-naive",
+      "prompt": "同名帧在火焰图里出现 9 次，合计 10.85%，这是真实占比吗？",
+      "expected_output": "不是——9 个实例中含递归自嵌套，直接求和把递归深度计入（虚高 3.6 倍）。报库占比/天花板必须用去嵌户口径（每条调用栈同名帧只计一次）。用 --denest 输出重新核对。",
+      "files": []
+    }
+  ]
+}
