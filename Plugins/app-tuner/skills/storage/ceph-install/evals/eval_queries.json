@@ -1,0 +1,35 @@
+{
+  "skill_name": "ceph-install",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "openEuler 22.03 挂载 SP4 镜像做本地源装 Ceph 16.2.7，local.repo 怎么配",
+      "should_trigger": true,
+      "note": "本地源安装路径"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "Ceph 16.2.7 在 openEuler 22.03 的在线源 openEuler.repo 怎么配，装完怎么验证",
+      "should_trigger": true,
+      "note": "在线源安装路径与版本验证"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "Ceph 14.2.8 从源码编译怎么打适配补丁、rpmbuild 怎么跑",
+      "should_trigger": false,
+      "note": "routes to ceph-build（源码编译路径）"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "用 ceph-ansible 部署一套新的 Ceph 块存储集群，部署命令是什么",
+      "should_trigger": false,
+      "note": "routes to 姊妹 skill ceph-ansible-deployment（同批姊妹 PR，同批交付，ansible 编排部署路径）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "ceph-deploy 手工部署块存储，MON/OSD 怎么初始化",
+      "should_trigger": false,
+      "note": "routes to 姊妹 skill ceph-block-storage-deployment（同批姊妹 PR，同批交付，ceph-deploy 手工路径）"
+    }
+  ]
+}
