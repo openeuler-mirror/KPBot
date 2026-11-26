@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-ansible-deployment",
+  "evals": [
+    {
+      "id": "CAD-E01",
+      "prompt": "用 ceph-ansible 在 CentOS 7.6 上部署一套 Ceph 块存储集群，配置和部署命令是什么？",
+      "expected_output": "ceph-ansible stable-4.0 + Ansible 2.9.0：部署前完成 SMMU 关闭、主机名与 hosts、免密（ssh-copy-id 分发公钥）、关闭防火墙、SELINUX permissive、ceph.repo 源配置；在 ceph1 上安装 ansible 与 ceph-ansible 并注释 rpm_key/grafana 相关依赖任务；hosts 文件定义 mons/osds/clients/grafana-server 角色；group_vars 从 sample 拷贝，用 all.yml 的 ceph_conf_overrides 配置 osd_pool_default_pg_num 等参数，osds.yml 定义 OSD（ceph-volume lvm batch 或 lvm_volumes 逻辑卷两种方式）；ansible-playbook -i hosts site.yml 部署，ceph health 显示 HEALTH_OK 为健康，并核对配置写入 ceph.conf",
+      "files": [],
+      "expectations": [
+        "说明 ceph-ansible stable-4.0 与 Ansible 2.9.0 版本组合及部署环境前置检查项（SMMU/防火墙/hosts/免密/SELINUX）",
+        "给出 hosts 角色定义（mons/osds/clients/grafana-server）与 group_vars sample 拷贝、ceph_conf_overrides 配置",
+        "给出以 site.yml 为入口的 ansible-playbook 部署命令与 ceph health 显示 HEALTH_OK 的健康验证",
+        "说明 osds.yml 两种 OSD 定义方式（ceph-volume lvm batch 与 lvm_volumes 逻辑卷）及单个 OSD 的 block.db 不小于 50GB 约束"
+      ]
+    },
+    {
+      "id": "CAD-E02",
+      "prompt": "ceph-ansible 部署的集群要加 Monitor 和 OSD 节点怎么扩？整套集群不要了怎么删干净？",
+      "expected_output": "扩容：Monitor 在集群 hosts 文件的 [mons] 群组下添加新节点，运行 infrastructure-playbooks/add-mon.yml（或切回主目录重跑 site.yml）；OSD 复制 add-osd.yml 到主目录、在 [osds] 群组增加新节点后运行；MDS 在 [mdss] 群组添加节点、取消 site.yml 中 mdss 注释后运行。删除集群：ansible-playbook -i hosts infrastructure-playbooks/purge-cluster.yml 并输入 yes 确认，属破坏性操作需二次确认目标集群并记录变更窗口",
+      "files": [],
+      "expectations": [
+        "给出 Monitor 扩容在 hosts [mons] 群组添加节点后运行 add-mon.yml 或重跑 site.yml",
+        "给出 OSD 扩容复制 add-osd.yml 到主目录并在 [osds] 群组增加节点后运行",
+        "给出 MDS 群组扩容步骤与删除集群 purge-cluster.yml 命令（输入 yes 确认）",
+        "声明删除集群属破坏性操作需二次确认目标集群并记录变更窗口"
+      ]
+    },
+    {
+      "id": "CAD-E03",
+      "prompt": "ceph-ansible-autotool 自动部署套件怎么用？安装参数在哪填、怎么校验、一键安装怎么跑？",
+      "expected_output": "按 auto-deployment.md：先配置物理环境（组网：前端 Public Network 与后端 Cluster Network 分离）与软件环境（服务端配置网卡管理 IP，lsblk 获取数据盘符名称和磁盘大小，获取业务网络网卡名称）；把安装参数填写到套件 input 文件夹里的 ceph_input.xlsx（覆盖原 Excel），上传整套安装套件解压到任意目录后执行 input_check.sh 校验参数填写正确；执行 install_all.sh 安装，通过日志最下方 ceph install 日志确认安装成功（显示 OK），随后确认 Ceph 部署结果并安装客户端",
+      "files": [],
+      "expectations": [
+        "说明物理与软件环境配置（组网前后端分离、lsblk 获取数据盘信息、获取业务网卡名称）",
+        "给出 ceph_input.xlsx 填写安装参数并覆盖套件 input 文件夹内 Excel、input_check.sh 校验的步骤",
+        "给出 install_all.sh 一键安装与日志 ceph install 显示 OK 的成功判据",
+        "说明部署结果确认与客户端安装（按实际用途限权身份下发 keyring，不下发 client.admin）"
+      ]
+    }
+  ]
+}
