@@ -1,0 +1,8 @@
+# From the skill root: python3 cases/shell-quality-contract/run.py
+name: shell-quality-contract
+skill: kptools-shell-format-quality-checker
+tier: A
+entrypoint: [python3, cases/shell-quality-contract/run.py]
+assert:
+  - type: exit_code
+    expect: 0
