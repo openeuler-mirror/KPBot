@@ -1,4 +1,0 @@
-interface:
-  display_name: "训推社区Host洞察skill"
-  short_description: "跟踪训推框架、缓存存储与模型生态，提炼有证据的 Host 优化机会"
-  default_prompt: "请使用 $training-inference-host-insights，续接上期成功报告，研究训推社区和模型 Agent 生态增量，生成中文 Host 洞察并归档 Markdown 与 HTML。"
