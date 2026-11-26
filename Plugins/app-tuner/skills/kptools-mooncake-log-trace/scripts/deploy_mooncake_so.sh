@@ -135,4 +135,4 @@ done
 echo
 info "部署完成。备份: $BAK（回滚: bash $0 --rollback $BAK $CONTAINER）"
 info "下一步（人工执行）: 重启引擎使新 .so 生效（运行中进程仍用旧库），然后发 1 条请求，"
-info "在引擎日志 grep -E '\\[MKT_TTF\\]|\\[MKT_FINE\\]' 验证成对输出；无输出按 SKILL.md 第 6 节排查。"
+info "在引擎日志验证成对输出（D 侧 grep -E '\\[MKT_TTF\\]|\\[MKT_FINE\\]'，P 侧 grep -E '\\[MKT_PUT\\]|\\[MKT_PFINE\\]'）；无输出按 SKILL.md 第 6 节排查。"

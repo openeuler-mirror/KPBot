@@ -3,7 +3,7 @@ name: kptools-mooncake-log-trace
 description: >
   把已编译好的带 MKT 打点 Mooncake .so 部署替换到远端 vLLM 容器并校验生效：产物预检
   （MKT 串 + md5）→ 定位容器内现役 .so → 备份 → docker cp 替换 → md5 回读 → 重启指引 →
-  smoke 验证 [MKT_TTF]/[MKT_FINE] 成对输出 → 回滚。当用户提到以下场景时必须使用此技能：
+  smoke 验证 MKT 成对输出（D 侧 [MKT_TTF]/[MKT_FINE]，P 侧 [MKT_PUT]/[MKT_PFINE]）→ 回滚。当用户提到以下场景时必须使用此技能：
   部署 mooncake .so、替换 mooncake 动态库、mooncake 打点推上去、给 P/D 容器换 mooncake 库、
   mooncake 打点部署后不生效/没有 MKT 输出排查、mooncake log trace。即使用户只说
   "把带打点的 .so 换上去"或"MKT 日志怎么没有输出"，也应使用此技能。只做部署与生效校验；
@@ -39,7 +39,7 @@ metadata:
 接收已验证打点产物（.so 集合 + md5 清单 + MKT 串校验确认）
   → 定位容器内现役目标 .so（同名匹配 / /proc/<pid>/maps 权威）
   → 备份（mktemp 私有目录 + MANIFEST）→ docker cp 替换 → md5 回读校验
-  → 用户重启引擎 → smoke：发真实请求 grep [MKT_TTF]/[MKT_FINE] 成对输出
+  → 用户重启引擎 → smoke：发真实请求，D 侧 grep [MKT_TTF]/[MKT_FINE]、P 侧 grep [MKT_PUT]/[MKT_PFINE] 成对输出
   → 异常回滚（按 MANIFEST 恢复）
 ```
 
@@ -78,8 +78,8 @@ metadata:
 
 1. 重启顺序参考 kptools-tpsplit-log-trace 第 3 节第 7 步（P 起 mooncake_master → P 引擎 → D 引擎 → proxy）；
 2. 重启后先核进程加载：`grep mooncake /proc/<新pid>/maps`，md5 应等于新 .so；
-3. 发 1 条真实请求，`grep -E "\[MKT_TTF\]|\[MKT_FINE\]" <引擎日志>` 应有成对输出；
-4. 核对一致性（keys 相同、FINE 五段和 ≈ getmem_ms，契约见 kptools-mooncake-instrumentation 的打点规格第 4 节），不符说明打点挂错阶段，退回 instrumentation skill。
+3. 发 1 条真实请求，引擎日志应出现成对 MKT 输出：D 侧 `grep -E "\[MKT_TTF\]|\[MKT_FINE\]"`，P 侧 `grep -E "\[MKT_PUT\]|\[MKT_PFINE\]"`；
+4. 核对一致性（同批 keys 相同、get 链 FINE 五段和 ≈ getmem_ms、put 链 PFINE 各相和 ≈ put_ms，契约见 kptools-mooncake-instrumentation 的打点规格第 6 节），不符说明打点挂错阶段，退回 instrumentation skill。
 
 ## 6. 部署后无 MKT 输出的排查
 

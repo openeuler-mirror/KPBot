@@ -22,8 +22,8 @@
 
 1. 重启顺序参考 kptools-tpsplit-log-trace 第 3 节第 7 步（P 起 mooncake_master → P 引擎 → D 引擎 → proxy）；
 2. 重启后先核进程加载：`grep mooncake /proc/<新pid>/maps`，md5 应等于新 .so；
-3. 发 1 条真实请求，`grep -E "\[MKT_TTF\]|\[MKT_FINE\]" <引擎日志>` 应有成对输出；
-4. 核对打点规格一致性（keys 相同、FINE 五段和 ≈ getmem_ms；契约见 `kptools-mooncake-instrumentation` 的 references/instrumentation.md 第 4 节），不符说明打点挂错阶段，退回该 skill。
+3. 发 1 条真实请求，引擎日志应出现成对 MKT 输出（D 侧 grep `[MKT_TTF]`/`[MKT_FINE]`，P 侧 grep `[MKT_PUT]`/`[MKT_PFINE]`）；
+4. 核对打点规格一致性（同批 keys 相同、get 链 FINE 五段和 ≈ getmem_ms、put 链 PFINE 各相和 ≈ put_ms；契约见 `kptools-mooncake-instrumentation` 的 references/instrumentation.md 第 6 节），不符说明打点挂错阶段，退回该 skill。
 
 ## 4. 回滚
 
