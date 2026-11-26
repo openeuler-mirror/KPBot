@@ -8,7 +8,7 @@ metadata:
   domain: vllm_moe_eplb
   activation_mode: active
   side_effect_free: "false"
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # EPLB 部署与收益验证（vLLM MoE）
@@ -20,6 +20,11 @@ metadata:
 ```
 输入：显式 mode + 参数 --> 本技能 --> 模板 + eplb_run_manifest.json + measurements
 ```
+
+> **迁移说明（与 `vllm-eplb-optimization` 的关系）**：本技能 `scripts/apply_eplb.py` 是模板改写脚本的
+> **唯一维护副本**，多 serve 拒绝、悬空续行符、`--additional-config` JSON 布尔、force→off V2 基线等历史缺陷
+> 都在此修复。`vllm-eplb-optimization/scripts/apply_eplb.py` 是旧副本，仅为该技能的历史流程保留、不再接收
+> 修复，将在本批子技能合入后由后续 PR 删除。做 EPLB 模式切换时只用本副本，不要两套脚本交替修改同一模板。
 
 ## 输入契约
 
