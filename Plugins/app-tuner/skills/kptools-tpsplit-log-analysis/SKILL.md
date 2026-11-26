@@ -8,13 +8,13 @@ description: >
   --burst-gap、看 TTFT 各环节占比、TTFT 长尾 P90/P99、定位首 token 延迟在
   tokenize/queue/forward/KV 哪一环。即使用户只说"帮我把这轮压测的 TTFT 日志解析
   一下"或"看看 TTFT 拆解在哪一环"，也应使用此技能。只做本地解析出表，不连远端：
-  日志还在远端时先转 kpbot-tpsplit-log-collector 采集回传（配套 PR #398 交付），
+  日志还在远端时先转 kptools-tpsplit-log-collector 采集回传（配套 PR #398 交付），
   打点 patch 部署归 kptools-tpsplit-log-trace（配套 PR #340 交付）。
 license: Proprietary
 compatibility: >
   本地 Windows/Linux（Python 3 + openpyxl，xlsx 输出必需）；不连远端、只读输入
   目录。输入为已回传本地的一套 4 份日志（P/D/proxy 日志 + 压测 result json，须
-  同一次压测、压测需 --save-detailed；采集回传由 kpbot-tpsplit-log-collector
+  同一次压测、压测需 --save-detailed；采集回传由 kptools-tpsplit-log-collector
   完成或用户自行回传）；打点须已部署且输出 v3 格式（[TTFT][BREAKDOWN] /
   [TTFT_KVXFER] / [SHM_DEQUEUE] / [LB_DISPATCH] / [TTFT_DRAFT]）；ttft_table.csv
   契约见本 skill references/ttft_table_contract.md，下游收益对比由仓内
@@ -32,13 +32,13 @@ metadata:
 打点已部署、日志已回传本地时（采集与打点部署不在本 skill 范围内），本 skill 只做：
 **本地解析 4 份日志 → Excel（8 Sheet）+ 文字结论 + ttft_table.csv**（全部毫秒）。
 
-**采集与解析分离**：远端日志的定位/校验/暂存/回传归 kpbot-tpsplit-log-collector
+**采集与解析分离**：远端日志的定位/校验/暂存/回传归 kptools-tpsplit-log-collector
 （`fetch_logs.sh` 已随拆分迁出，配套 PR 交付）；本 skill 不 SSH、不碰远端，解析出表
 由自带的 `scripts/analyze_ttft.py` 完成——不要手算环节占比或手写表格，脚本口径可
 复现（守恒式/信封/回填全部有断言护住）。
 
 **配套拆分说明**：本 skill 原「采集 + 解析」一体，现拆分为纯解析 skill；采集侧
-（`fetch_logs.sh` 与采集流程、压测补数据步骤）迁至新 skill kpbot-tpsplit-log-collector
+（`fetch_logs.sh` 与采集流程、压测补数据步骤）迁至新 skill kptools-tpsplit-log-collector
 （配套 PR，建议同批合入——单独部署本版本期间不具备远端日志采集能力，用户自行
 回传日志亦可）。拆分前后过渡期的行为由两侧 SKILL.md 的交接路径定义：本 skill 收到
 「日志还在远端」的请求时指引采集侧，不代做采集；两 PR 改动不相交，任意先后合入
@@ -89,7 +89,7 @@ proxy：`[LB_DISPATCH] req= wall_recv= client_send= client2proxy_ms= dispatch_ms
   | proxy 日志 | `load_balance.log` | |
   | 压测结果 | `manual_*_dumpjsonl.json`（必须 `--save-detailed`） | 无 client_send_ts 无法对账 |
 - 四份不是同一次压测（请求数对不上）时对账无意义——退回采集侧确认，不要硬解析
-- **日志还在远端** → 本 skill 不做 SSH：转 kpbot-tpsplit-log-collector 采集回传
+- **日志还在远端** → 本 skill 不做 SSH：转 kptools-tpsplit-log-collector 采集回传
   （或用户自行回传）后再来；**打点还没部署/没输出** → 转 kptools-tpsplit-log-trace
 - 输出 `-o TTFT_xxx_ms.xlsx` 文件名含机器/轮次，可追溯
 
@@ -192,7 +192,7 @@ python "<skill目录>/scripts/test_regression.py"
 - **某列整列为 0（如 dequeue/mtp）先怀疑数据源缺失**：去原始日志 grep 对应标记
   （`[SHM_DEQUEUE_BATCH]` / `[TTFT_DRAFT]`）——标记不存在 = 采集侧缺数据源
   （VLLM_TTFT_SHM_LOG 未开等），不是解析 bug；确认缺源后回
-  kpbot-tpsplit-log-collector 的标记检出表对影响，决定是否重采。
+  kptools-tpsplit-log-collector 的标记检出表对影响，决定是否重采。
 - **`dequeue` 空闲期伪样本**：SHM 原始 wait 可能含引擎空闲阻塞（数十秒），解析层已
   截断到 step_other 信封；统计比较用 p50/p90。
 - **首步冷启动**：`cold_step=1`（add_req<1ms 且 forward>2×中位数）应剔除或单列，否则
@@ -214,4 +214,4 @@ python "<skill目录>/scripts/test_regression.py"
 - `scripts/test_regression.py`：回归自检（改动解析器后必跑）
 - `references/ttft_table_contract.md`：ttft_table.csv 机器可读契约（仓内权威定义）
 - `evals/`：触发评测集（正/负例路由矩阵；采集类触发例为负例并路由到
-  kpbot-tpsplit-log-collector）+ fixtures
+  kptools-tpsplit-log-collector）+ fixtures

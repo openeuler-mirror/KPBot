@@ -8,16 +8,16 @@
     {"id": "AQ-05", "prompt": "两台 P 节点的日志怎么合成一套完整请求对比", "should_trigger": true, "note": "多 P 合并 --merge-p"},
     {"id": "AQ-06", "prompt": "这份日志里混了两轮压测，帮我按请求间隔分段再看占比", "should_trigger": true, "note": "burst 分段 --burst-gap"},
     {"id": "AQ-07", "prompt": "TTFT 长尾 P90/P99 很高，定位一下尾部请求慢在哪", "should_trigger": true, "note": "长尾归因"},
-    {"id": "AQ-08", "prompt": "dequeue 列全是 0，是解析器 bug 还是采集问题", "should_trigger": true, "note": "缺数据源诊断（先 grep 原始日志对标记，归因到采集侧时指引 kpbot-tpsplit-log-collector 的标记检出表）"},
+    {"id": "AQ-08", "prompt": "dequeue 列全是 0，是解析器 bug 还是采集问题", "should_trigger": true, "note": "缺数据源诊断（先 grep 原始日志对标记，归因到采集侧时指引 kptools-tpsplit-log-collector 的标记检出表）"},
     {"id": "NQ-01", "prompt": "把 TTFT 打点 patch 部署到远端 vLLM 容器里", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace（打点部署，配套 PR 交付）"},
     {"id": "NQ-02", "prompt": "对比 TP 拆分前后的收益，出一份对比报告", "should_trigger": false, "note": "routes to kptools-tpsplit-report（仓内收益对比 skill，ttft_table.csv 的下游消费方，#329 已合入）"},
     {"id": "NQ-03", "prompt": "抓一次 NPU profiling，看算子耗时", "should_trigger": false, "note": "routes to profiling 采集类技能"},
-    {"id": "NQ-04", "prompt": "帮我执行一轮压测，并发 16、8k5 序列", "should_trigger": false, "note": "压测执行不在本技能范围（日志链路补数据归 kpbot-tpsplit-log-collector）"},
+    {"id": "NQ-04", "prompt": "帮我执行一轮压测，并发 16、8k5 序列", "should_trigger": false, "note": "压测执行不在本技能范围（日志链路补数据归 kptools-tpsplit-log-collector）"},
     {"id": "NQ-05", "prompt": "推理请求分发不均，帮我部署负载均衡器", "should_trigger": false, "note": "routes to dplb 部署/优化类技能"},
     {"id": "NQ-06", "prompt": "模型精度掉了，对比优化前后准确率", "should_trigger": false, "note": "routes to model-precision-analysis"},
     {"id": "NQ-07", "prompt": "把算子采集数据渲染成交互式可视化 HTML 报告", "should_trigger": false, "note": "routes to 可视化报告类技能"},
     {"id": "NQ-08", "prompt": "打点部署完了但日志里看不到 BREAKDOWN 行，帮我排查 patch 生效问题", "should_trigger": false, "note": "routes to kptools-tpsplit-log-trace（打点生效排查属部署环节）"},
-    {"id": "NQ-09", "prompt": "帮我把远端的 prefill/decode/load_balance 日志采集下载下来", "should_trigger": false, "note": "routes to kpbot-tpsplit-log-collector（采集回传；本 skill 只做本地解析，日志到手后再回来）"},
-    {"id": "NQ-10", "prompt": "去 /data 把这轮压测的四份打点日志找出来拉回本地，注意两台 P 的 prefill.log 别覆盖", "should_trigger": false, "note": "routes to kpbot-tpsplit-log-collector（定位/校验/暂存/回传）"}
+    {"id": "NQ-09", "prompt": "帮我把远端的 prefill/decode/load_balance 日志采集下载下来", "should_trigger": false, "note": "routes to kptools-tpsplit-log-collector（采集回传；本 skill 只做本地解析，日志到手后再回来）"},
+    {"id": "NQ-10", "prompt": "去 /data 把这轮压测的四份打点日志找出来拉回本地，注意两台 P 的 prefill.log 别覆盖", "should_trigger": false, "note": "routes to kptools-tpsplit-log-collector（定位/校验/暂存/回传）"}
   ]
 }
