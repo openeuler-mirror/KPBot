@@ -1,0 +1,15 @@
+{
+  "skill_name": "kptools-ascend-profiling-analysis",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "TQ-01", "prompt": "分析这份 trace_view.json 的 Computing Communication Free 占比", "should_trigger": true },
+    { "id": "TQ-02", "prompt": "vLLM 推理 free 占比很高帮我看看是不是 host bound", "should_trigger": true },
+    { "id": "TQ-03", "prompt": "torch_npu profiler 的某个函数耗时占比怎么算", "should_trigger": true },
+    { "id": "TQ-04", "prompt": "帮我采集 NPU 算子级性能数据", "should_trigger": false, "route_to": "kptools-ascend-profiling" },
+    { "id": "TQ-05", "prompt": "trace 没有 python_function 字段能分析吗", "should_trigger": false, "route_to": "kptools-ascend-profiling-analysis-nostack" },
+    { "id": "TQ-06", "prompt": "改一下 nginx.conf 提升 QPS", "should_trigger": false },
+    { "id": "TQ-07", "prompt": "NPU 利用率怎么查看", "should_trigger": false, "route_to": "kptools-ascend-smi" },
+    { "id": "TQ-08", "prompt": "卡间通信等待很长，分析 HCCL 通信瓶颈", "should_trigger": true }
+  ]
+}

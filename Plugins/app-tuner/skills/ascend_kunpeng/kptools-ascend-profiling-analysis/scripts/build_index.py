@@ -247,10 +247,17 @@ def main():
     ap.add_argument('--ui-zero-ns', type=int, default=None,
                     help='UI 工具零点 (绝对ns)。不填则用最早事件 ts, 可后续用 query.py calibrate 校准')
     args = ap.parse_args()
+    # 默认把索引写在本轮工作目录（而非 ~/.cache），避免只读 HOME 下失败或把
+    # trace 派生数据留在报告目录之外；-o 可显式指定输出文件。
     out = args.out or os.path.join(
-        os.path.expanduser('~/.cache/ascend_prof_skill'),
+        os.getcwd(), '.ascend_prof_index',
         re.sub(r'[^A-Za-z0-9]', '_', os.path.abspath(args.trace)) + '.db')
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    try:
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+    except OSError as exc:
+        print(f'ERROR: 无法创建索引目录 {os.path.dirname(out)!r}: {exc}', file=sys.stderr)
+        print('请用 -o 指定可写输出路径（例如本轮输出目录）后重试。', file=sys.stderr)
+        sys.exit(2)
     old_zero, old_src = None, None
     if os.path.exists(out):
         try:
@@ -259,7 +266,13 @@ def main():
             old_zero = int(r[0]) if r else None
             r2 = old.execute("SELECT value FROM meta WHERE key='ui_zero_source'").fetchone()
             old_src = r2[0] if r2 else None
+            rt = old.execute("SELECT value FROM meta WHERE key='trace'").fetchone()
+            old_trace = rt[0] if rt else None
             old.close()
+            if old_trace and os.path.abspath(old_trace) != os.path.abspath(args.trace):
+                # 不同 trace 复用了同一 db 路径：不能继承上一份 trace 的手工零点。
+                print(f'NOTE: 索引文件属于另一份 trace，忽略其手动零点: {old_trace}', file=sys.stderr)
+                old_zero, old_src = None, None
         except Exception:
             pass
         os.remove(out)

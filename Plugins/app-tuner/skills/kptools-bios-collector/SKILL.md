@@ -15,11 +15,16 @@ metadata:
   version: "1.0.0"
 ---
 
+
+> **采集契约（被动观察）**：本 skill 为只读采集器（Redfish GET 查询）——不修改任何 BIOS/固件配置、不写入被测环境（产物仅写入输出目录）。需要变更的优化动作归属 bios-optimization。
+
 # kptools-bios-collector — BIOS/固件配置采集
 
 ## 工作流程
 
 1. 检查工具可用性：`bash scripts/discover.sh`
+
+> Redfish BIOS 属性快照暂存在 `TMPDIR` 下的受限目录（默认 `/tmp/bios_collect.*`），脚本用 EXIT/INT/TERM trap 清理；需要放到本轮输出目录时设 `TMPDIR=<本轮输出目录>`。
 2. 执行采集：`bash scripts/collect.sh --<mode>`（可多模式组合）
 3. Redfish 属性归一化（可选）：`bash scripts/redfish_attrs.sh -f <bios.json>`
 4. 返回原始输出（分析+优化建议属 bios-optimization subskill，本 SKILL 只采集）

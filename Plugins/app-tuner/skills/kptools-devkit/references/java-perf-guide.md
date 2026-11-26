@@ -57,7 +57,7 @@ bash scripts/run_devkit.sh java-perf hotspot -p <PID> -e CPU -d 20 -o <abs_path>
 | 架构 | 仅 aarch64 |
 | JDK | 任意版本（JDK 8 由 wrapper 自动注入 tools.jar；JDK 21 实测通过） |
 | attach 权限 | 采集用户须与目标 JVM 同 uid（跨 uid 报 `You do not have permission to perform this operation`） |
-| 安装目录写权限 | wrapper/cli-backend 需写 `java-perf/log/` 和 `config/`——root 装到 /opt/devkit 时非 root 用户无法运行，用 `deploy_devkit.sh --install-dir ~/.local/share/devkit` 装到用户目录 |
+| 安装目录写权限 | wrapper/cli-backend 需写 `java-perf/log/` 和 `config/`——即使 `-o` 指向可写目录，安装目录不可写仍会失败；root 装到 /opt/devkit 时非 root 用户无法运行，用 `deploy_devkit.sh --install-dir ~/.local/share/devkit` 装到用户目录 |
 | 输出目录写权限 | 默认输出到安装目录 `java-perf/data/`，"root 安装 + 非 root 采集"场景不可写——**必须显式 `-o` 指定用户可写的绝对路径**（run_devkit.sh 前置校验拦截） |
 | 并发限制 | 同一时刻仅允许一个采集任务，冲突报 `Another task is running` |
 | 参数转义 | 参数含引号被 wrapper 拒绝 |
