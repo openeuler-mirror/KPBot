@@ -1,0 +1,30 @@
+{
+  "skill_name": "ceph-file-storage-deployment",
+  "evals": [
+    {
+      "id": "CFS-E01",
+      "prompt": "ceph-deploy 部署文件存储集群，MDS 怎么创建？CephFS 的存储池、文件系统和客户机挂载怎么做？",
+      "expected_output": "按 file-storage-deployment.md：镜像源与 ceph-deploy 适配、系统配置（防火墙/主机名/NTP/免密/SELINUX/umask）完成后，在主节点 ceph1 的 /root/ceph-mycluster/ 下操作：创建 fs_data 与 fs_metadata 两个存储池（pg 数按 Ceph 官方单池基线公式 Total PGs = (OSD 数 × 100) / 副本数 取 2 的整数次幂，多池按数据量占比分摊，fs_data 存数据量更大应分配更多 pg，如 fs_data 取 1024、fs_metadata 取 128）；ceph fs new cephfs fs_metadata fs_data 创建文件系统（元数据池在前、数据池在后，注意先后顺序），可选对 fs_data 使能 zlib 压缩（compression_algorithm zlib、compression_mode force、compression_required_ratio .99），ceph fs ls 验证；MDS 用 ceph-deploy mds create ceph1 ceph2 ceph3 创建，用 ps -ef 过滤 ceph-mds 进程验证启动成功；客户机挂载：以限权身份 client.cfs-app 的 keyring 文件挂载（ceph auth get-or-create 签发并 umask 077 print_key 落盘 600 权限分发，不下发 client.admin、密钥不出现在命令行），所有 Client 节点 mkdir /mnt/cephfs 挂载点后执行 mount -t ceph 挂载（MON 节点 IP:6789 列表，-o name=client.cfs-app,secretfile=/etc/ceph/ceph.client.cfs-app.keyring,sync），stat -f /mnt/cephfs 检查挂载成功且文件系统类型为 ceph",
+      "files": [],
+      "expectations": [
+        "给出创建 fs_data 与 fs_metadata 两个存储池的 pg 规划（按官方单池基线公式取 2 的整数次幂，多池按数据量占比分摊，fs_data 存放数据量大应分配更多 pg）",
+        "说明 ceph fs new 创建 CephFS 时元数据池在前、数据池在后，并给出可选的 zlib 压缩参数设置与 ceph fs ls 验证",
+        "给出 MDS 节点用 ceph-deploy mds create 创建，并以 ps -ef 过滤 ceph-mds 进程作为启动成功的验证",
+        "说明业务客户端不下发 client.admin：以 ceph auth get-or-create 签发限权身份 client.<cfs-app> 并只分发该 keyring（umask 077 print_key 落盘 600 权限）",
+        "说明客户机挂载：从 keyring 文件读取密钥（mount -t ceph -o name=client.cfs-app,secretfile=...），创建 /mnt/cephfs 挂载点后以 MON 节点 IP:6789 列表挂载，密钥不在命令行打印（如需密钥串用 read -s），并用 stat -f 验证文件系统类型为 ceph"
+      ]
+    },
+    {
+      "id": "CFS-E02",
+      "prompt": "文件存储集群部署时 MON/MGR/OSD/MDS 的部署顺序和每步验证点是什么？",
+      "expected_output": "按 file-storage-deployment.md：节点本地源同步后，在主节点 ceph1 的 /root/ceph-mycluster/ 下：ceph-deploy new 生成配置并修改 ceph.conf（mon_host 按 MON 节点 ceph1~ceph3 的 Public 地址 198.51.100.166/167/168 生成、public_network/cluster_network）→ ceph-deploy mon create-initial 初始化监视器并收集密钥、ceph-deploy admin 仅向服务端 ceph1~ceph3 分发 keyring（业务客户端改签发限权身份 client.<cfs-app> 并只分发该 keyring）、ceph -s 验证 → ceph-deploy mgr create 部署 MGR 并验证 → 磁盘 zap 后 ceph-deploy osd create（普通与 DB/WAL 外置为互斥分支，目标盘取自 §3.4 逐机核准的设备清单）并验证 OSD up → ceph-deploy mds create 创建 MDS、ps -ef 过滤 ceph-mds 验证启动成功；每阶段 ceph -s 确认 HEALTH_OK，验证不过不进入下一步",
+      "files": [],
+      "expectations": [
+        "给出 MON 初始化监视器收集密钥、ceph-deploy admin 仅向服务端分发 keyring（业务客户端以限权身份 client.<cfs-app> 访问）并以 ceph -s 验证的顺序",
+        "给出 MGR 与 OSD 部署顺序：OSD 普通创建与 DB/WAL 外置创建（--block-wal/--block-db）为互斥分支，目标盘取自逐机核准清单，并验证 OSD up 状态",
+        "给出 ceph-deploy mds create 创建 MDS 并以 ps -ef 过滤 ceph-mds 进程验证启动成功",
+        "声明每阶段 ceph -s 健康验证（HEALTH_OK）必过才进入下一步"
+      ]
+    }
+  ]
+}
