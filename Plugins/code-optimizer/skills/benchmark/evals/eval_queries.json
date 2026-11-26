@@ -1,0 +1,13 @@
+{
+  "skill_name": "benchmark-domain",
+  "queries": [
+    { "id": "BQ-01", "prompt": "LOCOMO 多 runner 并发压测，按 NUMA 拓扑把 mem0 和 runner 分片绑核", "should_trigger": true, "note": "multirunner-topology: NUMA 分片" },
+    { "id": "BQ-02", "prompt": "benchmark 的 ingestion 和 qa 相位重叠，切成干净窗口", "should_trigger": true, "note": "phase-isolation: 相位隔离" },
+    { "id": "BQ-03", "prompt": "多轮 benchmark 数据池要保持逐字节一致，复用轮跳过 seed", "should_trigger": true, "note": "golden-volume-replay: 黄金卷" },
+    { "id": "BQ-04", "prompt": "seed index-ready 超时报 MilvusException 106", "should_trigger": true, "note": "seed-stability: seed 抖动" },
+    { "id": "BQ-05", "prompt": "多轮 benchmark 结果算组内/组间 CV 排除组间偏移", "should_trigger": true, "note": "statistical-design: 统计口径" },
+    { "id": "NQ-01", "prompt": "Milvus 检索慢，优化 L2 距离内核走 SVE", "should_trigger": false, "note": "routes to vectordb/milvus-sve-hnsw-kernel（引擎内部）" },
+    { "id": "NQ-02", "prompt": "mem0 框架侧给 mem0 加标量索引过滤 user_id", "should_trigger": false, "note": "routes to agent-memory/mem0-flatidx-scalar-index（框架侧）" },
+    { "id": "NQ-03", "prompt": "拿 bench 结果去采样火焰图做瓶颈归因", "should_trigger": false, "note": "routes to perf-engineering/opt-bottleneck-mining（测量方法论）" }
+  ]
+}
