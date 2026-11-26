@@ -1,0 +1,73 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-h2d-d2h",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "对比这两份 trace 的 H2D 拷贝次数和字节数",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "两份采集的拷贝带宽和重叠率差多少",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "同步拷贝占比在候选版本里是不是变高了",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "方向分布里 D2D 有多少，是不是有误标的",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "TransData 和 Memcpy 一共搬了多少字节",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "两份 profiling 的 memcpy 和计算重叠了多少",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "这两份 profiling 优化前后步耗时差多少",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "算子种类和 shape 有什么变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-opstats（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "设备时间轴的气泡窗口在哪",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-bubble（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "只分析这一份带栈 trace",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "对比两份 trace 的 stream 并发度",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-stream（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "融合前后算子数量怎么变的",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-fusion（同批 PR 交付）"
+    }
+  ]
+}
