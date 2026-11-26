@@ -1,6 +1,13 @@
 ---
 name: model-precision-analysis
 description: 模型精度分析（model precision analysis）— 对比优化前后两次推理运行（torch / torch_npu 精度评测工具输出）的合并结果，计算准确率、定位“优化前答对、优化后答错”的回归题，并判定精度是否达标。当用户提到对比优化前后精度、精度回归、准确率掉了/降了、精度验证、精度评测结果、opendatas/output 下两次运行对比，或某次量化/算子/图优化是否影响模型正确性时，都使用本技能；也适用于只看单次运行准确率、判断答案差异是格式问题还是真实错误、以及需要为精度门禁输出机器可读结论的场合。
+license: MulanPSL-2.0
+metadata:
+  skill_type: tool_assisted
+  category: verification
+  domain: model_precision
+  activation_mode: passive
+  version: "1.2.1"
 ---
 
 # 模型精度分析
@@ -8,23 +15,34 @@ description: 模型精度分析（model precision analysis）— 对比优化前
 手头有两份（或多份）**同一批题目**的推理结果 JSON，来自 torch / torch_npu 精度评测工具。
 任务不是复述模型输出，而是回答一句话：**这次优化让模型变差了吗？**
 
+本技能只读已有评测结果：不跑推理、不造数据、不改环境、不编排优化；它是优化流水线的**终点验证**，
+产出可被人和 CI 同时消费的结论（`--json` 结构化结果 + 退出码）。
+
 ## 快速开始
 
 ```bash
+# 人读报告
 python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> \
     [--dataset-name aime2024.json]
+
+# 机器可读（CI / validation_plan），退出码语义不变
+python3 scripts/analyze_precision.py <before_run_dir> <after_run_dir> --json [--out result.json]
 ```
 
 脚本只读文件，不修改任何数据。报告含两次准确率、未答/截断数、逐题明细、回归项和改善项。
-退出码语义（CI/脚本化调用一律按此判断，**退出码 0 才是达标**）：
+`--json` 输出稳定 schema：`before/after` 摘要、`status_flip`、`regressions[]`、`improvements[]`、
+`gold_mismatch[]`、`only_one_side[]`、`comparable`、`verdict(pass|fail|undecidable)`、`exit_code`；
+`--out` 可同时落盘，但**拒绝覆盖任一输入结果文件**：路径相同、经符号链接的父目录、或符号/硬链接别名都会被识别，保留原件并以退出码 3 报错；落盘在打印报告之前完成，失败时不会先输出一份“看起来成功”的报告。退出码语义（CI/脚本化调用一律按此判断，**退出码 0 才是达标**）：
 
 | 退出码 | 含义 |
 |--------|------|
 | 0 | 两次运行可比，且没有回归 |
 | 1 | 两次运行可比，但存在“对→错”回归（无论是否传 `--fail-on-regression`） |
-| 2 | 两次运行**不可比**（gold 或题号不一致），结论为“不可判定”，不是达标 |
+| 2 | 两次运行**不可比**（gold 或题号不一致，或没有任何一道可比题），结论为“不可判定”，不是达标 |
+| 3 | `--out` 输出无法安全写入（会覆盖输入文件，或落盘失败）；这是输出错误，不代表任何精度结论 |
 
 退出码与开关已解耦：只要存在回归就以 1 退出，`--fail-on-regression` 仅为兼容旧调用保留（传与不传行为一致）。
+两次运行都为空（零道题）不属于“无回归”，会判为“不可判定”并退出 2，避免 CI 放行一次没有样本的评测。
 
 `--dataset-name` 指定的 json 不存在、或 `merge/` 下有多个 json 却没指定时，脚本直接报错退出，
 不会静默换成别的文件——否则会跨数据集比较，结论完全无效。
@@ -144,6 +162,7 @@ box 里混着多个不相关数字、或模型用的单位与 gold 不同但数�
 ```bash
 python3 tests/test_extraction.py   # 31 条抽取用例（含多 \boxed{} 与各类截断）
 python3 tests/test_pipeline.py     # 12 组端到端（准确率/回归题号/退出码 0/1/2/dataset-name 门禁）
+python3 tests/test_json_output.py  # 14 条 JSON/--out 契约（空运行不可判定、--out 防覆盖与落盘失败退出码 3）
 ```
 
 `evals/evals.json` 中的用例覆盖数字题、字母题、混合格式与干扰项场景，可直接用于技能效果对比。

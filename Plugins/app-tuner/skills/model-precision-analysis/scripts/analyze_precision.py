@@ -12,8 +12,11 @@ Exit status:
     0 - comparable runs, no regression
     1 - comparable runs, at least one correct->wrong flip (gate failed, always
         returned regardless of the legacy --fail-on-regression flag)
-    2 - runs are not comparable (gold mismatch or case ids differ), so the
-        verdict is undecidable and must not be read as a pass
+    2 - runs are not comparable (gold mismatch, case ids differ, or no question
+        is comparable at all), so the verdict is undecidable and must not be
+        read as a pass
+    3 - the requested output could not be written safely (--out aliases an
+        input result file, or the write itself failed); never means a verdict
 
 Item schema (shared by all datasets in this tool):
     {"origin_prompt": str, "prediction": str, "gold": str, "exec_times": int}
@@ -22,9 +25,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+OUTPUT_ERROR_EXIT = 3
 
 BOXED_RE = re.compile(r"\\boxed\s*{([^{}]*(?:{[^{}]*}[^{}]*)*)}")
 NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
@@ -72,6 +78,25 @@ def find_json(run_dir: Path, dataset_name=None) -> Path | None:
         if cands:
             return cands[0]
     return None
+
+
+def same_identity(a: Path, b: Path) -> bool:
+    """True when two paths name the same file.
+
+    Covers the literal same path, symlinked parent directories, symlinks that point
+    at the input, and hardlink aliases (same device/inode). ``resolve()`` catches the
+    not-yet-existing output case so ``--out`` cannot be steered onto an input through
+    a symlinked directory before the file is created.
+    """
+    try:
+        if a.exists() and b.exists() and os.path.samefile(a, b):
+            return True
+    except OSError:
+        pass
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return False
 
 
 def is_truncated(text: str) -> bool:
@@ -255,10 +280,86 @@ def analyze(results: dict) -> dict:
     return out
 
 
-def report(
-    before_dir, after_dir, before_res, after_res, before_json, after_json
-) -> tuple[str, int, bool]:
-    before, after = analyze(before_res), analyze(after_res)
+
+def compare_runs(before: dict, after: dict) -> dict:
+    """Compute per-case before/after flips once, shared by markdown and JSON output."""
+    bmap = {c["id"]: c for c in before["cases"]}
+    amap = {c["id"]: c for c in after["cases"]}
+    regressions, improvements, rows, gold_mismatch = [], [], [], []
+    same = 0
+    only_one_side = sorted(set(bmap) ^ set(amap), key=int)
+    for cid in sorted(set(bmap) & set(amap), key=int):
+        b, a = bmap[cid], amap[cid]
+        rows.append((cid, b, a))
+        if b["gold"] != a["gold"]:
+            gold_mismatch.append(cid)
+            continue
+        if b["correct"] and not a["correct"]:
+            regressions.append(cid)
+        elif not b["correct"] and a["correct"]:
+            improvements.append(cid)
+        else:
+            same += 1
+    compared = len(rows) - len(gold_mismatch)
+    return {
+        "bmap": bmap, "amap": amap, "rows": rows,
+        "regressions": regressions, "improvements": improvements, "same": same,
+        "gold_mismatch": gold_mismatch, "only_one_side": only_one_side,
+        "compared": compared,
+        "incomparable": bool(gold_mismatch or only_one_side or compared == 0),
+    }
+
+
+def build_result(before_dir, after_dir, before: dict, after: dict, before_json, after_json) -> dict:
+    """Structured, machine-readable result for CI / downstream validation_plan."""
+    cmp = compare_runs(before, after)
+    if cmp["incomparable"]:
+        exit_code, verdict = 2, "undecidable"
+    elif cmp["regressions"]:
+        exit_code, verdict = 1, "fail"
+    else:
+        exit_code, verdict = 0, "pass"
+
+    def side(res, d, jf):
+        return {
+            "dir": str(d), "json": str(jf), "gold_type": res["gold_type"],
+            "total": res["total"], "correct": res["correct"],
+            "no_answer": res["no_answer"], "accuracy": res["accuracy"],
+        }
+
+    def flip(cid):
+        b, a = cmp["bmap"][cid], cmp["amap"][cid]
+        return {"id": cid, "gold": b["gold"],
+                "before_answer": b["answer"], "after_answer": a["answer"]}
+
+    return {
+        "schema_version": 1,
+        "before": side(before, before_dir, before_json),
+        "after": side(after, after_dir, after_json),
+        "status_flip": {
+            "same": cmp["same"],
+            "regressions": list(cmp["regressions"]),
+            "improvements": list(cmp["improvements"]),
+        },
+        "regressions": [flip(c) for c in cmp["regressions"]],
+        "improvements": [flip(c) for c in cmp["improvements"]],
+        "gold_mismatch": list(cmp["gold_mismatch"]),
+        "only_one_side": list(cmp["only_one_side"]),
+        "comparable": not cmp["incomparable"],
+        "verdict": verdict,
+        "exit_code": exit_code,
+    }
+
+
+def render_md(result: dict, before: dict, after: dict) -> str:
+    """Human-readable report; text stays identical to the pre-JSON renderer."""
+    cmp = compare_runs(before, after)
+    before_dir, after_dir = result["before"]["dir"], result["after"]["dir"]
+    before_json, after_json = result["before"]["json"], result["after"]["json"]
+    rows, bmap, amap = cmp["rows"], cmp["bmap"], cmp["amap"]
+    regressions, improvements = cmp["regressions"], cmp["improvements"]
+    same, gold_mismatch, only_one_side = cmp["same"], cmp["gold_mismatch"], cmp["only_one_side"]
+
     lines = [
         "## 精度对比分析",
         "",
@@ -273,25 +374,6 @@ def report(
         f"| 准确率 | {before['accuracy']}% | {after['accuracy']}% |",
         "",
     ]
-
-    bmap = {c["id"]: c for c in before["cases"]}
-    amap = {c["id"]: c for c in after["cases"]}
-    regressions, improvements, same = [], [], 0
-    rows = []
-    gold_mismatch = []
-    only_one_side = sorted(set(bmap) ^ set(amap), key=int)
-    for cid in sorted(set(bmap) & set(amap), key=int):
-        b, a = bmap[cid], amap[cid]
-        rows.append((cid, b, a))
-        if b["gold"] != a["gold"]:
-            gold_mismatch.append(cid)
-            continue
-        if b["correct"] and not a["correct"]:
-            regressions.append(cid)
-        elif not b["correct"] and a["correct"]:
-            improvements.append(cid)
-        else:
-            same += 1
     lines.append(f"状态翻转：无变化 {same} 题，回归 {len(regressions)} 题，改善 {len(improvements)} 题")
     if gold_mismatch:
         lines.append(
@@ -300,6 +382,8 @@ def report(
         )
     if only_one_side:
         lines.append(f"⚠️ 题 {', '.join(only_one_side)} 只出现在其中一次运行，未参与对比")
+    if cmp["compared"] == 0:
+        lines.append("⚠️ 两次运行没有可比题目（需至少一道题号与 gold 都一致的题），无法判定精度")
     lines.append("")
 
     lines.append("### 逐题明细")
@@ -335,12 +419,16 @@ def report(
             )
         lines.append("")
 
-    if gold_mismatch:
-        std = "未达标（存在回归）" if regressions else "不可判定（gold 不一致）"
+    if result["verdict"] == "pass":
+        std = "达标"
+    elif result["verdict"] == "fail":
+        std = "未达标（存在回归）"
+    elif gold_mismatch:
+        std = "不可判定（gold 不一致）"
     elif only_one_side:
-        std = "未达标（存在回归）" if regressions else "不可判定（题号不一致）"
+        std = "不可判定（题号不一致）"
     else:
-        std = "达标" if not regressions else "未达标（存在回归）"
+        std = "不可判定（无可比题目）"
     lines.append("### 结论")
     lines.append(
         f"精度标准：**{std}**。准确率 {before['accuracy']}% → {after['accuracy']}%"
@@ -351,13 +439,12 @@ def report(
             f"其中 {before['total'] - len(gold_mismatch)} 题可按题号对比；"
             f"{len(gold_mismatch)} 题 gold 不一致，需先确认是否同一份数据集。"
         )
-    incomparable = bool(gold_mismatch or only_one_side)
-    if incomparable:
+    if cmp["incomparable"]:
         lines.append(
             "两次运行不可比（gold 或题号不一致），脚本以退出码 2 结束；"
             "退出码 2 不是达标，需先确认两次跑的是同一份数据集。"
         )
-    return "\n".join(lines), len(regressions), incomparable
+    return "\n".join(lines)
 
 
 def load_dir(run_dir, dataset_name=None):
@@ -374,6 +461,9 @@ def main():
     ap.add_argument("before")
     ap.add_argument("after")
     ap.add_argument("--dataset-name", default=None, help="merged json filename hint")
+    ap.add_argument("--json", action="store_true",
+                    help="emit a structured JSON result instead of markdown (exit code unchanged)")
+    ap.add_argument("--out", default=None, help="also write the output to this file")
     ap.add_argument(
         "--fail-on-regression",
         action="store_true",
@@ -384,18 +474,34 @@ def main():
     before_dir = Path(args.before)
     after_dir = Path(args.after)
     try:
-        before, before_json = load_dir(before_dir, args.dataset_name)
-        after, after_json = load_dir(after_dir, args.dataset_name)
+        before_raw, before_json = load_dir(before_dir, args.dataset_name)
+        after_raw, after_json = load_dir(after_dir, args.dataset_name)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(f"error: {exc}\n提示：确认两次运行的目录；结果 json 通常在 <run_dir>/merge/ 下")
-    text, n_regressions, incomparable = report(
-        before_dir, after_dir, before, after, before_json, after_json
-    )
-    print(text)
-    if incomparable:
-        sys.exit(2)
-    if n_regressions:
-        sys.exit(1)
+
+    before_res, after_res = analyze(before_raw), analyze(after_raw)
+    result = build_result(before_dir, after_dir, before_res, after_res, before_json, after_json)
+    if args.json:
+        out = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    else:
+        out = render_md(result, before_res, after_res) + "\n"
+    if args.out:
+        out_path = Path(args.out)
+        for src in (before_json, after_json):
+            if same_identity(out_path, src):
+                print(
+                    f"error: --out {out_path} 与输入结果文件 {src} 是同一文件"
+                    "（含符号链接/硬链接别名），拒绝覆盖原始评测数据；请换一个输出路径",
+                    file=sys.stderr,
+                )
+                sys.exit(OUTPUT_ERROR_EXIT)
+        try:
+            out_path.write_text(out, encoding="utf-8")
+        except OSError as exc:
+            print(f"error: 写入 --out {out_path} 失败：{exc}", file=sys.stderr)
+            sys.exit(OUTPUT_ERROR_EXIT)
+    print(out, end="")
+    sys.exit(result["exit_code"])
 
 
 if __name__ == "__main__":
