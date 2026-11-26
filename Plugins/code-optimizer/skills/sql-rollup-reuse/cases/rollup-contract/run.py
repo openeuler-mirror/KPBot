@@ -10,6 +10,16 @@ def mix(seed, field):
     return (31 * seed + code) % 2**32
 
 
+def sale_amount(price, quantity):
+    """Model the Q67 expression COALESCE(price * quantity, 0)."""
+    return 0 if price is None or quantity is None else price * quantity
+
+
+def check(condition, message):
+    if not condition:
+        raise AssertionError(message)
+
+
 def aggregate(batches, reuse=False):
     sums = defaultdict(int)
     hashes = []
@@ -18,7 +28,7 @@ def aggregate(batches, reuse=False):
         prepared = []
         if reuse:
             for category, product, cents, count in batch:
-                prepared.append((cents * count if cents is not None else 0, mix(17, category)))
+                prepared.append((sale_amount(cents, count), mix(17, category)))
                 evaluations += 1
         for level in (2, 1, 0):
             for i, (category, product, cents, count) in enumerate(batch):
@@ -28,7 +38,7 @@ def aggregate(batches, reuse=False):
                     h = prefix if level else 17
                     fields = keys[1:] if level else ()
                 else:
-                    amount = cents * count if cents is not None else 0
+                    amount = sale_amount(cents, count)
                     evaluations += 1
                     h, fields = 17, keys
                 for field in fields:
@@ -36,6 +46,8 @@ def aggregate(batches, reuse=False):
                 hashes.append(mix(h, level))
                 projected = keys + (None,) * (2 - level)
                 sums[(level, projected)] += amount
+    # ROLLUP includes the empty grouping set. SUM has no input on an empty table.
+    sums.setdefault((0, (None, None)), None)
     return dict(sums), hashes, evaluations
 
 
@@ -73,7 +85,7 @@ class AmountCache:
         result = []
         for row in selection:
             _, _, cents, count = vector[mapping[row]]
-            result.append(cents * count if cents is not None else 0)
+            result.append(sale_amount(cents, count))
         self.key, self.vector, self.amounts = key, vector, tuple(result)
         self.misses += 1
         self.evaluations += len(result)
@@ -84,18 +96,18 @@ def cache_invalidation_checks():
     vector = [(1, 10, 100, 2), (2, 20, 300, 1)]
     identity = id(vector)
     cache = AmountCache()
-    assert cache.get(vector, 1, 0, (0, 1), (0, 1)) == (200, 300)
-    assert cache.get(vector, 1, 0, (0, 1), (0, 1)) == (200, 300)
+    check(cache.get(vector, 1, 0, (0, 1), (0, 1)) == (200, 300), "initial amounts")
+    check(cache.get(vector, 1, 0, (0, 1), (0, 1)) == (200, 300), "same-generation hit")
     # Mutate the same vector within a batch, publishing a new revision.
     vector[0] = (1, 10, 500, 2)
-    assert cache.get(vector, 1, 1, (0, 1), (0, 1)) == (1000, 300)
+    check(cache.get(vector, 1, 1, (0, 1), (0, 1)) == (1000, 300), "revision invalidation")
     # Reuse that very object for the next batch; the batch generation changes.
     vector[0] = (1, 10, 700, 2)
-    assert cache.get(vector, 2, 1, (0, 1), (0, 1)) == (1400, 300)
-    assert cache.get(vector, 2, 1, (1,), (0, 1)) == (300,)
-    assert cache.get(vector, 2, 1, (1,), (1, 0)) == (1400,)
-    assert id(vector) == identity and cache.vector is vector
-    assert (cache.hits, cache.misses, cache.evaluations) == (1, 5, 8)
+    check(cache.get(vector, 2, 1, (0, 1), (0, 1)) == (1400, 300), "batch invalidation")
+    check(cache.get(vector, 2, 1, (1,), (0, 1)) == (300,), "selection invalidation")
+    check(cache.get(vector, 2, 1, (1,), (1, 0)) == (1400,), "mapping invalidation")
+    check(id(vector) == identity and cache.vector is vector, "vector identity")
+    check((cache.hits, cache.misses, cache.evaluations) == (1, 5, 8), "cache counters")
     return {"cache_hits": cache.hits, "cache_invalidations": cache.misses - 1,
             "cache_amount_evaluations": cache.evaluations}
 
@@ -122,12 +134,28 @@ def duplicate_grouping_set_checks():
     instances = [(0, 0), (1, 0)]  # Same key set and GROUPING(a) mask, distinct instances.
     baseline, before = grouping_instances(rows, instances)
     candidate, after = grouping_instances(rows, instances, reuse_amount=True)
-    assert Counter(candidate) == Counter(baseline) == Counter({(7, 0, 10): 2})
-    assert (before, after) == (2, 1)
+    check(Counter(candidate) == Counter(baseline) == Counter({(7, 0, 10): 2}), "group multiplicity")
+    check((before, after) == (2, 1), "duplicate-set evaluation counts")
     unsafe, _ = grouping_instances(rows, instances, reuse_amount=True, include_instance=False)
-    assert unsafe == [(7, 0, 20)] and Counter(unsafe) != Counter(baseline)
+    check(unsafe == [(7, 0, 20)] and Counter(unsafe) != Counter(baseline), "unsafe state sharing")
     return {"duplicate_grouping_rows": len(candidate), "duplicate_grouping_each_amount": 10,
             "duplicate_grouping_amount_evaluations": after}
+
+
+def nullable_amount_checks():
+    rows = [(1, 10, None, 2), (1, 10, 100, None), (1, 10, None, None)]
+    expected = {(2, (1, 10)): 0, (1, (1, None)): 0, (0, (None, None)): 0}
+    empty = {(0, (None, None)): None}
+    for reuse in (False, True):
+        sums, _, _ = aggregate([[], rows, []], reuse)
+        check(sums == expected, "COALESCE on real rows must contribute zero")
+        for batches in ([], [[], []]):
+            sums, hashes, evaluations = aggregate(batches, reuse)
+            check((sums, hashes, evaluations) == (empty, [], 0), "empty ROLLUP grand total")
+    order = tuple(range(len(rows)))
+    cached = AmountCache().get(rows, 1, 0, order, order)
+    check(cached == (0, 0, 0), "cached amount with NULL price or quantity")
+    return {"null_operand_cases": len(rows), "empty_input_contract": True}
 
 
 def main():
@@ -137,27 +165,28 @@ def main():
     )
     old_sums, old_hashes, old_evaluations = aggregate(batches)
     sums, hashes, evaluations = aggregate(batches, reuse=True)
-    assert sums == old_sums and hashes == old_hashes
-    assert sums[(2, (1, 10))] == 3300
+    check(sums == old_sums and hashes == old_hashes, "reuse changed sums or hashes")
+    check(sums[(2, (1, 10))] == 3300, "detail sum")
     # Actual NULL data, a subtotal, and the grand total project the same keys.
-    assert [sums[(level, (None, None))] for level in (2, 1, 0)] == [200, 200, 3500]
-    assert (old_evaluations, evaluations) == (21, 7)
+    check([sums[(level, (None, None))] for level in (2, 1, 0)] == [200, 200, 3500], "NULL grouping levels")
+    check((old_evaluations, evaluations) == (21, 7), "amount evaluation counts")
     totals = (0, -1, 2**64-1, -2**64, 2**64, 2**127-1, -(2**127))
     values = (-(2**127), -(2**63)-1, -(2**63), -1, 0, 1, 2**63-1, 2**63, 2**127-1)
     routes = set()
     for total in totals:
         for value in values:
             result, route = candidate_add(total, value)
-            assert result == checked_add(total, value)
+            check(result == checked_add(total, value), f"incorrect sum for {total} + {value}")
             if not -(2**63) <= value < 2**63:
-                assert route == "fallback"
+                check(route == "fallback", "wide input must use fallback")
             routes.add(route)
-    assert routes == {"direct", "fallback"}
+    check(routes == {"direct", "fallback"}, "arithmetic paths exercised")
     result = {"success": True, "amount_evaluations": evaluations,
               "baseline_amount_evaluations": old_evaluations,
               "arithmetic_checks": len(totals)*len(values)}
     result.update(cache_invalidation_checks())
     result.update(duplicate_grouping_set_checks())
+    result.update(nullable_amount_checks())
     out = Path(__file__).resolve().parent / "results/result.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(result) + "\n", encoding="utf-8")
