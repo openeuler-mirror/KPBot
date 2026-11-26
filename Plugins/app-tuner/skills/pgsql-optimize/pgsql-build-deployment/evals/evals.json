@@ -1,0 +1,58 @@
+{
+  "skill_name": "pgsql-build-deployment",
+  "version": "1.0.0",
+  "notes": "部署决策类评估；不实际执行编译安装。",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我要在鲲鹏机器上从源码编译 PostgreSQL 17.5 并启用 LTO，装完之后怎么确认编译口径真的生效了（包括 LTO 带来的火焰图解读影响）？不要执行命令。",
+      "expected_output": "先跑只读预检（工具链 gcc/make/bison/flex/perl、源码树与 REL_17_5 tag、安装前缀）；configure 带 CFLAGS='-O2 -flto ...' 且整串记录；make -j 后 make install；验收用 pg_config --version 对照 17.5、pg_config --configure 复述本次 CFLAGS（LTO 是否生效以它为准，不凭记忆）、md5sum 记录 postgres 二进制身份、nm 用 grep -F 字面匹配核对关键符号。同时说明 LTO 口径对后续火焰图的影响：帧名带 .lto_priv、顶层可能出现在归因伪影（帧被内联后采样归错主循环），采集方要知道构建口径。",
+      "files": ["references/build-from-source.md"],
+      "expectations": [
+        "预检先行（工具链/源码树/tag 锚点）",
+        "验收依据是 pg_config --configure 与 --version，不是记忆",
+        "符号核对用 grep -F 字面匹配",
+        "指出 LTO 对火焰图帧名/归因的影响",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "装了自研的 pg_buffer_stats 观测扩展，postgresql.conf 里 shared_preload_libraries 已经加上，为什么 SELECT * FROM pg_buffer_stats.hotspots 还是报不存在？reload 了好几次都没用。不要执行命令。",
+      "expected_output": "指出 shared_preload_libraries 的加载语义：扩展在 postmaster 启动阶段申请共享内存与初始化，reload 只重读配置文件不会重新 fork postmaster——必须 restart。同时核对 CREATE EXTENSION 是否执行过（视图来自扩展 SQL 脚本）、make install 是否把控制文件/SQL 落到 share/extension、PG_CONFIG 是否指向目标安装（PGXS 独立编译时容易装错前缀）。给出排查顺序：pg_ctl status 确认重启时间 → psql 查 pg_extension → pg_config --sharedir 看 share/extension 下文件。",
+      "files": ["references/contrib-extensions-and-patches.md"],
+      "expectations": [
+        "明确 reload 与 restart 的区别及原因（postmaster 启动期申请共享内存）",
+        "给出 CREATE EXTENSION / make install / PG_CONFIG 指向的核对顺序",
+        "指出 PGXS 独立编译时装错前缀的常见坑",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "给源码树打了 NUM_BUFFER_PARTITIONS 128→512 的补丁，怎么保证这个变更可回退？编译期常量改了之后有什么要注意的？不要执行命令。",
+      "expected_output": "补丁纪律：git status 先确认树干净 → git apply --check 先行（失败不硬上）→ git apply 后 git diff --stat 记录 → 整树重编（编译期宏进每个翻译单元，只改头文件不重编不生效）→ make install。回退：git apply -R 反向补丁 → 整树重编重装 → pg_config --configure/md5 复核身份。多补丁叠加按时间序应用、反序回退。",
+      "files": ["references/contrib-extensions-and-patches.md", "references/build-from-source.md"],
+      "expectations": [
+        "apply --check 先行、失败拒绝应用",
+        "强调编译期常量必须整树重编",
+        "回退路径含 -R + 重编 + 身份复核",
+        "多补丁顺序纪律（时间序应用、反序回退）",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "要在生产上把 PG 17.5 换成 18.3 的二进制，数据目录能不能直接沿用？换二进制的安全流程是什么？不要执行命令。",
+      "expected_output": "区分大版本与小版本：大版本（17→18）on-disk catalog 格式不通用，数据目录不能直接沿用，需 initdb 新目录 + 逻辑导出或 pg_upgrade 专项流程；小版本二进制可替换。安全流程：替换前整套备份 bin+lib+share（同套退回防 lib 错配，备份目录已存在即拒绝）→ pg_ctl stop -m fast 且确认 SELECT 1 不再成功 → 替换 → 启动 → 版本核对（pg_config --version）+ 冒烟通过才放量；回滚是停服后成套 mv 回原名再冒烟，不嵌套 mv。",
+      "files": ["references/deployment-and-config.md"],
+      "expectations": [
+        "大/小版本数据目录兼容性区分清楚",
+        "备份是 bin+lib+share 成套、存在即拒绝",
+        "停服判定含 SELECT 1 失败确认",
+        "回滚成套退回且复跑冒烟",
+        "没有执行命令"
+      ]
+    }
+  ]
+}
