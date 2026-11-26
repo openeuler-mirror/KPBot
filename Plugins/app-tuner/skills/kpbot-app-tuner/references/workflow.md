@@ -275,6 +275,7 @@ OpenCode 与 Claude Code 运行时都必须维护 `current_workflow_state`，并
 - `memory_bandwidth_bottleneck`
 - `cpu_bottleneck`
 - `gpu_npu_bottleneck`
+- `crypto_accelerator_bottleneck`
 - `hardware_capacity_limit`
 - `unknown_bottleneck`
 - `no_active_bottleneck`

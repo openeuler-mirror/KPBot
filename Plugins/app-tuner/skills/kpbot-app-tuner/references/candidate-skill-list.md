@@ -45,7 +45,8 @@
 | 线程切换高且 L3/LLC cache miss 高 | `context_switch_rate_per_sec` 高，且 L3/LLC miss 比例达到阈值 | `cpu-affinity-optimization`，重点分析绑核、NUMA、线程迁移和 IRQ 隔离 |
 | 数据库/应用内部状态解释瓶颈 | 连接池、队列、buffer/cache、锁等待、数据库状态可解释瓶颈 | `application-config-optimization` |
 | Ceph 存储场景 | 场景为 Ceph 存储集群（RBD/RGW/CephFS），或瓶颈/热点证据落在 OSD、MON、存储网络、PG 分布 | `ceph-optimization`，按需 `network-optimization`、`cpu-affinity-optimization`、`bios-optimization` |
-| OS/BIOS/硬件/加速卡证据命中 | 环境诊断或采集信息显示对应问题 | `os-optimization`、`bios-optimization`、`accelerator-optimization`、`hardware-upgrade-analysis` |
+| OS/BIOS/硬件证据命中 | 环境诊断或采集信息显示对应问题 | `os-optimization`、`bios-optimization`、`hardware-upgrade-analysis` |
+| HPRE/KAE 密码加速卡证据命中 | `/sys/class/uacce/hisi_hpre-*`、`uacce_mode`、HPRE 引擎证据 | `accelerator-optimization`（GPU/NPU 通用计算卡不走此 skill） |
 | 既有分类无法覆盖 | 证据明确存在异常但不属于现有专项 | `other-optimization` |
 
 默认阈值可由脚本参数覆盖：
@@ -175,7 +176,7 @@ Step 0 产出的物理拓扑:
 - `hardware-upgrade-analysis`
 - `other-optimization`
 
-`io-optimization` 承担前置瓶颈预筛与磁盘/内存专项证据采集（系统参数动作由 os-optimization 唯一产出），预筛阶段不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 默认由 `accelerator-optimization` 按需引用（NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling 采集），证据命中下表信号时不进入主覆盖集合，在 `accelerator-optimization` 的执行序列内追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进 `accelerator-optimization` 任务包（证据已单独点名时不重复下发）。
+`io-optimization` 承担前置瓶颈预筛与磁盘/内存专项证据采集（系统参数动作由 os-optimization 唯一产出），预筛阶段不属于覆盖执行集合。`database-workload-analysis` 默认由 `application-config-optimization` 按需触发；当 `--database-workload` 明确给出时，可追加到覆盖集合。`vllm-ascend-profiling` 承接 NPU + vLLM 场景的 Stage-1 环境诊断与 TTFT profiling：`gpu_npu_bottleneck` 默认路由直接派发，`accelerator-optimization` 在 NPU+vLLM 委托场景下也按需引用。证据命中下表信号时不进入主覆盖集合，而作为专项 profiling 追加；脚本化派发已在 `create_subagent_tasks.py` 实现——TTFT 指标 / `trace_view.json` 等采集产物命中时生成独立证据任务包，否则该子技能以 `nested_subskills` 形式挂进对应任务包（证据已单独点名时不重复下发）。`accelerator-optimization` 自身只承接 HPRE/KAE 密码卸载（`crypto_accelerator_bottleneck`），不再承接 GPU/NPU 通用计算卡分析。
 
 ## 停止规则
 

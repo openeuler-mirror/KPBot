@@ -1,0 +1,20 @@
+# Tier A: fake download/systemd/quickcheck/official installer in a temporary root.
+# Run from any directory: bash cases/install-contract/run.sh
+name: install-contract
+skill: cubesandbox-single-node-install
+tier: A
+assert:
+  - {type: exit_code, expect: 0}
+  - {type: json_field, file: results/result.json, field: success, expect: true}
+  - {type: json_field, file: results/result.json, field: bypass_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: expect_version_required, expect: true}
+  - {type: json_field, file: results/result.json, field: existing_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: partial_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: unknown_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: missing_sha_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: sha_failure_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: version_drift_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: fresh_install_success, expect: true}
+  - {type: json_field, file: results/result.json, field: official_quickcheck_ran, expect: true}
+  - {type: json_field, file: results/result.json, field: no_forbidden_actions, expect: true}
+  - {type: json_field, file: results/result.json, field: secret_safe, expect: true}

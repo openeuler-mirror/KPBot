@@ -1,0 +1,43 @@
+name: hash-candidate-contract
+skill: lz4-hash-candidate-optimization
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: hash_candidate_route_positive
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: actual_load_width_guard
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: architecture_and_table_fallback
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: candidate_still_requires_match
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: compatibility_matrix_complete
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: decode_bytes_and_length_checked
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: shared_failure_is_not_pass
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: real_lz4_executed
+    expect: false

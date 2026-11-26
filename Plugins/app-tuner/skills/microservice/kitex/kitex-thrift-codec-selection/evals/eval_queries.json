@@ -1,0 +1,43 @@
+{
+  "skill_name": "kitex-thrift-codec-selection",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-frugal",
+      "prompt": "要不要开 frugal，能提升多少",
+      "should_trigger": true,
+      "note": "编解码选型类触发词：frugal"
+    },
+    {
+      "id": "q-codec-hot",
+      "prompt": "编解码在火焰图里占比偏高，是不是实现问题",
+      "should_trigger": true,
+      "note": "证据类触发词：编解码占比、火焰图"
+    },
+    {
+      "id": "q-codec-diff",
+      "prompt": "fastcodec 和 frugal 有什么区别，IDL 要不要改",
+      "should_trigger": true,
+      "note": "实现对比类触发词：fastcodec、IDL"
+    },
+    {
+      "id": "q-protocol",
+      "prompt": "该用 Framed 还是 TTHeader",
+      "should_trigger": false,
+      "note": "线路协议 → kitex-transport-protocol-selection"
+    },
+    {
+      "id": "q-conn",
+      "prompt": "df 很多，要不要改成复用连接",
+      "should_trigger": false,
+      "note": "连接形态 → kitex-transport-tuning"
+    },
+    {
+      "id": "q-alloc",
+      "prompt": "每请求分配太高怎么削",
+      "should_trigger": false,
+      "note": "分配热点 → kitex-allocation-hotspot-tuning"
+    }
+  ]
+}

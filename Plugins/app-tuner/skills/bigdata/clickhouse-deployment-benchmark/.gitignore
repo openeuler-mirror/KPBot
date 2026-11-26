@@ -1,0 +1,9 @@
+/results/
+/experiment/
+/cases/*/results/
+__pycache__/
+/clickhouse-source/
+
+# 官方发行包及摘要为本地安装产物
+/*.tgz
+/*.tgz.sha512

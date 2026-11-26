@@ -15,6 +15,9 @@ metadata:
   version: "1.0.0"
 ---
 
+
+> **采集契约（被动观察）**：采集路径为只读——不修改被测环境（产物仅写入输出目录）；工具缺失时 `deploy.sh` 会以 root 通过包管理器安装依赖，这是本 skill 唯一的写系统动作，需用户确认；采样工具自身开销极低（<1% CPU 量级）。需要变更的优化动作归属 network-optimization。
+
 # kptools-network-collector — 网络与中断数据采集
 
 ## 工作流程

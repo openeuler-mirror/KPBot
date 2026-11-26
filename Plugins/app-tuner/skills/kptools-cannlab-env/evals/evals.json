@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-cannlab-env",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "把这段代码同步到 NPU 真机上跑一下，结果拿回来。",
+      "expected_output": "按 SKILL.md 标准闭环：确认代码在 CPU /mnt/workspace（本机写的先 scp 上去）→ remote_tool.sh exec --command '...' --pull-dir '<产出目录>'（注意引号规则）→ 确认产出落盘 CPU → 需要时 scp 回本机；报告注明命令分别在本机/CPU/NPU 哪层执行、产物最终位置；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "remote_tool.sh 报错退出了，帮我看看怎么回事。",
+      "expected_output": "先问/看退出码，按退出码契约路由：2 服务端异常重试一次、3 SSH 未就绪重试、4 查路径、5 token 停下告知用户、6 查引号规则、7 看远端命令自身输出、8 等 1-2 分钟重试（非错误）、10 换思路；不盲目重试超过 2 次；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "在 NPU 上跑一个两小时的训练长任务，结束后把日志给我。",
+      "expected_output": "长任务模式：exec 启动 nohup ... > log 2>&1 & 立即返回 → 后续轮询一律用 --no-sync 的 exec tail 日志/查进程（避免同步 unlink 正在写的日志）→ 结束后 pull 日志与产出 → shutdown 收尾；注意探活与自动关机；引用真实输出，不编造。",
+      "files": []
+    }
+  ]
+}

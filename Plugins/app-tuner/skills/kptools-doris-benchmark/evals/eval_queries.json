@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-doris-benchmark",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {"id": "DBP-01", "prompt": "对已有 Doris 跑只读 SELECT 性能测试", "should_trigger": true},
+    {"id": "DBP-02", "prompt": "Doris 查询预热后跑三轮并记录原始时延", "should_trigger": true},
+    {"id": "DBP-03", "prompt": "采集 Doris 合成查询吞吐和结果正确性", "should_trigger": true},
+    {"id": "DBP-04", "prompt": "基准客户端超时要保留失败结果和日志", "should_trigger": true},
+    {"id": "DBP-05", "prompt": "用安全认证配置运行 Doris 查询冒烟基准", "should_trigger": true},
+    {"id": "DBP-06", "prompt": "跑一个有界 Doris query-only benchmark，不要建表", "should_trigger": true},
+    {"id": "DBN-01", "prompt": "只检查 Doris 环境，不要执行基准", "should_trigger": false, "note": "routes to kptools-doris-environment-check"},
+    {"id": "DBN-02", "prompt": "生成并导入完整 TPC-H SF100 数据", "should_trigger": false, "note": "outside synthetic SELECT-only scope"},
+    {"id": "DBN-03", "prompt": "安装 Doris 并启动 FE/BE", "should_trigger": false, "note": "deployment is outside scope"},
+    {"id": "DBN-04", "prompt": "启动本地 Ray 跑 ImageNet 精度", "should_trigger": false, "note": "different runtime and workload"}
+  ]
+}

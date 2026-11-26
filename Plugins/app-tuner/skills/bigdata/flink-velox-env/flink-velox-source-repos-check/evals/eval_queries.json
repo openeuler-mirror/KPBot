@@ -1,0 +1,49 @@
+{
+  "skill_name": "flink-velox-source-repos-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-missing-checkout",
+      "prompt": "velox、velox4j、gluten 三个源码仓克隆齐了没",
+      "should_trigger": true,
+      "note": "场景入口类触发词：源码仓、克隆了没"
+    },
+    {
+      "id": "q-branch",
+      "prompt": "velox 现在在哪个分支，是不是基线分支 gluten-20260829",
+      "should_trigger": true,
+      "note": "分支类触发词：在哪个分支、基线分支"
+    },
+    {
+      "id": "q-repos-dir",
+      "prompt": "源码仓的 repos 目录在哪，VELOX_HOME 指对了没",
+      "should_trigger": true,
+      "note": "位置类触发词：repos 目录、单仓环境变量"
+    },
+    {
+      "id": "q-cpp-deps",
+      "prompt": "velox setup 脚本要装的源码级 C++ 库装了没",
+      "should_trigger": false,
+      "note": "C++ 依赖 → flink-velox-cpp-deps-check"
+    },
+    {
+      "id": "q-toolchain",
+      "prompt": "git、cmake、gcc 装了没",
+      "should_trigger": false,
+      "note": "编译工具链 → flink-velox-toolchain-check"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-clone",
+      "prompt": "把 velox 克隆下来并切到基线分支",
+      "should_trigger": false,
+      "note": "克隆/切分支 → 安装类 skill（审中 !322）；本 skill 只读"
+    }
+  ]
+}

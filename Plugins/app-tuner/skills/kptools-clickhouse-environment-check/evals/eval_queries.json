@@ -1,0 +1,53 @@
+{
+  "skill_name": "kptools-clickhouse-environment-check",
+  "queries": [
+    {
+      "id": "CHENV-PQ-01",
+      "prompt": "跑 ClickHouse 基准前只读检查一下已有实例和客户端",
+      "should_trigger": true,
+      "note": "core preflight scenario"
+    },
+    {
+      "id": "CHENV-PQ-02",
+      "prompt": "验证这个非默认 TLS ClickHouse 端点的认证和 SELECT 前提",
+      "should_trigger": true,
+      "note": "secure nondefault endpoint"
+    },
+    {
+      "id": "CHENV-PQ-03",
+      "prompt": "用现有 clickhouse 单二进制检查基准环境，不要安装任何东西",
+      "should_trigger": true,
+      "note": "single binary and read-only boundary"
+    },
+    {
+      "id": "CHENV-PQ-04",
+      "prompt": "ClickHouse 客户端超时了，给我每项探针的结构化证据",
+      "should_trigger": true,
+      "note": "timeout diagnosis"
+    },
+    {
+      "id": "CHENV-NQ-01",
+      "prompt": "安装并启动一个新的 ClickHouse 集群",
+      "should_trigger": false,
+      "note": "deployment is explicitly out of scope"
+    },
+    {
+      "id": "CHENV-NQ-02",
+      "prompt": "创建测试数据库并导入 TPC-H 数据",
+      "should_trigger": false,
+      "note": "writes and data loading are out of scope"
+    },
+    {
+      "id": "CHENV-NQ-03",
+      "prompt": "修改 ClickHouse 副本配置并滚动重启",
+      "should_trigger": false,
+      "note": "service mutation is out of scope"
+    },
+    {
+      "id": "CHENV-NQ-04",
+      "prompt": "直接跑三轮 ClickHouse 合成查询并汇总 QPS",
+      "should_trigger": false,
+      "note": "routes to kptools-clickhouse-benchmark"
+    }
+  ]
+}

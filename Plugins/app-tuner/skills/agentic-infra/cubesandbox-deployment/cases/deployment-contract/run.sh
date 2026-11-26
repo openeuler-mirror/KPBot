@@ -34,13 +34,35 @@ grep -q -- '--preflight-only' "${TMP_DIR}/help.txt" && ! grep -q -- '--upgrade' 
 record_static "help documents read-only preflight and fresh-install-only scope" "$((rc != 0 || $? != 0))"
 
 PYTHONPYCACHEPREFIX="${TMP_DIR}/pycache" python3 -m py_compile \
-  "${SKILL_DIR}/scripts/discover_release.py" "${SKILL_DIR}/scripts/parse_env.py"
-record_static "discover_release.py and parse_env.py syntax" "$?"
+  "${SKILL_DIR}/scripts/discover_release.py" "${SKILL_DIR}/scripts/parse_env.py" \
+  "${SKILL_DIR}/scripts/report_safety.py" "${SKILL_DIR}/cases/lib/deployment_fixture.py"
+record_static "deployment Python helpers are Python 3.9-compatible syntax" "$?"
+
+python3 - "${SKILL_DIR}/cases/lib/deployment_fixture.py" <<'PY'
+import ast
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    tree = ast.parse(handle.read(), filename=sys.argv[1])
+for node in ast.walk(tree):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
+        if any(keyword.arg == "newline" for keyword in node.keywords):
+            raise SystemExit("Path.write_text(newline=) requires Python 3.10; use write_bytes")
+PY
+record_static "tier-A fixture forbids Python 3.10-only write_text newline" "$?"
 
 grep -q 'ONE_CLICK_RUN_QUICKCHECK=1' "${SKILL_DIR}/scripts/deploy.sh" \
   && grep -q 'EXPECTED_SHA256' "${SKILL_DIR}/scripts/deploy.sh" \
+  && grep -q 'SHA-256 pinning enforced' "${SKILL_DIR}/scripts/deploy.sh" \
+  && grep -q -- '--expect-version' "${SKILL_DIR}/scripts/deploy.sh" \
   && ! grep -q 'ONE_CLICK_SKIP_PRECHECK=1' "${SKILL_DIR}/scripts/deploy.sh"
-record_static "quickcheck, integrity verification, and no precheck bypass" "$?"
+record_static "quickcheck, mandatory digest, version pin, and no precheck bypass" "$?"
+
+grep -q 'ONE_CLICK_RUNTIME_ENV_FILE' "${SKILL_DIR}/scripts/verify.sh" \
+  && grep -q 'ONE_CLICK_RUNTIME_DIR' "${SKILL_DIR}/scripts/verify.sh" \
+  && grep -q 'ONE_CLICK_LOG_DIR' "${SKILL_DIR}/scripts/verify.sh" \
+  && grep -q 'verification will not create them' "${SKILL_DIR}/scripts/verify.sh"
+record_static "verifier pins runtime env and preserves official runtime/log directories" "$?"
 
 record=$'v1.2.3\x1easset.tar.gz\x1ehttps://github.com/asset.tar.gz\x1e\x1eabcdef'
 IFS=$'\x1e' read -r parsed_version parsed_asset parsed_url parsed_fallback parsed_sha <<<"${record}"
@@ -144,6 +166,83 @@ rc=$?
 [[ "${rc}" -ne 0 ]] && grep -q 'group/world writable' "${TMP_DIR}/insecure.log"
 record_static "group/world-writable environment files are rejected" "$?"
 
+python3 - "${SKILL_DIR}/../../../README.md" <<'PY'
+import sys
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    lines = handle.read().splitlines()
+expected = '| `cubesandbox-deployment` | CubeSandbox 单机在线部署(x86_64/ARM64 资产选择、部署预检、SHA-256 校验、官方 one-click 安装与服务健康检查；不含模板或性能测试) |'
+shared_rows = [line for line in lines if '`cubesandbox-deployment`' in line]
+focused = (
+    'cubesandbox-deployment-preflight',
+    'cubesandbox-single-node-install',
+    'cubesandbox-deployment-verify',
+)
+valid = shared_rows == [expected]
+valid = valid and not any(
+    '`' + name + '`' in line
+    for name in focused
+    for line in lines
+)
+raise SystemExit(0 if valid else 1)
+PY
+record_static "README keeps only the base shared row without focused entries" "$?"
+
+python3 - "${SKILL_DIR}/SKILL.md" <<'PY'
+import sys
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    text = handle.read()
+valid = text.count('- `cases/deployment-contract/`：共享部署实现的静态、严格 env 与 Release 契约') == 1
+valid = valid and text.count('`bash cases/deployment-contract/run.sh`') == 1
+raise SystemExit(0 if valid else 1)
+PY
+record_static "shared asset catalog documents and invokes deployment-contract" "$?"
+
+python3 - "${SKILL_DIR}/SKILL.md" "${SKILL_DIR}/../cubesandbox-single-node-install/SKILL.md" <<'PY'
+import sys
+
+texts = []
+for path in sys.argv[1:]:
+    with open(path, encoding='utf-8') as handle:
+        texts.append(handle.read())
+required = (
+    '127.0.0.1:3000',
+    '<node-ip>:12088',
+    'API/WebUI 不直接暴露到不可信网络',
+)
+valid = all(all(item in text for item in required) for text in texts)
+raise SystemExit(0 if valid else 1)
+PY
+record_static "Workflow and install output retain network exposure warnings" "$?"
+
+python3 - "${SKILL_DIR}/../cubesandbox-deployment-verify/SKILL.md" "${SKILL_DIR}/references/deployment.md" <<'PY'
+import sys
+
+required = '/usr/local/services/cubetoolbox/scripts/one-click/quickcheck.sh'
+for path in sys.argv[1:]:
+    with open(path, encoding='utf-8') as handle:
+        text = handle.read()
+    if required not in text or '`scripts/one-click/quickcheck.sh`' in text:
+        raise SystemExit(1)
+PY
+record_static "quickcheck documentation uses absolute installed paths not repository links" "$?"
+
+python3 - "${SKILL_DIR}/references/deployment.md" "${SKILL_DIR}/scripts/deploy.sh" <<'PY'
+import sys
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    reference = handle.read()
+with open(sys.argv[2], encoding='utf-8') as handle:
+    deploy = handle.read()
+if '192.168.0.0' in reference:
+    raise SystemExit(1)
+required_comment = "Upstream one-click's documented default sandbox CIDR, not a site-specific"
+if required_comment not in deploy or 'CUBE_SANDBOX_NETWORK_CIDR:-192.168.0.0/18' not in deploy:
+    raise SystemExit(1)
+PY
+record_static "CIDR example is generic while official default behavior is documented and retained" "$?"
+
 PYTHONPYCACHEPREFIX="${TMP_DIR}/pycache" python3 - "${SKILL_DIR}/scripts/discover_release.py" >"${TMP_DIR}/release-results.json" <<'PY'
 import importlib.util
 import json
@@ -231,7 +330,7 @@ try:
 finally:
     module.fetch_release = original_fetch_release
     module.fetch_json = original_fetch_json
-record("API rate limit fails over only to official URLs with a digest warning", fallback_works)
+record("API fallback leaves digest empty for deploy.sh to reject fail-closed", fallback_works)
 
 print(json.dumps(results))
 PY

@@ -1,0 +1,43 @@
+{
+  "skill_name": "go-runtime-tuning",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-container-cpu",
+      "prompt": "容器里线程数比 CPU 配额还多，怎么办",
+      "should_trigger": true,
+      "note": "容器适配类触发词：CPU 配额、线程数"
+    },
+    {
+      "id": "q-gc-latency",
+      "prompt": "GC 频率高，P99 抖动明显",
+      "should_trigger": true,
+      "note": "运行时类触发词：GC 频率、P99"
+    },
+    {
+      "id": "q-gomaxprocs",
+      "prompt": "GOMAXPROCS 设多少合适",
+      "should_trigger": true,
+      "note": "参数类触发词：GOMAXPROCS"
+    },
+    {
+      "id": "q-kitex-alloc",
+      "prompt": "Kitex 每请求为什么分配这么多",
+      "should_trigger": false,
+      "note": "组件分配点 → kitex-allocation-hotspot-tuning"
+    },
+    {
+      "id": "q-syncpool",
+      "prompt": "sync.Pool 的 poolretain 怎么用",
+      "should_trigger": false,
+      "note": "池参数 → go-syncpool-optimization"
+    },
+    {
+      "id": "q-runtime-patch",
+      "prompt": "要给 Go runtime 打补丁吗",
+      "should_trigger": false,
+      "note": "补丁与重编译 → go-runtime-patch-build"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-cannlab-env",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "CE-01", "prompt": "连接 cannlab 分设环境", "should_trigger": true },
+    { "id": "CE-02", "prompt": "把代码同步到 NPU 上跑一下", "should_trigger": true },
+    { "id": "CE-03", "prompt": "NPU Pod 开一下机", "should_trigger": true },
+    { "id": "CE-04", "prompt": "remote_tool.sh 怎么用", "should_trigger": true },
+    { "id": "CE-05", "prompt": "把 NPU 上的产出文件拉回来", "should_trigger": true },
+    { "id": "CE-06", "prompt": "上板调试这段代码", "should_trigger": true },
+    { "id": "CE-07", "prompt": "exec 偶发没有输出怎么回事", "should_trigger": true },
+    { "id": "CE-08", "prompt": "在 CPU 容器上查一下 /mnt/workspace 的文件", "should_trigger": true },
+    { "id": "CE-09", "prompt": "分析 NPU 上算子的上板性能", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis (本 skill 只管链路)" },
+    { "id": "CE-10", "prompt": "看看训练的 tps 和 mfu", "should_trigger": false, "note": "训练指标无仓内对应 skill，由所在部署环境的指标工具承接 (本 skill 只管链路)" },
+    { "id": "CE-11", "prompt": "AgentENV 沙箱装不上怎么排查", "should_trigger": false, "note": "routes to kptools-openeuler-agentenv" },
+    { "id": "CE-12", "prompt": "在本机跑一下这个单元测试", "should_trigger": false, "note": "本地执行, 无需远程链路" }
+  ]
+}
