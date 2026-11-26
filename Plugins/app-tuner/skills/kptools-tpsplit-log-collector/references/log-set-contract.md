@@ -60,4 +60,4 @@ kptools-tpsplit-log-collector 的交付物与校验口径。下游 kptools-tpspl
 
 日志须为 v3 打点格式（`[TTFT][BREAKDOWN]` 等行格式定义见解析侧
 kptools-tpsplit-log-analysis 的 SKILL.md 日志格式节）。打点 patch 的部署与生效
-排查归 kptools-tpsplit-log-trace（配套 PR 交付）。
+排查归 kptools-tpsplit-log-trace（配套 PR #340 交付）。

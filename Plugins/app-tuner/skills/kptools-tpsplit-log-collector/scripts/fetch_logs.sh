@@ -90,32 +90,45 @@ except OSError:
     print(-1, -1); sys.exit(0)
 if not text:
     print(0, 0); sys.exit(0)
-def count(obj, out):
-    if isinstance(obj, dict):
-        out[0] += 1
-        if "client_send_ts" in obj:
-            out[1] += 1
-        return
-    if isinstance(obj, list):
-        for x in obj:
-            count(x, out)
+# 与解析侧 load_bench 逐字对齐的计数：
+#   只计「顶层元素中的 dict」——jsonl 里一行的 JSON 是数组/标量时整行跳过
+#   （load_bench 的 for it in items: if not isinstance(it, dict): continue 同口径），
+#   不递归嵌套数组——递归口径会让嵌套形态在采集侧"对齐绿灯"、解析侧却
+#   必然终止或静默漏载
+def add_dict(d, out):
+    out[0] += 1
+    if "client_send_ts" in d:
+        out[1] += 1
 n = [0, 0]
 if text.startswith("["):
+    # 整文件 JSON 数组（load_bench 同款形态）：解析失败不退回逐行——
+    # load_bench 对该形态直接终止，采集侧按 0 条计（触发偏差告警/门槛红灯），
+    # 不在坏文件上凑数字
     try:
-        count(json.loads(text), n)
+        v = json.loads(text)
     except ValueError:
-        pass  # 整文件解析失败 → 退回逐行（解析器侧会显式报错）
-    else:
-        print(n[0], n[1]); sys.exit(0)
+        print("[warn] %s 整文件按 JSON 数组解析失败（解析侧 load_bench 将直接终止），按 0 条计"
+              % sys.argv[1], file=sys.stderr)
+        print(0, 0); sys.exit(0)
+    if isinstance(v, list):
+        for x in v:
+            if isinstance(x, dict):
+                add_dict(x, n)
+    elif isinstance(v, dict):
+        add_dict(v, n)
+    print(n[0], n[1]); sys.exit(0)
 bad = 0
 for line in text.splitlines():
     s = line.strip().rstrip(",").strip()
     if not s or s in ("[", "]"):
         continue
     try:
-        count(json.loads(s), n)
+        v = json.loads(s)
     except ValueError:
         bad += 1
+        continue
+    if isinstance(v, dict):   # list/标量行与 load_bench 同口径整行跳过（不展开）
+        add_dict(v, n)
 if bad:
     print("[warn] %s 存在无法按 JSON 解析的内容（本地 analyze_ttft.py 解析时会显式报错）"
           % sys.argv[1], file=sys.stderr)

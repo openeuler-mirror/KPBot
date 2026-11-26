@@ -17,7 +17,7 @@ compatibility: >
   宿主机执行（需 bash 与 grep/find/du；压测请求数精确计数需宿主机有 python3，无则
   退化为键字面量计数并打告警）；打点须已部署且输出 v3 格式（[TTFT][BREAKDOWN] /
   [TTFT_KVXFER] / [SHM_DEQUEUE] / [LB_DISPATCH] / [TTFT_DRAFT]，部署工具随配套 PR
-  交付）；Windows 写出的 .sh 带 CR，上传远端前先 tr -d '\r'（本 skill 脚本已按 LF
+  #340 交付）；Windows 写出的 .sh 带 CR，上传远端前先 tr -d '\r'（本 skill 脚本已按 LF
   交付）。
 metadata:
   skill_type: tool_assisted
