@@ -90,19 +90,30 @@ aarch64 常见断层：
 
 ## Candidate Action Template
 
+字段名与主流程 merge gate（`kpbot-app-tuner/scripts/merge_subagent_results.py` 的 REQUIRED_ACTION_FIELDS）逐字对齐，缺失会被 gate-check 拒绝：
+
 ```json
 {
   "action_id": "compiler-001",
-  "action_type": "arch_flags|pgo|css_pgo|lto|compiler_upgrade|source_patch",
-  "precondition": ["current_run_id evidence is current"],
-  "build_plan": ["commands or build-system edits"],
-  "codegen_validation": ["readelf/objdump/perf annotate commands"],
-  "functional_validation": ["smoke tests"],
-  "performance_validation": ["A/B benchmark plan"],
-  "rollback": ["restore baseline binary/config"],
-  "reject_condition": ["gain <= noise", "P99 regression", "functional failure"],
-  "risk": ["ABI", "portability", "profile staleness"]
+  "title": "为 <目标二进制> 应用 LTO+PGO 重编译",
+  "category": "build_fact_check | arch_flags | pgo | css_pgo | lto | compiler_upgrade | source_patch",
+  "priority": "high",
+  "change_mode": "rebuild_required",
+  "requires_root": false,
+  "risk": "medium",
+  "mutually_exclusive_with": ["compiler-002"],
+  "implementation_plan": ["commands or build-system edits"],
+  "validation_plan": ["codegen: readelf/objdump/perf annotate", "functional smoke test", "A/B benchmark plan"],
+  "rollback": ["restore baseline binary/config/runtime libs + 复核目标实例身份"],
+  "expected_effect": "branch miss/I-cache 降低，P99 改善",
+  "expected_gain_metric": "P99 或 workload QPS",
+  "rejection_criteria": ["gain <= noise", "P99 regression", "functional failure"],
+  "evidence_refs": ["output/evidence/<run_id>/..."]
 }
 ```
+
+- `change_mode` 枚举（主 SKILL 契约）：`analysis_only` / `dry_run` / `online` / `restart_required` / `system_reboot` / `rebuild_required` / `hardware_advice`；重编译/补丁/编译器切换类动作用 `rebuild_required`。
+- `mutually_exclusive_with`：替代方案组（如 LTO vs LTO+PGO vs 编译器升级）必须互相声明，主流程单变量轮次按此排程。
+- `priority`：`high`/`medium`/`low`；`risk`：`low`/`medium`/`high`（merge gate 按此排序）。
 
 `css_pgo` 动作 = BRBE/CSSPGO 采样式 PGO（gen → perf+llvm-profgen collect → use），与 `pgo`（插桩）共用该契约；选用条件与差异见 `references/csspgo-brbe-playbook.md`。

@@ -17,7 +17,7 @@
 
 1. 从 `candidate_skill_list` 选择当前 skill，先执行 `phase=evidence_candidate`，再执行 `phase=coverage`。
 2. 从该 skill 的 `candidate_pool.candidate_actions` 中选择本轮动作。
-3. 校验本轮动作是否落在已确认的 `agent_action_mode`、`execution_authorization_scope`、权限范围、回退方式和验证窗口内。基线确认后不得按每个 skill 或每轮动作重复向用户询问批准；只有动作超出已确认边界、风险升级或需要新增权限时，才设置 `scope_change_confirmation_required=true` 并回到用户确认门控。
+3. 校验本轮动作是否落在已确认的 `agent_action_mode`、`execution_authorization_scope`、权限范围、回退方式和验证窗口内。基线确认后不得按每个 skill 或每轮动作重复向用户询问批准；只有动作超出已确认边界、风险升级、**成本升级（正收益但实施成本高的候选，如源码重编译——须生成成本-收益卡片交用户裁决，不得以耗时或未现场验证的可行性假设静默排除）**或需要新增权限时，才设置 `scope_change_confirmation_required=true` 并回到用户确认门控。
 4. 启动一个执行验证 subagent，并把本轮候选动作、基线、上一轮有效配置、验证命令和回退条件写入任务包。
    生成任务包时必须传入当前 `per_skill_iteration_state`；若该 skill 已验证完全 subskill 给出的所有推荐，任务生成器必须拒绝继续生成执行任务。
 5. 执行验证 subagent 确认只有自己会修改测试环境。**环境隔离（默认强制全克隆共用方案）**：进入候选 skill 迭代阶段前，主 agent 先执行 `scripts/manage_verify_env.sh create --source <conda-env-path> --name <src>-verify` **一次性**克隆源 conda 环境为独立验证环境（整个迭代阶段只克隆一次）。**所有候选/coverage subskill 的全部后续分析、实施、复测和回退轮次都共用这一隔离克隆环境执行**，原环境零接触，彻底消除"回退后与原版不一致"风险。全部候选/coverage skill 验证完成后返回用户确认门控，由用户选择：全部回退（`manage_verify_env.sh destroy --name <src>-verify --force` 销毁克隆环境）或应用原环境（`conda list --explicit`/`pip list` 对比 diff → `pip/conda install` 到原环境；环境变量/绑核类变更按记录的 forward_cmd/reverse_cmd 手动应用，并执行 `record-execution`）。隔离为强制默认（`isolation_policy=planA_full_clone_shared`）；用户显式选择其他策略时记录 `isolation_policy=<user_choice>`。克隆不可用或不适用时降级为每轮 `forward_cmd`/`reverse_cmd` 回退并标注 `isolation_degraded=true`；降级时仍以每轮 `forward_cmd`/`reverse_cmd` 记录为回退依据。

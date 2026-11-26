@@ -26,7 +26,7 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 - 通用编译优化策略、知识库技术与案例、输出契约：`references/compiler-playbook.md`
 - ARM64 编译选项 5 阶段操作工作流（项目分析→CPU特性检测→运行时分析→优化配置生成→验证）：`references/compiler-option-playbook.md`
 - MySQL ARM64/LSE/CRC 专项、补丁和二进制等价门控：`references/mysql-arm64-playbook.md`
-- MySQL LSE outline atomics patch：见 `references/mysql-arm64-playbook.md` 中的补丁内容与应用方法
+- MySQL LSE outline-atomics：方法见 `references/mysql-arm64-playbook.md`「LSE Atomics」节（`-moutline-atomics` 入 CMAKE_C_FLAGS；补丁按目标版本现场生成）
 - A+K 场景毕昇编译器自动化编译脚本（BiSheng Python/PyTorch/torch_npu LTO+PGO 编译流程，含 css_pgo BRBE 路径）：`scripts/ak_compile_optimize.sh`
 - A+K 训练场景全链编译实战（源码获取/毕昇安装/容器处理/ABI 双栈共存/rpath）：`references/ak-compiler-playbook.md`
 - BRBE/CSSPGO 采样式 PGO（免插桩备选路径：gen/collect/use 三段流程、决策矩阵、与插桩 PGO 的优劣对比、实测数据）：`references/csspgo-brbe-playbook.md`
@@ -66,18 +66,22 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 ## 采集脚本
 
-- `scripts/perf_hotspot.sh <pid> [duration] [output_dir]` — 采集 ARM64 热点函数（top 50 + 火焰图数据），用于编译选项推荐。仅只读采集，不修改环境。
+- `scripts/perf_hotspot.sh <pid> [duration] [output_dir] [-k]` — 采集 ARM64 热点函数（flat top 50 文本），用于编译选项推荐。仅只读采集，不修改环境。加 `-k` 保留 `perf.data` 供火焰图/离线二次分析（默认删除以省空间）。
   - 用法详见 `references/compiler-option-playbook.md` 阶段 3。
 - `scripts/brbe_env_check.sh [--container <name>] [--workdir <dir>] [--json-only]` — BRBE/CSSPGO 收益验证前置门控（只读）：鲲鹏 CPU/昇腾 NPU(/dev/davinci*)/CANN/毕昇/llvm-profgen/BRBE 硬件（**真实分支栈校验，非 perf 退出码**）、当前 torch 栈编译器身份（readelf .comment）、磁盘。逐项 PASS/FAIL + JSON 总结（`ready|blocked` + blocked_reasons + next_steps）。
   - **NPU 检出语义（KPBOT_SOURCE_CANN 环境变量）**：默认 `0`——npu-smi 判定仅认 `/dev/davinci*` 设备节点或已在 PATH 中的 npu-smi，**不会** source CANN `set_env.sh` 深度探测（保证检测及其 UT 在任何宿主上结果一致）。CANN 已安装但未 source 的宿主（如未初始化的登录 shell）且无 `/dev/davinci*` 的容器场景，需显式 `KPBOT_SOURCE_CANN=1` 启用深度探测；`--container` 模式下该开关经 `docker exec -e` 传入容器内生效。
 - `scripts/brbe_ab_benchmark.sh` — A/B 收益验证 harness：`--mode run --label <baseline|gen|use> --cmd "<压测命令>" [--rounds 5] [--metric-regex 'tok/s']` 多轮压测+指标提取+均值/CV 统计；`--mode compare` 增益判定（accept / reject(gain<=noise) / reject(below_min_gain) / regression→rollback），对应候选动作 `rejection_criteria`。
   - 目标节点完整验证序列（门控→基线→gen→collect→use→compare）见 `references/csspgo-brbe-playbook.md`。
+- `scripts/ak_compile_optimize.sh --env-snapshot <dir>` — 环境指纹快照：解释器/编译器/ABI/关键 so sha256/pip freeze 指纹/CANN 版本/关键环境变量 → `<dir>/env_snapshot.json`。
+- `scripts/ak_compile_optimize.sh --env-verify <dir>` — 当前环境与历史快照逐键对比；**编译/优化前后各快照一次，A/B 前先校验**，差异键即"优化数据不可复现"的风险来源（precise 模式基线-复测一致性门禁的一部分）。
+- `scripts/ak_profile_workload.py` — PGO 标准采集负载模板（CPU 路径）：四形态（matmul/小算子/MLP前后向/排序）可参数化加权，防"窄负载 profile 导致 PGO2 把未覆盖路径判冷去优化"（实测：matmul-only profile 使 torch.sort 比 gcc 慢 66%，混合形态反超 11%）。`--profile_use` 前的 `check_profile` 形态执行门禁会校验 manifest 声明的形态计数（防采集早退/形态未执行，集中度仅作建议值）。
 
 ## 分析流程
 
 1. **确认收益空间**
    - 若 perf/PMU 不可用，明确降级范围；不能假设编译优化有效。
    - 若 Retiring 已高且热点已是平台快路径，优先把收益空间转给应用算法或配置。
+   - **收益空间确认必须对照经验库实测锚点，不得只做减法**：hostbound NPU 场景历史实测——解释器层 LTO+PGO **+71.6%**、PyTorch/torch_npu dispatch 层 **+13.3% 增量**、CPU 算子 LTO **-26%/-11%**。热点形态匹配 PGO 甜点（解释器/dispatch/分支密集）时按锚点预期，**不得按热点占比线性折算收益**（实测教训：6.4% 解释器占比被折算成 0.4-0.7% 收益而停止，实际 -9.16% staged——解释器加速缩短全部经它派发的路径，见「候选排除纪律」7/8）。
 
 2. **A+K 场景识别（两步判断）**
 
@@ -141,11 +145,24 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 ## 候选优先级
 
-1. 低风险构建事实修正：确认 `-O3` 未被构建系统覆盖、目标架构 flag 真正生效、链接器/库一致。
-2. 热点匹配的架构能力：ARM LSE/CRC/NEON/SVE/crypto，x86 SSE/AVX/AVX2/AVX-512，按机器池可移植性评估。
-3. Profile-guided 路径：PGO、AutoFDO、ThinLTO/LTO、BOLT 或函数布局，仅在 profile 代表性可验证时进入。
-4. 编译器选型：GCC 版本升级、LLVM/Clang、BiSheng/GCC for openEuler，必须做 ABI/功能/性能回归。
-5. 源码配套：runtime dispatch、构建宏、热点循环、数据布局、锁/原子模型，按风险分层。
+1. 低风险构建事实修正【category=build_fact_check】：确认 `-O3` 未被构建系统覆盖、目标架构 flag 真正生效、链接器/库一致。
+2. 热点匹配的架构能力【category=arch_flags】：ARM LSE/CRC/NEON/SVE/crypto，x86 SSE/AVX/AVX2/AVX-512，按机器池可移植性评估。
+3. Profile-guided 路径【category=pgo/lto】：PGO、AutoFDO、ThinLTO/LTO、BOLT 或函数布局，仅在 profile 代表性可验证时进入。
+4. 编译器选型【category=compiler_upgrade】：GCC 版本升级、LLVM/Clang、BiSheng/GCC for openEuler，必须做 ABI/功能/性能回归。
+5. 源码配套【category=source_patch】：runtime dispatch、构建宏、热点循环、数据布局、锁/原子模型，按风险分层。
+
+### 候选排除纪律（耗时/成本裁决权归属用户）
+
+实测教训（DSv4 hostbound E2E，2026-11-17）：主 agent 曾在任务包中以"时间预算与供应链不可行"预排除 torch/torch_npu 重编译——但用户从未设时限、供应链假设源自旧实验未现场验证、且引用 LTO-only 负收益证据与被拒的 LTO+PGO 配置错配（同案例 LTO+PGO 为正收益）。编译候选的排除权受以下纪律约束：
+
+1. **耗时不是拒绝理由**：用户未设时限时，预计耗时长短不得作为排除编译候选的依据——耗时属**用户裁决维度**。本规则与 references/ak-compiler-playbook.md「编译耗时纪律」的执行层规则（禁止因耗时跳过/缩短已开始的编译）共同覆盖决策层与执行层。
+2. **正收益候选必须保留**：有正收益证据（热点匹配 + 同类场景实测收益）的重编候选必须进入 candidate_actions 呈现，不得在任务包/分析层静默排除。
+3. **证据对齐**：拒绝某配置必须引用**该配置自身**的负收益证据——拒绝 LTO+PGO 不得引用 LTO-only 数据。
+4. **可行性假设当次验证**：供应链/环境类"不可行"必须现场探测核实；历史经验只能作为待验证假设标注，不得直接当硬约束。
+5. **高成本候选上浮**：正收益但实施成本高（重编译类、预计耗时超阈值、或可行性无法现场确认）的候选，生成成本-收益卡片（预计耗时/收益依据/风险/回退）交用户裁决——主流程按"成本等级升级"回到用户确认门控，不得静默拒绝。
+6. **报告披露义务**：change_scope 含 compiler 却被排除的编译候选，报告必须列"已排除项 + 依据 + 推翻条件"（如"提供源码链可重评估 torch 重编"）。
+7. **经验库实测优先于 agent 估算**：收益估算与经验库实测案例冲突时，以经验库为预期锚点、A/B 实测为最终裁决——**不得以自行推算的低估算直接 stopped/拒绝**。实测教训（DSv4 首次 E2E，2026-11-13）：agent 估算"Python 解释器占 6.4% → PGO 收益 0.4-0.7% < 1% 阈值"而停止编译优化；经验库同类 hostbound 场景实测为 Python LTO+PGO **+71.6%**，后续 E2E 实测该层 **-9.16% staged（参与 -21.9% 累计）**——估算偏差 10 倍以上，预期收益因估算未验证。热点占比 ≠ 该层优化后对端到端的影响占比（解释器加速会同时缩短全部经它派发的路径）。
+8. **机制性不适用只降级、不单独停止**："热点是忙等/IO 等待，编译无收益机制"类机制推理只能**降低候选优先级**，不得单独作为 stopped 依据——等待路径周边的派发/调度/解释器代码仍可能显著收益（同案例实证：ReadQueue 忙等结论下，解释器层优化仍产出 -9.16%）；stopped 必须有实测证据（A/B 已做且无收益），纯推理只能标注"低优先级/待验证假设"并保留候选。
 
 ## 二进制等价门控
 
@@ -160,7 +177,17 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 ## 输出字段
 
-至少输出：
+subagent 模式下，输出 JSON 必须同时满足主流程 merge gate（`scripts/merge_subagent_results.py` 对 14 个顶层字段做硬校验，缺一即被拒）——编译域字段放在 `findings` 内。
+
+**顶层必填字段**（主 SKILL 契约，见 `references/subagent-orchestration.md`「Subagent 输出 JSON」）：
+
+- `subskill_name`、`current_run_id`、`current_evidence_status`（必须为 `current` 才能输出候选动作）
+- `status`（`ok`/`degraded`/`blocked`/`failed`）、`confidence`（`high`/`medium`/`low`）、`analysis_timestamp`（ISO 8601）
+- `evidence_sources`、`findings`、`candidate_actions`、`required_evidence`、`fallback_notes`、`timing`
+- `subagent_id`、`result_path`
+- `independent_analysis_confirmation`（声明独立执行了本 SKILL 完整流程）、`steps_covered`（覆盖的分析步骤与手段类别——须覆盖 `build_fact_check`、`arch_flags`、`pgo`、`lto`、`compiler_upgrade`、`source_patch` 六类，`verify-skill-completeness` 会校验；被明确排除的类别在 `fallback_notes` 说明理由）
+
+**`findings` 内的编译域字段**：
 
 - `compiler_profile_mode`
 - `recommended_compiler`
@@ -172,7 +199,6 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 - `blocked_source_candidates`
 - `binary_equivalence_check`
 - `confounded_binary_test`
-- `candidate_actions`
 - `further_compiler_optimization_potential`
 - `next_round_candidate`
 
@@ -180,7 +206,7 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 
 ## Candidate Action Contract
 
-每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`。重编译、补丁、PGO/LTO/BOLT、编译器切换和二进制替换必须在 rollback 中记录恢复基线二进制、配置、运行库和目标实例身份复核步骤。
+每个 `candidate_actions[]` 必须包含 `action_id`、`title`、`category`、`priority`、`change_mode`、`requires_root`、`risk`、`implementation_plan`、`validation_plan`、`rollback`、`expected_effect`、`expected_gain_metric`、`rejection_criteria` 和 `evidence_refs`（字段名与 `scripts/merge_subagent_results.py` 的 REQUIRED_ACTION_FIELDS 逐字对齐；模板见 `references/compiler-playbook.md`）。存在互斥/替代关系的动作（如 LTO vs LTO+PGO vs 编译器升级、同函数只能选其一的 flag 组合）必须声明 `mutually_exclusive_with`，供主流程排程时识别。重编译、补丁、PGO/LTO/BOLT、编译器切换和二进制替换必须在 rollback 中记录恢复基线二进制、配置、运行库和目标实例身份复核步骤。
 
 ## NPU 推理 PGO Profile 采集
 
@@ -227,7 +253,7 @@ NPU 推理场景的 PGO profile 采集与 CPU 通用场景有本质区别，必�
 
 | Profile 来源 | 收益（相对 PGO1 基线） | 说明 |
 |-------------|---------------------|------|
-| 通用 profile（w00664011 通用负载采集） | 基准 | profile 与目标负载不匹配 |
+| 通用 profile（非目标负载采集） | 基准 | profile 与目标负载不匹配 |
 | qwen2.5-1.5b 真实推理负载 profile | +1.33% | profile 与目标负载匹配 |
 
 - 用目标模型 + 目标请求形态采集的 profile，PGO2 收益显著高于通用 profile。
@@ -257,6 +283,17 @@ llvm-cov export -instr-profile=/tmp/profile/default.profdata \
 
 - 函数覆盖率过低（< 30%）→ profile 代表性不足，PGO2 收益打折，应延长采集时间或增加负载覆盖。
 - 热点函数命中率低 → 推理主路径未走 instrumented build，检查是否真的安装了 PGO1 版本。
+
+### CPU 算子负载的 LTO/PGO 实测校准（鲲鹏950/毕昇5.2.0/pytorch2.5.1，2026-11-17）
+
+纯 CPU 算子负载（matmul/elementwise/sort/autograd，64 线程，gcc -O3 为基线）上的分解实验结论：
+
+- **收益主力是 ThinLTO**：毕昇 LTO-only 即得 matmul -26%、sort -11%；本负载集上 **PGO 净贡献 ≈ 0**（数值内核循环静态优化已充分——与下文 NPU/vLLM 场景的 PGO 收益不矛盾：解释器/dispatch 路径分支密集才是 PGO 甜点）。
+- **PGO 的风险面实测成立**：窄 profile（matmul-only）使未覆盖路径 sort 劣化 66%（LTO-only 无此问题）。采集必须用 `scripts/ak_profile_workload.py` 多形态覆盖，`check_profile` 的形态执行门禁会校验 manifest 声明的形态计数。
+- **ThinLTO 在 autograd 路径有固有退化**（MLP 前后向 +43% vs gcc，LTO-only 即有，与 profile 权重无关——权重实验已证伪冷路径假设）。
+- **`-mcpu=native` 在毕昇 5.2.0 上净有害**：SVE 自动向量化使 autograd 路径 3.2× 劣化（SVE 缺陷家族比 ReduceOpsKernel 崩溃更广）。`AK_ARCH_FLAGS` 默认关闭，启用前必须多负载基准验证。
+
+决策指引：CPU 算子密集型目标 → `--optimize lto` 优先，PGO 按需且必须过窄 profile 警惕 + 多负载验收；解释器/dispatch 密集（Python/torch_npu/vLLM）→ LTO+PGO（实战数据支撑）。
 
 ### PGO 是必须的，不能省
 
@@ -404,9 +441,9 @@ export CMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1"
 > 1. **变量名不同**（DeepSeek-V4-Flash 实测）：**PyTorch** 读 `GLIBCXX_USE_CXX11_ABI`（**无下划线**，设带下划线变量对 PyTorch 无效，按默认编成新 ABI=1）；**torch_npu** 的 `setup.py` 读 `_GLIBCXX_USE_CXX11_ABI`（**有下划线**）——显式设置须**分变量名且值统一（=1）**，否则两者 ABI 错配、torch_npu import 直接失败。错配报错解析与 `nm` 核实命令见「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 2。
 > 2. **双栈共存**（训练场景）：毕昇栈与生产 GCC 栈并存时（ABI 统一为 1），inductor `_compiler.py` 的 ABI 硬编码是全链唯一真源，处理不当会让 ABI=1 栈的 wrapper.so 全部编译成错误 ABI，**清 JIT 缓存无效**（勿误判为 kernel 缓存污染）。ABI 判断以 `_GLIBCXX_USE_CXX11_ABI` 环境变量为准（`torch.compiled_with_cxx11_abi()` 历史版本有误报，勿作唯一判据）。修复方案见「ABI 双栈共存」章节。
 
-### PyTorch ThinLTO 折叠 COMDAT 弱符号（`new_qtensor`）
+### PyTorch ThinLTO 内部化 inline 弱符号（`new_qtensor`）
 
-PyTorch 用 `-flto=thin` 时，ThinLTO 会把某些 COMDAT 弱符号折叠掉不再导出（最常见 `at::new_qtensor`），导致 torch_npu import 报 undefined symbol（`nm -D libtorch_cpu.so | grep -c new_qtensor` 为 0 = 已折叠）。修复：PyTorch 编译 `LDFLAGS` 加 `-Wl,-u,<mangled 全名>` 强制导出；同源码双机可能出现一个导出、一个不导出（折叠与源码/构建环境相关），必须逐节点 `nm` 核实。完整 mangled 符号与 LDFLAGS 命令见 `references/ak-compiler-playbook.md`「多机分布式 vLLM PGO 采集与多机一致性实战坑」§ 3。
+PyTorch 用 `-flto=thin` 时，lld 会把「仅被 DSO 内部引用的 inline 弱符号」**内部化**（internalization；IR 层 `linkonce_odr` + comdat，静态符号表可见 `.local` 克隆）——**不是 COMDAT 折叠**——最常见 `at::new_qtensor`，导致 torch_npu import 报 undefined symbol（`nm -D libtorch_cpu.so | grep -c new_qtensor` 为 0 = 已内部化）。修复：源码级去 inline（脚本已内置自动修复回路；`-Wl,-u`/`--export-dynamic` 等链接旗标实测无效，且 `-Wl,-u` 进全局 LDFLAGS 会破坏 cmake try_compile）；同源码双机可能出现一个导出、一个不导出（与源码/构建环境相关），必须逐节点 `nm` 核实。完整机制与 mangled 符号见 `references/ak-compiler-playbook.md`「PyTorch ThinLTO 内部化 inline 函数 new_qtensor」节。
 
 ### -D_GNU_SOURCE 解决 PGO 下 CLOCK_MONOTONIC_RAW 未声明
 

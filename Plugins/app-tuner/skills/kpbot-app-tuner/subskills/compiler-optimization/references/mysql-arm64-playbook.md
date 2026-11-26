@@ -25,7 +25,7 @@ MySQL 8.0.25 的 CMake 默认不一定启用 `-moutline-atomics`。若 ARM64 平
 
 1. 检查 CPU 是否支持 LSE：`lscpu | grep -i atomics` 或 `/proc/cpuinfo Features`。
 2. 检查当前二进制是否有 LSE 指令：`casal|swpal|ldaddal`。
-3. 若 CPU 支持但二进制无 LSE，候选动作可参考本文件下方的 outline-atomics 补丁内容与应用方法。
+3. 若 CPU 支持但二进制无 LSE，候选动作：重编译时在 `CMAKE_C_FLAGS`/`CMAKE_CXX_FLAGS` 追加 `-moutline-atomics`（GCC 10+；运行时按 CPU 能力选择 LSE 或 LL/SC 路径，产物可跨 ARMv8 机器迁移），或 `-march=armv8.x-a+lse` 直出 LSE 指令（产物仅限 LSE 机器运行）。补丁不随本文件预置——按目标 MySQL 版本的构建入口（源码 cmake / 发行版 spec）现场生成并过二进制等价门控。
 4. 编译后验证 CMake 日志含 `outline-atomics`，且二进制 LSE 指令数量明显大于 0。
 
 不要只因为指令生成成功就宣称整体收益；目标热点占比低于 1% 时，预期收益应标低并要求小轮次验证。
