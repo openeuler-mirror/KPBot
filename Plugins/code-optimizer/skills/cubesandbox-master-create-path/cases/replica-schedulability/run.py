@@ -68,7 +68,7 @@ def main():
         functions = functions.replace("constants.TemplateReplicaTableName", '"template_replicas"')
         functions = functions.replace("func isReplicaSchedulableNow(", "func isReplicaSchedulableNowBase(")
         (root / "selection.go").write_text(
-            'package templatecenter\nimport ("context"; "strings")\n' + functions + "\n", encoding="utf-8")
+            'package templatecenter\nimport ("context"; "errors"; "strings")\n' + functions + "\n", encoding="utf-8")
         cache = file_patch(patch, "CubeMaster/pkg/templatecenter/resolve_cache.go")
         cache_source = "\n".join(line[1:] for line in cache.splitlines()
                                  if line.startswith("+") and not line.startswith("+++"))

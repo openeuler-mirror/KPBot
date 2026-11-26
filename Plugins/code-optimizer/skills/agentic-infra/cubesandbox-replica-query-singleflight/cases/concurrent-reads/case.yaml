@@ -1,0 +1,7 @@
+name: cubesandbox-replica-query-singleflight-concurrent-reads
+skill: cubesandbox-replica-query-singleflight
+tier: B
+entrypoint: ["go", "-C", "cases/concurrent-reads", "test", "-count=1", "-timeout=30s", "-v", "."]
+assert:
+  - type: exit_code
+    expect: 0
