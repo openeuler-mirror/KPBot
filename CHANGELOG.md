@@ -34,9 +34,6 @@
 - app-tuner 新增 `redis-deploy` skill：Redis 环境部署（源码构建、默认 7.0.15、sha256 校验、systemd 托管、单机多实例、离线安装、升级/回滚与卸载，非回环 bind 无密码会被拒绝；构建目录 root 私有 0700、路径拒绝 . 与 .. 段、不自动修改内核参数、不执行远程脚本）；附 tier-A 完整性用例与 5 条触发评估集
 - app-tuner 为 `vllm-fastokens-segment-cache-migration` 新增六项技能：分词后端分析、候选加载验证、迁移快照、多轮回放数据生成、分词回放验证及迁移评估报告。已有验证产物可直接用于汇总。
 
-### Changed
-- app-tuner 拆分 `kptools-tpsplit-log-analysis` 为纯解析 skill：远端日志采集（`scripts/fetch_logs.sh` 定位/校验/暂存与回传流程、采集参数确认、压测补数据步骤）迁出至新 skill `kpbot-tpsplit-log-collector`（配套 PR，建议同批合入——单独部署本版本期间不具备远端日志采集能力，用户自行回传日志亦可）。本 skill 保留并只保留本地解析出表（`analyze_ttft.py` Excel 8 Sheet + `ttft_table.csv` 契约 + `gen_synth_logs.py` / `test_regression.py`），脚本零改动；description/compatibility/触发评测集同步收窄（采集类触发例转负例并路由到 collector，新增两条 collector 路由负例）；SKILL.md「采集前确认参数 + 采集步骤」两节合并为「输入约定」（一套 4 份同轮压测日志、多 P 命名 `P<ip>_prefill.log`、日志在远端/打点未部署时指引对应 skill 而非硬解析），「已知坑」新增「某列整列为 0 先 grep 原始日志对标记（数据源缺失 ≠ 解析 bug）」；解析列语义/守恒式/回填口径权威不变（本 skill SKILL.md 日志格式节 + `references/ttft_table_contract.md`），采集产物契约权威在 collector 侧 `references/log-set-contract.md`，两侧互不重复定义。两 PR 改动不相交（本 PR 只删 `fetch_logs.sh` 并改 SKILL.md/evals，不新增文件），任意先后合入无冲突
-
 ## [1.0.0] - 2026-09-03
 
 ### Added
