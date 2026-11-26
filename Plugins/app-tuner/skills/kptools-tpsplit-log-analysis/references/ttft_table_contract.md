@@ -7,7 +7,9 @@
 
 - 文件名惯例 `ttft_table.csv`，UTF-8，首行表头，每请求一行
 - `ts`：first token 时刻（BREAKDOWN 行时间戳；epoch 秒输出 `YYYY-MM-DD HH:MM:SS.mmm`，
-  相对时钟原样输出数值）
+  相对时钟原样输出数值）。**相对秒形态的下游限制**：loader 只解析日期时间——
+  ts 为相对秒时时间类过滤（如 `--warmup-seconds` 预热过滤）不生效、整轮保留
+  预热请求；生产端检测到整轮相对秒会打 stderr 告警，交接时须向下游说明
 - `request_id`：与日志行 `req=` 对齐，证据链连接键
 - 所有 `*_ms` 字段单位 ms，保留 2 位小数
 
@@ -59,7 +61,9 @@ add_req/mm_hash/wait_exec/sample/return/out_delivery/residual 合计），
 
 - loader 应容忍表头多列/缺列；缺的阶段按 0 处理并在报告中标注缺失
 - `ttft_ms`、`sched_qwait_ms` 不可缺
-- `input_len` 需打点行携带 `input_len=`，缺省输出 0（消费端按缺失标注）
+- `input_len` 需打点行携带 `input_len=`，缺失输出**空单元格**（与 ts 缺失同约定，
+  0 仅在打点确实为 0 时出现）——消费端不得把空值当有效长度（两轮都缺数据时
+  不应据此报告输入分布一致），按缺失标注
 
 ## 5. 已知口径坑（继承自打点设计，非 bug）
 

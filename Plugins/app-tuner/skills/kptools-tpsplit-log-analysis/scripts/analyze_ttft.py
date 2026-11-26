@@ -143,7 +143,10 @@ def load_breakdown(path, machine):
                 "batch": kv.get("batch", ""),
                 "ts": None, "burst": None,
                 "ttft": fnum(kv.get("ttft")),
-                "_input_len": fnum(kv.get("input_len")),
+                # input_len 缺失（打点行未携带）保持 None → CSV 输出空单元格；
+                # 有值但坏仍按 0 容错（与既有 fnum 口径一致）
+                "_input_len": (None if kv.get("input_len") is None
+                                else fnum(kv.get("input_len"))),
             }
             for c in MAIN_COMPS + [RESIDUAL] + INFO_COMPS:
                 row[c] = fnum(kv.get(c))
@@ -767,6 +770,15 @@ def write_csv(rows, path):
     import csv
     import sys as _sys
     n_neg = 0
+    # ts 形态检测：整轮全部为相对秒（≤1e9，与 fmt_ts 的 epoch 判定同口径）时提示
+    # 下游限制——下游 tpsplit-report 只解析日期时间，相对秒形态下其时间过滤
+    # （如 --warmup-seconds 预热过滤）不生效，整轮将保留预热请求
+    ts_vals = [r["ts"] for r in rows if r["ts"] is not None]
+    if ts_vals and all(t <= 1e9 for t in ts_vals):
+        print("[warn] ts 为相对秒形态（非 unix epoch）：下游 kptools-tpsplit-report "
+              "只解析日期时间，--warmup-seconds 等时间过滤不适用于相对秒，整轮将保留"
+              "预热请求；需要预热过滤时请在解析端完成或确认 ts 为绝对时间",
+              file=_sys.stderr)
     with open(path, "w", encoding="utf-8", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(CSV_HEADER)
@@ -794,7 +806,10 @@ def write_csv(rows, path):
                 other = 0.0
             ttft_total = r["ttft"] + stages["net_lb"]
             w.writerow([
-                fmt_ts(r["ts"]), r["req"], fnum(r.get("_input_len")),
+                fmt_ts(r["ts"]), r["req"],
+                # input_len 缺失输出空单元格（缺失约定与 ts 一致，见契约 §4：
+                # 下游不得把空值当有效长度，0 仅在打点确实为 0 时出现）
+                ("" if r.get("_input_len") is None else fnum(r.get("_input_len"))),
                 f"{ttft_total:.2f}",
                 f"{stages['net_lb']:.2f}", f"{stages['fe_inputq']:.2f}",
                 f"{stages['fe_addreq']:.2f}", f"{stages['sched_qwait']:.2f}",
@@ -1061,6 +1076,15 @@ def main(argv=None):
     _apply_real_dequeue(rows, aux["shm_batches"], report)
     _finalize_step_other(rows)
     apply_lb_backfill(rows, lb_rows, report)
+
+    # ---- 同轮对齐软告警（承接采集侧 kptools-tpsplit-log-collector 的口径：
+    #      P 侧请求数 vs 压测记录数不一致 → 四份日志可能不是同一次压测，
+    #      对账与守恒口径将失真；软告警不改变退出码，核对请回采集侧）
+    if bench_rows and rows and len(rows) != len(bench_rows):
+        print(f"[warn] 同轮对齐告警：P 侧解析出 {len(rows)} 条请求 vs 压测记录 "
+              f"{len(bench_rows)} 条（差 {abs(len(rows) - len(bench_rows))}）——"
+              f"四份日志可能不是同一次压测，对账结果无意义；请回采集侧核对",
+              file=sys.stderr)
 
     # ---- 对账
     recon, joined_n = ([], 0)
