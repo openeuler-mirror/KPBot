@@ -1,0 +1,73 @@
+{
+  "skill_name": "kunpeng-precision-optimization",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "鲲鹏上跑 WRF，结果和 x86 对不上，第一步该做什么",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "毕昇编译器和 ICC 的精度相关选项怎么一一对应",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "Allreduce 之后结果差最后几位，能不能对齐归约顺序",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "怎么用 RMSE 和相关系数验收精度调优",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "ICC 用 -O3 编出来的数跟 -O0 不一样，是不是编译器缺陷",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "换了进程数结果就变了，这算精度问题吗",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "矩阵乘 FP16 在昇腾上怎么调 tiling",
+      "should_trigger": false,
+      "note": "routes to ascend_kunpeng/kptools-* （NPU 侧）"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "帮我把这个 Python 脚本改成向量化实现",
+      "should_trigger": false,
+      "note": "通用代码改写，无需知识库"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "FFTW 的 plan 该用 ESTIMATE 还是 MEASURE",
+      "should_trigger": false,
+      "note": "routes to fftw3-optimization-pilot（x86 侧 FFTW）"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "Faiss 索引内存占用怎么估算",
+      "should_trigger": false,
+      "note": "routes to ann-index-selection-pilot"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "优化前后两次推理评测结果对比一下，看哪些题从对变错",
+      "should_trigger": false,
+      "note": "routes to model-precision-analysis（模型准确率回归，不是浮点一致性）"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "KML 的 FFT 线程数怎么设，kml_fft_plan_with_nthreads 用在哪",
+      "should_trigger": false,
+      "note": "routes to kml-fft-tuning（KML_FFT 库用法，不是跨架构精度比对）"
+    }
+  ]
+}
