@@ -13,18 +13,18 @@ metadata:
 
 # EPLB 部署与收益验证（vLLM MoE）
 
-本技能可**独立使用**：把显式的 mode 与参数（可选：读取一份参数方案）**确定性写进 P 节点模板**，
+本技能可**独立使用**：把显式的 mode 与参数**确定性写进 P 节点模板**，
 造不均衡数据集，组织 off/dynamic/force 三组对照并生成运行清单。它**不依赖任何尚未合入的技能**；
 收益结论可后续单独分析。
 
 ```
-输入：显式 mode + 参数（可选 eplb_parameter_plan.json）--> 本技能 --> 模板 + eplb_run_manifest.json + measurements
+输入：显式 mode + 参数 --> 本技能 --> 模板 + eplb_run_manifest.json + measurements
 ```
 
 ## 输入契约
 
-`eplb_parameter_plan.json`：`mode(dynamic/force/off/hold)`、`ep_size`、`redundant_experts`、
-`window_size`、`step_interval`、`template_changes`。`mode=hold` 时不要落盘。
+调用方把参数方案（`mode`/`ep_size`/`redundant_experts`/`window_size`/`step_interval`）转成
+`apply_eplb.py` 的显式命令行参数；本技能不读取方案文件，也不依赖未合入的其它技能。
 
 现场：P 节点模板路径、是否本站点分支、压测计划（数据集、并发、轮次、benchmark 服务器/端点）。
 **是否实测由使用者决定**；若实测，必须先拿到可用的 benchmark 服务器与 P/D/代理端点，缺就不跑、只落盘与交命令。

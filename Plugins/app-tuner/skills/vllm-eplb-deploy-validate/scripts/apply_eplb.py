@@ -204,20 +204,18 @@ def strip_eplb_args(lines):
     return out
 
 
-def _has_effective_eplb_markers(lines):
-    """True only when live (non-comment) config actually carries EPLB markers.
+def _has_dynamic_eplb_markers(lines):
+    """True only when live (non-comment) config carries *dynamic* EPLB markers.
 
-    Comments mentioning DYNAMIC_EPLB / --eplb-config must not count, otherwise
-    `--mode off` would flip the V2 runner on a V1 baseline just because a comment
-    names the knob.
+    `unset DYNAMIC_EPLB` and `enable_force_eplb` are force-probe footprints, not
+    evidence that the template was dynamic. Counting them made force->off flip a
+    V1 baseline's V2 runner to 1. Comments must not count either.
     """
     code = '\n'.join(ln for ln in lines if not ln.lstrip().startswith('#'))
     return bool(re.search(
-        r'^\s*export\s+DYNAMIC_EPLB\s*='
-        r'|^\s*unset\s+DYNAMIC_EPLB\b'
+        r'^\s*export\s+DYNAMIC_EPLB\s*=\s*["\']?true["\']?\s*$'
         r'|^\s*--enable-eplb\b'
-        r'|^\s*--eplb-config\.'
-        r'|"enable_force_eplb"\s*:\s*true',
+        r'|^\s*--eplb-config\.',
         code, re.M))
 
 
@@ -294,7 +292,7 @@ def transform(src, mode, redundant, window, interval):
         raise ValueError("found %d `vllm serve` commands; refusing to edit a multi-serve template "
                          "(role/EP/EPLB flags would not be bound to one producer command)" % len(serves))
 
-    has_markers = _has_effective_eplb_markers(lines)
+    has_markers = _has_dynamic_eplb_markers(lines)
 
     # Drop existing DYNAMIC_EPLB lines and standalone EPLB args first.
     out = []
@@ -338,7 +336,7 @@ def transform(src, mode, redundant, window, interval):
     elif mode == 'force':
         v2_idx = set_v2('0')
         out.insert(v2_idx + 1, '%sunset DYNAMIC_EPLB' % indent)
-    else:  # off: only touch V2 when the file actually carried EPLB markers
+    else:  # off: only touch V2 when the file carried *dynamic* EPLB markers
         if has_markers:
             set_v2('1')
 

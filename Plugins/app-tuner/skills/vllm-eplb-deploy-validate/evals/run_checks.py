@@ -236,6 +236,28 @@ def main():
         rn2 = run([APPLY, "--template", nov2, "--mode", "off"])
         check("off: 缺 V2 行时不注入", rn2.returncode == 0 and read(nov2) == before)
 
+        # --- 5e2. force -> off must not flip a V1 / no-V2 baseline to V2=1 ---
+        v1f = os.path.join(tmp, "v1_force_off.sh")
+        write(v1f, "#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=0\n"
+                   "vllm serve /models/x \\\n" + KV +
+                   "    --additional-config '{\"a\":1}' \\\n    --port 8000\n")
+        run([APPLY, "--template", v1f, "--mode", "force"])
+        rfo = run([APPLY, "--template", v1f, "--mode", "off"])
+        tf = read(v1f)
+        check("force->off: V1 基线保持 V2=0 且移除 force 残留",
+              rfo.returncode == 0 and "VLLM_USE_V2_MODEL_RUNNER=0" in tf
+              and "VLLM_USE_V2_MODEL_RUNNER=1" not in tf
+              and "unset DYNAMIC_EPLB" not in tf and "enable_force_eplb" not in tf)
+
+        nvf = os.path.join(tmp, "nov2_force_off.sh")
+        write(nvf, "#!/bin/bash\nvllm serve /models/x \\\n" + KV +
+                   "    --additional-config '{\"a\":1}' \\\n    --port 8000\n")
+        run([APPLY, "--template", nvf, "--mode", "force"])
+        rnfo = run([APPLY, "--template", nvf, "--mode", "off"])
+        check("force->off: 无 V2 基线不注入 V2=1（force 可能留下 V2=0）",
+              rnfo.returncode == 0 and "VLLM_USE_V2_MODEL_RUNNER=1" not in read(nvf)
+              and "unset DYNAMIC_EPLB" not in read(nvf))
+
         # --- 5f. parameter validation ---
         val = os.path.join(tmp, "val.sh")
         shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), val)
