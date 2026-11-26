@@ -1,0 +1,73 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-free",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "Free 时间都花在哪了，帮我拆一下构成",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "空闲是 host 忙导致的还是等同步",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "下发完成但设备没启动的空隙有多少",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "两份 trace 的 Free 六类构成对比",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "unknown 占比多高，归因可信吗",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "通信对齐等待占多少",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "设备气泡窗口在哪个时间段",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）-bubble"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "优化前后步耗时和四分类差多少",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "host 下发 API 自身耗时对比",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-enqueue（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "排队等待时间多少",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-dequeue（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "两份 trace 的算子 shape 变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-opstats（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "分析单份无栈 trace 的 P1/P2/P3",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis-nostack"
+    }
+  ]
+}
