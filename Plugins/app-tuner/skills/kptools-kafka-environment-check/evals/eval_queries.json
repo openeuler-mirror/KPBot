@@ -1,0 +1,59 @@
+{
+  "skill_name": "kptools-kafka-environment-check",
+  "queries": [
+    {
+      "id": "KE-PQ-01",
+      "prompt": "对已有 Kafka 做压测前环境检查，只读，别创建 topic",
+      "should_trigger": true,
+      "note": "core read-only preflight"
+    },
+    {
+      "id": "KE-PQ-02",
+      "prompt": "核查 SASL_SSL Kafka 的非默认端口和认证配置",
+      "should_trigger": true,
+      "note": "secure nondefault endpoint"
+    },
+    {
+      "id": "KE-PQ-03",
+      "prompt": "客户端版本和 Java 能不能运行这套 Kafka producer 基准",
+      "should_trigger": true,
+      "note": "bounded interface compatibility"
+    },
+    {
+      "id": "KE-PQ-04",
+      "prompt": "检查空专用 topic、结果盘和三轮压测计划是否ready",
+      "should_trigger": true,
+      "note": "topic and resource prerequisites"
+    },
+    {
+      "id": "KE-PQ-05",
+      "prompt": "只评估唯一测试 topic 创建计划，不要发创建请求",
+      "should_trigger": true,
+      "note": "read-only create plan"
+    },
+    {
+      "id": "KE-NQ-01",
+      "prompt": "安装并启动一个新的 Kafka 集群",
+      "should_trigger": false,
+      "note": "deployment and service mutation are out of scope"
+    },
+    {
+      "id": "KE-NQ-02",
+      "prompt": "现在向 Kafka 发十万条消息测吞吐",
+      "should_trigger": false,
+      "note": "actual workload belongs to benchmark execution"
+    },
+    {
+      "id": "KE-NQ-03",
+      "prompt": "检查 MySQL 连接和查询环境",
+      "should_trigger": false,
+      "note": "different service"
+    },
+    {
+      "id": "KE-NQ-04",
+      "prompt": "删除旧的业务消费组",
+      "should_trigger": false,
+      "note": "destructive operation is forbidden"
+    }
+  ]
+}

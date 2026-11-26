@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-kafka-environment-check",
+  "evals": [
+    {
+      "id": "KE-E01",
+      "query": "压测前只读检查这个已有 Kafka 和 JDK 环境",
+      "expected": "执行本地版本与实时 metadata 探针，输出逐项 JSON，不写消息"
+    },
+    {
+      "id": "KE-E02",
+      "query": "SASL_SSL 的 Kafka 在非默认端口，认证是否满足压测前置条件",
+      "expected": "使用安全 client config 与非默认端点，脱敏并区分 auth/timeout"
+    },
+    {
+      "id": "KE-E03",
+      "query": "看看这个空专用 topic 能否做三轮 producer 基准",
+      "expected": "describe 与 latest offset 均为只读，零 offset 才可通过该探针"
+    },
+    {
+      "id": "KE-E04",
+      "query": "Kafka 客户端是 3.9，能否直接运行这份压测脚本",
+      "expected": "明确 wrong_version，不做广泛兼容承诺"
+    },
+    {
+      "id": "KE-E05",
+      "query": "只检查计划创建唯一测试 topic 的资源条件，不要真的创建",
+      "expected": "使用创建计划模式，保持只读并记录 ACL 不可证明的限制"
+    }
+  ]
+}
