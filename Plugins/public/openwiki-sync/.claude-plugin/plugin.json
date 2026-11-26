@@ -23,6 +23,7 @@
   ],
   "platforms": [
     "claude",
-    "opencode"
+    "opencode",
+    "codex"
   ]
 }

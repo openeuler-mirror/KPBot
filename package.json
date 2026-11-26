@@ -1,7 +1,7 @@
 {
   "name": "@kunpengbot/kpbot",
   "version": "1.0.0",
-  "description": "鲲鹏/ARM 高性能计算工具集 — 面向 Claude Code、OpenCode 和 DSH 的性能优化 Agent 插件",
+  "description": "鲲鹏/ARM 高性能计算工具集 — 面向 Claude Code、OpenCode、Codex 和 DSH 的性能优化 Agent 插件",
   "exports": {
     "./package.json": "./package.json",
     "./dsh": "./adapters/dsh/index.mjs",
@@ -20,6 +20,7 @@
   "files": [
     "bin/",
     "adapters/dsh/",
+    "adapters/codex/install.py",
     "adapters/windows/InstallTree.cs",
     "Plugins/",
     ".claude-plugin/",
@@ -28,6 +29,7 @@
     "docs/STANDARDS.md",
     "docs/dsh.md",
     "docs/dsh-validation.md",
+    "docs/codex.md",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -57,6 +59,7 @@
     "optimization",
     "claude-code",
     "opencode",
+    "codex",
     "skills",
     "neon",
     "sve"

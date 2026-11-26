@@ -18,7 +18,7 @@
       "category": "performance",
       "source": "./Plugins/code-optimizer",
       "version": "1.0.0",
-      "platforms": ["claude", "opencode", "dsh"],
+      "platforms": ["claude", "opencode", "codex", "dsh"],
       "tags": ["performance", "optimization", "arm", "kunpeng", "aarch64", "neon", "sve", "profiling", "tensorflow", "inference", "graph-optimization", "kernel", "kdnn", "vsag", "rabitq", "hgraph", "vector-search", "batch-search", "openblas", "brgemm", "matmul", "gemm", "packb", "prepack", "blocked-layout", "onnxruntime", "onednn", "openzl", "compression", "entropy", "entropy-coding", "huffman", "fse", "lossless", "benchmark",
         "allocation", "malloc", "size-class", "dpdk", "pps", "forwarding", "data-plane",
         "sme", "microkernel", "autotuner", "codegen", "code-generation", "openmp", "hardware-detection",
@@ -33,7 +33,7 @@
       "category": "performance",
       "source": "./Plugins/app-tuner",
       "version": "1.0.0",
-      "platforms": ["claude", "opencode"],
+      "platforms": ["claude", "opencode", "codex"],
       "tags": ["performance", "tuning", "application", "arm", "kunpeng", "aarch64",
         "precision", "accuracy", "regression", "quantization"]
     },
@@ -46,7 +46,7 @@
       "category": "documentation",
       "source": "./Plugins/public/openwiki-sync",
       "version": "1.0.0",
-      "platforms": ["claude", "opencode"],
+      "platforms": ["claude", "opencode", "codex"],
       "tags": ["openwiki", "wiki", "documentation", "docs", "knowledge", "agent-docs", "sync", "mirror", "gitcode", "gitee", "github", "automation"]
     },
     {

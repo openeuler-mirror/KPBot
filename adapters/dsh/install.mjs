@@ -79,15 +79,30 @@ async function copySharedScript(repositoryRoot, destination, content) {
   await fs.chmod(target, 0o755);
 }
 
+function containsPath(parent, child) {
+  const relative = path.relative(parent, child);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
 export async function installSkills({ repositoryRoot = repository, ...options } = {}) {
   const entries = await discoverSkills(repositoryRoot);
+  if (!entries.length) throw new Error('No plugins declare DSH skills; use uninstall to remove an existing installation');
+  const root = configRoot(options);
+  const resourceRoots = new Set(entries.flatMap(entry => ['skills', 'dsh'].map(name => path.join(entry.pluginRoot, name))));
+  // Include common scripts and other plugin resources, not only opted-in skills.
+  resourceRoots.add(path.join(await fs.realpath(repositoryRoot), 'Plugins'));
+  resourceRoots.add(path.resolve(repositoryRoot, 'Plugins'));
+  for (const source of resourceRoots) {
+    if (containsPath(source, root) || containsPath(root, source)) {
+      throw new Error(`Installation directory overlaps skill resources: ${root}`);
+    }
+  }
   const prepared = await Promise.all(entries.map(async entry => {
     await assertSafeTree(entry.resourceDir);
     const overlay = path.join(entry.pluginRoot, 'dsh', entry.skillDir);
     if (await lstatOptional(overlay)) await assertSafeTree(overlay);
     return { entry, skill: await readSkill(entry, repositoryRoot) };
   }));
-  const root = configRoot(options);
   const previous = await managedState(root);
   const previousNames = new Set(previous?.installed_skills || []);
   for (const { entry } of prepared) {
@@ -101,9 +116,14 @@ export async function installSkills({ repositoryRoot = repository, ...options } 
   await fs.mkdir(root, { recursive: true });
   const stage = await fs.mkdtemp(path.join(root, '.kpbot-dsh-stage-'));
   const owner = previous?.owner || randomUUID();
+  const fresh = path.join(stage, 'new');
+  const backup = path.join(stage, 'old');
+  let preserveStage = false;
   try {
+    await fs.mkdir(fresh);
+    await fs.mkdir(backup);
     for (const { entry, skill } of prepared) {
-      const target = path.join(stage, entry.skillDir);
+      const target = path.join(fresh, entry.skillDir);
       await fs.cp(entry.resourceDir, target, { recursive: true });
       const overlay = path.join(entry.pluginRoot, 'dsh', entry.skillDir);
       if (await lstatOptional(overlay)) await fs.cp(overlay, target, { recursive: true, force: true });
@@ -113,19 +133,54 @@ export async function installSkills({ repositoryRoot = repository, ...options } 
       await copySharedScript(repositoryRoot, target, skill.content);
       await fs.writeFile(path.join(target, OWNER), JSON.stringify({ owner, skillDir: entry.skillDir }) + '\n');
     }
-    await fs.mkdir(path.join(root, 'skills'), { recursive: true });
-    // Revalidate immediately before committing: never trust manifest path strings.
-    await managedState(root);
-    for (const name of previousNames) await fs.rm(path.join(root, 'skills', name), { recursive: true, force: true });
-    for (const { entry } of prepared) await fs.rename(path.join(stage, entry.skillDir), path.join(root, 'skills', entry.skillDir));
     const manifest = { schemaVersion: 1, brand: 'KPBot', tool: 'dsh', owner, installed_skills: entries.map(entry => entry.skillDir) };
     const stagedManifest = path.join(stage, MANIFEST);
     await fs.writeFile(stagedManifest, JSON.stringify(manifest, null, 2) + '\n');
-    await fs.rename(stagedManifest, path.join(root, MANIFEST));
+    await fs.mkdir(path.join(root, 'skills'), { recursive: true });
+    if (JSON.stringify(await managedState(root)) !== JSON.stringify(previous)) {
+      throw new Error('DSH installation changed during preparation');
+    }
+    for (const { entry } of prepared) {
+      const target = path.join(root, 'skills', entry.skillDir);
+      if ((await lstatOptional(target)) && !previousNames.has(entry.skillDir)) {
+        throw new Error(`Unmanaged skill directory conflict: ${target}`);
+      }
+    }
+    const saved = [];
+    const published = [];
+    try {
+      for (const name of previousNames) {
+        const target = path.join(root, 'skills', name);
+        if (await lstatOptional(target)) {
+          await fs.rename(target, path.join(backup, name));
+          saved.push(name);
+        }
+      }
+      for (const { entry } of prepared) {
+        await fs.rename(path.join(fresh, entry.skillDir), path.join(root, 'skills', entry.skillDir));
+        published.push(entry.skillDir);
+      }
+      await fs.rename(stagedManifest, path.join(root, MANIFEST));
+    } catch (error) {
+      const failures = [];
+      for (const name of published) {
+        try { await fs.rm(path.join(root, 'skills', name), { recursive: true, force: true }); }
+        catch (failure) { failures.push(failure); }
+      }
+      for (const name of saved) {
+        try { await fs.rename(path.join(backup, name), path.join(root, 'skills', name)); }
+        catch (failure) { failures.push(failure); }
+      }
+      if (failures.length) {
+        preserveStage = true;
+        throw new AggregateError([error, ...failures], `DSH rollback incomplete; recovery files preserved in ${stage}`);
+      }
+      throw error;
+    }
     return { root, installed: manifest.installed_skills };
   } finally {
     // stage is created by mkdtemp under the validated root, never from a manifest.
-    await fs.rm(stage, { recursive: true, force: true });
+    if (!preserveStage) await fs.rm(stage, { recursive: true, force: true });
   }
 }
 
