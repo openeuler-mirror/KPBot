@@ -1,0 +1,78 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-steps",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "STP-01",
+      "prompt": "同一份 trace 里第 0-2 步和第 5-7 步比一下，哪组更慢",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-02",
+      "prompt": "这份 profiling 内哪个 step 是坏 step，比其他 step 慢多少",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-03",
+      "prompt": "比较同一采集的 step3 和 step7 的 Computing/Free",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-04",
+      "prompt": "单份采集里按 step 组对比，标出最大劣化步",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-05",
+      "prompt": "同一份 trace 内前后阶段的步耗时有没有劣化",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-06",
+      "prompt": "用 --base-steps 1,2,3 --cand-steps 8,9,10 对比这两组 step",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-07",
+      "prompt": "只看这一份采集，找出最慢的 step 并和平均值比",
+      "should_trigger": true
+    },
+    {
+      "id": "STP-08",
+      "prompt": "对比优化前后的两份 profiling，瓶颈迁移了吗",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付） (v1) / -hub"
+    },
+    {
+      "id": "STP-09",
+      "prompt": "这份无标识 trace 的 step 边界不准，帮我重新切 step",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-step-split（同批 PR 交付）"
+    },
+    {
+      "id": "STP-10",
+      "prompt": "找一下设备时间轴上的气泡窗口和通信等待",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-bubble（同批 PR 交付）"
+    },
+    {
+      "id": "STP-11",
+      "prompt": "分析单份无栈 trace 的 P1/P2/P3 和 Free 去向",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis-nostack"
+    },
+    {
+      "id": "STP-12",
+      "prompt": "对比两份采集的算子种类、调用次数和 shape 分布",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-opstats（同批 PR 交付）"
+    },
+    {
+      "id": "STP-13",
+      "prompt": "帮我把推理服务的整体吞吐调高",
+      "should_trigger": false,
+      "note": "routes to kpbot-app-tuner"
+    }
+  ]
+}
