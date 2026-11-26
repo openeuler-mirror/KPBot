@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenViking HTTP Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=__DATA_DIR__
+Environment="HOME=__DATA_DIR__"
+Environment="OPENVIKING_CONFIG_FILE=__CONF_FILE__"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=__SERVER_BIN__
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

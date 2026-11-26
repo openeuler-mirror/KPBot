@@ -1,0 +1,32 @@
+{
+  "service_name": "openviking-server",
+  "server": {
+    "host": "__HOST__",
+    "port": __PORT__
+  },
+  "storage": {
+    "workspace": "__WORKSPACE__",
+    "agfs": {
+      "backend": "local"
+    },
+    "vectordb": {
+      "name": "context",
+      "backend": "local"
+    }
+  },
+  "embedding": {
+    "dense": {
+      "provider": "__PROVIDER__",
+      "api_base": "__API_BASE__",
+      "api_key": "__API_KEY__",
+      "model": "__EMBEDDING_MODEL__",
+      "dimension": __DIMENSION__
+    }
+  },
+  "vlm": {
+    "provider": "__PROVIDER__",
+    "api_base": "__API_BASE__",
+    "api_key": "__API_KEY__",
+    "model": "__VLM_MODEL__"
+  }
+}
