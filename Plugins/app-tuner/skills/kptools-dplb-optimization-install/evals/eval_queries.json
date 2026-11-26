@@ -1,14 +1,14 @@
 {
-  "skill_name": "kptools-dplb-optimization-install",
+  "skill_name": "kptools-dplb-optimization（配套 PR #443 交付）-install",
   "queries": [
     { "id": "IQ-01", "prompt": "内网容器没法访问外网，从源码编译安装 MindIE Motor", "should_trigger": true, "note": "core scenario: offline source build (method B)" },
     { "id": "IQ-02", "prompt": "我有 motor 编译好的 whl 包，帮我装到远端", "should_trigger": true, "note": "method A: user-provided whl install" },
     { "id": "IQ-03", "prompt": "motor 升级到新版本，先把在跑的 coordinator 停干净再装", "should_trigger": true, "note": "upgrade/reinstall with stop-old discipline" },
     { "id": "IQ-04", "prompt": "coordinator 起不来，报找不到 libmindie_workload_shm.so，装的是个 1.2MB 的小 whl", "should_trigger": true, "note": "empty-shell whl interception + rebuild via bash build.sh" },
-    { "id": "IQ-05", "prompt": "帮我装个负载均衡器，后端是 4 个 vLLM 实例", "should_trigger": false, "note": "routes to kptools-dplb-optimization（端到端 LB 部署主入口，未装时它转本 skill 做安装）" },
-    { "id": "IQ-06", "prompt": "远端已经 pip 装好 motor 了，帮我生成 user_config.json、register.sh 和 start_motor.sh", "should_trigger": false, "note": "routes to kptools-dplb-optimization（配置三件套）" },
+    { "id": "IQ-05", "prompt": "帮我装个负载均衡器，后端是 4 个 vLLM 实例", "should_trigger": false, "note": "routes to kptools-dplb-optimization（配套 PR #443 交付）（端到端 LB 部署主入口，未装时它转本 skill 做安装）" },
+    { "id": "IQ-06", "prompt": "远端已经 pip 装好 motor 了，帮我生成 user_config.json、register.sh 和 start_motor.sh", "should_trigger": false, "note": "routes to kptools-dplb-optimization（配套 PR #443 交付）（配置三件套）" },
     { "id": "IQ-07", "prompt": "各引擎忙闲不均，现场采集 30 分钟负载指标出个均衡性报告", "should_trigger": false, "note": "routes to kptools-dplb-profiler（量化度量）" },
-    { "id": "IQ-08", "prompt": "推理请求分发不均，想用 MindIE Motor 做负载均衡，帮我在这台机器上部署", "should_trigger": false, "note": "routes to kptools-dplb-optimization（部署主入口；安装是其阶段 3 移交到本 skill 的子步骤）" },
+    { "id": "IQ-08", "prompt": "推理请求分发不均，想用 MindIE Motor 做负载均衡，帮我在这台机器上部署", "should_trigger": false, "note": "routes to kptools-dplb-optimization（配套 PR #443 交付）（部署主入口；安装是其阶段 3 移交到本 skill 的子步骤）" },
     { "id": "IQ-09", "prompt": "vLLM 首 token 延迟太长，帮忙定位一下", "should_trigger": false, "note": "routes to kptools-vllm-ttft" },
     { "id": "IQ-10", "prompt": "Nginx https 短连接场景怎么压测调优", "should_trigger": false, "note": "routes to nginx-optimization" }
   ]

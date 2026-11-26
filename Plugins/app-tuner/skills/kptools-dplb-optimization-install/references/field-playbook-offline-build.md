@@ -136,19 +136,20 @@ wheel package: dist/motor-3.1.0-py3-none-linux_aarch64.whl
 BUILD_RC=0
 ```
 
-## 7. 安装并验证
+## 7. 安装并验证（本 skill 交付终点）
 
 ```bash
 pip3 install --no-deps --force-reinstall dist/motor-*.whl
 cd /opt/mindie-motor    # 关键：切到源码目录之外！
 python3 -c "import motor; print(motor.__file__)"   # site-packages/motor/__init__.py
-bash start_motor.sh
-curl -s http://127.0.0.1:<mgmt_port>/liveness   # {"status":"ok","message":"Coordinator is alive"}
-curl -s http://127.0.0.1:<mgmt_port>/readiness  # {"status":"ok","message":"Coordinator is ok","ready":false}
 ```
 
+**`import motor` 成功并指向 site-packages 即为本 skill 的交付终点**——以下部署侧动作
+（启动 coordinator 与探活）不在本 skill 范围：`start_motor.sh` 由配套 PR #443
+（kptools-dplb-optimization）的阶段 4 生成，安装场景尚不存在该脚本，此处照做必失败；
+探活与管理端注册同样归部署侧流程。
+
 - wheel 内容：含 `motor/coordinator/workload_shm_rs/lib/libmindie_workload_shm.so`（实测 458,712 字节）；不含 `kv-conductor`（可选）。源码构建 wheel 约 1.4MB（官方 aarch64 3.6MB，差额主要是 kv-conductor）
-- `readiness` 返回 `"ready":false` 属正常（后端未注册时）；注册成功后变 `true`
 - **`import motor` 必须在源码目录之外执行**：在 `/tmp/mm-src` 内执行会命中源码目录而不是 site-packages，验证安装结果必须切到 `/opt/mindie-motor` 等外部目录
 - **运行依赖按上游 `requirements.txt` 全量补装**：本手册实测当时的基础镜像已具备大部分依赖，只补了 pyOpenSSL/watchdog——**新环境不要沿用该最小清单**，coordinator 还硬 import fastapi/pydantic/zmq/msgspec/uvicorn 等，缺任何一个都起不来；离线全量下载见上游 standalone.md 附录 A（`pip download -r requirements.txt`）
 - 上面第 123 行的通配 `dist/motor-*.whl` 是当时的一次通装了两个 wheel（`-none-any` 与 `-linux_aarch64`，恰好按字母序平台包最后生效）；正式部署不要沿用——build 可能同时产出两个 wheel，按 SKILL.md 方式 B 第 6 步用第 5 步断言选中的**明确文件名**安装，避免 glob 先后覆盖
