@@ -1,0 +1,23 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-admission",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "一个新模型，PD 分离，想判断能不能开公开版 P2P layerwise，应该看哪些指标？",
+      "expected_output": "先采集 kv_caches.keys()、group 数、draft layer 数、attention 后端和 Store use_layerwise 等事实，再按 G1-G6 输出 no-go 或 Mode A。不要凭模型名直接承诺支持，也不要推荐 Store layerwise range 或 host offload。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "标准 DSA 场景，已经有独立 indexer cache，能不能开 P2P layerwise？",
+      "expected_output": "检查同 layer index 是否多 cache key、attention 后端是否有逐层 hook，以及 checkout 是否包含公开版 P2P Layerwise 能力。若 G1/G2 不满足，给出 no-go 或交 code-optimizer，不要用配置绕过。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "未验证模型能不能开 layerwise？",
+      "expected_output": "说明未验证模型只做通用准入检查，不写适配承诺；要求采集 kv_caches、group、draft layer 和 attention 后端，必要时交 code-optimizer。",
+      "files": []
+    }
+  ]
+}

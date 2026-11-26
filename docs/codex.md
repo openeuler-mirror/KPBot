@@ -68,6 +68,8 @@ kpbot uninstall global codex
 | 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 |
 | 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 |
 
+`ascend_kunpeng/layerwise` 在本 PR 新增 5 个 `SKILL.md` 后，按同一口径实测为：安装清单 370、安装树递归 416、源树递归 484。
+
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
 未绑定可复现的树状态，不应用作当前版本的验证结论。

@@ -1,0 +1,17 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-workflow",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "从零帮我把 PD 分离的 P2P layerwise 配好并验证，给我一份结论。",
+      "expected_output": "按输入确认、admission（含版本门禁）、config、授权 apply、verification、troubleshooting、closeout 编排；在 no-go 或未授权时停止，不复制四个 skill 的技术细节。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "layerwise 配置写完但启动失败，顺便帮我判断要不要改源码。",
+      "expected_output": "先走 troubleshooting；能配置修复的回 config，需要多 draft/多 entry/planner 改动时停止并交 code-optimizer。",
+      "files": []
+    }
+  ]
+}

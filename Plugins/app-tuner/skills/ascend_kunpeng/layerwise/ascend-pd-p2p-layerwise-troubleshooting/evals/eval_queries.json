@@ -1,0 +1,12 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-troubleshooting",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "layerwise 报 IndexError，怎么排查？", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "Decode store hit 后出现 double-write", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "启动报 page sizes 不一致", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "Layerwise 配置怎么写？", "should_trigger": false, "note": "routes to config" },
+    { "id": "EQ-05", "prompt": "P/D 两侧环境版本是否一致？", "should_trigger": false, "note": "routes to kptools-ascend-pd-env" }
+  ]
+}

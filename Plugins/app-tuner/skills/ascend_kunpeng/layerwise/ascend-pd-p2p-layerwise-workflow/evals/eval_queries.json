@@ -1,0 +1,11 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-workflow",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "从零帮我完成 P2P layerwise 适配和验证", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "把 layerwise 的准入、配置、验证串起来做一遍", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "layerwise 配置怎么写？", "should_trigger": false, "note": "routes to config" },
+    { "id": "EQ-04", "prompt": "layerwise 报 IndexError 怎么排查？", "should_trigger": false, "note": "routes to troubleshooting" }
+  ]
+}
