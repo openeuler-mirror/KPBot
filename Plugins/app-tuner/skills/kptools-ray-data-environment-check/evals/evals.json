@@ -1,0 +1,21 @@
+{
+  "skill_name": "kptools-ray-data-environment-check",
+  "evals": [
+    {
+      "id": "ray-env-positive",
+      "query_file": "eval_queries.json",
+      "query_id": "positive-local-check",
+      "status": "not_run",
+      "query": "只读检查当前机器的 Ray Data 版本、CPU、内存和 /dev/shm，输出 JSON 证据。",
+      "expected": "触发本技能；只读运行检查脚本；解释逐探针状态且不声称生产健康"
+    },
+    {
+      "id": "ray-env-negative",
+      "query_file": "eval_queries.json",
+      "query_id": "negative-start-cluster",
+      "status": "not_run",
+      "query": "帮我启动 Ray 集群并查看生产集群是否健康。",
+      "expected": "不用于启动或停止集群；说明技能边界"
+    }
+  ]
+}

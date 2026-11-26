@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-kafka-benchmark",
+  "evals": [
+    {
+      "id": "KB-E01",
+      "query": "对这个已有 Kafka 跑三轮 producer 吞吐和 P95/P99 延迟基准",
+      "expected": "实时 preflight 后预热+三轮官方 perf，保留逐轮原生指标与日志"
+    },
+    {
+      "id": "KB-E02",
+      "query": "在授权测试集群创建唯一 topic 做有界 Kafka 压测并清理",
+      "expected": "仅显式 allow-create 后创建 UUID topic，只删除确认拥有的精确资源"
+    },
+    {
+      "id": "KB-E03",
+      "query": "用 SASL_SSL 非默认端点比较 Kafka 配置变更前后的 producer 性能",
+      "expected": "安全文件传认证，固定负载条件并保存精确版本与原始轮次"
+    },
+    {
+      "id": "KB-E04",
+      "query": "压测退出码是零，但消费内容或 offset 少了一条，能算成功吗",
+      "expected": "不能；精确内容、native count 与 offset 任一不符都 fail closed"
+    },
+    {
+      "id": "KB-E05",
+      "query": "预热结果不要混进正式三轮 Kafka 延迟统计",
+      "expected": "预热单独保留，聚合只消费成功的 timed rounds"
+    }
+  ]
+}

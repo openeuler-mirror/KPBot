@@ -1,4 +1,5 @@
 ---
+name: analyzer
 description: subskill analysis subagent (unified analyzer)
 mode: subagent
 hidden: true

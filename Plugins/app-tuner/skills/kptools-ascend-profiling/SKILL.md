@@ -15,6 +15,9 @@ metadata:
   version: "1.0.0"
 ---
 
+
+> **采集契约（主动采集）**：采集路径本身不改系统配置；**方案二 msp-enable 会修改服务侧 profiler 配置，首次启用可能需重启服务（需用户确认）**；方案一 trace 由被测服务写入其 profiler 输出目录（由服务启动参数决定）。本 skill 自身只写 `-o` 指定的输出目录。**已知副作用**：profiling session 启停期间对目标服务有性能开销；trace 数据量可能较大。需要变更的优化动作归属对应调优 skill。
+
 # kptools-ascend-profiling — NPU 算子级/服务框架级 profiling
 
 ## 工作流程

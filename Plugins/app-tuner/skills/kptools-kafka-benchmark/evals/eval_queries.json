@@ -1,0 +1,59 @@
+{
+  "skill_name": "kptools-kafka-benchmark",
+  "queries": [
+    {
+      "id": "KB-PQ-01",
+      "prompt": "给现有 Kafka 做三轮 producer 压测，保留原始延迟和吞吐",
+      "should_trigger": true,
+      "note": "core bounded benchmark"
+    },
+    {
+      "id": "KB-PQ-02",
+      "prompt": "授权新建唯一 Kafka 测试 topic，预热后测三轮并清理",
+      "should_trigger": true,
+      "note": "explicit owned topic creation"
+    },
+    {
+      "id": "KB-PQ-03",
+      "prompt": "通过 SASL_SSL 非默认端口测量 Kafka producer P99",
+      "should_trigger": true,
+      "note": "secure endpoint and native latency"
+    },
+    {
+      "id": "KB-PQ-04",
+      "prompt": "对空专用 topic 做配置前后可复现 Kafka 性能对比",
+      "should_trigger": true,
+      "note": "existing dedicated topic and reproducible rounds"
+    },
+    {
+      "id": "KB-PQ-05",
+      "prompt": "Kafka 压测要核对消息内容、记录数和 offset，预热别算进去",
+      "should_trigger": true,
+      "note": "correctness and warmup exclusion"
+    },
+    {
+      "id": "KB-NQ-01",
+      "prompt": "只读检查 Kafka 环境，不要写任何消息",
+      "should_trigger": false,
+      "note": "read-only preflight, not workload execution"
+    },
+    {
+      "id": "KB-NQ-02",
+      "prompt": "部署并启动 Kafka broker",
+      "should_trigger": false,
+      "note": "deployment is out of scope"
+    },
+    {
+      "id": "KB-NQ-03",
+      "prompt": "跑 Ray ImageNet smoke",
+      "should_trigger": false,
+      "note": "different benchmark domain"
+    },
+    {
+      "id": "KB-NQ-04",
+      "prompt": "对生产业务 topic 无限速无限时压测",
+      "should_trigger": false,
+      "note": "unbounded or unauthorized workload is refused"
+    }
+  ]
+}

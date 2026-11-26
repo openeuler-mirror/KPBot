@@ -22,9 +22,9 @@ lib 里全部 `*.jar`（按名序）：
 |---|---|---|
 | native 且 expect ∈ {any, native} | `build` ok | — |
 | native 且 expect = gfv | `build` fail | `build velox4j and gluten-flink and deploy the complete set into lib, then restart the cluster (a restart needs the user consent)` |
-| gfv 且 expect ∈ {any, gfv} | `build` ok：`complete GFV set: planner runtime loader + velox4j + 14 runtime deps` | — |
+| gfv 且 expect ∈ {any, gfv} | `build` ok：`complete GlutenFlink set: planner runtime loader + velox4j + 14 runtime deps` | — |
 | gfv 且 expect = native | `build` fail | `move every gluten/velox jar out of lib and restart the cluster (a restart needs the user consent)` |
-| partial（任何 expect） | `build` fail：点名 missing_parts 与 gluten/velox jar | `deploy the complete GFV build into lib, or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent)` |
+| partial（任何 expect） | `build` fail：点名 missing_parts 与 gluten/velox jar | `deploy the complete GlutenFlink build into lib, or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent)` |
 | 多版本 | `duplicates` warn | — |
 | 找不到安装 | `home` fail | 安装 Flink 1.19.x 的提示 |
 | 安装没有 lib/ | `lib` fail | 同上 |
@@ -35,7 +35,7 @@ lib 里全部 `*.jar`（按名序）：
 
 按"找不到安装 → partial → 不符期望 → 多版本"取第一个成立的：
 1. 找不到安装 / 没有 lib → `install the official binary distribution flink-1.19.x-bin-scala_2.12.tgz and point FLINK_HOME at it, then rerun`
-2. partial → `deploy the complete GFV build into lib (missing <parts>) or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent), then rerun`
+2. partial → `deploy the complete GlutenFlink build into lib (missing <parts>) or remove every gluten/velox jar, then restart the cluster (a restart needs the user consent), then rerun`
 3. expect=native 而非 native → `move every gluten/velox jar out of lib and restart the cluster (a restart needs the user consent), then rerun`；expect=gfv 而非 gfv → `build velox4j and gluten-flink and deploy the complete set into lib, then restart the cluster (a restart needs the user consent), then rerun`
 4. 多版本 → `remove the stale duplicate jars (<artifact: <jars>; …) and restart the cluster (a restart needs the user consent), then rerun`
 5. 否则 `ready: lib holds the <build> build`（expect 不是 any 时附 ` as expected`）
@@ -48,4 +48,4 @@ lib 里全部 `*.jar`（按名序）：
 
 ## 5. 来源
 
-"有 gluten/velox jar 即 GFV 构建"与 `flink-velox-e2e-verify` 的 lib 门同一判据；GFV 集合的组成（planner / runtime / loader + velox4j + 14 个运行依赖）来自 GFV 构建脚本拷进 `$FLINK_HOME/lib` 的清单（artifactId 不随版本变）。
+"有 gluten/velox jar 即 GlutenFlink 构建"与 `flink-velox-e2e-verify` 的 lib 门同一判据；GlutenFlink 集合的组成（planner / runtime / loader + velox4j + 14 个运行依赖）来自 GFVBot 构建脚本拷进 `$FLINK_HOME/lib` 的清单（artifactId 不随版本变）。

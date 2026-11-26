@@ -18,7 +18,11 @@ metadata:
 
 # Nexmark 准备状态检查
 
-nexmark 是 GFV 栈的吞吐基准口径，但它不是一条 `dnf install` 就能有的东西：`nexmark-flink` 没有发布件，要从 `github.com/nexmark/nexmark` 源码 `mvn -pl nexmark-flink -am package` 构建出 jar 拷进 Flink 的 `lib/`；跑查询还要一棵可运行树（`bin/run_query.sh` 与查询 / 资源文件，即 checkout 的 `nexmark-flink/src/main/resources`），放在 `$NEXMARK_HOME`、`/usr/local/nexmark` 或 `/opt/nexmark`。缺任一件，基准命令都在半途才报错。本 skill 只做一件事：**核对这两件在不在**。它是 `flink-velox-env` 检查家族里"nexmark 准备"这一具体项：只读、不改动机器、不构建、不拷贝。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+nexmark 是 GlutenFlink 栈的吞吐基准口径，但它不是一条 `dnf install` 就能有的东西：`nexmark-flink` 没有发布件，要从 `github.com/nexmark/nexmark` 源码 `mvn -pl nexmark-flink -am package` 构建出 jar 拷进 Flink 的 `lib/`；跑查询还要一棵可运行树（`bin/run_query.sh` 与查询 / 资源文件，即 checkout 的 `nexmark-flink/src/main/resources`），放在 `$NEXMARK_HOME`、`/usr/local/nexmark` 或 `/opt/nexmark`。缺任一件，基准命令都在半途才报错。本 skill 只做一件事：**核对这两件在不在**。它是 `flink-velox-env` 检查家族里"nexmark 准备"这一具体项：只读、不改动机器、不构建、不拷贝。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
+
+## 术语
+
+这套栈的官方叫法是 GlutenFlink；项目名 GFVBot（本 skill 的判据解析自其安装器的 nexmark 构建步骤）按原名保留，`GFV` 与 GlutenFlink 指同一生态。
 
 ## 使用场景
 
@@ -34,7 +38,7 @@ nexmark 是 GFV 栈的吞吐基准口径，但它不是一条 `dnf install` 就�
 - 指望它构建 nexmark、拷 jar 或铺可运行树——`fix` 与 `next_step` 只是工单，交给安装类 skill（审中 !323）
 - 跑 nexmark 测吞吐、校验 nexmark 结果 → 基准 / 校验类 skill（规划中）；本 skill 不提交任何作业
 - Flink 安装是否完整、版本线 → `flink-velox-flink-dist-check`
-- 只有 nexmark 场景才需要 nexmark：不做基准时这两项缺失与 GFV 栈本身无关
+- 只有 nexmark 场景才需要 nexmark：不做基准时这两项缺失与 GlutenFlink 栈本身无关
 
 ## 检查项
 
@@ -99,6 +103,6 @@ python3 <skill_dir>/scripts/nexmark_check.py [--json] [--out FILE [--overwrite]]
 ## 边界与相邻 skill
 
 - `flink-velox-flink-dist-check`：Flink 安装完整性与版本线——nexmark jar 只是放进它的 `lib/`
-- `flink-velox-lib-state-check`：lib 里 GFV 构建的判定——nexmark jar 不参与 GFV 构建分类（名字不含 gluten/velox）
+- `flink-velox-lib-state-check`：lib 里 GlutenFlink 构建的判定——nexmark jar 不参与 GlutenFlink 构建分类（名字不含 gluten/velox）
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一
 - 构建 nexmark、铺可运行树：同族安装类 skill（审中 !323）；跑 nexmark 吞吐基准与正确性校验：基准 / 校验类 skill（规划中）；本 skill 的 `next_step` 与每项 `fix` 即交给它们的工单，本 skill 不执行任何修复

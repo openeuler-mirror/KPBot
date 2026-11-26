@@ -1,6 +1,6 @@
 ---
 name: kpbot-ray-data-performance-analysis
-description: 分析 Ray Data ETL、预处理和批推理流水线的吞吐、耗时、资源使用与执行瓶颈。用户提供 Dataset 代码、运行日志、stats 或 profile，或希望采集性能基线时使用；支持离线证据分析和用户指定命令的现场测量。
+description: 当用户提供 Ray Data Dataset 代码、运行日志、stats 或 profile，或希望采集 Ray Data 性能基线时使用。分析 ETL、预处理和批推理流水线的吞吐、耗时、资源使用与执行瓶颈；支持离线证据分析和用户指定命令的现场测量。
 ---
 
 # Ray Data 性能分析
@@ -50,6 +50,7 @@ python3 scripts/compare_runs.py "$BASELINE_JSON" "$CANDIDATE_JSON" --out results
 
 - [公开来源与版本边界](references/sources.md)：Ray 公共文档；具体命令须匹配目标版本。
 - `cases/analyze-records/case.yaml`：tier A 工具回归，包括表格、文本、图像三类合成记录。它不证明真实 Ray 性能或 Agent 的分析效果。
+- `cases/analyze-records/reasoning-evals.json`：四个待执行的人工 Agent 推理评测场景。其 `status: not_run` 仅表示尚未执行，不是已执行或通过记录，也不会由上述 tier A/B 入口自动运行。需要评测时，按文件内 `instructions` 将各 `cases[].prompt` 分别提交给有/无 skill 的独立 Agent 上下文，不向被测 Agent 提供 `rubric`；保存原始回答与工具 trace，由评测者按 `rubric` 人工评分，并将实际执行状态、原始回答、trace 和评分写入独立的新结果文件，不改写此待执行规格。
 
 ## 安装后的验证
 

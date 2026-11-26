@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-tpsplit-log-trace",
+  "queries": [
+    {"id": "AQ-01", "prompt": "帮我把最新的 TTFT 打点 patch 部署到 13 集群的 P 容器", "should_trigger": true, "note": "核心部署场景"},
+    {"id": "AQ-02", "prompt": "deploy_ttft_full.sh 跑完重启引擎后 [TTFT][BREAKDOWN] 一条都没有，帮我看看哪里没生效", "should_trigger": true, "note": "部署不生效排查"},
+    {"id": "AQ-03", "prompt": "明天要跑 TTFT 拆解压测，今天先把打点插桩推到 105/106/107 集群", "should_trigger": true, "note": "压测前预部署"},
+    {"id": "AQ-04", "prompt": "把 shm_broadcast.py 的新版推到 D 侧容器，注意先做 md5 基座核对", "should_trigger": true, "note": "单文件更新+基座核对"},
+    {"id": "AQ-05", "prompt": "给 p0-1112 容器更新一下 TTFT patch，v3.2 那套", "should_trigger": true, "note": "口语化更新请求"},
+    {"id": "AQ-06", "prompt": "我明明 export 了 VLLM_TTFT_SHM_LOG=1，为什么 [SHM_DEQUEUE] 日志一条都没有", "should_trigger": true, "note": "环境变量不生效排查"},
+    {"id": "AQ-07", "prompt": "102 上的 glm52-d 容器现在是 stopped 状态，能直接把打点补丁打进去吗", "should_trigger": true, "note": "stopped 容器 docker cp 知识"},
+    {"id": "AQ-08", "prompt": "[LB_DISPATCH] 和 client_send_ts 这些 proxy 侧打点怎么部署，压测端要不要一起推", "should_trigger": true, "note": "proxy/压测端 patch"},
+    {"id": "AQ-09", "prompt": "部署打点前要做哪些 md5 指纹核对，基座不一致怎么办", "should_trigger": true, "note": "基座核对流程"},
+    {"id": "AQ-10", "prompt": "把打点推上去", "should_trigger": true, "note": "最小口语化触发"},
+    {"id": "NQ-01", "prompt": "帮我把压测日志里的 [TTFT][BREAKDOWN] 行解析成 TTFT 拆解表", "should_trigger": false, "note": "日志解析出表归 kptools-tpsplit-log-analysis，本技能只部署"},
+    {"id": "NQ-02", "prompt": "queue_wait 和 step_other 这两个字段在 TTFT breakdown 里分别代表什么", "should_trigger": false, "note": "字段含义解读，非部署"},
+    {"id": "NQ-03", "prompt": "TTFT P99 长尾很严重，帮我分析是排队还是计算瓶颈", "should_trigger": false, "note": "性能归因分析，非插桩部署"},
+    {"id": "NQ-04", "prompt": "把集群从跨机 TP32+Ray 改成单机 TP8 闭环部署", "should_trigger": false, "note": "拓扑变更归 tpsplit 拓扑迁移技能"},
+    {"id": "NQ-05", "prompt": "推理请求在 DP 节点间分发不均，负载均衡怎么优化", "should_trigger": false, "note": "负载均衡归 dplb 技能"},
+    {"id": "NQ-06", "prompt": "vllm serve 加载模型 OOM 了，max-num-seqs 和 gpu-memory-utilization 怎么调", "should_trigger": false, "note": "引擎配置调优"},
+    {"id": "NQ-07", "prompt": "帮我看下 NPU 利用率，采集一下设备状态", "should_trigger": false, "note": "NPU 状态采集归 ascend-smi 技能"},
+    {"id": "NQ-08", "prompt": "给 vllm 写一个自定义算子并注册到模型里", "should_trigger": false, "note": "算子开发，非打点部署"}
+  ]
+}

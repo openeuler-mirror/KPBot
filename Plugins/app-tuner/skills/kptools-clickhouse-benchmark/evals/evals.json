@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-clickhouse-benchmark",
+  "evals": [
+    {
+      "id": "CHBENCH-E01",
+      "query": "对现有 ClickHouse 跑有界合成 SELECT 基准，预热后测三轮",
+      "expected_output": "调用 run_benchmark.py，重新做实时预检，固定 iterations；预热不计入汇总，保留三轮原生 QPS、延迟、计数和精确正确性。"
+    },
+    {
+      "id": "CHBENCH-E02",
+      "query": "用单个 clickhouse 二进制测非默认 TLS 端点，不要泄露密码",
+      "expected_output": "使用 --single-binary 和 --secure，密码仅经 CLICKHOUSE_PASSWORD，只有提供实际存在的私有配置时才使用 --config；全局 --version 记录完整共享版本，不执行 benchmark --version。"
+    },
+    {
+      "id": "CHBENCH-E03",
+      "query": "第二轮 native benchmark 非零退出时保留什么",
+      "expected_output": "整次运行失败并停止第三轮；result.json 保留预热、第一轮、第二轮返回码和日志路径，不生成成功 summary。"
+    },
+    {
+      "id": "CHBENCH-E04",
+      "query": "ClickHouse 26.8 输出 50% 和 95% 而不是 50.000%，如何汇总",
+      "expected_output": "按实际原生格式解析 p50/p95/p99，将秒转为毫秒；查询数同时匹配 Queries executed 与 iterations，缺失或变化则 metric_parse 失败。"
+    },
+    {
+      "id": "CHBENCH-E05",
+      "query": "把这个合成测试当成 TPC-H 并允许无限运行",
+      "expected_output": "拒绝错误口径和无限执行：只提供固定 numbers(N) SELECT 的有界协议，明确不是 TPC-H，并要求有限轮次、迭代和超时。"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ RATE=""
 FORMAT="flamegraph"
 OUT=""
 SWITCHES=()
+NONBLOCKING=0
 
 print_help() {
     cat <<'EOF'
@@ -33,6 +34,7 @@ Options:
   -i, --idle          Include idle threads（off-CPU 近似）
   -n, --native        Include native extension stacks（实验性：需 debug symbols，torch_npu 待实测）
   -t, --threads       Show thread ids in the output
+  --nonblocking       Do not pause the target while sampling（record/top 降级；有丢样代价）
   --help              Show this help
 
 Notes:
@@ -65,6 +67,7 @@ while [ $# -gt 0 ]; do
         -i|--idle) SWITCHES+=("--idle"); shift ;;
         -n|--native) SWITCHES+=("--native"); shift ;;
         -t|--threads) SWITCHES+=("--threads"); shift ;;
+        --nonblocking) NONBLOCKING=1; shift ;;
         --help) print_help ;;
         *) echo "ERROR: unknown option: $1" >&2; exit 3 ;;
     esac
@@ -77,6 +80,11 @@ fi
 
 if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
     echo "ERROR: -p 必须为数字 PID" >&2
+    exit 3
+fi
+
+if [ "$MODE" = "dump" ] && [ "$NONBLOCKING" = "1" ]; then
+    echo "ERROR: --nonblocking 仅适用于 record/top，dump 不支持" >&2
     exit 3
 fi
 
@@ -150,11 +158,17 @@ fi
 
 if [ "$MODE" = "top" ]; then
     if [ -t 1 ]; then
+        if [ "$NONBLOCKING" = "1" ]; then
+            echo "ERROR: TTY 交互 top 不支持 --nonblocking；请改用 --record --nonblocking（或去掉 --top）" >&2
+            exit 3
+        fi
         exec py-spy top -p "$PID"
     fi
     echo "NOTICE: stdout 非 TTY，py-spy top 交互视图不可用，降级为 raw 统计按采样数排序（时长 ${DURATION}s）" >&2
     TMP_RAW=$(mktemp /tmp/pyspy_top.XXXXXX.txt)
-    run_pyspy record -p "$PID" -d "$DURATION" -f raw -o "$TMP_RAW"
+    TOP_ARGS=(-p "$PID" -d "$DURATION" -f raw -o "$TMP_RAW")
+    [ "$NONBLOCKING" = "1" ] && TOP_ARGS+=(--nonblocking)
+    run_pyspy record "${TOP_ARGS[@]}"
     RC="$PYSPY_RC"
     if [ "$RC" -ne 0 ]; then
         rm -f "$TMP_RAW"
@@ -184,6 +198,9 @@ if [ -n "$RATE" ]; then
 fi
 if [ "${#SWITCHES[@]}" -gt 0 ]; then
     ARGS+=("${SWITCHES[@]}")
+fi
+if [ "$NONBLOCKING" = "1" ]; then
+    ARGS+=(--nonblocking)
 fi
 
 run_pyspy record "${ARGS[@]}"

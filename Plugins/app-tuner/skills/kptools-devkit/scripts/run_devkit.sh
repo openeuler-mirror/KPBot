@@ -80,7 +80,29 @@ fi
 # java-perf 的 cli-backend 以相对路径写 java-perf/log 等文件，要求 cwd 为 devkit home
 # （实测：cwd 不对时 attach 失败，NoSuchFileException: java-perf/log/...）
 if [ "${1:-}" = "java-perf" ]; then
-    cd "$(dirname "$DEVKIT_BIN")"
+    DEVKIT_HOME="$(dirname "$DEVKIT_BIN")"
+    # cli-backend 固定在 cwd 下写 java-perf/log 与 config；-o 只控制报告输出。
+    # 只检查实际要写的子目录，允许“父目录只读、log/config 已存在且可写”的共享安装。
+    JAVA_PERF_HOME="${DEVKIT_HOME}/java-perf"
+    if [ -d "${JAVA_PERF_HOME}" ]; then
+        for sub in log config; do
+            if [ -d "${JAVA_PERF_HOME}/${sub}" ]; then
+                [ -w "${JAVA_PERF_HOME}/${sub}" ] || {
+                    echo "ERROR: ${JAVA_PERF_HOME}/${sub} is not writable; java-perf needs it for runtime files." >&2
+                    exit 2
+                }
+            else
+                [ -w "${JAVA_PERF_HOME}" ] || {
+                    echo "ERROR: ${JAVA_PERF_HOME} is not writable; cannot create ${sub}/ for java-perf." >&2
+                    exit 2
+                }
+            fi
+        done
+    elif [ ! -w "${DEVKIT_HOME}" ]; then
+        echo "ERROR: ${DEVKIT_HOME} is not writable; cannot create java-perf/log. Reinstall to a user-writable prefix." >&2
+        exit 2
+    fi
+    cd "${DEVKIT_HOME}"
 fi
 
 exec "$DEVKIT_BIN" "$@"

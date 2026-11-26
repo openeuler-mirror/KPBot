@@ -9,7 +9,8 @@
     { "id": "NQ-02", "prompt": "分析这个 Python 进程的 GIL 竞争", "should_trigger": false, "note": "routes to kptools-py-spy" },
     { "id": "NQ-03", "prompt": "采集系统整体 CPU 和内存利用趋势", "should_trigger": false, "note": "routes to kptools-nmon" },
     { "id": "NQ-04", "prompt": "看看 NPU 算子执行耗时分布", "should_trigger": false, "note": "routes to kptools-ascend-profiling" },
-    { "id": "NQ-05", "prompt": "帮我部署一个负载均衡器把请求均匀分发", "should_trigger": false, "note": "部署动作，本 skill 只做采集，不部署组件" },
+    { "id": "NQ-05", "prompt": "帮我部署一个负载均衡器把请求均匀分发", "should_trigger": false, "note": "部署动作，routes to kptools-dplb-optimization（本 skill 只做采集，不部署组件）" },
+    { "id": "NQ-06", "prompt": "采集 Python proxy 转发的请求内容，看看请求分布和会话情况", "should_trigger": false, "note": "routes to kptools-prompt-capture（请求内容采集，非负载指标）" },
     { "id": "NQ-09", "prompt": "我有一份 dp_load_metrics CSV，帮我出分析报告", "should_trigger": false, "note": "解析与报告，routes to kptools-dplb-report（无采集动作）" },
     { "id": "NQ-10", "prompt": "各引擎忙闲不均，分析下负载均衡状况出个报告", "should_trigger": false, "note": "分析报告诉求，routes to kptools-dplb-report（需要数据时由其引导回本 skill 采集）" }
   ]

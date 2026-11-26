@@ -10,18 +10,21 @@ description: |
   无栈 trace（无 python_function / 无 ProfilerStep#N）请使用 kptools-ascend-profiling-analysis-nostack。
 ---
 
+
+> **只读契约**：本 skill 严格只读——采集/分析过程不修改任何系统配置、不写入被测环境（产物仅写入输出目录）；需要变更的优化动作归属对应调优 skill。
+
 # Ascend Profiling Trace 分析
 
 ## 输入与产物
 
 - 输入：`trace_view.json`（torch_npu profiler 导出，chrome trace 格式，单行大文件）；同目录侧车 `communication.json`/`api_statistic.csv` 若存在则一并入索引
-- 产物：sqlite 索引（`~/.cache/ascend_prof_skill/`，一份 trace 只建一次，5s；零点自动取全事件最早 ts，仅手动 calibrate 过的重建才继承；meta 含各层 pid（python/device/cann/oa）、coord_streams 协调流、has_stack、ui_zero_source、step_source（step 边界来源））
+- 产物：sqlite 索引（默认 `./.ascend_prof_index/`，可用 `-o` 指向本轮输出目录；一份 trace 只建一次，5s；零点自动取全事件最早 ts，仅手动 calibrate 过的重建才继承；meta 含各层 pid（python/device/cann/oa）、coord_streams 协调流、has_stack、ui_zero_source、step_source（step 边界来源））
 - 源码对照：`vllm-src/` 子 skill（版本知识库 + repos/vllm、repos/vllm-ascend 浅克隆）
 
 ## 工作流（铁律，按序执行）
 
 1. **建索引**（若该 trace 无索引）：
-   `python3 scripts/build_index.py <trace_view.json>`
+   `python3 scripts/build_index.py <trace_view.json> -o ./ascend-prof-index/<trace-name>.db`（每份 trace 一个 db，禁止复用同名 trace_view.db）
 2. **时间基准**（build_index 已自动校准，一般无需用户提供信息）：
    自动零点 = **全事件（含 metadata）最早 ts** = chrome trace 查看器（MindStudio Insight）零点——比最早 X 事件早几十 ms（8B 实测 75ms），这就是旧版"工具零点≠trace最早事件"的根源。
    仅当报告时间与用户工具显示仍不一致时才手动校准：让用户读任一熟悉函数的 `start 显示值` 和 `start(raw timestamp)`，

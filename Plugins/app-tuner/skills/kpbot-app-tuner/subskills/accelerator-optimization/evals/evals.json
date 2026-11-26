@@ -1,0 +1,99 @@
+{
+  "skill_name": "accelerator-optimization",
+  "evals": [
+    {
+      "id": "ACC-E01",
+      "prompt": "nginx HTTPS 短连接 TTFB 很高，RSA 握手是瓶颈，机器是鲲鹏 920 带 HPRE 卡。帮我优化。",
+      "expected_output": "Output accelerator_class=crypto_accelerator, collect evidence with collect_hpre_evidence.sh first, walk the four-condition gate, and produce no environment change while status is analysis.",
+      "files": [],
+      "expectations": [
+        "result.status in {ok, degraded}",
+        "result.findings.accelerator_class == crypto_accelerator",
+        "evidence_sources contains hpre_offload_evidence.json",
+        "all candidate_actions[].change_mode != online/system_reboot unless risk documented"
+      ]
+    },
+    {
+      "id": "ACC-E02",
+      "prompt": "这台机器没有加速卡，也帮我出一份 TLS 卸载优化方案。",
+      "expected_output": "Report crypto accelerator absent as degraded/not_present and still emit exactly one analysis_only no-op action (accel-uadk-000) so the pipeline gate does not fail on empty candidate_actions.",
+      "files": [],
+      "expectations": [
+        "result.status == degraded",
+        "result.findings.crypto_offload_status == not_present",
+        "len(candidate_actions) >= 1",
+        "candidate_actions[0].action_id == accel-uadk-000",
+        "candidate_actions[0].change_mode == analysis_only"
+      ]
+    },
+    {
+      "id": "ACC-E03",
+      "prompt": "用上一次跑出来的证据继续做卸载优化。",
+      "expected_output": "Refuse to analyse: run_id / evidence status / snapshot_time mismatch must produce status=blocked with empty candidate_actions. current_evidence_status must record the gate verdict (stale / mismatched / unbound), never current.",
+      "files": [],
+      "expectations": [
+        "result.status == blocked",
+        "result.candidate_actions == []",
+        "result.current_evidence_status in {stale, mismatched, unbound}"
+      ]
+    },
+    {
+      "id": "ACC-E04",
+      "prompt": "证书是 ECDSA 的，还能用 HPRE 卸载吗？",
+      "expected_output": "State that HPRE RSA offload does not apply to ECDSA certificates and provide rejection_criteria instead of an enable action.",
+      "files": [],
+      "expectations": [
+        "findings mentions ECDSA inapplicability",
+        "no action installs libasf or sets ssl_engine"
+      ]
+    },
+    {
+      "id": "ACC-E05",
+      "prompt": "openssl engine -t e_sse 报 libasf.so not found，怎么修？",
+      "expected_output": "Diagnose libasf missing from the loader path and propose installing it to /usr/lib64 followed by ldconfig, with engine -t and ldd as validation and rm+ldconfig as rollback.",
+      "files": [],
+      "expectations": [
+        "action implementation_plan contains install and ldconfig",
+        "action validation_plan contains 'openssl engine -t e_sse'",
+        "action rollback contains rm and ldconfig"
+      ]
+    },
+    {
+      "id": "ACC-E06",
+      "prompt": "scheduler.json 里有两台设备的 quota，把 quota 都调到 800OPS。",
+      "expected_output": "Detect multiple quota entries and refuse the single-entry rewrite unless --all-quotas is passed; never silently rewrite only the first device. Also enforce quota <= throughput before writing.",
+      "files": [],
+      "expectations": [
+        "action commands_dry_run mentions --all-quotas",
+        "rejection_criteria covers multi-device quota ambiguity",
+        "rejection_criteria states that quota above throughput exits 2"
+      ]
+    },
+    {
+      "id": "ACC-E07",
+      "prompt": "验证一下卸载真的生效了。",
+      "expected_output": "Trigger N full handshakes, compare SQE counter before/after (aggregated across devices), confirm the server process loaded e_sse/uadk_engine, and report offload_mode as asf or direct.",
+      "files": [],
+      "expectations": [
+        "verification reports delta > 0 for N handshakes",
+        "verification reports offload_mode in {asf, direct}",
+        "verification JSON contains scope and devices_counted",
+        "verification requires https and reports handshakes_success plus attribution",
+        "PASS only when SQE delta is attributable to successful handshakes"
+      ]
+    },
+    {
+      "id": "ACC-E08",
+      "prompt": "改完 nginx 配置直接重启可以吗？",
+      "expected_output": "Require nginx -t before restart, place ssl_engine in the nginx main context (top level, exactly once) and never inside http{} or server{}, and note that the enable script restores the .bak and exits non-zero when validation fails or cannot run.",
+      "files": [],
+      "expectations": [
+        "answer references nginx -t",
+        "answer references .bak restore and non-zero exit when validation fails",
+        "answer states restart required",
+        "answer places ssl_engine in the nginx main context, exactly once",
+        "answer does not place ssl_engine inside http{} or server{}"
+      ]
+    }
+  ]
+}

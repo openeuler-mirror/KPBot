@@ -20,10 +20,11 @@ GitHub。这解决了官方文档所述 `online-install.sh` 当前仅自动发�
 
 GitHub API 被限流或暂时不可达时，latest 会回退到官方
 `download.cubesandbox.com/release/latest.json` 获取版本，指定版本则使用用户给出的标签；
-两种降级都只构造官方 CNB/GitHub 资产地址，并明确警告本次没有 API 提供的 SHA-256。
-需要严格摘要固定时，可提供 `GITHUB_TOKEN` 后重试，或由用户独立核验后设置
-`CUBE_SANDBOX_DOWNLOAD_URL` 与 `CUBE_SANDBOX_SHA256`。API 已返回 Release 但缺少目标架构
-或摘要时不会降级掩盖错误。
+两种降级只构造官方 CNB/GitHub 资产地址，但没有 API 提供的 SHA-256，因此共享 `deploy.sh`
+会 fail closed，聚焦预检输出 `ready_for_install=false`、`sha256_pinned=false` 和对应 `issues`，
+不会准备主机、下载或安装。可提供 `GITHUB_TOKEN` 后重试，或由用户独立核验后同时设置
+`CUBE_SANDBOX_DOWNLOAD_URL` 与 `CUBE_SANDBOX_SHA256`；自定义 URL 同样必须带可信摘要。
+API 已返回 Release 但缺少目标架构或摘要时不会降级掩盖错误。
 
 ## 2. 不在本技能范围内
 
@@ -89,11 +90,11 @@ guest kernel 与 PVM 宿主不匹配。
 | `MIRROR` | 境内外网络或镜像站有要求时 | `cn`；空字符串表示 GitHub/global |
 | `CUBE_SANDBOX_NODE_IP` | 多网卡、多 IPv4、NAT 或自动检测值不符合预期时 | 目标节点 IPv4 |
 | `CUBE_PVM_ENABLE` | x86 PVM 主机，或自动检测结果与用户规划不一致时 | `auto` / `0` / `1` |
-| `CUBE_SANDBOX_NETWORK_CIDR` | 官方默认 `192.168.0.0/18` 与主机、VPN、VPC 冲突时 | 不冲突的私网，掩码 `/16`～`/24` |
+| `CUBE_SANDBOX_NETWORK_CIDR` | 官方默认沙箱 CIDR（以所选 Release 的 env.example 为准）与主机、VPN、VPC 冲突时 | 不冲突的私网，掩码 `/16`～`/24` |
 | `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` | 下载或镜像访问必须经过代理时 | 由用户提供；回环地址加入 `NO_PROXY` |
-| `GITHUB_TOKEN` | GitHub API 限流且用户要求严格 API 摘要固定时 | 仅通过安全环境注入，不写入文件或日志 |
-| `CUBE_SANDBOX_DOWNLOAD_URL` | 用户指定可信软件 mirror 时 | 文件名必须匹配当前架构 |
-| `CUBE_SANDBOX_SHA256` | 使用自定义下载地址时强烈建议；官方 API 可用时自动获取 | 64 位十六进制摘要 |
+| `GITHUB_TOKEN` | GitHub API 限流，需要取得可信 API 摘要时 | 仅通过安全环境注入，不写入文件或日志 |
+| `CUBE_SANDBOX_DOWNLOAD_URL` | 用户指定可信软件 mirror 时 | 文件名必须匹配当前架构，且必须同时设置摘要 |
+| `CUBE_SANDBOX_SHA256` | 所有资产均强制；自定义 URL 必须显式提供，官方 API 可用时自动获取 | 64 位十六进制摘要 |
 | 官方镜像/数据库/端口/DNS 变量 | 私有 registry、外部依赖或端口冲突时 | 只写明确需要覆盖的官方键 |
 
 自定义 `CUBE_API_BIND` / `CUBE_OPS_BIND` 时，脚本会从端口派生默认的
@@ -112,7 +113,31 @@ guest kernel 与 PVM 宿主不匹配。
 
 ## 6. 执行方式
 
+三个聚焦 Skill 与 `cubesandbox-deployment` 同级安装；以下相对路径同时适用于源码
+`agentic-infra/` 和安装后的平铺 `skills/`。它们共享本目录脚本和参考，不各自复制实现。
+
 ### 只读预检
+
+```bash
+bash ../cubesandbox-deployment-preflight/scripts/run.sh \
+  --report /secure/path/cubesandbox-preflight.json
+# 或追加 --env /secure/path/deployment.env
+```
+
+聚焦入口调用共享 `deploy.sh --preflight-only`，检查主机、监听端口、沙箱 CIDR 与主机路由冲突，
+并在线解析与架构匹配的 Release，但不下载大文件、不修改主机。所有来源都必须取得可信 SHA-256；
+API 回退或自定义 URL 缺摘要时报告 `sha256_pinned=false`、列出 `issues` 并不就绪。出现 `AUTO`
+表示正式部署会挂载 bpffs 或加载已就绪的 PVM 模块；出现多条 IPv4 时预检会失败，Agent 必须先让
+用户确认并显式设置节点 IP。只有 JSON 中 `status=success`、`success=true`、
+`ready_for_install=true`、`sha256_pinned=true` 才表示可进入授权阶段；`failed` 表示不就绪，缺共享
+实现或无法写报告为 `blocked`。已有安装在本聚焦入口中也会返回不就绪，不能只看兼容脚本的
+warning/退出码。
+
+预检报告不得与 `--env` 输入重合。任意已有文件只有能解析为 JSON，且 `schema_version=1`、
+`skill=cubesandbox-deployment-preflight`、`mode=preflight` 全部匹配时才可替换；非 JSON、其他
+Skill/mode 的报告、符号链接和特殊文件均拒绝。所有写入先按真实路径复核，再原子替换为 `0600`。
+
+原预检用法保持兼容：
 
 ```bash
 bash scripts/deploy.sh --preflight-only
@@ -120,11 +145,24 @@ bash scripts/deploy.sh --preflight-only
 bash scripts/deploy.sh --env /secure/path/deployment.env --preflight-only
 ```
 
-预检会检查主机、监听端口、沙箱 CIDR 与主机路由冲突，并在线解析与架构匹配的 Release，
-但不下载大文件、不修改主机。出现 `AUTO` 表示正式部署会挂载 bpffs 或加载已就绪的 PVM
-模块；出现多条 IPv4 时预检会失败，Agent 必须先让用户确认并显式设置节点 IP。
+### 明确授权后的安装与一键兼容
 
-### 一键部署
+独立安装入口要求显式授权开关和已批准预检报告的精确版本，且不能转换成预检、验收或升级：
+
+```bash
+EXPECTED_VERSION="$(python3 -c 'import json, sys; r = json.load(open(sys.argv[1], encoding="utf-8")); assert r["ready_for_install"] is True and r["sha256_pinned"] is True; print(r["release"]["version"])' \
+  /secure/path/cubesandbox-preflight.json)"
+bash ../cubesandbox-single-node-install/scripts/run.sh \
+  --confirm-fresh-install --expect-version "${EXPECTED_VERSION}" \
+  --env /secure/path/deployment.env
+# 无自定义配置时省略 --env，但不能省略 --expect-version。
+```
+
+`--expect-version` 是必需参数，必须原样复制已批准报告的 `release.version`。共享 `deploy.sh`
+在再次解析后比较实际 `RESOLVED_VERSION`；例如预检为 v1.2.3、安装时 latest 变为 v1.2.4，
+会在任何主机准备、下载或安装前退出并提示重新预检确认。不得绕过版本门沿用旧授权。
+
+原有一键安装用法不变：
 
 ```bash
 bash scripts/deploy.sh --env /secure/path/deployment.env
@@ -135,9 +173,35 @@ bash scripts/deploy.sh
 流程：
 
 ```text
-主机预检 → 选择 amd64/arm64 Release → （正式部署时）准备 bpffs/PVM 模块
-→ 下载并校验 SHA-256 → 官方 install.sh → 官方服务健康 quickcheck → 输出访问信息
+主机预检 → 选择 amd64/arm64 Release → 核对预检版本并强制固定 SHA-256
+→ （正式部署时）准备 bpffs/PVM 模块 → 下载并校验 SHA-256
+→ 官方 install.sh → 官方服务健康 quickcheck → 输出访问信息
 ```
+
+### 独立只读健康验收
+
+```bash
+bash ../cubesandbox-deployment-verify/scripts/run.sh \
+  --report /secure/path/cubesandbox-verify.json
+```
+
+共享 `scripts/verify.sh` 要求固定安装根中的 `.one-click.env` 可读，并执行
+`/usr/local/services/cubetoolbox/scripts/one-click/quickcheck.sh` 及同目录 `common.sh`。包装器只确认配置存在并读取两个非秘密目录键，
+不 source、打印或复制秘密内容；启动前显式设置 `ONE_CLICK_RUNTIME_ENV_FILE`，使维护会话中的
+同名覆盖无效。除官方 quickcheck 返回零外，还要求 control 角色、systemd、CubeAPI、CubeOps 和
+`[quickcheck] OK` 输出证据；缺 quickcheck、运行配置、权限或完整证据时返回 `blocked`，健康检查
+非零返回 `failed`。不会用少量 systemctl/curl 检查降级冒充成功，也不会触发 Release 发现、下载、
+安装、重启、目录创建或配置修改。唯一持久化输出是指定 JSON 报告。
+
+官方 v0.7.3 `common.sh` 会 `mkdir -p` 实际 runtime/log 目录，因此 quickcheck 前必须确认
+`ONE_CLICK_RUNTIME_DIR`（默认 `/var/run/cube-sandbox-one-click`）和 `ONE_CLICK_LOG_DIR`
+（默认 `/var/log/cube-sandbox-one-click`）都已存在且为目录；缺任一项直接 blocked，不能创建。
+转发日志中的所有 HTTP(S) URL 仅保留 scheme/host/port，用户信息、路径和 query 全部移除。
+
+验收报告按真实路径解析，不得与 `.one-click.env` 重合或位于 `INSTALL_ROOT` 内。已有文件必须
+能解析为 JSON 且 `schema_version=1`、`skill=cubesandbox-deployment-verify`、`mode=verify`
+全部匹配，否则不覆盖。共享 `verify.sh` 或整个共享 Skill 缺失时，安全的旧 success 也会被本次
+blocked 原子替换；不安全路径则明确失败且保留哨兵。
 
 ### 已有安装与恢复
 
@@ -151,9 +215,10 @@ root-only 临时配置。
 
 ## 7. 成功判据与故障处理
 
-成功判据是官方安装器和 quickcheck 均返回成功，且运行时环境文件
+安装成功判据是官方安装器和安装期 quickcheck 均返回成功，且运行时环境文件
 `/usr/local/services/cubetoolbox/.one-click.env` 存在。脚本最后输出版本、架构、PVM 模式、
-CubeAPI 和 WebUI 地址。不要把“压缩包下载完成”或“进程曾启动”当成部署成功。
+CubeAPI 和 WebUI 地址。独立验收还必须得到 JSON `status=success`、`success=true`，并包含完整
+官方服务/健康证据。不要把“压缩包下载完成”“预检就绪”或“进程曾启动”当成部署成功。
 
 常见故障：
 
@@ -162,6 +227,8 @@ CubeAPI 和 WebUI 地址。不要把“压缩包下载完成”或“进程曾�
 | 非 XFS / 空间不足 | 停止并请用户准备挂载点；不得自行 `mkfs` |
 | 无 `/dev/kvm` | x86 询问原生 KVM 或 PVM 路线；ARM 只能启用原生 KVM |
 | Release 无目标架构 | 换用包含该架构的稳定版，或使用用户验证过的同架构 URL + SHA-256 |
+| Release/API 回退或自定义 URL 无可信摘要 | 不就绪且不下载/安装；用 `GITHUB_TOKEN` 重试或提供独立核验的摘要 |
+| 安装解析版本偏离预检 `release.version` | 不准备主机、不下载/安装；重新预检并重新取得版本变更授权 |
 | 下载失败 | 核对 DNS、代理、GitHub/CNB 连通性；CN 模式会回退同一 GitHub 资产 |
 | SHA-256 不匹配 | 不执行安装；重新解析 Release 或让用户确认可信资产 |
 | 已有/部分安装 | 默认停止；备份并转用户授权的官方手工升级/恢复流程 |

@@ -2,7 +2,7 @@
 name: flink-velox-cluster-check
 description: >
   Flink + GlutenFlink（velox 向量化栈）本安装的 Flink 集群只读检查：从 /proc 找归属本安装的守护进程（按 classpath 里
-  flink-dist jar 的真实路径），判它们实际加载的是 native 还是 GFV 构建（classpath 上的 gluten/velox jar）、是否一致（mixed）、
+  flink-dist jar 的真实路径），判它们实际加载的是 native 还是 GlutenFlink 构建（classpath 上的 gluten/velox jar）、是否一致（mixed）、
   lib 是否在集群启动后改过（加载的 jar 与磁盘上的不等、或有 jar 晚于最早进程启动时间）、REST /overview 是否应答及版本 /
   TaskManager 数 / 在跑作业（忽略环境代理）。没在跑、JM 无 TM、TM 无 JM、mixed、lib 改过均判 fail；REST 异常与在跑作业给 warn。
   只扫不改：不起停集群、不提交作业。触发词：集群加载的是哪套 jar、lib 与集群一致吗、集群在不在跑、重启了没、REST 应答。
@@ -21,6 +21,10 @@ metadata:
 
 换了 lib 里的 jar 却没重启、或者只重启了一半——集群还在跑它启动时加载的那一套，而 lib 已经是另一套；从"作业没走 gluten 算子"倒查到这一点很慢。本 skill 只做一件事：**核对本安装的守护进程在不在跑、它们实际加载了哪套构建、lib 改了之后集群是否还在跑旧的、REST 说了什么**。它是 `flink-velox-env` 检查家族里"集群状态"这一具体项：只读、不改动机器、不起停集群、不提交作业。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
+## 术语
+
+这套栈的官方叫法是 GlutenFlink；`gfv` / `GFV` 是代码与契约层沿用的缩写，指同一构建，按既有契约保留原名——JSON 取值与键（`loaded_build: gfv`、`gfv_jars` / `loaded_gfv_jars` / `lib_gfv_jars`）、脚本与用例里的变量名（`GFV_JAR_RE` / `GFV_JARS`）、项目名 GFVBot。
+
 ## 使用场景
 
 ### 适用（应使用本 skill）
@@ -33,10 +37,10 @@ metadata:
 ### 不适用（不要用本 skill）
 
 - 指望它起停集群、取消作业——`fix` 与 `next_step` 只是工单，重启须用户同意，交给切换类 skill（审中 !325）
-- lib 里是哪套构建、GFV 集齐不齐 → `flink-velox-lib-state-check`
+- lib 里是哪套构建、GlutenFlink 集齐不齐 → `flink-velox-lib-state-check`
 - 守护进程用哪个 Java、重启会选到哪个 → `flink-velox-jdk-check`
 - Flink 安装完整性与版本线 → `flink-velox-flink-dist-check`
-- "这台机器能不能编译 GFV 栈"的总裁决 → 统筹 `flink-velox-env-check`
+- "这台机器能不能编译 GlutenFlink 栈"的总裁决 → 统筹 `flink-velox-env-check`
 
 ## 检查项
 
@@ -45,7 +49,7 @@ metadata:
 | `home` | Flink 安装按 FLINK_HOME → PATH 上的 flink → /opt/flink → /usr/local/flink 定位；找不到为 fail（守护进程无从归属） |
 | `processes` | 扫 `/proc/*/cmdline`：主类是 JobManager / TaskManager 入口且 classpath 里 `flink-dist*.jar` 位于**本安装** `lib/`（真实路径相等）的进程——**只看得到本机的进程**；JM + TM 都有为 ok；都没在跑为 fail；只有 TM（残留进程）为 fail；只有 JM 时看 REST：REST（版本与本安装一致）列出了 TaskManager → 它们注册自别处（别的机器 / 别的容器），判 **warn** 并写明"本机没有、它们的加载情况这里查不了"（`remote_taskmanagers` 记个数）；REST 也列不出 → fail（作业起不来）；其它安装的守护进程只计数（`other-clusters` info） |
 | `loaded-build` | 每个本安装守护进程 classpath 上的 gluten/velox jar：全有为 gfv、全无为 native、不一致为 mixed（fail：整集群一起重启） |
-| `lib-vs-cluster` | **逐个守护进程**比对：某个进程 classpath 上的 GFV jar 比 lib 少（`missing_vs_lib`）或多（`extra_vs_lib`，lib 里已经没有了），或 lib 里有 jar 的 mtime 晚于最早的进程启动时间（`jars_replaced_after_start`）→ fail：集群还在跑旧的，detail 逐个写明"哪个角色哪个 pid 加载了什么、缺什么"；否则 ok。不取各进程的并集来比——JobManager 有 planner、TaskManager 没有，并集仍可能等于磁盘 |
+| `lib-vs-cluster` | **逐个守护进程**比对：某个进程 classpath 上的 GlutenFlink jar 比 lib 少（`missing_vs_lib`）或多（`extra_vs_lib`，lib 里已经没有了），或 lib 里有 jar 的 mtime 晚于最早的进程启动时间（`jars_replaced_after_start`）→ fail：集群还在跑旧的，detail 逐个写明"哪个角色哪个 pid 加载了什么、缺什么"；否则 ok。不取各进程的并集来比——JobManager 有 planner、TaskManager 没有，并集仍可能等于磁盘 |
 | `rest` | `GET <rest_url>/overview`（忽略环境代理，3 秒超时；地址取自 **Flink 实际读的那份配置**——两份并存时 Flink 1.19 只读 `flink-conf.yaml`，本检查同样只读那一份，`conf_file` 记录是哪份）：应答则记版本 / TaskManager 数 / 在跑作业数；在跑而不应答 warn；版本 ≠ 本安装 flink-dist 版本 warn；REST 列出的 TM 少于本机在跑的 TM warn；REST 列出的多于本机在跑的 warn（多出来的注册自别处，加载情况这里查不了）；不在跑却应答 warn（是别的安装 / 容器 / 远端地址） |
 | `jobs` | REST 报有作业在跑 → warn：重启会打断；此时凡是建议重启的 `fix` 都附一句"先等作业结束"，`next:` 也改成等作业而不是重启 |
 | `other-clusters` | 本机其它安装的 Flink 守护进程数 → info（WebUI / REST 端口可能是它们的） |
@@ -67,7 +71,7 @@ python3 <skill_dir>/scripts/cluster_check.py [--json] [--out FILE [--overwrite]]
 ### 步骤 2：判读
 
 1. 先看 `next:`——按"起集群 → 补齐 / 清理进程 → 整集群重启消 mixed → 重启加载现有 lib"的顺序给出唯一下一步；每条都注明须用户同意；**REST 报有作业在跑时，所有重启类建议都换成"先等作业结束（或经用户同意停掉）再复查"**。
-2. `READY` 的含义是"集群加载的 == lib 里的"：它不说明那是 native 还是 GFV——读 `loaded_build`。
+2. `READY` 的含义是"集群加载的 == lib 里的"：它不说明那是 native 还是 GlutenFlink——读 `loaded_build`。
 3. `jobs` 的 warn 必须转述：有作业在跑时不得重启。`rest` 的 warn 多半是端口 / 地址指向了别的安装或还在启动中；`processes` 的 warn（本机只有 JobManager、TaskManager 注册自别处）说明这是分机部署，本检查只覆盖本机进程。
 4. 本 skill 不起停集群、不取消作业：把 `next:` 交给切换类 skill（审中 !325）并**征得用户同意**，做完重扫直到 READY。
 
@@ -114,7 +118,7 @@ python3 <skill_dir>/scripts/cluster_check.py [--json] [--out FILE [--overwrite]]
 
 ## 边界与相邻 skill
 
-- `flink-velox-lib-state-check`：lib 里是哪套构建、GFV 集齐不齐——本 skill 用同一判据看 classpath 上加载的那套
+- `flink-velox-lib-state-check`：lib 里是哪套构建、GlutenFlink 集齐不齐——本 skill 用同一判据看 classpath 上加载的那套
 - `flink-velox-jdk-check`：守护进程用哪个 Java、重启会选到哪个（它也读 /proc 做同样的归属）
 - `flink-velox-flink-dist-check`：Flink 安装完整性与版本线（REST 报的版本与它对照）
 - 统筹 `flink-velox-env-check`：按 goal 聚合各具体项检查给总裁决；本 skill 的输出是它的输入之一

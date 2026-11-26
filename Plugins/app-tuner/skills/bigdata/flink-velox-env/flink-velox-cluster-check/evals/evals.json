@@ -8,7 +8,7 @@
     },
     {
       "id": "which-build-loaded",
-      "query": "集群现在加载的是 native 还是 GFV 构建，TaskManager 都在吗",
+      "query": "集群现在加载的是 native 还是 GlutenFlink 构建，TaskManager 都在吗",
       "expected": "触发本 skill：cluster.loaded_build（native / gfv / mixed）、jobmanagers / taskmanagers 的 pid 与加载的 jar 作答；JM 无 TM 或 mixed 判 fail"
     },
     {
@@ -18,7 +18,7 @@
     },
     {
       "id": "not-lib-state",
-      "query": "lib 里是 native 构建还是 GFV 构建，部署齐不齐",
+      "query": "lib 里是 native 构建还是 GlutenFlink 构建，部署齐不齐",
       "expected": "不触发：lib 内容分类属 flink-velox-lib-state-check（本 skill 只看进程加载的那套）"
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "id": "not-overall",
-      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "query": "这台机器现在能不能编译并运行 GlutenFlink 栈",
       "expected": "不触发：总裁决属统筹 flink-velox-env-check"
     },
     {

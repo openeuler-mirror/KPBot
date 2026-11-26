@@ -100,6 +100,22 @@ check_agentenv_package() {
         '! bash "$skills/kptools-agentenv-tuning/scripts/collect_environment.sh" --output "$TMPROOT" >/dev/null 2>&1'
 }
 
+check_pdenv_package() {
+    local skills="$1"
+    local source="$ROOT/Plugins/app-tuner/skills/ascend_kunpeng/kptools-ascend-pd-env"
+    local parent="$skills/kptools-ascend-pd-env"
+    local source_skill name
+    check "installs P/D environment entry at skill root" '[ -f "$parent/SKILL.md" ]'
+    check "installs P/D summary subskill" \
+        '[ -r "$parent/subskills/summarize-environment-findings/SKILL.md" ]'
+    for source_skill in "$source"/subskills/*/SKILL.md; do
+        [ -f "$source_skill" ] || continue
+        name="$(basename "$(dirname "$source_skill")")"
+        check "keeps P/D $name inside the parent skill" \
+            'cmp -s "$source_skill" "$parent/subskills/$name/SKILL.md" && [ ! -e "$skills/$name" ]'
+    done
+}
+
 check_cubesandbox_split() {
     local skills="$1"
     local skill
@@ -143,11 +159,48 @@ check_sandbox_profile_install() {
     done
 }
 
+check_cubesandbox_deployment_package() {
+    local skills="$1"
+    local skill
+    for skill in cubesandbox-deployment cubesandbox-deployment-preflight cubesandbox-single-node-install cubesandbox-deployment-verify; do
+        check "installs $skill" '[ -f "$skills/$skill/SKILL.md" ]'
+        check "$skill has an executable entry" \
+            '[ -f "$skills/$skill/scripts/run.sh" ] || [ "$skill" = cubesandbox-deployment ]'
+    done
+    check "CubeSandbox shared deploy and internal helpers resolve" \
+        '[ -f "$skills/cubesandbox-deployment/scripts/deploy.sh" ] && [ -f "$skills/cubesandbox-deployment/scripts/discover_release.py" ] && [ -f "$skills/cubesandbox-deployment/scripts/parse_env.py" ] && [ -f "$skills/cubesandbox-deployment/scripts/report_safety.py" ]'
+    check "CubeSandbox shared verifier resolves" \
+        '[ -f "$skills/cubesandbox-deployment/scripts/verify.sh" ]'
+    check "CubeSandbox shared references resolve from preflight" \
+        '[ -r "$skills/cubesandbox-deployment-preflight/../cubesandbox-deployment/references/deployment.md" ]'
+    check "CubeSandbox Workflow routes all focused skills" \
+        'grep -Fq cubesandbox-deployment-preflight "$skills/cubesandbox-deployment/SKILL.md" && grep -Fq cubesandbox-single-node-install "$skills/cubesandbox-deployment/SKILL.md" && grep -Fq cubesandbox-deployment-verify "$skills/cubesandbox-deployment/SKILL.md"'
+    check "preflight installed entry is executable without host checks" \
+        'bash "$skills/cubesandbox-deployment-preflight/scripts/run.sh" --help >/dev/null'
+    check "install installed entry is executable without authorization" \
+        'bash "$skills/cubesandbox-single-node-install/scripts/run.sh" --help >/dev/null'
+    check "verify installed entry is executable without host checks" \
+        'bash "$skills/cubesandbox-deployment-verify/scripts/run.sh" --help >/dev/null'
+    check "focused skills do not duplicate Release/env implementations" \
+        '! find "$skills/cubesandbox-deployment-preflight" "$skills/cubesandbox-single-node-install" "$skills/cubesandbox-deployment-verify" -name discover_release.py -o -name parse_env.py | grep -q .'
+    check "CubeSandbox shared tier-A fixture helper survives install" \
+        '[ -f "$skills/cubesandbox-deployment/cases/lib/deployment_fixture.py" ]'
+    for skill in cubesandbox-deployment-preflight:cases/preflight-contract cubesandbox-single-node-install:cases/install-contract cubesandbox-deployment-verify:cases/verify-contract; do
+        local name="${skill%%:*}" case_path="${skill#*:}"
+        check "$name tier-A case survives install" \
+            '[ -f "$skills/$name/$case_path/run.sh" ] && [ -f "$skills/$name/$case_path/case.yaml" ]'
+        check "$name installed tier-A contract passes" \
+            'bash "$skills/$name/$case_path/run.sh" >"$TMPROOT/$name-case.log" 2>&1'
+    done
+}
+
 echo "== claude mode =="
 run_install claude
 CLAUDE_SKILLS="$TMPROOT/claude/.claude/skills"
 check "installs code-optimizer skills"        '[ -d "$CLAUDE_SKILLS/kpbot-code-optimizer" ]'
 check "installs app-tuner skills"             '[ -d "$CLAUDE_SKILLS/kpbot-app-tuner" ]'
+check "installs dplb optimization skill"     '[ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/SKILL.md" ]'
+check "dplb optimization templates survive install" '[ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/references/templates/user_config.json" ] && [ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/references/templates/register.sh" ] && [ -f "$CLAUDE_SKILLS/kptools-dplb-optimization/references/templates/start_motor.sh" ]'
 check "installs prompt capture runtime"       '[ -f "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capture_runtime.py" ]'
 check "prompt capture controller loads"       '"$PY3" "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/capturectl.py" --help >/dev/null'
 check "prompt capture report assets load"     '"$PY3" "$CLAUDE_SKILLS/kptools-prompt-capture/scripts/session_view.py" --help >/dev/null'
@@ -156,11 +209,14 @@ check "keeps claude-only drive skill"         '[ -d "$CLAUDE_SKILLS/drive-claude
 check "keeps claude-only batch skill"         '[ -d "$CLAUDE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "keeps claude-only media skill"         '[ -d "$CLAUDE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$CLAUDE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$CLAUDE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "includes Faiss workflow initializer"   '[ -f "$CLAUDE_SKILLS/faiss-optimize/workflows/scripts/init_run.py" ]'
 check "registers Faiss reviewer agent"        '[ -f "$TMPROOT/claude/.claude/agents/faiss-reviewer.md" ]'
 check_agentenv_package "$CLAUDE_SKILLS"
+check_pdenv_package "$CLAUDE_SKILLS"
 check_cubesandbox_split "$CLAUDE_SKILLS"
 check_sandbox_profile_install "$CLAUDE_SKILLS"
+check_cubesandbox_deployment_package "$CLAUDE_SKILLS"
 check_vector_install "$TMPROOT/claude/.claude"
 
 echo "== opencode mode =="
@@ -168,6 +224,8 @@ run_install opencode
 OPENCODE_SKILLS="$TMPROOT/opencode/.opencode/skills"
 check "installs code-optimizer skills"        '[ -d "$OPENCODE_SKILLS/kpbot-code-optimizer" ]'
 check "installs app-tuner skills"             '[ -d "$OPENCODE_SKILLS/kpbot-app-tuner" ]'
+check "installs dplb optimization skill"     '[ -f "$OPENCODE_SKILLS/kptools-dplb-optimization/SKILL.md" ]'
+check "dplb optimization templates survive install" '[ -f "$OPENCODE_SKILLS/kptools-dplb-optimization/references/templates/user_config.json" ]'
 check "installs prompt capture entry"         '[ -f "$OPENCODE_SKILLS/kptools-prompt-capture/SKILL.md" ]'
 check "prompt capture assets survive install" '[ -f "$OPENCODE_SKILLS/kptools-prompt-capture/assets/session.json" ]'
 check "prompt capture analysis loads"         '"$PY3" "$OPENCODE_SKILLS/kptools-prompt-capture/scripts/analyze.py" --help >/dev/null'
@@ -177,6 +235,7 @@ check "excludes claude-only drive skill"      '[ ! -e "$OPENCODE_SKILLS/drive-cl
 check "excludes claude-only batch skill"      '[ ! -e "$OPENCODE_SKILLS/batch-drive-optimize-pipeline" ]'
 check "excludes claude-only media skill"      '[ ! -e "$OPENCODE_SKILLS/multimedia-code-optimizer" ]'
 check "installs Faiss domain entry"           '[ -f "$OPENCODE_SKILLS/faiss-optimize/SKILL.md" ]'
+check "installs libco context-switch"         '[ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/SKILL.md" ] && [ -f "$OPENCODE_SKILLS/libco-aarch64-context-switch/references/libco-baseline-and-method-map.md" ]'
 check "preserves Faiss benchmark contract"    '[ -f "$OPENCODE_SKILLS/faiss-ivfpq-optimization/references/benchmark-contract.json" ]'
 check "opencode overlay keeps base references" '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/references/experiment-contract.md" ]'
 check "opencode overlay keeps base scripts"    '[ -f "$OPENCODE_SKILLS/kpbot-code-optimizer/scripts/experiment_feedback.py" ]'
@@ -187,8 +246,10 @@ for role in analyzer profiler candidate-planner implementer reviewer; do
     check "registers Faiss $role agent" '[ -f "$TMPROOT/opencode/.opencode/agents/faiss-'"$role"'.md" ]'
 done
 check_agentenv_package "$OPENCODE_SKILLS"
+check_pdenv_package "$OPENCODE_SKILLS"
 check_cubesandbox_split "$OPENCODE_SKILLS"
 check_sandbox_profile_install "$OPENCODE_SKILLS"
+check_cubesandbox_deployment_package "$OPENCODE_SKILLS"
 check_vector_install "$TMPROOT/opencode/.opencode"
 
 echo "== preview count vs installed count =="

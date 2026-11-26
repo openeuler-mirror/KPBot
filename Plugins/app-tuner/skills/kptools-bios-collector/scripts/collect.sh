@@ -4,6 +4,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Redfish BIOS 属性快照的受限暂存目录；默认在 $TMPDIR（通常 /tmp），
+# 可用 TMPDIR=<本轮输出目录> 指到受控目录。EXIT/INT/TERM 都会清理。
+WORK_TMP=$(mktemp -d "${TMPDIR:-/tmp}/bios_collect.XXXXXX")
+cleanup() { rm -rf "$WORK_TMP"; }
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
 MODES=()
 BMC_HOST="${REDFISH_HOST:-}"
 BMC_USER="${REDFISH_USER:-}"
@@ -266,7 +273,7 @@ mode_prefetcher() {
         return 0
     fi
     local tmpd pf_src pf_out
-    tmpd=$(mktemp -d /tmp/bios_pf.XXXXXX)
+    tmpd=$(mktemp -d "$WORK_TMP/pf.XXXXXX")
     if ! redfish_fetch_bios "$tmpd/redfish" >/dev/null; then
         echo "hardware_prefetcher=unavailable"
         echo "source=unavailable"
@@ -307,7 +314,7 @@ rc_overall=0
 
 run_redfish() {
     section "Redfish BIOS"
-    TMPD=$(mktemp -d /tmp/bios_redfish.XXXXXX)
+    TMPD=$(mktemp -d "$WORK_TMP/redfish.XXXXXX")
     if member=$(redfish_fetch_bios "$TMPD/redfish"); then
         echo "--- $member/Bios ---"
         cat "$TMPD/redfish.bios.json"
