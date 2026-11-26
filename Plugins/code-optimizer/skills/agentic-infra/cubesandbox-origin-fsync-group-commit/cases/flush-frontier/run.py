@@ -20,18 +20,23 @@ class Directory:
         self.producers.add(producer)
         return producer
 
-    def publish_rename(self, producer):
+    def fail_before_rename(self, producer):
         self.producers.remove(producer)
+
+    def publish_rename(self, producer):
+        if producer not in self.producers:
+            raise RuntimeError("rename has no admitted producer")
         self.issued += 1
         self.outcome[self.issued] = "waiting"
+        self.producers.remove(producer)
         return self.issued
 
     def submit(self):
         return self.publish_rename(self.admit())
 
-    def detach(self, ticket):
+    def detach(self, ticket, reason):
         if self.outcome[ticket] == "waiting":
-            self.outcome[ticket] = "cancelled"
+            self.outcome[ticket] = reason
 
     def begin_sync(self):
         if self.flushing is not None or self.issued == self.durable:
@@ -59,6 +64,27 @@ class Directory:
 def require(condition, message):
     if not condition:
         raise AssertionError(message)
+
+
+def check_rename_failures():
+    unchanged = Directory()
+    producer = unchanged.admit()
+    unchanged.accepting = False
+    require(not unchanged.drained(), "shutdown lost the admitted producer")
+    unchanged.fail_before_rename(producer)
+    require(unchanged.issued == 0 and not unchanged.begin_sync(), "failed rename created flush work")
+    require(unchanged.drained(), "failed rename blocked shutdown")
+
+    changed = Directory()
+    producer = changed.admit()
+    changed.accepting = False
+    ticket = changed.publish_rename(producer)
+    changed.detach(ticket, "resize-error")
+    require(not changed.drained() and changed.begin_sync(), "resize error dropped a published rename")
+    changed.finish_sync(True)
+    require(changed.drained() and changed.durable == ticket, "shutdown missed the published rename")
+    require(changed.outcome[ticket] == "resize-error", "flush success replaced the create error")
+    return {"failed_rename_tickets": unchanged.issued, "post_rename_failure_flushes": changed.flushes}
 
 
 def exercise():
@@ -96,7 +122,7 @@ def exercise():
     first.finish_sync(True)
     require(first.drained() and first.outcome[final] == "io-error", "drain and caller outcome")
 
-    second.detach(other)
+    second.detach(other, "cancelled")
     require(second.begin_sync(), "cancelled caller dropped a published rename")
     second.finish_sync(True)
     require(second.durable == other and second.outcome[other] == "cancelled", "detach outcome")
@@ -106,6 +132,7 @@ def exercise():
 
 if __name__ == "__main__":
     report = exercise()
+    report.update(check_rename_failures())
     path = Path(__file__).resolve().parent / "results" / "result.json"
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

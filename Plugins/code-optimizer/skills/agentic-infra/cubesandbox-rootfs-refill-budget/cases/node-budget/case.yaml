@@ -25,3 +25,7 @@ assert:
     file: cases/node-budget/results/result.json
     field: remaining_charges
     expect: 0
+  - type: json_field
+    file: cases/node-budget/results/result.json
+    field: unresolved_identity_charges
+    expect: 1

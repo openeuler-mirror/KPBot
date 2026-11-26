@@ -25,3 +25,11 @@ assert:
     file: cases/flush-frontier/results/result.json
     field: other_origin_sync_attempts
     expect: 1
+  - type: json_field
+    file: cases/flush-frontier/results/result.json
+    field: failed_rename_tickets
+    expect: 0
+  - type: json_field
+    file: cases/flush-frontier/results/result.json
+    field: post_rename_failure_flushes
+    expect: 1

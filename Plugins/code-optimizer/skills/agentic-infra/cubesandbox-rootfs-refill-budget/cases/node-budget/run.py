@@ -9,6 +9,35 @@ def require(condition, message):
         raise AssertionError(message)
 
 
+def member_name(pool, slot):
+    template, generation = pool
+    return (template, generation, slot)
+
+
+class Catalog:
+    """Atomic backend operations; object IDs remain unique across name reuse."""
+    def __init__(self):
+        self.entries = {}
+        self.last_id = 0
+
+    def create(self, name, pool):
+        if name in self.entries:
+            raise FileExistsError(name)
+        self.last_id += 1
+        self.entries[name] = (pool, self.last_id)
+        return self.last_id
+
+    def owns(self, name, pool, object_id):
+        return object_id is not None and self.entries.get(name) == (pool, object_id)
+
+    def delete_owned(self, name, pool, object_id):
+        # One indivisible backend step in this interleaving model.
+        if not self.owns(name, pool, object_id):
+            return False
+        del self.entries[name]
+        return True
+
+
 class Budget:
     def __init__(self, slots, permits):
         self.slots = slots
@@ -78,6 +107,73 @@ class Budget:
         del self.members[member]
 
 
+def recover_existing(ledger, job, catalog, name, recorded_id, *, prior_write_possible):
+    pool, _ = ledger.members[job]
+    try:
+        catalog.create(name, pool)
+    except FileExistsError:
+        verified = catalog.owns(name, pool, recorded_id)
+        # AlreadyExists made no new object; an earlier interrupted attempt may have.
+        ledger.complete(job, ok=verified, object_exists=verified or prior_write_possible)
+        return verified
+    raise AssertionError("recovery fixture expected an existing object")
+
+
+def clean_recorded(ledger, job, catalog, name, recorded_id):
+    pool, state = ledger.members[job]
+    require(state == "cleanup", "invalid cleanup owner")
+    if catalog.delete_owned(name, pool, recorded_id):
+        ledger.removed(job)
+        return True
+    return False
+
+
+def exercise_identity():
+    ledger = Budget(slots=3, permits=2)
+    catalog = Catalog()
+    old, current = ("cold", "epoch-A"), ("cold", "epoch-B")
+    old_name, new_name = member_name(old, 0), member_name(current, 0)
+    ledger.request(old)
+    late_job = ledger.dispatch()
+    ledger.retire(old)
+    ledger.request(current)
+    current_job = ledger.dispatch()
+    # Simulate restart recovery with an existing object and its recorded ID.
+    current_id = catalog.create(new_name, current)
+    require(recover_existing(ledger, current_job, catalog, new_name, current_id,
+                             prior_write_possible=True),
+            "verified owner could not recover its own member")
+    old_id = catalog.create(old_name, old)
+    ledger.complete(late_job)
+    require(clean_recorded(ledger, late_job, catalog, old_name, old_id),
+            "late completion did not clean up the retired member")
+    require(catalog.owns(new_name, current, current_id) and len(ledger.members) == 1,
+            "retired cleanup touched the current member or its charge")
+
+    # A legacy name collision returns AlreadyExists for a different generation.
+    ledger.retire(current)
+    successor = ("cold", "epoch-C")
+    ledger.request(successor)
+    conflict = ledger.dispatch()
+    require(not recover_existing(ledger, conflict, catalog, new_name, current_id,
+                                 prior_write_possible=False),
+            "AlreadyExists adopted another generation's member")
+    require(ledger.reserve(successor) is None, "conflicting member became available")
+    require(conflict not in ledger.members and catalog.owns(new_name, current, current_id),
+            "a confirmed no-create conflict retained a charge or removed the existing member")
+
+    # Replace the object *after* cleanup is queued. Even the owner tag matches.
+    require(catalog.delete_owned(new_name, current, current_id), "fixture removal failed")
+    replacement_id = catalog.create(new_name, current)
+    require(not clean_recorded(ledger, current_job, catalog, new_name, current_id),
+            "stale cleanup accepted the replacement identity")
+    require(catalog.owns(new_name, current, replacement_id), "replacement was deleted")
+    require(ledger.members == {current_job: (current, "cleanup")},
+            "stale cleanup released its charge before identity reconciliation")
+    # Snapshot before an authoritative inventory determines the old object's fate.
+    return len(ledger.members)
+
+
 def exercise():
     ledger = Budget(slots=3, permits=2)
     hot, cold, replacement = ("hot", 1), ("cold", 1), ("cold", 2)
@@ -134,7 +230,8 @@ def exercise():
     ledger.retire(hot_again)
     return {"success": True, "peak_charged_slots": ledger.peak_slots,
             "peak_active_derives": ledger.peak_io, "foreground_fallbacks": ledger.fallbacks,
-            "remaining_charges": len(ledger.members)}
+            "remaining_charges": len(ledger.members),
+            "unresolved_identity_charges": exercise_identity()}
 
 
 if __name__ == "__main__":

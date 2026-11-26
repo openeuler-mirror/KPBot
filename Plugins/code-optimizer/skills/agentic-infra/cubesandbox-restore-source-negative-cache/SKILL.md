@@ -21,6 +21,8 @@ rg -n 'skipTemplateLocalityReady|getSnapshotRestoreSourceFn|EnsureTemplateLocali
 
 Count restore-source reads and local readiness checks separately, grouped by Master process, resolved ID and request scope. Choose a TTL consistent with the accepted create-after-publication visibility interval. The store can return `ErrSnapshotNotFound` both for a missing row and for a row hidden by its lifecycle state. Establish the required handling of newly created or restored rows in both cases. When such rows must be visible immediately, keep reading from the store unless all relevant writers and Master instances participate in an ordered invalidation protocol. [Snapshot store semantics](https://github.com/TencentCloud/CubeSandbox/blob/31d911e430fdf8a8879bd062b8e78066c1a8e89d/CubeMaster/pkg/templatecenter/snapshot_table.go#L187-L206)
 
+Trace the lookup through any existing cache. If it already retains missing-source results, enforce the visibility budget at that layer. Starting another TTL when an inner cache returns a miss can extend the delay beyond the agreed window.
+
 A cached miss answers only the early locality question. Binding still reads the snapshot state required by its own consistency contract, even when the same ID just hit the locality cache.
 
 ## Implement the decision
