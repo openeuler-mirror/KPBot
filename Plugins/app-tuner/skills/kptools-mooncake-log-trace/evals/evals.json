@@ -40,7 +40,7 @@
       "assertions": [
         "方案对两个容器逐一部署，每容器独立备份/MANIFEST/回读校验",
         "明确不重新编译，直接复用已就绪产物（一次编译多处部署）",
-        "部署前对产物做 MKT 串预检（strings grep MKT_TTF/MKT_FINE）",
+        "部署前对产物做 MKT 串预检（strings 四 tag 分别计数）",
         "不自动重启，提示用户重启后逐容器 smoke（grep MKT 成对输出）",
         "回滚说明按容器独立执行（各自的备份目录/MANIFEST）"
       ]

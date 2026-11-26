@@ -1,6 +1,8 @@
 # .so 部署替换与回滚
 
-> 宿主机上操作，用 `scripts/deploy_mooncake_so.sh`；本文件说明边界与手工兜底。
+> 宿主机上操作，用 `scripts/deploy_mooncake_so.sh`；本文件只保留 SKILL.md 未覆盖的
+> **手工兜底操作**与**已知坑表**——部署纪律、预检门禁（四 tag + --manifest sha256）、
+> stopped 容器分支、自动恢复行为等**以 SKILL.md 为单一事实源**（此处不复述，防止双份漂移）。
 
 ## 1. 目标 .so 的确定
 

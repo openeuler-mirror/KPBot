@@ -49,7 +49,7 @@ metadata:
 
 本 skill 部署前独立复核（不信任口头"已验证"）：
 
-1. `strings <每个.so> | grep -c "MKT_TTF\|MKT_FINE"` ≥2，不满足即拒收（说明产物未打点）；
+1. `strings <打点目标.so> | grep -c` 四 tag 分别计数——`MKT_TTF` / `MKT_FINE` / `MKT_PUT` / `MKT_PFINE` 各 ≥1（任一为 0 = 对应链打点没编进目标库，拒收）；**注意：只检查打点目标 .so**（`--manifest` 清单内登记了全部 .so*，伴生的 transfer engine 依赖库不含 MKT 串属正常，脚本对清单内非打点文件自动跳过四 tag 检查、仅做 sha256 清单比对）；
 2. 本地 sha256 与交付清单逐一比对（脚本 `--manifest` 强制门禁：strings 门禁只能证明"编进了打点"，防不了错版本/篡改/投毒；无清单默认拒绝部署，应急需显式 `--allow-no-manifest` 自担风险）；
 3. 文件名与容器内现役 .so 对得上（对不上先回探测，见第 3 节）。
 
