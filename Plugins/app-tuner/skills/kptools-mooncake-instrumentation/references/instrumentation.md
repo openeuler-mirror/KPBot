@@ -22,7 +22,7 @@ I20261118 10:58:41.144507 719011 real_client.cpp:4783] [MKT_TTF] keys=49 mem=49 
 
 ```
 I20261118 11:02:05.201443 707880 client_service.cpp:3715] [MKT_PFINE] keys=32 build_ms=0.1137 checksum_ms=1.8056 alloc_ms=3.2107 stage_ms=0.0221 submit_ms=2.4474 wait_ms=52.1071 dfs_ms=0 final_ms=0.8841
-I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=390062272 total_ms=61.1137 build_ms=0.2413 put_ms=60.7296 dst_ep=7.150.0.11:15418 kv_addr=0x12f1c0c00000 dst_addr=0x12d8b68a0000 key=GLM-5.2-W4A8@pcp0@dcp0@head_or_tp_rank:0@pp_rank:0@group:0@cache_role:kv@cache_family:c1@013e... size=12189696
+I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=390070272 total_ms=61.1137 build_ms=0.2413 put_ms=60.7296 dst_ep=7.150.0.11:15418 kv_addr=0x12f1c0c00000 dst_addr=0x12d8b68a0000 key=GLM-5.2-W4A8@pcp0@dcp0@head_or_tp_rank:0@pp_rank:0@group:0@cache_role:kv@cache_family:c1@013e... size=12189696
 ```
 
 ## 2. MKT_TTF 字段契约（get 链批次摘要，real_client.cpp）
@@ -107,9 +107,9 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 5. 有效带宽 ≈ `bytes / total_ms`（样例 ≈8.67 GB/s，可与网卡规格对账）
 
 **put 链：**
-1. 等尺寸 block 时 `keys × size = bytes`
+1. 等尺寸 block 时 `keys × size = bytes`（样例 32×12,189,696=390,070,272 ✓）
 2. `put_ms ≈ PFINE 各相之和 + 调度开销`，差值容差 `≤ max(1.5ms, 2% put_ms)`——PFINE 是 PUT 中 put_ms 的子阶段分解
-3. `total_ms ≈ build_ms + put_ms`（real_client 层仅这两段）
+3. `total_ms ≈ build_ms + put_ms`（real_client 层仅这两段），差值容差同口径 `≤ max(1.5ms, 2% total_ms)`（样例 61.1137 vs 60.9709，差 0.143ms ≤ 1.5ms ✓）
 4. 同批次 PUT/PFINE 相邻、同线程 id、同 keys 值
 5. 无 DFS 副本时 `dfs_ms=0`；`alloc_ms` 含 master RPC，是 put 与 get 的差异相（get 的 master 查询在 query_ms）
 6. 有效带宽 ≈ `bytes / total_ms`
