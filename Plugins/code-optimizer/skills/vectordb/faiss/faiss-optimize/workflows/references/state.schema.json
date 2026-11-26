@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kpbot-faiss-opt-run.v1",
+  "title": "KPBot Faiss 优化运行状态",
+  "description": "Faiss CP0–CP7运行状态。由primary创建与更新，位于独立run_dir；角色通过handoff回传结果。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "repo",
+    "source",
+    "contract",
+    "stages",
+    "selected_candidate",
+    "result",
+    "decisions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kpbot-faiss-opt-run.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+      "description": "EXPERIMENT_ID 规则：小写字母数字开头，可用 . _ -，长度 3-128"
+    },
+    "repo": {
+      "type": "string",
+      "description": "Faiss 源码仓绝对路径（CP0 输入）"
+    },
+    "run_dir": {
+      "type": "string",
+      "description": "本次任务独立产物目录，不位于技能或插件目录内。"
+    },
+    "interaction_mode": {
+      "enum": [
+        "collaboration",
+        "auto"
+      ],
+      "default": "collaboration",
+      "description": "collaboration：CP3-B selected 确认与 CP7 提交授权征求用户；auto：按排序规则自主选定并记录决策"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "baseline_commit"
+      ],
+      "properties": {
+        "baseline_commit": {
+          "type": "string",
+          "description": "参考源码的 Git commit（SHA-1 或 SHA-256）；发布归档、空仓库或 Git 不可用时明确记 unknown。CP1 复核版本和归档/源码摘要，CP2 仍须记录可复现的 baseline_id 与 manifest，unknown 不能代替基线身份。",
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{7,64}$"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "faiss_version": {
+          "type": "string",
+          "description": "实际检出的Faiss版本字符串。"
+        },
+        "baseline_id": {
+          "type": "string",
+          "description": "本轮基线身份（上游版本 + 补丁/构建标识，CP0/CP2 识别；记录于 run_dir manifest）"
+        }
+      }
+    },
+    "history_policy": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "none",
+            "external"
+          ],
+          "description": "none=未提供外部实验资料；external=有明确来源的外部资料。"
+        },
+        "source": {
+          "type": "string",
+          "description": "external 模式下资料路径或说明"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "required": [
+        "algorithm"
+      ],
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "rabitq",
+            "turboquant",
+            "ivfpq",
+            "ivfpqfs",
+            "hnsw"
+          ]
+        },
+        "active_algorithm_skill": {
+          "type": "string",
+          "description": "如 faiss-rabitq-optimization；一次运行恰一个"
+        },
+        "benchmark_contract": {
+          "type": "string",
+          "description": "该算法 benchmark-contract.json 的路径"
+        },
+        "frozen_fields_check": {
+          "enum": [
+            "pending",
+            "passed",
+            "drifted"
+          ],
+          "description": "CP2 建基线与 CP6 对照前的复核结果；drifted 时禁止继续"
+        }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "description": "恰含 0..7 八个键；状态机 pending→running→completed/blocked/failed；无 skipped（CP4_SKIPPED_NOT_REQUESTED 仅表示未请求独立 diff 审查，记于 decisions；候选实现照常完成）",
+      "required": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "propertyNames": {
+        "enum": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ]
+      },
+      "additionalProperties": false,
+      "properties": {
+        "0": {
+          "$ref": "#/$defs/stage"
+        },
+        "1": {
+          "$ref": "#/$defs/stage"
+        },
+        "2": {
+          "$ref": "#/$defs/stage"
+        },
+        "3": {
+          "$ref": "#/$defs/stage"
+        },
+        "4": {
+          "$ref": "#/$defs/stage"
+        },
+        "5": {
+          "$ref": "#/$defs/stage"
+        },
+        "6": {
+          "$ref": "#/$defs/stage"
+        },
+        "7": {
+          "$ref": "#/$defs/stage"
+        }
+      }
+    },
+    "selected_candidate": {
+      "type": "object",
+      "description": "CP3-B 产生；stage 4 完成前必须非空",
+      "properties": {
+        "candidate_id": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "selection_mode": {
+          "enum": [
+            "user-confirmed",
+            "auto-ranked"
+          ]
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "candidate_commit"
+      ],
+      "properties": {
+        "verdict": {
+          "enum": [
+            "ACCEPT",
+            "ACCEPT_WITH_NOTES",
+            "REJECT",
+            "INCONCLUSIVE"
+          ],
+          "description": "仅终态填写（CP7 completed 且无未决 REWORK）；REWORK 不是 verdict，记录在 rework_events"
+        },
+        "candidate_commit": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "description": "授权范围内的提交状态与身份。",
+          "properties": {
+            "status": {
+              "enum": [
+                "pending",
+                "committed",
+                "not_authorized",
+                "not_applicable"
+              ],
+              "description": "committed=协调者已执行本地提交；not_authorized=ACCEPT 但用户未授权提交；not_applicable=REJECT/INCONCLUSIVE"
+            },
+            "sha": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+              "description": "status=committed 时必填：完整 SHA-1（40 位）或 SHA-256（64 位）提交身份"
+            },
+            "committed_by": {
+              "const": "coordinator"
+            },
+            "pending_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "not_authorized 时列出待提交文件"
+            }
+          }
+        },
+        "rework_events": {
+          "type": "array",
+          "description": "每次 REWORK 追加一条；对应阶段回到 pending，CP7 不 completed",
+          "items": {
+            "type": "object",
+            "required": [
+              "return_to",
+              "reason",
+              "at"
+            ],
+            "properties": {
+              "return_to": {
+                "enum": [
+                  "CP3",
+                  "CP4",
+                  "CP5",
+                  "CP6"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "required_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "at": {
+                "type": "string",
+                "description": "ISO8601 时间戳"
+              }
+            }
+          }
+        },
+        "report": {
+          "type": "string",
+          "description": "EXPERIMENT-REPORT.md 相对路径"
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "关键决策记录（如 CP4_SKIPPED_NOT_REQUESTED=未请求独立 diff 审查、auto 模式选定理由、patch-recorded=本轮补丁清单记录）",
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "decision"
+        ],
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "blocked",
+            "failed"
+          ]
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "completed_at": {
+          "type": "string"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^/].*$"
+          },
+          "description": "相对 run_dir 的路径，禁止绝对路径与 ../ 越界（.. 由 validate_state.py 程序检查）"
+        },
+        "blocker_reason": {
+          "type": "string",
+          "description": "status=blocked 时必填（由 validate_state.py 程序检查）"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

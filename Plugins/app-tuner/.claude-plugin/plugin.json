@@ -1,18 +1,45 @@
 {
   "name": "app-tuner",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "应用级调优 — 针对具体应用场景的深度性能调优",
   "author": {
     "name": "Kunpeng Acceleration Team"
   },
-  "homepage": "https://atomgit.com/openEuler/KPBot/tree/main/Plugins/app-tuner",
-  "license": "Apache-2.0",
+  "homepage": "https://atomgit.com/openeuler/KPBot/tree/master/Plugins/app-tuner",
+  "license": "MulanPSL-2.0",
   "keywords": [
     "performance",
     "tuning",
     "application",
     "arm",
     "kunpeng",
-    "aarch64"
+    "aarch64",
+    "dpdk",
+    "network",
+    "pps",
+    "forwarding",
+    "vllm",
+    "load-balancing",
+    "dp",
+    "llm-serving",
+    "mindie",
+    "motor",
+    "coordinator",
+    "lb",
+    "deployment",
+    "profiling",
+    "report",
+    "precision",
+    "accuracy",
+    "regression",
+    "quantization",
+    "topdown",
+    "pmu",
+    "collection-quality"
+  ],
+  "platforms": [
+    "claude",
+    "opencode",
+    "codex"
   ]
 }

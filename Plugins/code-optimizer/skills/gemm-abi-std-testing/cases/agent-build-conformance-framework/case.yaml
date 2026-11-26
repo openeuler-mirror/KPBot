@@ -1,0 +1,68 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 为 MiniGEMM 搭建标准符合性测试框架
+#
+# 拉取与测试方法（人类可读）：
+#   # 构建（本机容器无法解析 openeuler 源，需 --network host）
+#   docker build --network host -f skills/gemm-abi-std-testing/cases/agent-build-conformance-framework/Dockerfile \
+#       -t kpbot/code-optimizer-agent-conformance:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。with-skill 在容器内接入 gemm-abi-std-testing，prompt 显式要求调用；
+# without-skill 不接入任何 skill，prompt 只描述任务不提 skill，其余（模型/任务/判定）
+# 完全一致，用于量化 skill 的净增益。
+#
+# 与 apply-vectorization 的 agent 用例的差异：本 skill 的产出是「符合性测试框架」而非
+# 优化后的 kernel，因此核心指标不是 speedup，而是框架是否成立（conformance_ready）。
+# 参照仓库既有非 speedup 用例：sra-dag-tuning/cases/recall-topk（用 run_eval.sh + verify.sh）。
+
+name: agent-build-conformance-framework
+skill: gemm-abi-std-testing
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/code-optimizer-agent-conformance:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection          # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载
+
+ab:
+  conditions: [with, without]      # 同一任务两条件对照
+  skill_enabled:
+    with: true                     # 运行时把 /staging/skill 接入 .opencode/skills/
+    without: false                 # 不接入任何 skill，仅靠模型自身
+  metric: conformance_ready        # 核心对比指标：框架是否成立（0/1）
+  uplift: conformance_ready_with - conformance_ready_without
+
+build:
+  context: ../../../..                         # 指向 Plugins/code-optimizer/
+  dockerfile: skills/gemm-abi-std-testing/cases/agent-build-conformance-framework/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - x86_64 / aarch64 主机（纯 C 标量，无 ISA 依赖）
+  - opencode 二进制（只读挂载）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载）
+  - 容器可访问模型 API（默认 bridge 网络即可）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: conformance_ready
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: framework_present
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: clause_bound
+    expect: 1

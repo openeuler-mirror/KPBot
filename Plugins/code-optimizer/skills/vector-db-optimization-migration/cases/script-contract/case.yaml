@@ -1,0 +1,49 @@
+# 用例:tier A —— vector-db-optimization-migration 的门禁脚本契约
+#
+# 覆盖(来自 MR 评审两轮反例):
+#   compare_topk  G0/G3 等价性门禁:顺序交换、ULP 级距离漂移、候选侧
+#                 多余/缺失查询、条数不一致、距离位模式差异(-0.0 vs
+#                 +0.0)、rank 重复默认必须退出 1;省略 --k 时全量比对
+#                 (候选多出的行不被静默截断),显式 --k 才截断;
+#                 --allow-order-change 与显式 --atol/--rtol 是仅有的
+#                 放宽;输出字段使用 overlap@k 命名,不冒充对 ground
+#                 truth 的 recall。
+#   check_flags   compile_commands.json 解析:-U 取消先前的 -D(含空格
+#                 形态 "-U NAME")、-U 后 -D 以后者为准、空格分隔
+#                 "-march value" 折叠识别、负向 flag(-fno-lto)记为
+#                 显式关闭、缺失 uniform flag 的 TU 记为 <absent> 并
+#                 默认判非一致失败、--allow-inconsistent 降级为仅报告。
+#   scan_delta    版本差异审计:CMake option() 缺省默认按隐式 OFF 处理
+#                 (不再误报"新增"),组合条件 #if defined(A) && defined(B)
+#                 中的每个宏都会被捕获。
+#   skill         SKILL.md frontmatter 完整、引用的 references/scripts/
+#                 templates 资产存在、known-cases 可追溯标注、G5 噪声
+#                 标定修订在位且门禁文档与交付清单口径一致(防止两处
+#                 漂移)。
+#
+# 运行(在技能根目录下):
+#   bash cases/script-contract/run.sh
+#   # 产物 results/result.json;退出码 0 = 全部通过
+
+name: script-contract
+skill: vector-db-optimization-migration
+tier: A
+
+entrypoint: ["bash", "cases/script-contract/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 50

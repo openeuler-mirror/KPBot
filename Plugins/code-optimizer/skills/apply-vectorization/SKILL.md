@@ -111,6 +111,7 @@ python3 scripts/query_arm_intrinsics.py validate-snippet --file ./candidate.c --
 
 可选字段：
 
+- `target_platform`: 目标平台型号，`"0xd01" | "0xd03" | "0xd06"`。指定后，ISA 选型以该平台微架构能力矩阵为准（`kunpeng_microarch/scripts/isa_capabilities.json`），本机探测仅用于判断能否本地编译/验证
 - `isa_extensions`: ISA 扩展特性数组，如 `["dotprod", "i8mm", "sve2"]`
 - `codegen_style`: 代码生成形态，`"auto"` (默认)、`"intrinsics"`、`"inline_asm"` 或 `"assembly"`
 - `optimization_level`: 旧兼容字段，`"intrinsics"` 映射到 `codegen_style="intrinsics"`，`"asm"` 映射到 `codegen_style="inline_asm"`
@@ -179,10 +180,24 @@ ISA 扩展层次：
 必须先跑：
 
 - `scripts/detect_isa_features.sh`
+- `scripts/detect_isa_features.sh --target <target_platform>`（仅当 request 指定 `target_platform`）
 - `scripts/detect_compiler_support.py`
 - `scripts/preflight_benchmark_env.py --arch <target_arch>`
 
-只要本机 ISA、编译器、或 preflight 任何一项不满足，就直接拒绝，返回 `success=false`。
+判定规则：
+
+- 指定 `target_platform` 时，**以目标平台能力矩阵的 `available` 作为 ISA 许可**；本机 ISA 不满足只影响"本地编译/验证"能力，不直接拒绝目标平台合法的 ISA 方案（如本机无 SVE 但目标 0xd06 支持 SVE，仍可生成 SVE 代码，但 `verification_required=true` 必须要求目标平台验证）
+- 未指定 `target_platform` 时，保持本机探测语义：本机 ISA、编译器或 preflight 任一不满足即拒绝，返回 `success=false`
+
+目标平台能力矩阵（`kunpeng_microarch/scripts/isa_capabilities.json`）摘要：
+
+| 平台 | NEON | SVE | SME | DotProd | FP16 | BF16 | I8MM |
+|------|------|-----|-----|---------|------|------|------|
+| 0xd01 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 0xd03 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| 0xd06 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+
+`--target` 结果中不包含的 ISA（如 0xd01 无 SVE/SME）在后续 ISA 选型中禁止使用；若 request 的 `isa_extensions`/`target_arch` 与目标平台能力冲突，直接拒绝或降级到 NEON，并在 `safety_checks`/`error_message` 中说明。
 
 ### 2. 校验 request
 
@@ -190,6 +205,7 @@ ISA 扩展层次：
 
 - 字段是否齐全
 - `target_arch` 是否是 `neon|sve|sme`
+- 若指定 `target_platform`，`target_arch`/`isa_extensions` 不得超出该平台能力矩阵（0xd01 限制为 NEON 及 NEON 扩展）
 - `loop_info.file_path/start_line/end_line` 是否可落到真实源码
 - `data_types` 是否与待优化循环一致
 - `neon` 是否明确 `vector_width = 128`

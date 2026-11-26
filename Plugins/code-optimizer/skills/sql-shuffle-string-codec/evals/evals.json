@@ -1,0 +1,39 @@
+{
+  "skill_name": "sql-shuffle-string-codec",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "single-writer-hotspot",
+      "prompt": "热点已明确在 Shuffle writer 的 20 字节 memcpy，只允许改这个循环，应该从哪个 skill 实施？",
+      "expected_output": "直接使用 sql-shuffle-fixed-width-copy；总入口只提供阶段选择，不同时执行物化、reader 或 LZ4 改动。",
+      "files": [],
+      "assertions": [
+        "选择写端专用单元",
+        "保留单项修改范围"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "combined-lifetime-and-reader",
+      "prompt": "连接物化与 Shuffle reader 均在热点里，输入缓冲释放后还有悬空视图，如何组织工作？",
+      "expected_output": "由总入口分别选择物化与读端重建单元，分别证明各自缓冲拥有方，再验证缓冲交接和完整行值；不能复用一个阶段的寿命证明。",
+      "files": [],
+      "assertions": [
+        "选择两个相关单元",
+        "分开拥有方证据",
+        "组合结果对照"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "locate-codec-before-editing",
+      "prompt": "输入文件是 Snappy Parquet，但 profile 中出现 LZ4；还没确定来自何处，要不要先改 reader？",
+      "expected_output": "先由总入口定位文件与 Exchange 调用链及实际加载库，再决定是否进入 LZ4 单元，不预先改 reader。",
+      "files": [],
+      "assertions": [
+        "区分文件与 Shuffle codec",
+        "先定位后选择"
+      ]
+    }
+  ]
+}

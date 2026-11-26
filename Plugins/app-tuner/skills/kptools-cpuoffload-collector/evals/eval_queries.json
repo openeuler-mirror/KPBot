@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-cpuoffload-collector",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "CQ-01", "prompt": "采集 CPU offload 的 pinned 内存分布", "should_trigger": true },
+    { "id": "CQ-02", "prompt": "训练开了 cpu offload，帮我采一份 pinned 内存快照", "should_trigger": true },
+    { "id": "CQ-03", "prompt": "看看 devmm_svm 段占了多少内存", "should_trigger": true },
+    { "id": "CQ-04", "prompt": "在不同训练阶段采 offload 内存的 probe 序列", "should_trigger": true },
+    { "id": "CQ-05", "prompt": "往训练进程注入 offload 内存埋点", "should_trigger": true },
+    { "id": "CQ-06", "prompt": "分析 offload 内存是否在正确的 NUMA node", "should_trigger": false, "note": "判读归 kptools-cpuoffload-analyzer（MR !315）" },
+    { "id": "CQ-07", "prompt": "判读 cpu offload 每步是否重建 slab", "should_trigger": false, "note": "判读归 kptools-cpuoffload-analyzer（MR !315）" },
+    { "id": "CQ-08", "prompt": "采集训练进程的线程绑核掩码", "should_trigger": false, "note": "routes to kptools-thread-affinity-collector（MR !247）" },
+    { "id": "CQ-09", "prompt": "看看线程在哪些核上运行", "should_trigger": false, "note": "routes to kptools-proc-collector" },
+    { "id": "CQ-10", "prompt": "采集系统 CPU 利用率", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "CQ-11", "prompt": "训练没用 cpu offload，看看进程 RSS", "should_trigger": false, "note": "routes to kptools-proc-collector" },
+    { "id": "CQ-12", "prompt": "给训练进程打火焰图", "should_trigger": false, "note": "routes to kptools-devkit" }
+  ]
+}

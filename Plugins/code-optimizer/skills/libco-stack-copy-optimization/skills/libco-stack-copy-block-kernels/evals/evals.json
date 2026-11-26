@@ -1,0 +1,15 @@
+{
+  "skill_name": "libco-stack-copy-block-kernels",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "libco 共享栈块内核展开后吞吐明显变高，但较大的栈内容偶尔不对。应该先查什么？",
+      "expected_output": "先怀疑块覆盖不完整或少拷贝，而不是继续调吞吐。用逐字节矩阵检查每个块大小是否覆盖整个块，修复后重新建立正确 baseline；同时覆盖未对齐、块边界和首尾哨兵。",
+      "expectations": [
+        "吞吐异常好先查少拷贝/块不完整",
+        "用逐字节和块边界矩阵验证",
+        "修复后重建正确 baseline"
+      ]
+    }
+  ]
+}

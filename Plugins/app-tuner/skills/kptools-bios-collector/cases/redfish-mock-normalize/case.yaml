@@ -1,0 +1,21 @@
+# 用例：Redfish 采集 + redfish_attrs 归一化（evals BC-E02；mock BMC，依赖 openssl/curl）
+# 依据 docs/case-spec.md（tier B）。evals ID 映射见各断言注释；entrypoint 宿主机可直接执行。
+
+name: redfish-mock-normalize
+skill: kptools-bios-collector
+tier: B
+image: host-runtime
+entrypoint: ["./entrypoint.sh"]
+
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: power_profile_present
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: collection_chain
+    expect: true

@@ -1,0 +1,613 @@
+// SPDX-License-Identifier: Apache-2.0
+package templatecenter
+
+import (
+	"context"
+	"errors"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+const ReplicaStatusReady = "READY"
+
+func TestExecutionDoesNotInheritOperatorCredentials(t *testing.T) {
+	for _, key := range []string{"KPBOT_ENV_SENTINEL_TOKEN", "CI_JOB_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "DATABASE_URL"} {
+		if _, inherited := os.LookupEnv(key); inherited {
+			t.Errorf("operator environment key %s reached compiled test code", key)
+		}
+	}
+	if os.Getenv("GOENV") != "off" || os.Getenv("GOCACHE") == "" || os.Getenv("HOME") == "" {
+		t.Error("dedicated execution environment is missing")
+	}
+}
+
+var ErrTemplateHasNoReadyReplica = errors.New("no ready replica")
+
+type ReplicaStatus struct{ NodeID, Status string }
+type requestPolicyKey struct{}
+type queryResult struct{ Error error }
+type fakeDB struct {
+	mu            sync.Mutex
+	rows          map[string][]ReplicaStatus
+	listReads     map[string]int
+	singleReads   map[string]int
+	health        map[string]bool
+	checks        int
+	failure       error
+	blocked       <-chan struct{}
+	entered       chan struct{}
+	singleBlocked <-chan struct{}
+	singleEntered chan struct{}
+}
+type fakeQuery struct {
+	db                 *fakeDB
+	ctx                context.Context
+	templateID, nodeID string
+}
+
+var store struct{ db *fakeDB }
+
+func isReady() bool                                            { return store.db != nil }
+func replicaModelToStatus(replica ReplicaStatus) ReplicaStatus { return replica }
+func (db *fakeDB) WithContext(ctx context.Context) *fakeQuery  { return &fakeQuery{db: db, ctx: ctx} }
+func (q *fakeQuery) Table(_ string) *fakeQuery                 { return q }
+func (q *fakeQuery) Where(_ string, templateID, nodeID string) *fakeQuery {
+	q.templateID, q.nodeID = templateID, nodeID
+	return q
+}
+func (q *fakeQuery) First(replica *ReplicaStatus) queryResult {
+	q.db.mu.Lock()
+	q.db.singleReads[q.templateID]++
+	err := q.db.failure
+	var snapshot ReplicaStatus
+	found := false
+	for _, row := range q.db.rows[q.templateID] {
+		if row.NodeID == q.nodeID {
+			snapshot, found = row, true
+			break
+		}
+	}
+	blocked, entered := q.db.singleBlocked, q.db.singleEntered
+	q.db.mu.Unlock()
+	if entered != nil {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+	}
+	if blocked != nil {
+		select {
+		case <-blocked:
+		case <-q.ctx.Done():
+			return queryResult{q.ctx.Err()}
+		}
+	}
+	if err != nil {
+		return queryResult{err}
+	}
+	if !found {
+		return queryResult{errors.New("not found")}
+	}
+	*replica = snapshot
+	return queryResult{}
+}
+func ListReplicas(ctx context.Context, templateID string) ([]ReplicaStatus, error) {
+	db := store.db
+	db.mu.Lock()
+	db.listReads[templateID]++
+	rows := append([]ReplicaStatus(nil), db.rows[templateID]...)
+	err, blocked, entered := db.failure, db.blocked, db.entered
+	db.mu.Unlock()
+	if entered != nil {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+	}
+	if blocked != nil {
+		select {
+		case <-blocked:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return rows, err
+}
+
+// The real v0.7.1 predicate is preserved as Base. The injected live-health and
+// context policy model target versions that extend that predicate; production
+// v0.7.1 itself checks only trimmed READY status, not live node health.
+func isReplicaSchedulableNow(ctx context.Context, replica ReplicaStatus) bool {
+	db := store.db
+	db.mu.Lock()
+	db.checks++
+	healthy := db.health[strings.TrimSpace(replica.NodeID)]
+	db.mu.Unlock()
+	allowed, hasPolicy := ctx.Value(requestPolicyKey{}).(bool)
+	return isReplicaSchedulableNowBase(ctx, replica) && healthy && ctx.Err() == nil && (!hasPolicy || allowed)
+}
+
+func setup() *fakeDB {
+	db := &fakeDB{rows: map[string][]ReplicaStatus{"tpl": {{"a", "READY"}, {"b", "READY"}}},
+		listReads: make(map[string]int), singleReads: make(map[string]int), health: map[string]bool{"a": true, "b": true}}
+	store.db = db
+	readyReplicaResultCache = newResolveTTLCache(resolveResultCacheTTL)
+	replicaSchedulableResultCache = newResolveTTLCache(resolveResultCacheTTL)
+	resolveResultFetchGroup = &templateFetchGroup{calls: make(map[string]*templateFetchCall)}
+	return db
+}
+
+func TestNormalizedREADYOnMissAndHit(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", " READY "}}
+	for i := 0; i < 2; i++ {
+		if replica, err := ResolveTemplateReadyReplica(context.Background(), "tpl", "a"); err != nil || replica.NodeID != "a" {
+			t.Fatalf("request %d must preserve v0.7.1 trimmed READY semantics: %v %v", i, replica, err)
+		}
+	}
+	if db.listReads["tpl"] != 1 {
+		t.Fatalf("expected one metadata read, got %v", db.listReads)
+	}
+}
+
+func TestReadyCacheRechecksHealthAndPreferredNode(t *testing.T) {
+	db := setup()
+	ctx := context.Background()
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl", "a"); err != nil {
+		t.Fatal(err)
+	}
+	db.health["a"] = false
+	if replica, err := ResolveTemplateReadyReplica(ctx, "tpl", ""); err != nil || replica.NodeID != "b" {
+		t.Fatalf("unhealthy a must be filtered on a cache hit: %v %v", replica, err)
+	}
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl", "a"); !errors.Is(err, ErrTemplateHasNoReadyReplica) {
+		t.Fatalf("unhealthy preferred node must not be chosen: %v", err)
+	}
+	if db.listReads["tpl"] != 1 {
+		t.Fatal("live checks must not require another metadata query")
+	}
+}
+
+func TestReadyCandidateRecoversWithoutRefetch(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	db.health["a"] = false
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", ""); !errors.Is(err, ErrTemplateHasNoReadyReplica) {
+		t.Fatal(err)
+	}
+	db.health["a"] = true
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", ""); err != nil {
+		t.Fatal(err)
+	}
+	if db.listReads["tpl"] != 1 {
+		t.Fatal("temporary health must not filter a candidate out of cached metadata")
+	}
+}
+
+func TestReadyCacheUsesEachRequestContext(t *testing.T) {
+	db := setup()
+	ctx := context.Background()
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl", "a"); err != nil {
+		t.Fatal(err)
+	}
+	denied := context.WithValue(ctx, requestPolicyKey{}, false)
+	if _, err := ResolveTemplateReadyReplica(denied, "tpl", "a"); !errors.Is(err, ErrTemplateHasNoReadyReplica) {
+		t.Fatalf("cache hit must use the new caller's policy: %v", err)
+	}
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if db.listReads["tpl"] != 1 {
+		t.Fatal("request-local filtering should retain the metadata cache")
+	}
+}
+
+func TestSingleReplicaNeverCachesHealthBool(t *testing.T) {
+	db := setup()
+	for _, healthy := range []bool{true, false, true} {
+		db.health["a"] = healthy
+		if actual := isTemplateReplicaSchedulable(context.Background(), "tpl", "a"); actual != healthy {
+			t.Fatalf("health=%v, schedulable=%v", healthy, actual)
+		}
+	}
+	if db.singleReads["tpl"] != 1 || db.checks != 3 {
+		t.Fatalf("must read metadata once and check every request: reads=%v checks=%d", db.singleReads, db.checks)
+	}
+}
+
+func TestSingleReplicaRecoversAndUsesCallerContext(t *testing.T) {
+	db := setup()
+	db.health["a"] = false
+	if isTemplateReplicaSchedulable(context.Background(), "tpl", "a") {
+		t.Fatal("initially unhealthy")
+	}
+	db.health["a"] = true
+	denied := context.WithValue(context.Background(), requestPolicyKey{}, false)
+	if isTemplateReplicaSchedulable(denied, "tpl", "a") {
+		t.Fatal("new caller is denied")
+	}
+	if !isTemplateReplicaSchedulable(context.Background(), "tpl", "a") {
+		t.Fatal("recovered caller must succeed")
+	}
+	if db.singleReads["tpl"] != 1 {
+		t.Fatal("health and policy outcomes must not be cached")
+	}
+}
+
+func TestInvalidationRefreshesBothMetadataCaches(t *testing.T) {
+	db := setup()
+	ctx := context.Background()
+	db.rows["tpl-other"] = []ReplicaStatus{{"b", "READY"}}
+	for _, templateID := range []string{"tpl", "tpl-other"} {
+		if _, err := ResolveTemplateReadyReplica(ctx, templateID, ""); err != nil {
+			t.Fatal(err)
+		}
+		if !isTemplateReplicaSchedulable(ctx, templateID, db.rows[templateID][0].NodeID) {
+			t.Fatal("expected READY")
+		}
+	}
+	db.rows["tpl"] = []ReplicaStatus{{"a", "FAILED"}}
+	invalidateResolveResultCache("tpl")
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl", ""); !errors.Is(err, ErrTemplateHasNoReadyReplica) {
+		t.Fatal(err)
+	}
+	if isTemplateReplicaSchedulable(ctx, "tpl", "a") {
+		t.Fatal("invalidated state must be reloaded")
+	}
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl-other", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !isTemplateReplicaSchedulable(ctx, "tpl-other", "b") {
+		t.Fatal("unrelated key must survive")
+	}
+	if db.listReads["tpl"] != 2 || db.singleReads["tpl"] != 2 || db.listReads["tpl-other"] != 1 || db.singleReads["tpl-other"] != 1 {
+		t.Fatalf("wrong invalidation scope: list=%v single=%v", db.listReads, db.singleReads)
+	}
+}
+
+func TestNoREADYIsNotNegativeCached(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "BUILDING"}}
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", ""); !errors.Is(err, ErrTemplateHasNoReadyReplica) {
+		t.Fatal(err)
+	}
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", ""); err != nil {
+		t.Fatal(err)
+	}
+	if db.listReads["tpl"] != 2 {
+		t.Fatal("no READY metadata must not be cached")
+	}
+}
+
+func TestDBErrorsAreNotCached(t *testing.T) {
+	db := setup()
+	db.failure = errors.New("temporary DB error")
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", ""); !errors.Is(err, db.failure) {
+		t.Fatal(err)
+	}
+	if isTemplateReplicaSchedulable(context.Background(), "tpl", "a") {
+		t.Fatal("DB error must fail closed")
+	}
+	db.failure = nil
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !isTemplateReplicaSchedulable(context.Background(), "tpl", "a") {
+		t.Fatal("next lookup must retry")
+	}
+	if db.listReads["tpl"] != 2 || db.singleReads["tpl"] != 2 {
+		t.Fatal("DB errors must not populate either cache")
+	}
+}
+
+func TestPreferredNodeAndReturnedValueIsolation(t *testing.T) {
+	db := setup()
+	ctx := context.Background()
+	first, err := ResolveTemplateReadyReplica(ctx, "tpl", " b ")
+	if err != nil || first.NodeID != "b" {
+		t.Fatalf("preferred-node normalization: %v %v", first, err)
+	}
+	first.Status = "FAILED"
+	second, err := ResolveTemplateReadyReplica(ctx, "tpl", "b")
+	if err != nil || second.Status != "READY" {
+		t.Fatal("returned value mutated cached metadata")
+	}
+	if _, err := ResolveTemplateReadyReplica(ctx, "tpl", "missing"); !errors.Is(err, ErrTemplateHasNoReadyReplica) {
+		t.Fatal(err)
+	}
+	if db.listReads["tpl"] != 1 {
+		t.Fatal("preferred node must not fragment metadata cache")
+	}
+}
+
+func TestConcurrentBurstSharesMetadataButNotDecision(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	release := make(chan struct{})
+	db.blocked, db.entered = release, make(chan struct{}, 1)
+	var wait sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 100; i++ {
+		wait.Add(1)
+		go func(allowed bool) {
+			defer wait.Done()
+			<-start
+			ctx := context.WithValue(context.Background(), requestPolicyKey{}, allowed)
+			_, err := ResolveTemplateReadyReplica(ctx, "tpl", "a")
+			if (err == nil) != allowed {
+				t.Errorf("allowed=%v, error=%v", allowed, err)
+			}
+		}(i%2 == 0)
+	}
+	close(start)
+	<-db.entered
+	close(release)
+	wait.Wait()
+	if db.listReads["tpl"] != 1 || db.checks != 100 {
+		t.Fatalf("read=%d checks=%d", db.listReads["tpl"], db.checks)
+	}
+}
+
+// The barriers capture an old DB snapshot before invalidation. Timeouts are
+// deadlock guards only; ordering is established by the entered/release channels.
+func receive[T any](t *testing.T, channel <-chan T) T {
+	t.Helper()
+	select {
+	case value := <-channel:
+		return value
+	case <-time.After(2 * time.Second):
+		t.Fatal("query did not finish after the expected barrier")
+		var zero T
+		return zero
+	}
+}
+
+type resolutionResult struct {
+	replica ReplicaStatus
+	err     error
+}
+
+func TestReadyInvalidationSeparatesFlightsAndRejectsOldRefill(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	release := make(chan struct{})
+	var once sync.Once
+	resume := func() { once.Do(func() { close(release) }) }
+	db.blocked, db.entered = release, make(chan struct{}, 1)
+	var workers sync.WaitGroup
+	defer func() { resume(); workers.Wait() }()
+	oldResult := make(chan resolutionResult, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		replica, err := ResolveTemplateReadyReplica(context.Background(), "tpl", "")
+		oldResult <- resolutionResult{replica, err}
+	}()
+	receive(t, db.entered)
+	db.mu.Lock()
+	db.rows["tpl"] = []ReplicaStatus{{"b", "READY"}}
+	db.blocked, db.entered = nil, nil
+	db.mu.Unlock()
+	invalidateResolveResultCache("tpl")
+	newResult := make(chan resolutionResult, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		replica, err := ResolveTemplateReadyReplica(context.Background(), "tpl", "")
+		newResult <- resolutionResult{replica, err}
+	}()
+	// A post-invalidation request must not join the still-blocked old flight.
+	newer := receive(t, newResult)
+	if newer.err != nil || newer.replica.NodeID != "b" {
+		t.Fatalf("new generation: %v", newer)
+	}
+	resume()
+	older := receive(t, oldResult)
+	if older.err != nil || older.replica.NodeID != "b" {
+		t.Fatalf("old reader reused obsolete metadata: %v", older)
+	}
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if db.listReads["tpl"] != 2 {
+		t.Fatalf("expected one read per generation, got %v", db.listReads)
+	}
+}
+
+func TestSingleInvalidationSeparatesFlightsAndRejectsOldRefill(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	release := make(chan struct{})
+	var once sync.Once
+	resume := func() { once.Do(func() { close(release) }) }
+	db.singleBlocked, db.singleEntered = release, make(chan struct{}, 1)
+	var workers sync.WaitGroup
+	defer func() { resume(); workers.Wait() }()
+	oldResult := make(chan bool, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		oldResult <- isTemplateReplicaSchedulable(context.Background(), "tpl", "a")
+	}()
+	receive(t, db.singleEntered)
+	db.mu.Lock()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "FAILED"}}
+	db.singleBlocked, db.singleEntered = nil, nil
+	db.mu.Unlock()
+	invalidateResolveResultCache("tpl")
+	newResult := make(chan bool, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		newResult <- isTemplateReplicaSchedulable(context.Background(), "tpl", "a")
+	}()
+	if receive(t, newResult) {
+		t.Fatal("new generation selected failed replica")
+	}
+	resume()
+	if receive(t, oldResult) {
+		t.Fatal("old metadata overwrote the new generation")
+	}
+	if isTemplateReplicaSchedulable(context.Background(), "tpl", "a") {
+		t.Fatal("new cache was polluted")
+	}
+	if db.singleReads["tpl"] != 2 {
+		t.Fatalf("expected one read per generation, got %v", db.singleReads)
+	}
+}
+
+func TestInvalidatedNoREADYResultIsRetried(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "BUILDING"}}
+	release := make(chan struct{})
+	var once sync.Once
+	resume := func() { once.Do(func() { close(release) }) }
+	db.blocked, db.entered = release, make(chan struct{}, 1)
+	var workers sync.WaitGroup
+	defer func() { resume(); workers.Wait() }()
+	result := make(chan resolutionResult, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		replica, err := ResolveTemplateReadyReplica(context.Background(), "tpl", "a")
+		result <- resolutionResult{replica, err}
+	}()
+	receive(t, db.entered)
+	db.mu.Lock()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	db.blocked, db.entered = nil, nil
+	db.mu.Unlock()
+	invalidateResolveResultCache("tpl")
+	resume()
+	actual := receive(t, result)
+	if actual.err != nil || actual.replica.NodeID != "a" {
+		t.Fatalf("obsolete no-READY result escaped: %v", actual)
+	}
+	if db.listReads["tpl"] != 2 {
+		t.Fatalf("expected retry after invalidation: %v", db.listReads)
+	}
+}
+
+func TestInvalidatedSingleReadErrorDoesNotDiscardNewFill(t *testing.T) {
+	db := setup()
+	db.rows["tpl"] = nil
+	release := make(chan struct{})
+	var once sync.Once
+	resume := func() { once.Do(func() { close(release) }) }
+	db.singleBlocked, db.singleEntered = release, make(chan struct{}, 1)
+	var workers sync.WaitGroup
+	defer func() { resume(); workers.Wait() }()
+	oldResult := make(chan bool, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		oldResult <- isTemplateReplicaSchedulable(context.Background(), "tpl", "a")
+	}()
+	receive(t, db.singleEntered)
+	db.mu.Lock()
+	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
+	db.singleBlocked, db.singleEntered = nil, nil
+	db.mu.Unlock()
+	invalidateResolveResultCache("tpl")
+	newResult := make(chan bool, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		newResult <- isTemplateReplicaSchedulable(context.Background(), "tpl", "a")
+	}()
+	if !receive(t, newResult) {
+		t.Fatal("new metadata must be ready")
+	}
+	resume()
+	if !receive(t, oldResult) {
+		t.Fatal("obsolete not-found result must retry current metadata")
+	}
+	if !isTemplateReplicaSchedulable(context.Background(), "tpl", "a") {
+		t.Fatal("old failure removed current fill")
+	}
+	if db.singleReads["tpl"] != 2 {
+		t.Fatalf("failure must not evict new cache: %v", db.singleReads)
+	}
+}
+
+func TestPendingReadHasNoValueTTLAndFailedSlotIsReleased(t *testing.T) {
+	// An already-expired value TTL makes expiry deterministic without sleeps.
+	// Pending reads still have to share their slot until they finish or fail.
+	cache := newResolveTTLCache(-time.Second)
+	_, hit, generation := cache.Lookup("tpl\x00ready")
+	if hit {
+		t.Fatal("new slot already has a value")
+	}
+	_, hit, pending := cache.Lookup("tpl\x00ready")
+	if hit || pending != generation {
+		t.Fatal("pending read expired before completing metadata I/O")
+	}
+	if !cache.Store("tpl\x00ready", generation, []ReplicaStatus{{"a", "READY"}}) {
+		t.Fatal("pending query could not publish")
+	}
+	_, _, replacement := cache.Lookup("tpl\x00ready")
+	if replacement == generation {
+		t.Fatal("expired value reused a generation ID")
+	}
+	if cache.Store("tpl\x00ready", generation, true) || cache.Discard("tpl\x00ready", generation) {
+		t.Fatal("obsolete generation modified replacement slot")
+	}
+	if !cache.Discard("tpl\x00ready", replacement) {
+		t.Fatal("failed query did not release its placeholder")
+	}
+	_, _, next := cache.Lookup("tpl\x00ready")
+	if next == replacement {
+		t.Fatal("failed slot generation was recycled")
+	}
+}
+
+func TestCanceledInvalidatedReadStopsRetryAndReleasesSlot(t *testing.T) {
+	db := setup()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	release := make(chan struct{})
+	db.blocked, db.entered = release, make(chan struct{}, 1)
+	result := make(chan error, 1)
+	var workers sync.WaitGroup
+	workers.Add(1)
+	defer func() { cancel(); workers.Wait() }()
+	go func() {
+		defer workers.Done()
+		_, err := ResolveTemplateReadyReplica(ctx, "tpl", "a")
+		result <- err
+	}()
+	receive(t, db.entered)
+	invalidateResolveResultCache("tpl")
+	cancel()
+	if err := receive(t, result); !errors.Is(err, context.Canceled) {
+		t.Fatalf("invalidated retry ignored cancellation: %v", err)
+	}
+	db.mu.Lock()
+	db.blocked, db.entered = nil, nil
+	db.mu.Unlock()
+	if _, err := ResolveTemplateReadyReplica(context.Background(), "tpl", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if db.listReads["tpl"] != 2 {
+		t.Fatalf("canceled read leaked a pending slot: %v", db.listReads)
+	}
+}
+
+func TestObsoleteFlightRecheckDoesNotAllocateReplacement(t *testing.T) {
+	cache := newResolveTTLCache(time.Second)
+	_, _, generation := cache.Lookup("tpl\x00ready")
+	cache.DeletePrefix("tpl\x00")
+	if _, hit, current := cache.ReadCurrent("tpl\x00ready", generation); hit || current {
+		t.Fatal("invalidated flight was treated as current")
+	}
+	cache.mu.Lock()
+	remaining := len(cache.entries)
+	cache.mu.Unlock()
+	if remaining != 0 {
+		t.Fatal("obsolete/canceled flight allocated an unowned pending slot")
+	}
+}

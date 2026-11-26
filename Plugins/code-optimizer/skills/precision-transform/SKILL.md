@@ -1,6 +1,6 @@
 ---
 name: precision-transform
-description: 对通用热点函数进行受控精度变换，包括升精度累加、低精度计算、宽窄转换融合、denormal/subnormal 规避。必须有误差边界或测试容差。适用于 apply-optimization 调用。
+description: 对通用热点函数进行受控精度变换，包括升精度累加、低精度计算、宽窄转换融合、denormal/subnormal 规避。必须有误差边界或测试容差。适用于 apply-optimization 调用。语言无关：C/C++ 与 Rust 源码均适用，输出与原源码同语言的改写。
 ---
 
 # 精度变换优化
@@ -40,6 +40,24 @@ description: 对通用热点函数进行受控精度变换，包括升精度累�
 4. 涉及 FP16/BF16/int8 dot 指令时，必须确认编译参数或 `prepareProject` 表明目标 ISA 支持；否则返回 `success=false`。
 5. 不自动启用 `-ffast-math`、flush-to-zero 或近似舍入；这类要求返回失败并说明需要人工授权。
 
+**Rust 变体**：`optimized_code` 输出与原源码同语言（含 Rust）。类型映射直接用 Rust 类型：
+- `f32`/`f64` → `f16`/`bf16` 可用 `half` crate（默认 feature `std`/`alloc`）或 `std::arch::aarch64` 的 `v..._f16` 系列。f16 NEON intrinsic 自 Rust 1.94.0 起部分稳定：不依赖 `f16` 类型签名的（如 `vaddq_f16`）已 stable；签名含 `*const f16` 的（如 `vld1q_f16`）仍 nightly（`#![feature(stdarch_neon_f16)]`）。
+- Rust 的降精度累加要显式标注类型，避免隐式转换被模式匹配或 trait 约束挡住：例如 `let acc: f32 = h.iter().map(|x| f32::from(*x)).sum();`。
+- `f16` 原语类型存在但 unstable（`#![feature(f16_and_f128)]`，RFC 3453）；stable 代码用 `half` crate 的 `f16`/`bf16` 或 `u16` 位级表示；不要生成 C 的 `_Float16`。
+- denormal 规避在 Rust 用 `f32::from_bits`/`to_bits` 位级 guard，不要用 C 的 `_MM_FLUSH_ZERO`/`ftz` 宏；std 无浮点环境/FTZ API（stable 与 nightly 均无），需操作 FPCR/FTZ 时用 `core::arch::asm!`（aarch64 `msr fpcr`）或 libc，此时返回失败并说明。
+- 组合 SIMD 精度变换时优先用 `std::arch::aarch64` intrinsic（`vaddq_*`/`vcvtq_*`），避免直接内联 `asm!`，以保留可移植性与安全检查。
+
+## Rust 示例（fp32 累加升精度为 fp64）
+
+```rust
+// 优化前：f32 累加，大数组误差累积
+let sum: f32 = items.iter().sum();
+
+// 优化后：f64 累加器，写回 f32 输出，误差显著降低
+let acc: f64 = items.iter().map(|&x| x as f64).sum();
+let sum: f32 = acc as f32;
+```
+
 ## 输出
 
 ```json
@@ -62,4 +80,5 @@ description: 对通用热点函数进行受控精度变换，包括升精度累�
 - 不做源码写入；只返回原始文本和优化文本。
 - 没有容差、测试或用户授权时，不做自动精度变换。
 - 保守优先：升精度累加通常比降精度计算更安全。
+- `optimized_code` 与原源码同语言（C/C++ 或 Rust），不跨语言改写；Rust 侧避免依赖非 `half`/`std::arch` 的第三方浮点 hack。
 - 任何会改变公开数值语义的优化必须返回 `success=false`。

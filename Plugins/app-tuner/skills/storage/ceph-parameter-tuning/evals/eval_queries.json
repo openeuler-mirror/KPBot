@@ -1,0 +1,13 @@
+{
+  "skill_name": "ceph-parameter-tuning",
+  "queries": [
+    { "id": "CQ-01", "prompt": "Ceph 集群 PG 分布不均，个别 OSD 成为瓶颈", "should_trigger": true, "note": "PG 分布与 balancer upmap" },
+    { "id": "CQ-02", "prompt": "OSD 进程和网卡中断同 NUMA，CPU 瓶颈", "should_trigger": true, "note": "OSD 绑核 osd_numa_node" },
+    { "id": "CQ-03", "prompt": "ceph.conf 副本数、cluster_network、debug 开关该怎么配", "should_trigger": true, "note": "ceph.conf 全量参数纠偏" },
+    { "id": "CQ-04", "prompt": "Ceph 节点 vm.swappiness 和数据盘 read_ahead 怎么调", "should_trigger": true, "note": "OS 系统层参数（独立使用时属本 skill 调优范围；编排器双轨时证据移交 os-optimization）" },
+    { "id": "NQ-01", "prompt": "Ceph 集群怎么编译安装、初始化部署一套新环境", "should_trigger": false, "note": "routes to ceph-deployment-installation（部署类问题，规划中）" },
+    { "id": "NQ-02", "prompt": "给 Ceph 集群做一轮 rbd fio 基准压测，对齐压测口径", "should_trigger": false, "note": "routes to ceph-testing（基准压测与验证方法学，规划中）" },
+    { "id": "NQ-03", "prompt": "3FS 集群 chain table 调整和 sync_when_write 配置怎么改", "should_trigger": false, "note": "routes to 3fs-parameter-tuning（非 Ceph 的 3FS 集群）" },
+    { "id": "NQ-04", "prompt": "librbd 应用线程 malloc 热点高，想换 tcmalloc 试试", "should_trigger": false, "note": "routes to performance-library-selection（库级选型）" }
+  ]
+}

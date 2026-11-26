@@ -1,0 +1,42 @@
+# 用例：tier A —— allocation-path-optimization 的审计脚本与输出契约
+#
+# 覆盖：
+#   scripts   alloc_size_audit.py：分配下限通胀倍数、下限命中比例、每操作字节、
+#             模型与实测的偏差、三种推荐分支（精确申请 / 拒绝 / 无下限通胀）、
+#             jemalloc 尺寸类、JSON 计数输入、缺失输入报错
+#             alloc_probe.c：在有 C 编译器时编译并对照"字节 / 次数 / 释放 / 峰值活字节"
+#             四个精确值（无编译器时跳过，不计失败）
+#   skill     SKILL.md 不变量：frontmatter、五族配方、路由正文不含库名、
+#             七条分配路径不变量齐备、被引用的脚本与参考资料真实存在
+#   contract  输出对象字段齐备（allocation_result / measured_before /
+#             inflation_ratio / ownership_contract_preserved /
+#             invariants_checked / error_message）
+#
+# 运行（在技能根目录下）：
+#   bash cases/size-class-audit/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（python3 标准库；C 编译器为可选增强）。
+
+name: size-class-audit
+skill: allocation-path-optimization
+tier: A
+
+entrypoint: ["bash", "cases/size-class-audit/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 30

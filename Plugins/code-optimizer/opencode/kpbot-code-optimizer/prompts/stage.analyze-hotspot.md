@@ -16,6 +16,9 @@ performance analysis expert
     "entry_functions": ["${context.current_sub_task.function}"]
   },
   "baseline": ${context.prepareProject.baseline},
+  "target_machine": ${context.prepareProject.target_machine},
+  "verification_commands": ${context.prepareProject.verification_commands},
+  "numeric_constraints": ${context.prepareProject.numeric_constraints},
   "sub_task": {
     "id": ${context.current_sub_task.id},
     "function": "${context.current_sub_task.function}",
@@ -40,6 +43,8 @@ performance analysis expert
 
 动态分析三件套：perf stat（微架构事件：IPC/branch miss rate/cache miss rate）→ perf annotate（热点指令定位）→ perf spe（cache/branch miss 精确归因）。
 
+把直接事实、解释和证据缺口分开：采样缺失不能证明代码未调用；整条命令的计数器没有直接归因时不能归属于当前函数；理论周期只能标为 `estimate`，不能冒充实测。目标机器不可用时只完成静态分析并记录缺口。
+
 对 C/C++ 目标函数额外采集一次 compiler vectorization feedback，作为 `autovec-source-transform` 的唯一触发依据。Clang/BiSheng 使用 `-Rpass=loop-vectorize -Rpass-missed=loop-vectorize -Rpass-analysis=loop-vectorize`；GCC 使用 `-fopt-info-vec-optimized -fopt-info-vec-missed`。该步骤只读编译诊断，不修改源码或构建配置；不可用时记录 fallback reason。
 
 如果静态扫描或优化点判断涉及 NEON/SVE/SVE2 intrinsic、inline asm 或汇编指令事实，必须先调用 repo 内统一入口并记录 JSON evidence：
@@ -61,6 +66,15 @@ python3 scripts/arm_query.py intrinsic --name <intrinsic> --family <neon|sve|sve
   "function": "<function_name>",
   "source_file": "<source_file_path>",
   "lines": [start_line, end_line],
+  "observations": [
+    { "id": "obs1", "kind": "observation", "scope": "<command|process|function|loop>", "source": "<perf|source|compiler|historical>", "statement": "<直接观察到的事实>", "evidence_ref": "<原始输出或源码位置>" }
+  ],
+  "possible_causes": [
+    { "id": "cause1", "claim": "<待验证的解释>", "based_on": ["obs1"], "status": "hypothesis" }
+  ],
+  "missing_evidence": [
+    { "question": "<尚不能回答的问题>", "reason": "<证据缺口>", "suggested_observation": "<最小区分观察>" }
+  ],
   "dynamic_analysis": {
     "status": "ok|partial|unavailable",
     "perf_stat": {
@@ -74,6 +88,13 @@ python3 scripts/arm_query.py intrinsic --name <intrinsic> --family <neon|sve|sve
     "perf_annotate_top5": [
       { "instruction": "...", "cpu_pct": 28.3, "source_line": 45 }
     ],
+    "theoretical_cycles": {
+      "evidence_kind": "estimate",
+      "actual_cycles_per_iter": null,
+      "theoretical_min_cycles": 46,
+      "headroom": null,
+      "attribution": "unattributed|function|loop"
+    },
     "perf_spe_used": true,
     "perf_spe_samples": {
       "top_cache_miss_instructions": [],

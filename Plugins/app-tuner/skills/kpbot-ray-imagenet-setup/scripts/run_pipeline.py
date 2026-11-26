@@ -1,0 +1,393 @@
+"""Run a bounded Ray JPEG/preprocessing pipeline with mock batch inference."""
+
+import argparse
+import hashlib
+import io
+import json
+import math
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_environment import inspect
+
+_TRANSFORM = None
+_TENSOR_BYTES = 3 * 224 * 224 * 4
+_HEADROOM_BYTES = 64 * 1024 * 1024
+_JPEG_SUFFIXES = (".jpg", ".jpeg")
+_SYNTHETIC_KIND = "synthetic"
+_USER_KIND = "user-provided-jpeg-directory"
+
+
+class OutputExistsError(ValueError):
+    """Caller error: --output must name a directory that does not exist."""
+
+
+def inspect_jpegs(directory, limit):
+    """Resolve, validate content and read the header of each selected JPEG."""
+    from PIL import Image
+
+    if not directory.is_dir():
+        raise ValueError("input must be an existing JPEG directory")
+    root = directory.resolve()
+    entries = []
+    for path in sorted(directory.rglob("*")):
+        if path.suffix.lower() not in _JPEG_SUFFIXES:
+            continue
+        try:
+            target = path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ValueError(
+                f"cannot resolve input JPEG {path}: {exc}"
+            ) from exc
+        try:
+            target.relative_to(root)
+        except ValueError:
+            raise ValueError(
+                f"input JPEG symlink escapes input root: {path} -> {target}"
+            ) from None
+        if not target.is_file():
+            continue
+        try:
+            with Image.open(target) as image:
+                if image.format != "JPEG":
+                    raise ValueError(
+                        f"input is not a JPEG: {path} "
+                        f"(detected {image.format or 'unknown'})"
+                    )
+                width, height = image.size
+        except ValueError:
+            raise
+        except (OSError, Image.DecompressionBombError) as exc:
+            raise ValueError(
+                f"cannot decode input JPEG {path}: {exc}"
+            ) from exc
+        entries.append(
+            {
+                "path": path,
+                "target": target,
+                "id": path.relative_to(directory).as_posix(),
+                "bytes": target.stat().st_size,
+                "width": width,
+                "height": height,
+            }
+        )
+        if len(entries) >= limit:
+            break
+    if not entries:
+        raise ValueError("no JPEG files found")
+    return entries
+
+
+def validate_args(args):
+    if not 1 <= args.limit <= 10000:
+        raise ValueError("limit must be 1..10000")
+    if not 1 <= args.batch_size <= 256:
+        raise ValueError("batch-size must be 1..256")
+    if not 2 <= args.cpus <= 32:
+        raise ValueError("cpus must be 2..32")
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        raise ValueError("timeout must be finite and positive")
+    if not 1 <= args.max_estimated_mib <= 65536:
+        raise ValueError("max-estimated-mib must be 1..65536")
+    if not 1 <= args.max_pixels <= 2_000_000_000:
+        raise ValueError("max-pixels must be 1..2000000000")
+    if args.dataset_kind not in ("user", "synthetic"):
+        raise ValueError("dataset-kind must be user or synthetic")
+
+
+def estimate_memory(entries, max_estimated_mib, max_pixels):
+    for entry in entries:
+        pixels = entry["width"] * entry["height"]
+        if pixels > max_pixels:
+            raise ValueError(
+                f"input {entry['id']} is {entry['width']}x{entry['height']} "
+                f"= {pixels} pixels, exceeds --max-pixels {max_pixels}"
+            )
+    input_bytes = sum(entry["bytes"] for entry in entries)
+    # Pillow needs the decoded RGB image plus the converted RGB buffer before
+    # the 224x224 resize; count both even though the source JPEG is compressed.
+    decoded_bytes = sum(
+        entry["width"] * entry["height"] * 3 * 2 for entry in entries
+    )
+    tensor_bytes = 3 * len(entries) * _TENSOR_BYTES
+    estimated_mib = (
+        input_bytes + decoded_bytes + tensor_bytes + _HEADROOM_BYTES
+    ) / (1024 * 1024)
+    if estimated_mib > max_estimated_mib:
+        raise ValueError(
+            f"estimated peak {estimated_mib:.0f} MiB exceeds "
+            f"--max-estimated-mib {max_estimated_mib}; reduce --limit"
+        )
+    return {
+        "input_bytes": input_bytes,
+        "decoded_rgb_mib": round(decoded_bytes / (1024 * 1024), 3),
+        "estimated_mib": estimated_mib,
+    }
+
+
+def classify_source(directory, requested):
+    """Default to user data; require an explicit synthetic-fixture request."""
+    if requested != "synthetic":
+        return _USER_KIND, None
+    marker = directory / "fixture.json"
+    try:
+        metadata = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            "synthetic dataset requires fixture.json generated by "
+            f"scripts/make_fixture.py: {exc}"
+        ) from exc
+    if (
+        metadata.get("kind") != "synthetic-jpeg-smoke"
+        or metadata.get("is_imagenet") is not False
+    ):
+        raise ValueError(
+            "fixture.json is not the synthetic JPEG fixture marker"
+        )
+    return _SYNTHETIC_KIND, metadata
+
+
+def preprocess(row):
+    global _TRANSFORM
+    import numpy as np
+    import torch
+    from PIL import Image
+    from torchvision.models import ResNet18_Weights
+
+    torch.set_num_threads(1)
+    if _TRANSFORM is None:
+        # Weight metadata only; this never downloads model parameters.
+        _TRANSFORM = ResNet18_Weights.DEFAULT.transforms()
+    with Image.open(io.BytesIO(row["jpeg"])) as image:
+        if image.format != "JPEG":
+            raise ValueError(f"input is not a JPEG: {row['id']}")
+        tensor = _TRANSFORM(image.convert("RGB"))
+    value = tensor.numpy()
+    if value.shape != (3, 224, 224) or not np.isfinite(value).all():
+        raise ValueError("invalid preprocessed tensor")
+    return {
+        "id": row["id"],
+        "tensor": value,
+        "tensor_sha256": hashlib.sha256(value.tobytes()).hexdigest(),
+    }
+
+
+class MockActor:
+    def __call__(self, batch):
+        import numpy as np
+
+        size = len(batch["id"])
+        tensors = batch["tensor"]
+        if tensors.shape != (size, 3, 224, 224):
+            raise ValueError("unexpected batch tensor shape")
+        if tensors.dtype != np.float32:
+            raise ValueError(f"unexpected batch tensor dtype: {tensors.dtype}")
+        if not np.isfinite(tensors).all():
+            raise ValueError("non-finite value in batch tensor")
+        # Hash the tensor rows actually received by the actor. Forwarding a
+        # digest computed before batching would miss row reordering, swaps or
+        # an unexpected dtype silently converted by the actor.
+        digests = [
+            hashlib.sha256(
+                np.ascontiguousarray(tensors[index]).tobytes()
+            ).hexdigest()
+            for index in range(size)
+        ]
+        return {
+            "id": batch["id"],
+            "tensor_sha256": np.array(digests),
+            "label": np.full(size, "mock_label"),
+        }
+
+
+def execute(args):
+    validate_args(args)
+    entries = inspect_jpegs(args.input, args.limit)
+    memory = estimate_memory(entries, args.max_estimated_mib, args.max_pixels)
+    dataset, marker = classify_source(args.input, args.dataset_kind)
+    try:
+        args.output.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        raise OutputExistsError(
+            f"output directory already exists: {args.output}; "
+            "choose a new --output"
+        ) from None
+    result = {
+        "status": "failed",
+        "inference": "mock",
+        "preprocessing": "torchvision-ResNet18_Weights.DEFAULT.transforms",
+        "model": "resnet18-weights-metadata-only-no-parameter-download",
+        "gpu": False,
+        "dataset": dataset,
+        "dataset_marker": marker,
+        "selected_rows": len(entries),
+        "batch_size": args.batch_size,
+        "ray_logical_cpus": args.cpus,
+        "input_bytes": memory["input_bytes"],
+        "decoded_rgb_mib": memory["decoded_rgb_mib"],
+        "estimated_peak_mib": round(memory["estimated_mib"], 3),
+        "max_estimated_mib": args.max_estimated_mib,
+        "max_pixels": args.max_pixels,
+        "correctness": False,
+    }
+    ray = None
+    session = tempfile.TemporaryDirectory(prefix="kp-ray-")
+    try:
+        result["environment"] = inspect()
+        records, expected, manifest = [], {}, []
+        # Bounded driver input for installation acceptance, not a full loader.
+        for entry in entries:
+            # Read the already-resolved target so a changed link cannot escape.
+            data = entry["target"].read_bytes()
+            name = entry["id"]
+            row = {"id": name, "jpeg": data}
+            expected[name] = preprocess(row)["tensor_sha256"]
+            records.append(row)
+            manifest.append(
+                {
+                    "id": name,
+                    "bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "width": entry["width"],
+                    "height": entry["height"],
+                }
+            )
+        (args.output / "input-manifest.json").write_text(
+            json.dumps(manifest, indent=2), encoding="utf-8"
+        )
+        import ray
+        from ray.data import ActorPoolStrategy
+
+        ray.init(
+            num_cpus=args.cpus,
+            include_dashboard=False,
+            object_store_memory=256 * 1024 * 1024,
+            _temp_dir=session.name,
+        )
+        start = time.perf_counter()
+        ds = (
+            ray.data.from_items(records, override_num_blocks=2)
+            .map(preprocess, num_cpus=1)
+            .map_batches(
+                MockActor,
+                batch_size=args.batch_size,
+                batch_format="numpy",
+                compute=ActorPoolStrategy(size=1),
+                num_cpus=1,
+            )
+        )
+        # Execute once; reading stats must not run the Dataset again.
+        rows = ds.take_all()
+        result["pipeline_elapsed_seconds"] = time.perf_counter() - start
+        result["output_rows"] = len(rows)
+        actual = {str(row["id"]): str(row["tensor_sha256"]) for row in rows}
+        if len(rows) != len(expected) or actual != expected:
+            raise ValueError(
+                "Ray output differs from serial preprocessing reference"
+            )
+        if any(str(row["label"]) != "mock_label" for row in rows):
+            raise ValueError("mock inference labels differ")
+        stats = ds.stats()
+        if not stats.strip():
+            raise ValueError("Ray returned empty Dataset stats")
+        (args.output / "dataset-stats.txt").write_text(stats, encoding="utf-8")
+        (args.output / "rows.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "id": str(row["id"]),
+                        "tensor_sha256": str(row["tensor_sha256"]),
+                        "label": str(row["label"]),
+                    }
+                    for row in rows
+                ],
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        result.update(status="passed", correctness=True)
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        if ray is not None:
+            ray.shutdown()
+        session.cleanup()
+        (args.output / "result.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8"
+        )
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--limit", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--cpus", type=int, default=4)
+    parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--max-estimated-mib", type=int, default=4096)
+    parser.add_argument("--max-pixels", type=int, default=50_000_000)
+    parser.add_argument(
+        "--dataset-kind",
+        choices=("user", "synthetic"),
+        default="user",
+        help=(
+            "synthetic only for fixture acceptance generated by "
+            "make_fixture.py"
+        ),
+    )
+    args = parser.parse_args()
+    try:
+        validate_args(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if os.environ.get("KPBOT_RAY_PIPELINE_CHILD") != "1":
+        env = dict(os.environ, KPBOT_RAY_PIPELINE_CHILD="1")
+        child = subprocess.Popen(
+            [sys.executable, __file__, *sys.argv[1:]],
+            env=env,
+            start_new_session=True,
+        )
+        try:
+            code = child.wait(timeout=args.timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                child.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+            print(
+                "pipeline timed out/interrupted; "
+                "owned process group terminated",
+                file=sys.stderr,
+            )
+            code = 124
+        raise SystemExit(code)
+    try:
+        result = execute(args)
+    except OutputExistsError as exc:
+        # Caller error: reuse of an existing --output is a usage error (2),
+        # not an input/dependency/runtime failure (1). The no-overwrite check
+        # runs before any write, so existing result bytes stay untouched.
+        parser.error(str(exc))
+    except (OSError, ValueError, ImportError) as exc:
+        parser.exit(1, f"pipeline failed: {exc}\n")
+    print(json.dumps(result))
+    if result["status"] != "passed":
+        print(result.get("error", "pipeline failed"), file=sys.stderr)
+    raise SystemExit(0 if result["status"] == "passed" else 1)
+
+
+if __name__ == "__main__":
+    main()

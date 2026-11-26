@@ -1,0 +1,12 @@
+{
+  "skill_name": "flamegraph-libopt",
+  "queries": [
+    { "id": "FLG-01", "prompt": "用生产火焰图分析一下服务里哪个第三方库占比高、值得优化", "should_trigger": true },
+    { "id": "FLG-02", "prompt": "火焰图里同名帧出现很多次，占比应该怎么算才不虚高", "should_trigger": true },
+    { "id": "FLG-03", "prompt": "变体 bench 测出来是负收益，怀疑链接的不是新编译的库，怎么验证", "should_trigger": true },
+    { "id": "FLG-04", "prompt": "把优化流程从 protobuf 换到 abseil 上用，哪些环节要重新确认", "should_trigger": true },
+    { "id": "FLG-05", "prompt": "优化 protobuf 的 MapMergeFrom 合并路径", "should_trigger": false },
+    { "id": "FLG-06", "prompt": "folly future 的 then 回调链有开销，怎么优化", "should_trigger": false },
+    { "id": "FLG-07", "prompt": "写一个火焰图渲染工具，支持缩放和搜索", "should_trigger": false }
+  ]
+}

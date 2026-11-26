@@ -1,0 +1,30 @@
+diff --git a/CubeShim/shim/src/sandbox/sb.rs b/CubeShim/shim/src/sandbox/sb.rs
+index a6e3505..b420bb7 100644
+--- a/CubeShim/shim/src/sandbox/sb.rs
++++ b/CubeShim/shim/src/sandbox/sb.rs
+@@ -564,8 +564,23 @@ impl SandBox {
+         let (tx, mut rx) = channel::<()>(1);
+         let arc_conainers = self.containers.clone();
+         let arc_state = self.state.clone();
+-        let conn = AsyncUtils::connect_agent(&self.id).await?;
+-        let client = health_ttrpc::HealthClient::new(conn);
++        let client = if let Some(conn) = self.conn.as_ref() {
++            let existing = conn.lock().await.clone();
++            let health_client = health_ttrpc::HealthClient::new(existing);
++            // Probe before returning even when periodic health checks are disabled.
++            let probe = health::CheckRequest::default();
++            if health_client
++                .check(context::with_timeout(100_000_000), &probe)
++                .await
++                .is_ok()
++            {
++                health_client
++            } else {
++                health_ttrpc::HealthClient::new(AsyncUtils::connect_agent(&self.id).await?)
++            }
++        } else {
++            health_ttrpc::HealthClient::new(AsyncUtils::connect_agent(&self.id).await?)
++        };
+         let log = self.log.clone();
+         let handle = tokio::spawn(async move {
+             let ctx = context::with_timeout(1000 * 1000 * 1000 * 5);

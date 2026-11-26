@@ -1,0 +1,48 @@
+# 用例：tier C —— 把 allocation-path-optimization 的配方应用到真实 libevent
+#
+# 这是"方法论可落地"的端到端证据：在一个未改动的 libevent 2.1.12 源码树上，
+# 只应用本 skill 的配方补丁，然后核对正确性、分配字节数与三个 evbuffer 接口。
+#
+#   recipes/0001-allocation-path-optimization.patch
+#       引用型链的元数据改为精确尺寸申请（链头 + 引用记录），替代通用分配的
+#       1024 B 下限；通用分配函数与数据型链保持不变。补丁不含任何调用路径改动。
+#
+# 断言：
+#   1. 正确性：候选构建必须通过 libevent 自身的 evbuffer 回归组；
+#   2. 主指标（确定性）：drain 负载的申请字节下降 ≥8x；
+#   3. 时间指标：drain 提升 ≥2x（建链/解链是该接口的全部成本）；
+#   4. 回归守卫：readline ≥0.95x、append ≥0.90x。
+#
+# 运行（在技能根目录下）：
+#   LIBEVENT_SRC=/path/to/libevent-2.1.12 \
+#     bash cases/libevent-interfaces/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier C（需要 cc、cmake、binutils、python3，以及一份 libevent 2.1.12
+# 源码）。第三方源码不随用例分发，因此未设置 LIBEVENT_SRC 时用例记录
+# skipped=true 并退出 0——这是显式的"未验证"，不是静默通过。
+
+name: libevent-interfaces
+skill: allocation-path-optimization
+tier: C
+
+image: host-runtime
+entrypoint: ["bash", "cases/libevent-interfaces/run.sh"]
+
+env_requires:
+  - libevent_2_1_12_source_tree
+
+env_vars:
+  PAIRS: 15
+  OPS: 200000
+
+# run.sh 自己执行全部实质门槛（回归组、申请字节 ≥8x、drain ≥2x、readline/append
+# 守卫），不满足即以 1 退出；这里只断言"跳过或通过"，两者可区分：
+# skipped_or_success 为 true 表示本次要么跳过（无源码树），要么所有门槛通过。
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: skipped_or_success
+    expect: true

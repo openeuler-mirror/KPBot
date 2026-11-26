@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# =============================================================================
+# A/B 对照运行器（依 docs/case-spec.md §5）：with/without 各跑一次，输出客观对照表。
+# 环境变量处理依 docs/agent-case-security-notes.md 规则 7：
+# fail-closed + realpath 白名单 + BIN 文件类型校验 + DOCKER_RUN_ARGS 白名单；
+# 凭证注入依规则 1：auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不做 -v 挂载。
+#
+# 用法:
+#   ./run_ab.sh [--save <目录>] [<image>]
+# 环境变量:
+#   OPENCODE_BIN      opencode 二进制路径（默认 /usr/local/bin/opencode），只读挂载
+#   OPENCODE_AUTH     auth.json 路径（默认 ~/.local/share/opencode/auth.json）
+#                     —— 整文件 base64 经 OPENCODE_AUTH_JSON env 注入容器，不挂载
+#   DOCKER_RUN_ARGS   追加给 docker run 的参数（默认为空；白名单:
+#                     --cpus* / --memory* / --pids-limit* / --rm / --name=*
+#                     / --network=bridge / --read-only / --tmpfs=*，
+#                     --privileged / --pid=host / --volume / --network host
+#                     等一律拒绝）
+# =============================================================================
+set -uo pipefail
+
+DEFAULT_IMAGE="kpbot/app-tuner-agent-agent-arthas-trigger:1.0-openeuler24.03"
+IMAGE="$DEFAULT_IMAGE"
+SAVE_DIR=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --save) SAVE_DIR="${2:-}"; shift 2 ;;
+        *) IMAGE="$1"; shift ;;
+    esac
+done
+
+# (5) 默认值必须是 Linux 真实路径（不得为 Windows 风格 .exe）
+BIN="${OPENCODE_BIN:-/usr/local/bin/opencode}"
+AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
+RUN_ARGS="${DOCKER_RUN_ARGS:-}"
+
+# (1) fail-closed：路径不存在直接退出，而非警告后继续
+[ -e "${BIN}" ] || { echo "错误: opencode 二进制不存在 ${BIN}" >&2; exit 1; }
+[ -e "${AUTH}" ] || { echo "错误: opencode auth.json 不存在 ${AUTH}" >&2; exit 1; }
+
+# (2) realpath 解析 + 白名单前缀（拒绝符号链接绕过与任意路径注入 docker -v）
+AUTH="$(realpath -e "${AUTH}")" || exit 1
+case "${AUTH}" in
+    "$HOME"/.local/share/opencode/*|/etc/opencode/*)
+        ;;
+    *)
+        echo "错误: opencode auth.json 路径不在白名单内: ${AUTH}" >&2
+        exit 1
+        ;;
+esac
+
+BIN="$(realpath -e "${BIN}")" || exit 1
+case "${BIN}" in
+    /usr/local/bin/opencode|/usr/local/lib/node_modules/opencode-ai/bin/*|\
+    "$HOME"/.local/bin/*|"$HOME"/.bun/*|"$HOME"/.npm-global/*|"$HOME"/.local/share/opencode/*)
+        ;;
+    *)
+        echo "错误: opencode 二进制路径不在白名单内: ${BIN}" >&2
+        exit 1
+        ;;
+esac
+
+# (3) BIN 文件类型校验：ELF 魔数 fail-closed（防任意文件顶替二进制挂入容器执行）
+BIN_MAGIC="$(head -c 4 "${BIN}" | od -An -tx1 | tr -d ' \n')"
+if [ "${BIN_MAGIC}" != "7f454c46" ]; then
+    echo "错误: ${BIN} 不是 ELF 二进制 (magic=${BIN_MAGIC})" >&2
+    exit 1
+fi
+
+# (4) DOCKER_RUN_ARGS 白名单过滤：仅允许资源限制与安全开关，其余一律拒绝
+RUN_ARGS_FILTERED=()
+for tok in ${RUN_ARGS}; do
+    case "${tok}" in
+        --cpus*|--memory*|--pids-limit*|--rm|--name=*|--network=bridge|--read-only|--tmpfs=*)
+            RUN_ARGS_FILTERED+=("${tok}")
+            ;;
+        *)
+            echo "错误: DOCKER_RUN_ARGS 含不允许的参数: ${tok}" >&2
+            exit 1
+            ;;
+    esac
+done
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+# 凭证整文件 base64 经 env 注入（避免多行 JSON 破坏 docker -e，且不做卷挂载）
+AUTH_JSON_B64="$(base64 -w0 "${AUTH}")"
+
+for mode in with without; do
+    echo "==> SKILL_MODE=${mode}"
+    cid=$(docker run -d ${RUN_ARGS_FILTERED[@]+"${RUN_ARGS_FILTERED[@]}"} \
+        -e SKILL_MODE=${mode} -e MODEL="${MODEL:-opencode/glm-5.3-flash-free}" \
+        -e "OPENCODE_AUTH_JSON=${AUTH_JSON_B64}" \
+        -v "${BIN}":/usr/local/bin/opencode:ro \
+        "${IMAGE}") || { echo "docker run 失败" >&2; exit 1; }
+    docker wait "${cid}" >/dev/null
+    docker inspect -f '{{.State.ExitCode}}' "${cid}" > "${TMP}/${mode}.exit"
+    docker cp "${cid}":/workspace/results/result.json "${TMP}/${mode}.json" 2>/dev/null || true
+    if [ -n "${SAVE_DIR}" ]; then
+        mkdir -p "${SAVE_DIR}"
+        for f in result.json trace.jsonl trace_summary.json opencode.log; do
+            docker cp "${cid}":/workspace/results/${f} "${SAVE_DIR}/${mode}.${f}" 2>/dev/null || true
+        done
+    fi
+    docker rm "${cid}" >/dev/null
+done
+
+# --save 回拷产物做凭证剔除：避免凭证经日志/结果落盘到宿主（更不可进仓库）。
+# 凭证 blob 经 stdin 传入 python——argv 会经 /proc/<pid>/cmdline 与 ps 对本机
+# 其他用户可见，不得把 base64 凭证拼进命令行（评审意见，与 #141 同步收敛）。
+if [ -n "${SAVE_DIR}" ]; then
+    cat > "${TMP}/redact.py" <<'PY'
+import os, re, sys
+save, blob = sys.argv[1], sys.stdin.read()
+pat = re.compile(r'("(?:access_token|api[_-]?key|secret|token|password|key)"\s*:\s*")[^"]*(")', re.I)
+skey = re.compile(r'sk-[A-Za-z0-9_\-]{8,}')
+for name in sorted(os.listdir(save)):
+    p = os.path.join(save, name)
+    if not os.path.isfile(p):
+        continue
+    try:
+        s = open(p, encoding="utf-8", errors="ignore").read()
+    except Exception:
+        continue
+    t = s
+    if blob:
+        t = t.replace(blob, "***REDACTED***")
+    t = pat.sub(r'\1***REDACTED***\2', t)
+    t = skey.sub("***REDACTED***", t)
+    if t != s:
+        open(p, "w", encoding="utf-8").write(t)
+        print("[redact] %s: 已剔除凭证串" % name)
+PY
+    printf '%s' "${AUTH_JSON_B64:-}" | python3 "${TMP}/redact.py" "${SAVE_DIR}"
+fi
+
+unset AUTH_JSON_B64
+
+python3 - "${TMP}" <<'PY'
+import json, os, sys
+tmp = sys.argv[1]
+keys = ["skill_mode", "exit", "success", "trigger", "skills_invoked", "tools_used"]
+rows = []
+for m in ("with", "without"):
+    d = {}
+    p = os.path.join(tmp, m + ".json")
+    if os.path.exists(p):
+        try: d = json.load(open(p))
+        except Exception: d = {}
+    d.setdefault("skill_mode", m)
+    d.setdefault("exit", open(os.path.join(tmp, m + ".exit")).read().strip())
+    rows.append(d)
+print("| " + " | ".join(keys) + " |")
+print("|-" + "-|-".join("-" * len(k) for k in keys) + "-|")
+for d in rows:
+    print("| " + " | ".join(str(d.get(k, "")) for k in keys) + " |")
+PY
+
+# ---- 取证完整性守卫：任一条件的 result.json 缺失即以非 0 退出 ----
+# 容器在取证（docker inspect / docker cp）完成前退出或被删除（含镜像损坏）时，
+# 上面的表格会以空串兜底呈现——不得让这种“无证据运行”以退出码 0 冒充有效 A/B 对照。
+EVIDENCE_FAILED=0
+for mode in with without; do
+    if [ ! -s "${TMP}/${mode}.json" ]; then
+        echo "错误: ${mode}: result.json 缺失或为空，A/B 证据不完整（容器可能在取证前退出或镜像已过期）" >&2
+        EVIDENCE_FAILED=1
+    fi
+done
+if [ "${EVIDENCE_FAILED}" = "1" ]; then
+    exit 1
+fi

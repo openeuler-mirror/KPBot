@@ -1,0 +1,94 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 vllm-ascend-profiling 完成 Stage-1 环境诊断
+#
+# 拉取与测试方法（人类可读）：
+#   # 构建（openEuler 源，需 --network host）
+#   docker build --network host \
+#     -f skills/kpbot-app-tuner/subskills/vllm-ascend-profiling/cases/agent-stage1-diagnosis/Dockerfile \
+#     -t kpbot/app-tuner-agent-stage1:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。with-skill 在容器内接入 vllm-ascend-profiling 子 skill，
+# prompt 显式要求调用；without-skill 不接入任何 skill，prompt 只描述任务不提
+# skill。两臂除第 1 句的 skill 提及差异外逐行相同：同一套规范检查名清单
+#（docker_daemon/container_running/vllm_process/PYTHONMALLOC/vllm_ttft_fork/
+# vllm_ascend/vllm_config）与语义对照在两臂都要给出，否则 without 臂命名
+# 自由度不同会让 verify 的精确集合比对恒 0（quantification 失效）。
+#
+# 任务：对一台运行 vLLM 服务的 docker 容器完成 Stage-1 环境诊断，产出
+# opt/diagnosis.json（schema 见 prompts/）。判定用 verify.sh **独立探测**
+# （自建 docker exec 探针，不复用 skill 脚本逻辑）计算地面真值 failed 集，
+# 与 agent 报告严格比对。
+#
+# 与 code-optimizer A/B 用例的差异：不是编译/speedup，核心指标是
+#「诊断正确率 diagnosis_correct」（0/1）；建议宿主机预置故障
+#（如 unset PYTHONMALLOC 重启 vllm）后再跑，否则 GT 为空时无区分度。
+# 本用例不重启 vLLM、不执行需要重启的修复（agent 只输出诊断与修复计划）。
+
+name: agent-stage1-diagnosis
+skill: vllm-ascend-profiling
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/app-tuner-agent-stage1:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount           # ~/.local/share/opencode/auth.json
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true                # 运行时把 /staging/skill 接入 .opencode/skills/
+    without: false
+  metric: diagnosis_correct   # 核心对比指标（0/1，verify.sh 独立判定）
+  uplift: diagnosis_correct_with / diagnosis_correct_without
+
+build:
+  context: ../../../../../../                    # 指向 Plugins/app-tuner/
+  dockerfile: skills/kpbot-app-tuner/subskills/vllm-ascend-profiling/cases/agent-stage1-diagnosis/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机 + Ascend NPU（宿主机运行 vllm-ascend 容器，真机项）
+  - docker daemon + /var/run/docker.sock（run_ab.sh 默认挂载，供容器内 docker CLI）
+  - 容器内有运行 vllm 服务的目标容器（或 docker run 时显式 -e TARGET_CONTAINER=<name>）
+  - opencode 二进制（运行时只读挂载 :ro，当前迭代；见下方安全说明）
+  - opencode auth.json（运行时只读挂载；见下方安全说明）
+  - 容器可访问 deepseek API（bridge 网络默认 NAT 出网可用；不要 --network host）
+
+# 意见10（凭证暴露）治理说明：
+#   1. agent 容器不再默认 --network host（run_ab.sh 已改 bridge），不再共享宿主
+#      网络命名空间；需要宿主网络时显式传 DOCKER_RUN_ARGS 并自担风险。
+#   2. entrypoint 在 /workspace/opencode.json 落 permission 规则：webfetch/websearch
+#      deny、bash 的 curl/wget/ssh 等 deny、read 对 auth.json 与 *.env deny/ask。
+#      --auto 只自动批准未显式 deny 的动作，deny 规则仍然强制生效。
+#   3. 残余风险（文档化）：bash 嵌套（bash -lc 'curl …'）绕过 token 级 deny、
+#      docker.sock 仍可用、auth.json 对 agent 进程文件级可读。彻底消除需
+#      短期 token / 进程注入式凭据（后续迭代）。
+#   4. 宿主 opencode 二进制挂载（意见3.0-2）：run_ab.sh:54 历史默认可写挂载
+#      已修为 :ro（2026-10）——容器只需执行权限，:ro 由挂载层保证、与容器内
+#      root/CAP_DAC_OVERRIDE 无关，宿主二进制必检：a) 未来 opencode 若需写
+#      自身安装目录，应改为 COPY 进镜像而非去掉 :ro；b) 经 OPENCODE_BIN
+#      覆盖路径时同样保持 :ro（与文件类型无关）。
+#   5. docker.sock 维持 rw 挂载：socket 为双向通道、加 :ro 无实际约束力；
+#      该暴露面属既有 finding security-docker-socket-mounted-into-auto-approved-agent，
+#      「受限 proxy / 移除」为方案级跟进（需 docker-api proxy 或改造容器内
+#      探针方式），不在本轮实施，确认为已知残余风险。
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with                  # 每次运行设 with 或 without（A/B 对照）
+  EXPECTED_FAILED_CHECKS: ""        # 地面真值覆盖：逗号分隔检查名，留空=自动探测
+  EXPECTED_VLLM_ASCEND_OK: auto     # auto | true | false（真机无 pip 探针时的手动覆盖）
+  OPENCODE_PERMISSIONS_GUARD: "1"   # 生成 opencode.json 收敛 agent 权限；"0" 关闭（调试用）
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: diagnosis_correct
+    expect: 1

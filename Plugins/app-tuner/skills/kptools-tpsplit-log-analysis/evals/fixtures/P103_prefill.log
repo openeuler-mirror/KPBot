@@ -1,0 +1,66 @@
+INFO 2026-11-23 engine heartbeat (noise line)
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=4/8 wait=0.336 read=0.2 nreq=4 reqs=na sub=take_draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=1/8 wait=0.145 read=0.2 nreq=4 reqs=na sub=take_draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=0/8 wait=3.000 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=7/8 wait=2.767 read=0.2 nreq=4 reqs=na sub=main
+[pool_worker] tp=4/8 start_load_kv batch=3eb13b90 reqs=4 cost 29.582ms
+[pool_worker] tp=5/8 start_load_kv batch=3eb13b90 reqs=4 cost 29.657ms
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=6.727 reqs=4 tp=7/8
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=2/8 wait=0.350 read=0.2 nreq=4 reqs=na sub=take_draft
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=7.178 reqs=4 tp=3/8
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=7/8 wait=0.622 read=0.2 nreq=4 reqs=na sub=draft
+[TTFT][BREAKDOWN] req=req_0003 ts=104.500 batch=3eb13b90 ttft=785.134 tokenize_render=2.052 dispatch=1.698 add_req=0.300 mm_hash=0.547 queue_wait=10.309 wait_exec=13.041 load_kv=0.000 forward=750.000 sample=0.641 save_kv=0.000 step_other=5.000 out_delivery=1.546 residual=0.000 lb_dispatch=5.0 hash=1.0 ext_lookup=2.0 alloc=1.0 overhead=0.5 sched_total=4.0 update=1.0 emit=0.5 step_exec=250.0 add_req_iq=1.0 add_req_proc=2.0 preempt=0 fwd_tokens=40 fwd_steps=1
+[SHM_DEQUEUE] t=1001.0 wait=31.0 read=0.3 mono=1732000000000 tid=99 total=99.0 count=10 avg=9.9
+[SHM_DEQUEUE] t=1004.0 wait=34.0 read=0.3 mono=1732000000000 tid=99 total=99.0 count=10 avg=9.9
+[SHM_DEQUEUE] t=1003.0 wait=33.0 read=0.3 mono=1732000000000 tid=99 total=99.0 count=10 avg=9.9
+[TTFT][BREAKDOWN] req=req_0001 ts=101.500 batch=3eb13b90 ttft=362.729 tokenize_render=1.720 dispatch=1.554 add_req=3.309 mm_hash=0.303 queue_wait=10.029 wait_exec=13.887 load_kv=0.000 forward=240.415 sample=0.531 save_kv=0.000 step_other=89.144 out_delivery=1.837 residual=0.000 lb_dispatch=5.0 hash=1.0 ext_lookup=2.0 alloc=1.0 overhead=0.5 sched_total=4.0 update=1.0 emit=0.5 step_exec=250.0 add_req_iq=1.0 add_req_proc=2.0 preempt=0 fwd_tokens=12 fwd_steps=1
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=5/8 wait=1.273 read=0.2 nreq=4 reqs=na sub=aux
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=5/8 wait=0.649 read=0.2 nreq=4 reqs=na sub=draft
+[pool_worker] tp=2/8 start_load_kv batch=3eb13b90 reqs=4 cost 31.989ms
+[TTFT_KVXFER][put] req=req_0005 total=0.1 build_key=0.0 lookup=0.0 prepare=0.1 sync=0.0 put=0.0
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=3/8 wait=2.773 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=4/8 wait=0.600 read=0.2 nreq=4 reqs=na sub=draft
+[pool_worker] tp=0/8 start_load_kv batch=3eb13b90 reqs=4 cost 38.893ms
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=6/8 wait=0.382 read=0.2 nreq=4 reqs=na sub=take_draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=7/8 wait=0.286 read=0.2 nreq=4 reqs=na sub=take_draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=3/8 wait=1.165 read=0.2 nreq=4 reqs=na sub=aux
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=4.520 reqs=4 tp=2/8
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=5.453 reqs=4 tp=1/8
+[TTFT_KVXFER][put] req=req_0003 total=19.456 build_key=0.3 lookup=0.2 prepare=1.0 sync=0.5 put=18.0 finalize=0.2
+[TTFT_KVXFER][put] req=req_0005 total=20.686 build_key=0.3 lookup=0.2 prepare=1.0 sync=0.5 put=18.0 finalize=0.2
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=1/8 wait=2.843 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=2/8 wait=1.320 read=0.2 nreq=4 reqs=na sub=aux
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=4.888 reqs=4 tp=6/8
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=0/8 wait=0.500 read=0.2 nreq=4 reqs=na sub=take_draft
+[TTFT][BREAKDOWN] req=req_0005 ts=2001.500 batch=3eb13b90 ttft=388.773 tokenize_render=2.148 dispatch=1.565 add_req=2.671 mm_hash=0.592 queue_wait=6.817 wait_exec=11.656 load_kv=0.000 forward=279.371 sample=0.628 save_kv=0.000 step_other=81.139 out_delivery=2.185 residual=0.000 lb_dispatch=5.0 hash=1.0 ext_lookup=2.0 alloc=1.0 overhead=0.5 sched_total=4.0 update=1.0 emit=0.5 step_exec=250.0 add_req_iq=1.0 add_req_proc=2.0 preempt=0 fwd_tokens=12 fwd_steps=1
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=3/8 wait=0.885 read=0.2 nreq=4 reqs=na sub=draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=0/8 wait=1.000 read=0.2 nreq=4 reqs=na sub=draft
+[TTFT_KVXFER][put] req=req_0003 total=0.1 build_key=0.0 lookup=0.0 prepare=0.1 sync=0.0 put=0.0
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=6.455 reqs=4 tp=5/8
+[pool_worker] tp=3/8 start_load_kv batch=3eb13b90 reqs=4 cost 32.924ms
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=6/8 wait=0.609 read=0.2 nreq=4 reqs=na sub=draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=2/8 wait=0.735 read=0.2 nreq=4 reqs=na sub=draft
+[TTFT_KVXFER][put] req=req_0001 total=19.185 build_key=0.3 lookup=0.2 prepare=1.0 sync=0.5 put=18.0 finalize=0.2
+[TTFT_KVXFER][put] req=req_0007 total=0.1 build_key=0.0 lookup=0.0 prepare=0.1 sync=0.0 put=0.0
+[TTFT_KVXFER][put] req=req_0001 total=0.1 build_key=0.0 lookup=0.0 prepare=0.1 sync=0.0 put=0.0
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=5/8 wait=0.280 read=0.2 nreq=4 reqs=na sub=take_draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=0/8 wait=1.500 read=0.2 nreq=4 reqs=na sub=aux
+[TTFT_KVXFER][put] req=req_0007 total=20.995 build_key=0.3 lookup=0.2 prepare=1.0 sync=0.5 put=18.0 finalize=0.2
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=5/8 wait=2.825 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=4/8 wait=2.816 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=2/8 wait=2.765 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=7/8 wait=1.101 read=0.2 nreq=4 reqs=na sub=aux
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=1/8 wait=1.104 read=0.2 nreq=4 reqs=na sub=aux
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=4/8 wait=1.263 read=0.2 nreq=4 reqs=na sub=aux
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=8.473 reqs=4 tp=0/8
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=6/8 wait=1.113 read=0.2 nreq=4 reqs=na sub=aux
+[SHM_DEQUEUE] t=1000.0 wait=30.0 read=0.3 mono=1732000000000 tid=99 total=99.0 count=10 avg=9.9
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=6/8 wait=2.623 read=0.2 nreq=4 reqs=na sub=main
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=3/8 wait=0.254 read=0.2 nreq=4 reqs=na sub=take_draft
+[SHM_DEQUEUE_BATCH] batch=3eb13b90-1 tp=1/8 wait=0.642 read=0.2 nreq=4 reqs=na sub=draft
+[TTFT][BREAKDOWN] req=req_0007 ts=2004.500 batch=3eb13b90 ttft=362.161 tokenize_render=2.415 dispatch=1.475 add_req=2.765 mm_hash=0.399 queue_wait=8.807 wait_exec=10.839 load_kv=0.000 forward=255.075 sample=0.680 save_kv=0.000 step_other=77.988 out_delivery=1.719 residual=0.000 lb_dispatch=5.0 hash=1.0 ext_lookup=2.0 alloc=1.0 overhead=0.5 sched_total=4.0 update=1.0 emit=0.5 step_exec=250.0 add_req_iq=1.0 add_req_proc=2.0 preempt=0 fwd_tokens=12 fwd_steps=1
+[pool_worker] tp=1/8 start_load_kv batch=3eb13b90 reqs=4 cost 25.818ms
+[pool_worker] tp=6/8 start_load_kv batch=3eb13b90 reqs=4 cost 29.223ms
+[TTFT_DRAFT] batch=3eb13b90 draft_wall=6.265 reqs=4 tp=4/8
+[pool_worker] tp=7/8 start_load_kv batch=3eb13b90 reqs=4 cost 26.602ms
+[SHM_DEQUEUE] t=1002.0 wait=32.0 read=0.3 mono=1732000000000 tid=99 total=99.0 count=10 avg=9.9

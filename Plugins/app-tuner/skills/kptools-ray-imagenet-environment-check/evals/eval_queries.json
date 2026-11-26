@@ -1,0 +1,14 @@
+{
+  "skill_name": "kptools-ray-imagenet-environment-check",
+  "queries": [
+    {"id": "RE-Q01", "prompt": "Ray ImageNet 基准前只读检查一下已有环境", "should_trigger": true, "note": "核心触发"},
+    {"id": "RE-Q02", "prompt": "确认 torch、torchvision、Ray 版本和 CPU 预处理接口是否满足 smoke", "should_trigger": true, "note": "版本与实际 API"},
+    {"id": "RE-Q03", "prompt": "用安全认证检查非默认 Ray 端点，别打印 token", "should_trigger": true, "note": "端点与凭据"},
+    {"id": "RE-Q04", "prompt": "共享内存和可用内存够不够跑这个小 Ray 图像预处理测试", "should_trigger": true, "note": "资源前置"},
+    {"id": "RE-Q05", "prompt": "环境探针超时了，给我结构化原因，不要自动修复", "should_trigger": true, "note": "失败语义"},
+    {"id": "RE-N01", "prompt": "从零安装 Ray 和 PyTorch 并创建一个新环境", "should_trigger": false, "note": "安装不在只读技能范围"},
+    {"id": "RE-N02", "prompt": "正式跑三轮 Ray ImageNet smoke 并给我吞吐", "should_trigger": false, "note": "执行基准而非环境检查"},
+    {"id": "RE-N03", "prompt": "证明这个 Ray 集群生产 SLA 全部健康", "should_trigger": false, "note": "超出有限探针结论"},
+    {"id": "RE-N04", "prompt": "评估完整 ImageNet 上 ResNet 的 top-1 准确率", "should_trigger": false, "note": "不是模型精度工具"}
+  ]
+}

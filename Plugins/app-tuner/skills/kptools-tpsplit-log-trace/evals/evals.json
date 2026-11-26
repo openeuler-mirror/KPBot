@@ -1,0 +1,54 @@
+{
+  "skill_name": "kptools-tpsplit-log-trace",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "generate-deploy-script",
+      "prompt": "帮我把最新的 TTFT 打点 patch（v3.2）部署到 13 集群。先别连远端，给我写一个 deploy_ttft_full.sh 一键部署脚本，要能对单个容器完成：备份、md5 基座核对（不一致就退出，不许强推）、docker cp 覆盖、site-packages 文件 find 定位、grep 校验关键字段、py_compile。我 review 完自己拿去跑。",
+      "expected_output": "产出与 scripts/deploy_ttft_full.sh 同口径的部署脚本：mktemp 备份、基座指纹核对（detokenizer.py=3fe8bf88 / kv_cache_manager.py=d1a6c67c / version.py=2b4efcd3）不符即退出且无强推选项、docker cp 覆盖 16 文件、SP 文件 find 定位、grep 11 个关键字段、py_compile、CRLF 自检（tr -d '\\r'）、known-good v3.2 指纹核对、不自动重启并打印含 VLLM_TTFT_SHM_LOG=1 的重启指引。",
+      "files": [],
+      "assertions": [
+        "脚本包含备份步骤：把容器内现役文件拉出到备份目录（mktemp 或时间戳目录）",
+        "脚本包含基座指纹核对（detokenizer.py / kv_cache_manager.py / version.py），不一致即退出且无强推选项",
+        "脚本覆盖方式使用 docker cp（对 stopped 容器有效），而非依赖 docker exec 写入",
+        "脚本包含 site-packages 文件的 find 定位逻辑（vllm_ascend / ascend_store 路径模式）",
+        "grep 校验覆盖关键打点字段（frontend_ts / schedule_total_time / queue_wait / step_other / add_req_iq / TTFT_DECODE / TTFT_KVXFER / start_load_kv / TTFT_DRAFT / _ttft_in_draft / _TTFT_SHM_DQ 中至少 8 个）",
+        "脚本包含 py_compile 语法检查步骤",
+        "脚本处理 Windows CRLF 问题（tr -d '\\r' 或等价自检）",
+        "脚本不自动重启引擎，仅打印重启指引，且指引包含 VLLM_TTFT_SHM_LOG=1 环境变量提示",
+        "脚本包含 known-good 版本指纹核对（model_runner_v1=2e7db5f3 / shm_broadcast=55821b06 / gpu_model_runner=0a59cde4 / stats=9f9f5276 / sched_output=c6d9b049 中至少 3 个）"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "plan-cluster-deployment",
+      "prompt": "明天要在 105/106/107 集群跑 TTFT 拆解压测（105+107 是 Ray TP32 的 P，106 是 D，proxy 跑在 106）。今天想把打点先部署上去，帮我规划一下完整部署流程和风险点，先出方案我确认后再动远端。",
+      "expected_output": "部署方案覆盖：确认参数（含 proxy/压测端）、上传、备份+md5 基座核对（不一致停下问用户）、docker cp 覆盖、grep/py_compile 校验、不自动重启由用户停启、smoke 验证 [TTFT][BREAKDOWN] / [TTFT_DRAFT] / [SHM_DEQUEUE_BATCH]、VLLM_TTFT_SHM_LOG=1 与 RAY_DEDUP_LOGS=0 提示、勿动同机他人容器（dsv41/v30）、proxy 和压测端 patch 也要推。",
+      "files": [],
+      "assertions": [
+        "方案包含备份与 md5 基座核对步骤，且明确不一致时停下问用户/禁止强推",
+        "方案明确不自动重启 P/D 引擎与 proxy，由用户手动停启",
+        "方案包含 smoke 验证清单（[TTFT][BREAKDOWN] / [TTFT_DRAFT] / [SHM_DEQUEUE_BATCH]）",
+        "方案提到 VLLM_TTFT_SHM_LOG=1 环境变量",
+        "方案提到 Ray 相关注意事项（RAY_DEDUP_LOGS=0 或 Ray actor 环境变量不继承启动 shell）",
+        "方案提示勿动同机他人容器（dsv41/v30）或部署前先看 NPU 占用",
+        "方案覆盖 proxy 与压测端 patch 的部署（load_balance_proxy_server_example.py / benchmark_serving）",
+        "方案包含部署后 grep / py_compile 校验步骤"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "troubleshoot-shm-dequeue-silent",
+      "prompt": "我在 P 侧的启动 shell 里 export VLLM_TTFT_SHM_LOG=1 了，重启引擎后 [SHM_DEQUEUE] 日志一条都没有，engine 日志里也看不到 worker 侧的输出。帮我分析下可能原因和排查步骤。",
+      "expected_output": "分析指出三因叠加排查路径：(1) Ray worker 是 Ray actor，env 来自 raylet 而非启动 shell——需确认部署的是懒读 os.environ 的新版 shm_broadcast.py（md5 55821b06）；(2) Ray 远端日志经 log_to_driver 汇总到 head 一份日志，需要 RAY_DEDUP_LOGS=0；(3) 部署层未生效（grep _TTFT_SHM_DQ 校验、md5 比对）。",
+      "files": [],
+      "assertions": [
+        "分析指出 Ray worker 是 Ray actor、环境变量来自 raylet 而非启动 shell（export 不生效的机制）",
+        "分析提到确认部署的是新版 shm_broadcast.py（懒读 os.environ / md5 55821b06）",
+        "分析提到 RAY_DEDUP_LOGS=0（Ray 日志去重导致 worker 输出不可见）",
+        "分析提到 Ray 远端日志经 log_to_driver 汇总到 head 节点日志",
+        "分析给出可操作的排查步骤（如 grep 校验 _TTFT_SHM_DQ 确认 patch 已生效、检查 head 日志位置）"
+      ]
+    }
+  ]
+}

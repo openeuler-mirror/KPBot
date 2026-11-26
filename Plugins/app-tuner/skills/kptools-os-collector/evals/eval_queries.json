@@ -1,0 +1,14 @@
+{
+  "skill_name": "kptools-os-collector",
+  "queries": [
+    { "id": "OQ-01", "prompt": "检查 OS 内核参数配置", "should_trigger": true, "note": "sysctl" },
+    { "id": "OQ-02", "prompt": "看看透明大页 THP 状态", "should_trigger": true, "note": "thp" },
+    { "id": "OQ-03", "prompt": "检查 HugePages 大页配置", "should_trigger": true, "note": "hugepages" },
+    { "id": "OQ-04", "prompt": "irqbalance 和 tuned 服务开着吗", "should_trigger": true, "note": "services" },
+    { "id": "OQ-05", "prompt": "看看这个容器的资源限制", "should_trigger": true, "note": "cgroup" },
+    { "id": "OQ-06", "prompt": "内核启动参数里有哪些优化项", "should_trigger": true, "note": "cmdline" },
+    { "id": "NQ-01", "prompt": "检查 BIOS 电源配置", "should_trigger": false, "note": "routes to kptools-bios-collector" },
+    { "id": "NQ-02", "prompt": "看看线程在哪些核上", "should_trigger": false, "note": "routes to kptools-proc-collector" },
+    { "id": "NQ-03", "prompt": "采集系统 CPU 利用率", "should_trigger": false, "note": "routes to kptools-nmon" }
+  ]
+}

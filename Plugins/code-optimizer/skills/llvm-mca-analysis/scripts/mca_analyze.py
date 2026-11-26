@@ -1,0 +1,1018 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+llvm-mca 瓶颈分析器（鲲鹏 HiSilicon 微架构）
+
+对 ARM64 指令序列做流水线级静态仿真，输出 IPC、Block RThroughput、逐资源端口压力、
+bottleneck 归因（资源压力 vs 数据依赖）和关键依赖序列。
+
+支持微架构（用户代号 -> LLVM -mcpu）：
+  hip08 / 0xd01 / tsv110  -> tsv110
+  hip09 / 0xd02           -> hip09
+  hip10 / 0xd03           -> hip10c   (注意 LLVM 名带 c)
+  hip11 / 0xd22           -> hip11
+  hip12 / 0xd06           -> hip12
+
+输入模式：
+  --asm <file|->          纯汇编文本或 .s 文件（'-' 读 stdin）
+  --source <file> --function <name> [--source-language rust]
+                          C/C++ 源码（clang -S 编译）或 Rust 源码（rustc --emit=asm 编译）
+  --binary <file> --function <name>   二进制/目标文件，llvm-objdump -d 反汇编后提取函数
+  Rust legacy mangled 符号形如 _ZN4calc3sum17h<hash>E，函数匹配按剥离
+  17h<hash>E 后缀后的前缀进行（--function 传 calc::sum 或 _ZN4calc3sum 均可命中）。
+  --source-language 语义：提供时=期望值，与汇编产物推导值（含 _ZN...17h<hash>E
+  符号→rust，否则 c_cpp）不一致即报错退出（fail-closed）；缺省时 input.source_language
+  填推导值（input.language_source 记录 derived/cli_verified 溯源）。
+
+输出：JSON 契约（含可读摘要 summary_text）。--text 仅打印可读摘要。
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+# 用户代号 -> LLVM -mcpu。多别名映射到同一调度模型。
+UARCH_MAP = {
+    "hip08": "tsv110", "0xd01": "tsv110", "tsv110": "tsv110",
+    "hip09": "hip09", "0xd02": "hip09",
+    "hip10": "hip10c", "0xd03": "hip10c", "hip10c": "hip10c",
+    "hip11": "hip11", "0xd22": "hip11",
+    "hip12": "hip12", "0xd06": "hip12",
+}
+# LLVM -mcpu -> 优先展示的用户代号（用于报告里的 uarch 字段）
+MCPU_TO_UARCH = {
+    "tsv110": "hip08",
+    "hip09": "hip09",
+    "hip10c": "hip10",
+    "hip11": "hip11",
+    "hip12": "hip12",
+}
+
+MTRIPLE = "aarch64-linux-gnu"
+
+
+def sanitize_resource_name(name):
+    """LLVM JSON 把分组资源的子单元编码为末尾控制字符（如 "TSV110UnitAB.\\x00"），
+    清洗成可读形式 "TSV110UnitAB.0"。"""
+    return re.sub(r'[\x00-\x1f]', lambda m: str(ord(m.group())), name or "")
+
+
+def die(msg):
+    """构造失败契约并退出。"""
+    out = {"llvm_mca_analysis_result": {"success": False, "error_message": str(msg)}}
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    sys.exit(1)
+
+
+def resolve_mcpu(uarch):
+    key = (uarch or "").strip().lower()
+    if key not in UARCH_MAP:
+        die("不支持的微架构代号 '%s'。支持: %s" % (
+            uarch, ", ".join(sorted(set(UARCH_MAP.keys())))))
+    return UARCH_MAP[key]
+
+
+def run_cmd(cmd, input_text=None):
+    """运行命令，返回 (returncode, stdout, stderr)。"""
+    try:
+        p = subprocess.run(
+            cmd, input=input_text, capture_output=True, text=True, timeout=120)
+        return p.returncode, p.stdout, p.stderr
+    except FileNotFoundError as e:
+        die("缺少可执行文件: %s（命令: %s）" % (e, " ".join(cmd)))
+    except subprocess.TimeoutExpired:
+        die("命令超时: %s" % " ".join(cmd))
+
+
+# --------------------------------------------------------------------------- #
+# 环境与模型支持预检
+# --------------------------------------------------------------------------- #
+# hip09/hip10c/hip11/hip12 是 HiSilicon 贡献的调度模型，仅在特定 LLVM 构建
+# （如 openEuler 的 llvm-toolset）中可用；tsv110(hip08) 是上游模型。
+# 在不支持这些模型的 LLVM 上，llvm-mca 遇到未识别的 -mcpu 会静默回退到 generic
+# 模型（不报错退出），产出无意义的 IPC。所以必须在运行前主动探测。
+
+# 全部支持的 uarch 代号 -> LLVM -mcpu（用于 check-env / 失败时列出可用项）
+ALL_UARCHES = [("hip08", "tsv110"), ("hip09", "hip09"),
+               ("hip10", "hip10c"), ("hip11", "hip11"), ("hip12", "hip12")]
+
+
+def probe_mcpu_support(mcpu):
+    """探测 llvm-mca 是否真支持 -mcpu=<mcpu>。
+
+    未识别的 CPU 名 llvm-mca 不会报错退出，而是打印
+    "'<name>' is not a recognized processor ... (ignoring processor)" 后回退到
+    generic 模型。因此靠 stderr/stdout 文本判定，而非返回码。
+    返回 (supported: bool, message: str)。
+    """
+    # llvm-mca 缺失时返回不支持而非 die：--check-env 需在缺工具的机器上
+    # 也能打印完整 tools/uarch_support 报告（preflight 路径不受影响——
+    # 它在调用前已用 which 预检并对缺失给出专门的 die 说明）。
+    if not shutil.which("llvm-mca"):
+        return False, "未找到 llvm-mca 可执行文件"
+    asm = "mov x0, x0\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".s", delete=False) as tf:
+        tf.write(asm)
+        path = tf.name
+    try:
+        rc, out, err = run_cmd(
+            ["llvm-mca", "-mtriple=%s" % MTRIPLE, "-mcpu=%s" % mcpu,
+             "--iterations=1", path])
+        combined = ((err or "") + (out or "")).lower()
+        if "not a recognized processor" in combined or "no scheduling model" in combined:
+            return False, (err or out or "").strip()
+        if rc != 0:
+            return False, (err or out or "").strip()
+        return True, ""
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def list_supported_uarches():
+    """探测全部 5 个 uarch 模型在当前系统的支持情况。返回 [(uarch, mcpu, supported)]。"""
+    return [(u, m, probe_mcpu_support(m)[0]) for u, m in ALL_UARCHES]
+
+
+def preflight(mcpu, uarch):
+    """运行前预检：llvm-mca 是否安装、是否支持目标微架构。失败则 die 给出清晰说明。"""
+    if not shutil.which("llvm-mca"):
+        die("未找到 llvm-mca 可执行文件。请安装 LLVM（须含 llvm-mca 工具）。")
+    ok, msg = probe_mcpu_support(mcpu)
+    if ok:
+        return
+    supported = ["%s(%s)" % (u, m) for u, m, ok2 in list_supported_uarches() if ok2]
+    die(
+        "当前系统的 llvm-mca 不支持微架构 %s（-mcpu=%s）。\n"
+        "这通常意味着你使用的是非 openEuler / 标准 LLVM 构建，缺少 HiSilicon hip 调度模型：\n"
+        "  - hip09 / hip10c / hip11 / hip12 是 HiSilicon 贡献的调度模型，仅在特定 LLVM 构建"
+        "（如 openEuler 的 llvm-toolset）中可用；\n"
+        "  - tsv110（hip08）是上游模型，标准 LLVM 通常也支持。\n"
+        "当前系统支持的型号: %s\n"
+        "请安装支持 hip 模型的 LLVM（如 openEuler llvm-toolset），或改用上述已支持的微架构。\n"
+        "原始探测输出: %s" % (
+            uarch, mcpu,
+            ", ".join(supported) if supported
+            else "（无 -- 连 tsv110 都不支持，请确认 llvm-mca 支持 aarch64 目标）",
+            msg or "(无)"))
+
+
+def check_env():
+    """显式环境检查：报告 llvm-mca / clang / llvm-objdump / rustc 及 5 个 uarch 模型的支持情况。"""
+    result = {
+        "success": True,
+        "env_check": True,
+        "tools": {
+            "llvm-mca": bool(shutil.which("llvm-mca")),
+            "clang": bool(shutil.which("clang")),
+            "llvm-objdump": bool(shutil.which("llvm-objdump")),
+            "rustc": bool(shutil.which("rustc")),
+        },
+        "uarch_support": [
+            {"uarch": u, "mcpu": m, "supported": ok}
+            for u, m, ok in list_supported_uarches()],
+        "note": "hip09/hip10c/hip11/hip12 仅在含 HiSilicon 调度模型的 LLVM 构建（如 openEuler "
+                "llvm-toolset）中可用；tsv110(hip08) 为上游模型。",
+        "error_message": "",
+    }
+    print(json.dumps({"llvm_mca_analysis_result": result},
+                     ensure_ascii=False, indent=2))
+
+
+# --------------------------------------------------------------------------- #
+# 汇编获取
+# --------------------------------------------------------------------------- #
+
+def read_asm_input(path):
+    """--asm 模式：读文件或 stdin。"""
+    if path == "-":
+        return sys.stdin.read(), "stdin"
+    if not os.path.isfile(path):
+        die("--asm 指定的文件不存在: %s" % path)
+    with open(path, "r", errors="replace") as f:
+        return f.read(), path
+
+
+def compile_source_to_asm(source, mcpu, extra_cflags):
+    """clang -S 编译 C/C++ 源码为汇编。返回 (asm_text, ok, err)。"""
+    if not shutil.which("clang"):
+        die("未找到 clang。--source 模式需要 clang 编译源码。")
+    if not os.path.isfile(source):
+        die("--source 指定的文件不存在: %s" % source)
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".s", delete=False)
+    tmp.close()
+    cmd = ["clang", "-S", "--target=%s" % MTRIPLE, "-mcpu=%s" % mcpu,
+           "-O2", "-o", tmp.name]
+    if extra_cflags:
+        cmd += extra_cflags
+    cmd.append(source)
+    rc, out, err = run_cmd(cmd)
+    if rc != 0:
+        os.unlink(tmp.name)
+        return "", False, err or out
+    with open(tmp.name, "r", errors="replace") as f:
+        asm = f.read()
+    os.unlink(tmp.name)
+    return asm, True, ""
+
+
+RUST_TRIPLE = "aarch64-unknown-linux-gnu"
+# Rust legacy mangling：_ZN<seg><seg>...17h<16-hex-hash>E（末段固定长度 17+16+1）。
+# 同一段源码两次编译 hash 基本必变，因此函数匹配按剥离 hash 后缀后的前缀进行。
+RUST_HASH_RE = re.compile(r"17h[0-9a-f]{16}E$")
+
+
+def strip_rust_hash(sym):
+    """剥离 Rust legacy mangled 符号末尾的 17h<hash>E 后缀。非该形状则原样返回。"""
+    return RUST_HASH_RE.sub("", sym or "")
+
+
+def demangle_legacy_segments(sym):
+    """把 legacy mangled 前缀（_ZN 后、17h<hash>E 剥离后）解析成段列表。
+
+    "_ZN6kernel4calc3dot" -> ["kernel", "calc", "dot"]。非 _ZN 形状返回 []。
+    段内转义（如 $ 转义 unicode）不展开——比对只要求段名逐字相等。
+    """
+    # P1-c 防护①（入口总长上限）：真实 legacy 符号远短于 1024 字符；超长输入
+    # 直接判非法，防超长数字串喂给 int() 触发 CPython>=3.10.7 的 4300 位
+    # 转换上限 ValueError（verify.sh 交叉核对段以本函数归一化 agent 自报
+    # function 字段，恶意构造不得令判定进程带未捕获异常退出）。
+    if not isinstance(sym, str) or len(sym) > 1024:
+        return []
+    s = strip_rust_hash(sym or "")
+    if not s.startswith("_ZN"):
+        return []
+    s = s[3:]
+    segs = []
+    while s:
+        m = re.match(r"(\d+)", s)
+        if not m:
+            return []  # 段长损坏（非纯 legacy 形状）
+        # P1-c 防护②（段长字段位数上限）：真实 Itanium/Rust legacy 段长远小于
+        # 6 位；超 6 位的段长字段必是畸形构造，先于 int() 拦截返回 []。
+        if len(m.group(1)) > 6:
+            return []
+        n = int(m.group(1))
+        s = s[m.end():]
+        if n <= 0 or len(s) < n:
+            return []
+        segs.append(s[:n])
+        s = s[n:]
+    return segs
+
+
+def rust_function_variants(func):
+    """生成 --function 的候选匹配集（用于 Rust mangled 符号 hash 容忍匹配）。
+
+    - "calc::sum"  -> ["calc::sum", "_ZN4calc3sum"]（路径形式转 legacy mangled 前缀）
+    - "_ZN4calc3sum" -> ["_ZN4calc3sum"]（已是 mangled 前缀，自身即候选）
+    - "dot"        -> ["dot"]（无 "::" 且非 _ZN 的普通名，走 c_cpp 原逻辑）
+    """
+    func = func or ""
+    variants = [func]
+    if "::" in func:
+        segs = [s for s in func.split("::") if s]
+        if segs and all(segs):
+            variants.append("_ZN" + "".join("%d%s" % (len(s), s) for s in segs))
+    return variants
+
+
+def match_rust_label(label, func):
+    """判断汇编/反汇编里的符号 label 是否匹配 --function（Rust hash 容忍）。
+
+    候选集：func 本身、"_"+func、mangled(func)（"calc::sum" -> "_ZN4calc3sum"；
+    func 以 _ZN 开头时自身即 mangled 前缀）。比对规则（任一命中即真）：
+    - label == 候选；
+    - label 剥离 17h<hash>E 后缀后 == 候选（如 _ZN4calc3sum17h...E 剥离后
+      == _ZN4calc3sum，对 --function calc::sum / _ZN4calc3sum 均命中）；
+    - 裸名（func 无 "::" 且非 _ZN）：label 段列表末段 == func 即命中
+      （--function dot_f32 命中 _ZN6kernel7example7dot_f3217h...E 的末段）。
+      该分支仅 rust 语言路径可达（c_cpp 裸名走 extract_* 的快路径不进本函数）；
+      同一裸名命中多个标签时由调用方按唯一性守卫报错。
+    """
+    if not label or not func:
+        return False
+    stripped = strip_rust_hash(label)
+    candidates = rust_function_variants(func)
+    prefixed = "_" + func
+    if prefixed not in candidates:
+        candidates.append(prefixed)
+    for cand in candidates:
+        if label == cand or stripped == cand:
+            return True
+    # 段级解析一次，裸名与尾部对齐两分支共用。
+    label_segs = demangle_legacy_segments(label)
+    if label_segs:
+        # 裸名支持：func 无 "::" 且非 _ZN 时，label 段列表末段 == 裸名即命中。
+        # 例：--function dot_f32 命中 _ZN6kernel7example7dot_f3217h...E（末段 dot_f32）。
+        # 仅 rust 语言路径会以裸名进入本函数（extract_* 对 c_cpp 裸名走快路径）；
+        # 同一裸名命中多个标签时由调用方按唯一性守卫报错。
+        if "::" not in func and not func.startswith("_ZN") and label_segs[-1] == func:
+            return True
+        # 尾部对齐：容忍外层 crate 名段差异。库 crate（如 SKILL.md 用例 1 的
+        # pub mod calc，文件 kernel.rs）编译产出的符号是 _ZN6kernel4calc3dot17h...E，
+        # --function calc::dot 生成的候选 _ZN4calc3dot 缺外层 crate 段无法整串相等。
+        # 把 label 剥 hash 后解析成段，候选段为 label 段的尾部（末 len 段全等）即命中。
+        for cand in candidates:
+            if not cand.startswith("_ZN"):
+                continue
+            cand_segs = demangle_legacy_segments(cand)
+            if not cand_segs:
+                continue
+            if len(cand_segs) <= len(label_segs) and \
+                    label_segs[-len(cand_segs):] == cand_segs:
+                return True
+    return False
+
+
+# Rust legacy mangled 符号形状，用于从汇编文本反推源语言（PR #95 review-2 修复：
+# source_language 由被分析产物推导，不再取调用方自报值）。
+RUST_ASM_SYMBOL_RE = re.compile(r"\b_ZN(?:\d+[A-Za-z0-9_.$]+)+17h[0-9a-f]{16}E\b")
+
+
+def derive_source_language(asm_text):
+    """从汇编文本推导源语言：含 rust legacy mangled 符号（_ZN...17h<hash>E）→ rust，否则 c_cpp。"""
+
+    if asm_text and RUST_ASM_SYMBOL_RE.search(asm_text):
+        return "rust"
+    return "c_cpp"
+
+
+def check_source_language(cli_lang, derived, origin):
+    """fail-closed 校验：--source-language 提供值（期望）与汇编推导值不一致即 die。
+
+    报错信息同时给出 expected 与 derived 两个值；cli_lang 为 None（缺省）时直接放行。
+    """
+
+    if cli_lang is not None and cli_lang != derived:
+        die("--source-language 期望 '%s'，但%s推导源语言为 '%s'（expected=%s, derived=%s）。"
+            "请改用推导值，或省略 --source-language 由脚本自动推导并填入输出字段。"
+            % (cli_lang, origin, derived, cli_lang, derived))
+
+
+# rustc 不含 hip10c/hip11/hip12 等 LLVM 调度模型（clang 认、rustc 不认，
+# 传不识别的 cpu 名只会被忽略并告警）。rustc 侧单独映射：
+# - tsv110 rustc 原生支持；其余鲲鹏型号退 native（目标机本机编译=目标 cpu）。
+# - aarch64 rustc 对非 tsv110 目标要求显式 +neon 才能保证 ABI 正确。
+RUSTC_CPU_MAP = {
+    "tsv110": "tsv110",
+    "hip09": "native", "hip10c": "native", "hip11": "native", "hip12": "native",
+}
+
+
+def compile_rust_source_to_asm(source, mcpu, extra_flags):
+    """rustc --emit=asm 编译 Rust 源码为汇编。返回 (asm_text, ok, err)。
+
+    cargo 项目不走此分支：按 SKILL.md 用例 2，由用户先跑
+    `cargo rustc --release -- --emit asm -C target-cpu=<model>` 产出 .s，
+    再用 --asm 模式喂给脚本（该路径无需编译，已可用）。
+    """
+    if not shutil.which("rustc"):
+        die("未找到 rustc。--source rust 模式需要 rustc 编译源码。")
+    if not os.path.isfile(source):
+        die("--source 指定的文件不存在: %s" % source)
+    rustc_cpu = RUSTC_CPU_MAP.get(mcpu, "native")
+    # edition 2021：NEON 源码的 `use core::arch::aarch64::*` 在默认 2015 edition
+    # 报 E0433（裸 core 路径不解析），必须显式 --edition 2021（与 SKILL.md 的
+    # rustc 手动编译命令一致，见 D2 规则）。
+    # 库 crate（无 fn main，如 SKILL.md 用例 1 的 pub mod 形态）需 --crate-type=lib，
+    # 否则 rustc 报 E0601 main function not found。
+    try:
+        with open(source, "r", errors="replace") as f:
+            src_text = f.read()
+    except OSError as e:
+        die("读取源码失败: %s" % e)
+    is_lib = not re.search(r"\bfn\s+main\s*\(", src_text)
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".s", delete=False)
+    tmp.close()
+    cmd = ["rustc", "-O", "--edition", "2021", "--target=%s" % RUST_TRIPLE,
+           "-C", "target-cpu=%s" % rustc_cpu,
+           "-C", "target-feature=+neon", "--emit=asm", "-o", tmp.name]
+    if is_lib:
+        cmd.append("--crate-type=lib")
+    if extra_flags:
+        cmd += extra_flags
+    cmd.append(source)
+    rc, out, err = run_cmd(cmd)
+    if rc != 0:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        return "", False, err or out
+    if not os.path.isfile(tmp.name):
+        # rustc --emit=asm 某些版本在 -o 指向不存在目录时报错但不建文件；此处兜底
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        return "", False, "rustc 未产出汇编文件（--emit=asm -o %s）" % tmp.name
+    with open(tmp.name, "r", errors="replace") as f:
+        asm = f.read()
+    os.unlink(tmp.name)
+    return asm, True, ""
+
+
+def disasm_binary(binary, mcpu):
+    """llvm-objdump -d 反汇编二进制。返回 (text, ok, err)。"""
+    if not shutil.which("llvm-objdump"):
+        die("未找到 llvm-objdump。--binary 模式需要它反汇编。")
+    if not os.path.isfile(binary):
+        die("--binary 指定的文件不存在: %s" % binary)
+    cmd = ["llvm-objdump", "-d", "--no-show-raw-insn", binary]
+    rc, out, err = run_cmd(cmd)
+    if rc != 0:
+        return "", False, err or out
+    return out, True, ""
+
+
+def extract_function_from_compiler_asm(asm_text, func, language="c_cpp"):
+    """从 clang 生成的 .s 中提取函数体。
+
+    clang .s 形如：
+        foo:
+        .Ltmp0:
+          .cfi_startproc
+          <指令>
+          ret
+        .Ltmp1:
+        .size foo, .Ltmp1-foo
+          .cfi_endproc
+
+    取 <func>: 到 .cfi_endproc（或 .size <func>）之间的内容。
+
+    Rust hash 容忍匹配：标签若是 Rust legacy mangled 符号（_ZN...17h<hash>E），
+    剥离 hash 后缀后与 --function 候选比对（calc::sum / _ZN4calc3sum 均可命中）。
+    裸名支持（仅 language=rust 启用，两道守卫）：
+    - 守卫(i) 仅 rust 语言：c_cpp 裸名仍走下方快路径，行为与原逻辑完全一致；
+    - 守卫(ii) 唯一命中：裸名按 mangled 符号末段比对，命中多个标签时报错列出
+      全部（裸名跨模块/闭包歧义概率高），唯一命中才通过。
+    """
+    # 找函数标签行：行首 func 名 + 冒号（行尾可能有注释，如 "dot:  // @dot"）
+    is_bare_name = "::" not in (func or "") and not (func or "").startswith("_ZN")
+    # c_cpp 快路径：func 是普通标识符且语言非 rust 时用原精确正则
+    # （裸名要走 rust 段级匹配必须显式 --source-language rust）
+    if is_bare_name and language != "rust":
+        label_re = re.compile(r"^\s*%s\s*:" % re.escape(func), re.MULTILINE)
+        m = label_re.search(asm_text)
+        if not m:
+            return None, "在编译产物中找不到函数标签 '%s:'" % func
+    else:
+        # Rust 路径：抽出全部候选函数标签（标识符 + ':'），逐一 hash 容忍比对
+        label_any_re = re.compile(r"^\s*([A-Za-z_.$][\w.$]*)\s*:", re.MULTILINE)
+        m = None
+        if is_bare_name:
+            # 裸名守卫(ii)：收集全部命中（按标签名去重），唯一才过，多命中报错列出全部
+            hits = {}
+            for lm in label_any_re.finditer(asm_text):
+                if match_rust_label(lm.group(1), func):
+                    hits.setdefault(lm.group(1), lm)
+            if len(hits) > 1:
+                return None, ("裸函数名 '%s' 命中 %d 个标签，无法唯一定位: %s；"
+                              "请改用带模块路径的函数名（如 mod::%s）或 mangled 前缀"
+                              % (func, len(hits), ", ".join(hits), func))
+            m = next(iter(hits.values()), None)
+            if m is None:
+                return None, ("在编译产物中找不到函数 '%s'（裸名按 mangled 符号末段"
+                              "匹配未命中；请改用路径名（如 mod::%s）或 mangled 前缀）"
+                              % (func, func))
+        else:
+            for lm in label_any_re.finditer(asm_text):
+                if match_rust_label(lm.group(1), func):
+                    m = lm
+                    break
+            if m is None:
+                return None, "在编译产物中找不到函数标签 '%s:'（已按剥离 17h<hash>E 后缀的" \
+                             "前缀容忍匹配，含 mangled 形式 _ZN...17h...E）" % func
+    start = m.end()
+    # 找函数结束边界
+    end_re = re.compile(r"^\s*\.cfi_endproc\b", re.MULTILINE)
+    em = end_re.search(asm_text, start)
+    end = em.start() if em else len(asm_text)
+    body = asm_text[start:end]
+    # 剥离对 MCA 无意义且可能引发警告的伪指令，保留指令与标签
+    cleaned = []
+    for line in body.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        # 纯注释行（AArch64 用 // 注释）
+        if s.startswith("//"):
+            continue
+        if s.startswith((".cfi_", ".loc", ".file", ".p2align", ".balign",
+                         ".align", ".type", ".size", ".Ltmp", ".Lfunc",
+                         ".LBB", ".subsection", ".variant_pcs", ".gnu_inline",
+                         ".note", ".text", ".globl", ".weak")):
+            continue
+        cleaned.append(line)
+    if not cleaned:
+        return None, "函数 '%s' 提取后无有效指令" % func
+    return "\n".join(cleaned), ""
+
+
+def extract_function_from_objdump(disasm_text, func, language="c_cpp"):
+    """从 llvm-objdump -d 输出中提取函数指令。
+
+    形如：
+        00000000 <foo>:
+               0: d2800000     mov     x0, #0
+               4: d65f03c0     ret
+               8: ...
+        <nextsym>:
+
+    --no-show-raw-insn 已去掉 hex 字节列，但地址列仍在。
+
+    Rust hash 容忍匹配：<label> 里的符号若是 _ZN...17h<hash>E 形状，剥离
+    hash 后缀后与 --function 候选比对（binary 来自另一趟编译也能对齐）。
+    裸名支持仅 language=rust 启用（守卫同 extract_function_from_compiler_asm：
+    c_cpp 裸名走快路径行为不变；rust 裸名须唯一命中，多命中报错列出全部）。
+    """
+    lines = disasm_text.splitlines()
+    # 找函数头：<func>:  或  <addr> <func>:
+    header_idx = None
+    is_bare_name = "::" not in (func or "") and not (func or "").startswith("_ZN")
+    # c_cpp 快路径：func 是普通标识符且语言非 rust 时用原精确匹配
+    if is_bare_name and language != "rust":
+        for i, line in enumerate(lines):
+            if re.search(r"<%s>:" % re.escape(func), line):
+                header_idx = i
+                break
+    else:
+        # Rust 路径：抽出 <label>: 头行里的符号名，hash 容忍比对
+        sym_re = re.compile(r"<([A-Za-z_.$][\w.$]*)>:")
+        if is_bare_name:
+            # 裸名守卫(ii)：收集全部命中（按符号名去重），唯一才过
+            hits = {}
+            for i, line in enumerate(lines):
+                for sm in sym_re.finditer(line):
+                    if match_rust_label(sm.group(1), func):
+                        hits.setdefault(sm.group(1), i)
+            if len(hits) > 1:
+                return None, ("裸函数名 '%s' 命中 %d 个符号，无法唯一定位: %s；"
+                              "请改用带模块路径的函数名（如 mod::%s）或 mangled 前缀"
+                              % (func, len(hits), ", ".join(hits), func))
+            if hits:
+                header_idx = next(iter(hits.values()))
+        else:
+            for i, line in enumerate(lines):
+                for sm in sym_re.finditer(line):
+                    if match_rust_label(sm.group(1), func):
+                        header_idx = i
+                        break
+                if header_idx is not None:
+                    break
+    if header_idx is None:
+        return None, "在反汇编结果中找不到函数 '<%s>:'" % func
+    instrs = []
+    for line in lines[header_idx + 1:]:
+        s = line.rstrip()
+        if not s.strip():
+            if instrs:
+                break  # 函数体后的空行视为结束
+            continue
+        # 遇到下一个符号头 <name>: 结束
+        if re.match(r"^\s*[0-9a-f]+\s+<.+>:\s*$", s):
+            break
+        # 指令行：形如 "       0:\t<mnemonic> <operands>"
+        m = re.match(r"^\s*[0-9a-f]+:\s+(.*)$", s)
+        if m:
+            instr = m.group(1).strip()
+            if instr:
+                instrs.append(instr)
+    if not instrs:
+        return None, "函数 '%s' 反汇编后无有效指令" % func
+    return "\n".join(instrs), ""
+
+
+def get_assembly(args, mcpu):
+    """根据输入模式获取干净的汇编文本。返回 (asm_text, input_info)。
+
+    source_language 语义（PR #95 review-2 修复）：--source-language 提供时=期望值，
+    脚本从被分析汇编文本推导实际值（含 _ZN...17h<hash>E 符号→rust，否则 c_cpp），
+    两者不一致即 die（fail-closed，报错含 expected/derived 两值）；缺省时输出字段
+    input.source_language 填推导值，并附 language_source 溯源（derived/cli_verified）。
+    推导在函数提取前的完整汇编/反汇编文本上进行（提取过程会剥掉符号标签行）。
+    """
+    cli_lang = getattr(args, "source_language", None)
+    if args.asm:
+        text, src = read_asm_input(args.asm)
+        derived = derive_source_language(text)
+        check_source_language(cli_lang, derived, "--asm 输入文本")
+        return text, {"mode": "asm", "source": src, "function": None,
+                      "source_language": derived,
+                      "language_source": "cli_verified" if cli_lang else "derived"}
+    if args.source:
+        # 编译器仍由 CLI 值决定（缺省 c_cpp 走 clang）；推导校验作用于编译产物全文
+        if (cli_lang or "c_cpp") == "rust":
+            asm, ok, err = compile_rust_source_to_asm(
+                args.source, mcpu, args.cflags)
+            if not ok:
+                die("Rust 源码编译失败（cargo 项目请按 SKILL.md 用例 2 先跑 "
+                    "cargo rustc --release -- --emit asm 产出 .s 后改用 --asm 模式）:\n%s" % err)
+        else:
+            asm, ok, err = compile_source_to_asm(
+                args.source, mcpu, args.cflags)
+            if not ok:
+                die("源码编译失败:\n%s" % err)
+        derived = derive_source_language(asm)
+        check_source_language(cli_lang, derived, "编译产物")
+        body, err = extract_function_from_compiler_asm(
+            asm, args.function, cli_lang or "c_cpp")
+        if err:
+            die(err)
+        return body, {"mode": "source", "source": args.source,
+                      "function": args.function,
+                      "source_language": derived,
+                      "language_source": "cli_verified" if cli_lang else "derived"}
+    if args.binary:
+        text, ok, err = disasm_binary(args.binary, mcpu)
+        if not ok:
+            die("反汇编失败:\n%s" % err)
+        derived = derive_source_language(text)
+        check_source_language(cli_lang, derived, "反汇编输出")
+        body, err = extract_function_from_objdump(
+            text, args.function, cli_lang or "c_cpp")
+        if err:
+            die(err)
+        return body, {"mode": "binary", "source": args.binary,
+                      "function": args.function,
+                      "source_language": derived,
+                      "language_source": "cli_verified" if cli_lang else "derived"}
+    die("未指定输入：需提供 --asm / --source+--function / --binary+--function 之一")
+
+
+# --------------------------------------------------------------------------- #
+# 运行 MCA
+# --------------------------------------------------------------------------- #
+
+def run_mca(asm_text, mcpu, iterations, want_json):
+    """运行 llvm-mca。want_json=True 用 --json 拿结构化数据，否则拿文本（含 bottleneck）。"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".s", delete=False) as tf:
+        tf.write(asm_text)
+        asm_path = tf.name
+    try:
+        cmd = ["llvm-mca", "-mtriple=%s" % MTRIPLE, "-mcpu=%s" % mcpu,
+               "--iterations=%d" % iterations, asm_path]
+        if want_json:
+            cmd += ["--json", "-all-stats"]
+        else:
+            cmd += ["-bottleneck-analysis"]
+        rc, out, err = run_cmd(cmd)
+        if rc != 0:
+            return None, err or out, err
+        return out, "", err
+    finally:
+        os.unlink(asm_path)
+
+
+# --------------------------------------------------------------------------- #
+# 解析
+# --------------------------------------------------------------------------- #
+
+def parse_bottleneck_section(text):
+    """从 MCA 文本输出解析 bottleneck-analysis 段。
+
+    返回 dict：backend_pressure_cycles_pct, resource_pressure_pct,
+    limiting_resources[], data_dependencies_pct, register/memory deps pct,
+    critical_sequence[], raw_text。解析失败时各字段为空，raw_text 保留原文。
+    """
+    result = {
+        "backend_pressure_cycles_pct": None,
+        "resource_pressure_pct": None,
+        "limiting_resources": [],
+        "data_dependencies_pct": None,
+        "register_dependencies_pct": None,
+        "memory_dependencies_pct": None,
+        "critical_sequence": [],
+        "raw_text": "",
+    }
+    if not text:
+        return result
+    # 截取 bottleneck 段：从 "Cycles with backend pressure" 到 "Instruction Info:" 之前
+    start = text.find("Cycles with backend pressure")
+    end = text.find("Instruction Info:")
+    if start == -1:
+        # 没有瓶颈分析段（可能 iterations 太少或无瓶颈）
+        return result
+    section = text[start:end if end != -1 else len(text)]
+    result["raw_text"] = section.strip()
+
+    m = re.search(r"Cycles with backend pressure increase\s*\[\s*([\d.]+)%\s*\]", section)
+    if m:
+        result["backend_pressure_cycles_pct"] = float(m.group(1))
+
+    m = re.search(r"Resource Pressure\s*\[\s*([\d.]+)%\s*\]", section)
+    if m:
+        result["resource_pressure_pct"] = float(m.group(1))
+        # 紧随其后的 "  - <Resource>  [ X% ]"
+        for rm in re.finditer(r"^\s*-\s+(\S+)\s*\[\s*([\d.]+)%\s*\]", section, re.MULTILINE):
+            result["limiting_resources"].append(
+                {"resource": rm.group(1), "pct": float(rm.group(2))})
+
+    m = re.search(r"Data Dependencies:?\s*\[\s*([\d.]+)%\s*\]", section)
+    if m:
+        result["data_dependencies_pct"] = float(m.group(1))
+        rm = re.search(r"Register Dependencies\s*\[\s*([\d.]+)%\s*\]", section)
+        if rm:
+            result["register_dependencies_pct"] = float(rm.group(1))
+        mm = re.search(r"Memory Dependencies\s*\[\s*([\d.]+)%\s*\]", section)
+        if mm:
+            result["memory_dependencies_pct"] = float(mm.group(1))
+
+    # 关键序列：+----> N.  <instr>   ## TYPE: detail
+    for cm in re.finditer(
+        r"^\s*\+---->\s+(\d+)\.\s+(.+?)\s*##\s*(.+?)\s*$", section, re.MULTILINE):
+        idx = int(cm.group(1))
+        instr = cm.group(2).strip()
+        ann = cm.group(3).strip()
+        if ann.startswith("RESOURCE interference"):
+            dtype = "resource_interference"
+        elif ann.startswith("REGISTER dependency"):
+            dtype = "register"
+        elif ann.startswith("MEMORY dependency"):
+            dtype = "memory"
+        else:
+            dtype = "other"
+        result["critical_sequence"].append(
+            {"index": idx, "instruction": instr, "dependency_type": dtype, "detail": ann})
+    return result
+
+
+def classify_bottleneck(bn):
+    """根据解析结果给出主要瓶颈类型。"""
+    rp = bn.get("resource_pressure_pct")
+    dd = bn.get("data_dependencies_pct")
+    bp = bn.get("backend_pressure_cycles_pct")
+    if bp is None and rp is None and dd is None:
+        return "unknown"
+    if (bp is not None and bp < 10.0):
+        return "low_pressure"  # 后端压力小，瓶颈在前端/dispatch/retire 或已充分流水化
+    rp = rp or 0.0
+    dd = dd or 0.0
+    if rp == 0 and dd == 0:
+        return "low_pressure"
+    if rp > dd * 1.5:
+        return "resource_pressure"
+    if dd > rp * 1.5:
+        return "data_dependency"
+    return "mixed"
+
+
+def build_report(json_text, bn_text, mcpu, iterations, input_info, warnings):
+    """合并 JSON 结构化数据与文本瓶颈解析，构造契约。"""
+    uarch = MCPU_TO_UARCH.get(mcpu, mcpu)
+    region = None
+    if json_text:
+        try:
+            data = json.loads(json_text)
+        except json.JSONDecodeError as e:
+            die("MCA JSON 解析失败: %s" % e)
+        regions = data.get("CodeRegions", [])
+        if not regions:
+            die("MCA 未返回任何 CodeRegion（输入汇编可能为空或无法解析）")
+        region = regions[0]
+        target = data.get("TargetInfo", {})
+        resources = [sanitize_resource_name(r) for r in target.get("Resources", [])]
+    else:
+        die("MCA 未产出 JSON")
+
+    sv = region.get("SummaryView", {})
+    summary = {
+        "iterations": sv.get("Iterations"),
+        "instructions": sv.get("Instructions"),
+        "total_cycles": sv.get("TotalCycles"),
+        "total_uops": sv.get("TotaluOps"),
+        "dispatch_width": sv.get("DispatchWidth"),
+        "uops_per_cycle": round(sv.get("uOpsPerCycle", 0.0), 4),
+        "ipc": round(sv.get("IPC", 0.0), 4),
+        "block_rthroughput": round(float(sv.get("BlockRThroughput", 0.0)), 4),
+        "cycles_per_iteration": round(
+            sv.get("TotalCycles", 0) / sv.get("Iterations", 1), 4) if sv.get("Iterations") else None,
+    }
+
+    # 逐资源压力（聚合到每个资源）。MCA 的 per-iteration 汇总行 InstructionIndex
+    # = 指令数（即所有条目里的最大 InstructionIndex），不是 -1。
+    rpv = region.get("ResourcePressureView", {}).get("ResourcePressureInfo", [])
+    per_resource = [0.0] * len(resources)
+    total_idx = max((e.get("InstructionIndex", -1) for e in rpv), default=-2)
+    for item in rpv:
+        if item.get("InstructionIndex", -1) == total_idx:  # 仅汇总行
+            ri = item.get("ResourceIndex", 0)
+            if 0 <= ri < len(per_resource):
+                per_resource[ri] += item.get("ResourceUsage", 0.0)
+    resource_pressure_per_iteration = [
+        {"resource": resources[i] if i < len(resources) else "R%d" % i,
+         "pressure": round(per_resource[i], 4)}
+        for i in range(len(resources))]
+
+    # 逐指令信息
+    iiv = region.get("InstructionInfoView", {}).get("InstructionList", [])
+    instrs = region.get("Instructions", [])
+    instructions_info = []
+    for i, info in enumerate(iiv):
+        instructions_info.append({
+            "index": i,
+            "instruction": instrs[i] if i < len(instrs) else "",
+            "uops": info.get("NumMicroOpcodes"),
+            "latency": info.get("Latency"),
+            "rthroughput": round(float(info.get("RThroughput", 0.0)), 4),
+            "may_load": bool(info.get("mayLoad", False)),
+            "may_store": bool(info.get("mayStore", False)),
+            "has_unmodeled_side_effects": bool(info.get("hasUnmodeledSideEffects", False)),
+        })
+
+    dispatch_stalls = region.get("DispatchStatistics", {})
+
+    bn = parse_bottleneck_section(bn_text)
+    primary_type = classify_bottleneck(bn)
+    bottleneck = {
+        "primary_type": primary_type,
+        "backend_pressure_cycles_pct": bn["backend_pressure_cycles_pct"],
+        "resource_pressure_pct": bn["resource_pressure_pct"],
+        "data_dependencies_pct": bn["data_dependencies_pct"],
+        "register_dependencies_pct": bn["register_dependencies_pct"],
+        "memory_dependencies_pct": bn["memory_dependencies_pct"],
+        "limiting_resources": bn["limiting_resources"],
+        "critical_sequence": bn["critical_sequence"],
+        "raw_text": bn["raw_text"],
+    }
+
+    result = {
+        "success": True,
+        "uarch": uarch,
+        "mcpu": mcpu,
+        "input": dict(input_info, instruction_count=len(instructions_info)),
+        "iterations": iterations,
+        "warnings": warnings,
+        "summary": summary,
+        "bottleneck": bottleneck,
+        "dispatch_stalls": dispatch_stalls,
+        "resource_pressure_per_iteration": resource_pressure_per_iteration,
+        "instructions_info": instructions_info,
+        "summary_text": "",
+        "error_message": "",
+    }
+    result["summary_text"] = render_summary(result)
+    return {"llvm_mca_analysis_result": result}
+
+
+# --------------------------------------------------------------------------- #
+# 可读摘要
+# --------------------------------------------------------------------------- #
+
+def render_summary(r):
+    s = r["summary"]
+    b = r["bottleneck"]
+    lines = []
+    lines.append("# LLVM MCA 瓶颈分析报告")
+    lines.append("")
+    lines.append("**目标微架构**: %s (%s) | **输入**: %s%s | **迭代**: %s" % (
+        r["uarch"], r["mcpu"], r["input"]["mode"],
+        ("，函数 `%s`" % r["input"]["function"]) if r["input"].get("function") else "",
+        r["iterations"]))
+    if r.get("warnings"):
+        lines.append("**注意**: " + "; ".join(r["warnings"]))
+    lines.append("")
+    lines.append("## 汇总指标")
+    lines.append("| 指标 | 值 |")
+    lines.append("|------|-----|")
+    lines.append("| IPC | %s |" % s["ipc"])
+    lines.append("| Block RThroughput | %s |" % s["block_rthroughput"])
+    lines.append("| 每迭代周期数 | %s |" % s["cycles_per_iteration"])
+    lines.append("| Dispatch 宽度 | %s |" % s["dispatch_width"])
+    lines.append("| uOps/周期 | %s |" % s["uops_per_cycle"])
+    lines.append("| 总指令数(含迭代) | %s |" % s["instructions"])
+    lines.append("")
+    lines.append("## 瓶颈归因")
+    type_cn = {
+        "resource_pressure": "资源压力 (Resource Pressure)",
+        "data_dependency": "数据依赖 (Data Dependency)",
+        "mixed": "混合 (资源压力 + 数据依赖)",
+        "low_pressure": "后端压力低 (前端/dispatch/retire 主导或已充分流水化)",
+        "unknown": "未知",
+    }.get(b["primary_type"], b["primary_type"])
+    lines.append("**主要瓶颈类型**: %s" % type_cn)
+    if b["backend_pressure_cycles_pct"] is not None:
+        lines.append("- 后端压力周期占比: %.2f%%" % b["backend_pressure_cycles_pct"])
+    if b["resource_pressure_pct"] is not None:
+        lines.append("- 资源压力: %.2f%%" % b["resource_pressure_pct"])
+        if b["limiting_resources"]:
+            lim = "，".join("%s (%.2f%%)" % (x["resource"], x["pct"]) for x in b["limiting_resources"])
+            lines.append("  - 饱和资源: %s" % lim)
+    if b["data_dependencies_pct"] is not None:
+        lines.append("- 数据依赖: %.2f%% (寄存器 %.2f%%，内存 %.2f%%)" % (
+            b["data_dependencies_pct"],
+            b["register_dependencies_pct"] or 0.0,
+            b["memory_dependencies_pct"] or 0.0))
+    if b["critical_sequence"]:
+        lines.append("")
+        lines.append("**关键序列**:")
+        for c in b["critical_sequence"]:
+            lines.append("  #%d `%s` — %s" % (c["index"], c["instruction"], c["detail"]))
+    lines.append("")
+    # 逐资源压力 Top
+    rp = sorted(r["resource_pressure_per_iteration"],
+                key=lambda x: x["pressure"], reverse=True)
+    rp = [x for x in rp if x["pressure"] > 0]
+    if rp:
+        lines.append("## 逐资源端口压力（每迭代）")
+        for x in rp[:8]:
+            lines.append("- %s: %s" % (x["resource"], x["pressure"]))
+        lines.append("")
+    # 逐指令信息
+    if r["instructions_info"]:
+        lines.append("## 逐指令信息")
+        lines.append("| # | 指令 | uOps | 延迟 | RThroughput | Load | Store |")
+        lines.append("|---|------|------|------|-------------|------|-------|")
+        for ii in r["instructions_info"]:
+            lines.append("| %d | `%s` | %s | %s | %s | %s | %s |" % (
+                ii["index"], ii["instruction"], ii["uops"], ii["latency"],
+                ii["rthroughput"],
+                "Y" if ii["may_load"] else "",
+                "Y" if ii["may_store"] else ""))
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# 主入口
+# --------------------------------------------------------------------------- #
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="llvm-mca 瓶颈分析器（鲲鹏 HiSilicon 微架构）")
+    ap.add_argument("--check-env", action="store_true",
+                   help="仅检查当前系统的 llvm-mca 是否支持各 hip 微架构，不做分析")
+    g = ap.add_mutually_exclusive_group(required=False)
+    g.add_argument("--asm", metavar="FILE|-",
+                   help="纯汇编文本或 .s 文件（'-' 读 stdin）")
+    g.add_argument("--source", metavar="FILE",
+                   help="C/C++ 或 Rust 源码文件（需配合 --function；Rust 需再加 --source-language rust）")
+    g.add_argument("--binary", metavar="FILE",
+                   help="二进制/目标文件（需配合 --function）")
+    ap.add_argument("--function", help="目标函数名（--source/--binary 模式必填；Rust 场景支持 "
+                     "calc::sum / _ZN4calc3sum 等 hash 容忍匹配）")
+    ap.add_argument("--source-language", choices=("c_cpp", "rust"), default=None,
+                    help="源码语言期望值（--source 模式兼作编译器选择：rust 用 rustc，"
+                         "缺省走 clang）。提供时与汇编产物推导值核验，不一致即报错退出"
+                         "（fail-closed）；缺省时输出字段填推导值")
+    ap.add_argument("--uarch",
+                   help="微架构代号: hip08/0xd01, hip09/0xd02, hip10/0xd03, hip11/0xd22, hip12/0xd06")
+    ap.add_argument("--iterations", type=int, default=100,
+                   help="MCA 仿真迭代次数（默认 100，越大瓶颈分析越稳）")
+    ap.add_argument("--cflags", nargs=argparse.REMAINDER, default=[],
+                   help="透传给 clang 的额外编译参数（--source 模式）")
+    ap.add_argument("--text", action="store_true",
+                   help="仅打印可读摘要（默认输出 JSON 契约）")
+    args = ap.parse_args()
+
+    if args.check_env:
+        check_env()
+        return
+
+    if not args.uarch:
+        die("必须提供 --uarch（除非使用 --check-env）")
+    if not (args.asm or args.source or args.binary):
+        die("必须提供 --asm / --source+--function / --binary+--function 之一")
+    if (args.source or args.binary) and not args.function:
+        die("--source/--binary 模式必须提供 --function")
+
+    mcpu = resolve_mcpu(args.uarch)
+    preflight(mcpu, args.uarch)
+    asm_text, input_info = get_assembly(args, mcpu)
+
+    # 1) JSON 拿结构化数据
+    json_out, jerr, jwarn = run_mca(asm_text, mcpu, args.iterations, want_json=True)
+    if json_out is None:
+        die("llvm-mca (JSON) 运行失败:\n%s" % jerr)
+    # 2) 文本拿 bottleneck-analysis
+    text_out, terr, twarn = run_mca(asm_text, mcpu, args.iterations, want_json=False)
+    if text_out is None:
+        # bottleneck 文本失败不致命，降级为无瓶颈段
+        text_out = ""
+
+    warnings = []
+    seen = set()
+    for w in (jwarn, twarn):
+        if w:
+            for line in w.strip().splitlines():
+                line = line.strip()
+                if line and "warning" in line.lower() and line not in seen:
+                    seen.add(line)
+                    warnings.append(line)
+
+    report = build_report(json_out, text_out, mcpu, args.iterations, input_info, warnings)
+
+    if args.text:
+        print(report["llvm_mca_analysis_result"]["summary_text"])
+    else:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

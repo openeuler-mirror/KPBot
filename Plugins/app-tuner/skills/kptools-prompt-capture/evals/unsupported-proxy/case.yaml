@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: unsupported-proxy
+expected_outcome: |
+  明确仅支持 Python proxy，不能自动改造 Go 版 proxy，不索要无关集群信息，
+  不修改或重启服务，不自行增加串联代理；已有采集数据时仍可单独分析。

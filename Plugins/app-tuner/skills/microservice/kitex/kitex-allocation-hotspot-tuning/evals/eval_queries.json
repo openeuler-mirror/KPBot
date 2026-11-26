@@ -1,0 +1,43 @@
+{
+  "skill_name": "kitex-allocation-hotspot-tuning",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-heap-growth",
+      "prompt": "堆增长快，但内存预算不能放宽",
+      "should_trigger": true,
+      "note": "现象类触发词：堆增长、内存预算"
+    },
+    {
+      "id": "q-alloc-query",
+      "prompt": "每请求分配多少，从哪查",
+      "should_trigger": true,
+      "note": "度量类触发词：每请求分配、分配来源"
+    },
+    {
+      "id": "q-kitex-alloc",
+      "prompt": "Kitex 的分配热点主要在哪",
+      "should_trigger": true,
+      "note": "组件类触发词：Kitex、分配热点"
+    },
+    {
+      "id": "q-gc-param",
+      "prompt": "GOGC 设多少合适",
+      "should_trigger": false,
+      "note": "运行时参数 → go-runtime-tuning"
+    },
+    {
+      "id": "q-gomaxprocs",
+      "prompt": "GOMAXPROCS 怎么设",
+      "should_trigger": false,
+      "note": "运行时参数 → go-runtime-tuning"
+    },
+    {
+      "id": "q-codec",
+      "prompt": "要不要换 frugal",
+      "should_trigger": false,
+      "note": "编解码实现 → kitex-thrift-codec-selection"
+    }
+  ]
+}

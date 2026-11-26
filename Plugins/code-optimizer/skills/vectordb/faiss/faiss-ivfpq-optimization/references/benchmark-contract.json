@@ -1,0 +1,145 @@
+{
+  "schema_version": "faiss-benchmark-contract.v1",
+  "algorithm": "ivfpq",
+  "faiss_version": "<detected-faiss-version>",
+  "note": "定义需记录的字段和可比性规则；实际能力、默认值与正式冻结值从目标源码/索引/测试程序确认，保存到run_dir/manifest.json。可选扩展不存在时记录不适用。",
+  "baseline_id": "<source-patches-build-identity>",
+  "patches": {
+    "note": "记录基线实际包含的补丁及SHA256；未提供或不存在时不预设补丁。"
+  },
+  "source_repo": "<faiss-source-repo>",
+  "sra_test_registration": "ivfpq",
+  "sra_test_repo": "<test-adapter-repo-if-used>",
+  "build_target": "make ivfpq_test",
+  "index_params": {
+    "nlist": {
+      "kind": "build",
+      "frozen": true,
+      "note": "sra_test build 用 4*sqrt(nb)；load 索引时由索引决定"
+    },
+    "M": {
+      "kind": "build",
+      "frozen": true
+    },
+    "nbits": {
+      "kind": "build",
+      "frozen": true,
+      "default": 8
+    },
+    "by_residual": {
+      "kind": "build",
+      "frozen": true,
+      "default": true
+    },
+    "use_precomputed_table": {
+      "kind": "build",
+      "frozen": true,
+      "default": 0,
+      "note": "heuristic 决定 type 1/2"
+    }
+  },
+  "query_params": {
+    "nprobe": {
+      "kind": "query",
+      "frozen": true
+    },
+    "top_k": {
+      "kind": "query",
+      "frozen": true,
+      "default": 10
+    },
+    "k_f": {
+      "kind": "query",
+      "frozen": true,
+      "note": "IndexRefineFlat k_factor；large-k 场景需显式记录 k_base"
+    },
+    "num_threads": {
+      "kind": "query",
+      "frozen": true,
+      "default": null,
+      "note": "本轮冻结值记录于 manifest；须与绑核方案一致"
+    },
+    "batch_mode": {
+      "kind": "query",
+      "frozen": true,
+      "default": false
+    }
+  },
+  "scheduling_params": {
+    "scan_fastpath": {
+      "kind": "scheduling",
+      "frozen": true,
+      "note": "记录实际扫描批量/分派与适用guard，不预设额外快路径。"
+    },
+    "decoder": {
+      "kind": "scheduling",
+      "frozen": true,
+      "note": "nbits==8 ⇒ PQDecoder8"
+    },
+    "accu_level": {
+      "kind": "scheduling",
+      "frozen": true,
+      "note": "可选数值/过滤层字段；无对应实现时不适用。精度或筛选策略变化另行声明实验。"
+    }
+  },
+  "environment_params": {
+    "affinity": {
+      "kind": "environment",
+      "frozen": true,
+      "default": null,
+      "note": "绑核方案由本轮环境冻结：numactl/taskset 完整命令写入 run_dir/manifest.json，baseline 与 candidate 必须一致"
+    },
+    "compiler": {
+      "kind": "environment",
+      "frozen": true
+    },
+    "openmp": {
+      "kind": "environment",
+      "frozen": true
+    },
+    "blas": {
+      "kind": "environment",
+      "frozen": true
+    },
+    "march": {
+      "kind": "environment",
+      "frozen": true,
+      "default": null,
+      "note": "记录目标平台、实际ISA/编译flags和向量长度设置，A/B公共条件一致。"
+    },
+    "krl_env_macro": {
+      "kind": "environment",
+      "frozen": false,
+      "default": null,
+      "note": "兼容字段名：记录实际构建特性宏及可选后端。公共宏保持一致，本次候选涉及的宏可不同；两侧实际值分别记录。不预设后端存在。"
+    }
+  },
+  "frozen_field_rules": {
+    "meaning": "所有适用的frozen:true字段在A/B逐项一致；身份与候选宏分别记录，公共条件变化则建立新实验。",
+    "drift_check": "CP2 建立基线与 CP6 正式对照前至少各复核一次冻结字段，复核结果写入 manifest.json / PROFILE-HANDOFF.json",
+    "record": "实际冻结值记录在本次manifest；示例仅演示字段形状。",
+    "baseline_identity": "从当前参考源码、补丁和构建产物确认身份，核对其与manifest一致。",
+    "scope": "不用降低 recall 或调整冻结参数冒充实现收益；recall 门禁见 vector-experiment-methodology"
+  },
+  "representative_frozen_values_example": {
+    "_note": "合成字段示例，不是推荐配置、冻结值或测量结果。",
+    "<dataset-a-angular>": {
+      "metric": "IP",
+      "M": 20,
+      "nprobe": 100,
+      "k_f": 2,
+      "top_k": 10,
+      "num_threads": 4
+    },
+    "<dataset-b-euclidean>": {
+      "metric": "L2",
+      "M": 8,
+      "nprobe": 20,
+      "k_f": 2,
+      "top_k": 10,
+      "num_threads": 4
+    }
+  },
+  "qps_metric": "<verified-throughput-field-formula-and-aggregation>",
+  "recall_metric": "Recall@k：按实际ground truth和命中公式记录，k由实验声明。"
+}

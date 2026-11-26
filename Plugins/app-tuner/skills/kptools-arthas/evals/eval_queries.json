@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-arthas",
+  "queries": [
+    { "id": "AQ-01", "prompt": "这个 Java 服务接口慢，分析一下最耗时的方法段", "should_trigger": true, "note": "core scenario: slow api" },
+    { "id": "AQ-02", "prompt": "Java 进程 CPU 打满了，查一下是哪个方法在烧", "should_trigger": true, "note": "high cpu" },
+    { "id": "AQ-03", "prompt": "并发吞吐上不去，线程大量阻塞在锁上，看下谁持锁", "should_trigger": true, "note": "lock contention / blocker" },
+    { "id": "AQ-04", "prompt": "线上 GC 很频繁，老年代一直降不下来", "should_trigger": true, "note": "gc pressure / leak" },
+    { "id": "AQ-05", "prompt": "看下线上 JVM 当前生效的堆大小和 GC 器参数", "should_trigger": true, "note": "jvm runtime params" },
+    { "id": "AQ-06", "prompt": "用 arthas 分析一下 PID 1234 这个进程的性能", "should_trigger": true, "note": "explicit tool" },
+    { "id": "AQ-07", "prompt": "看看这个方法每次调用的入参和返回值", "should_trigger": true, "note": "watch" },
+    { "id": "AQ-08", "prompt": "统计一下这个接口的 QPS 和平均 RT", "should_trigger": true, "note": "monitor" },
+    { "id": "NQ-01", "prompt": "给这个 Java 服务采一张 CPU 火焰图", "should_trigger": false, "note": "routes to kptools-devkit java-perf（采样火焰图）" },
+    { "id": "NQ-02", "prompt": "分析这个 Python 进程的 GIL 竞争", "should_trigger": false, "note": "routes to kptools-py-spy" },
+    { "id": "NQ-03", "prompt": "Node.js 网关进程采个火焰图", "should_trigger": false, "note": "routes to kptools-node-profiler" },
+    { "id": "NQ-04", "prompt": "看看系统整体的 CPU 和内存利用趋势", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "NQ-05", "prompt": "JVM 堆大小和 GC 器参数怎么调", "should_trigger": false, "note": "调优动作 → kpbot-app-tuner（本 skill 只分析）" },
+    { "id": "NQ-06", "prompt": "看看 NPU 算子执行耗时分布", "should_trigger": false, "note": "routes to kptools-ascend-profiling" }
+  ]
+}

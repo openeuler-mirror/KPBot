@@ -1,0 +1,14 @@
+{
+  "rule": "fine_grained_thread_binding 门槛：nvcswch/s>500 per TID / cpu-migrations/s>1000 / per-CPU busy std>5% / 热点 TID 3 轮稳定",
+  "evidence": {
+    "cpu_load_pct_overall": 8.0,
+    "cpu_count": 40,
+    "migration_rate_per_sec": 45,
+    "nvcswch_per_tid_max": 120,
+    "hot_tid_stability_rounds": 2,
+    "preemption_events": "approx 0",
+    "source": "torchtitan-dsv4-hostbound 训练线程画像（threads_snapshot + perf 软件事件，2026-11-17）"
+  },
+  "expected_conclusion": "fine_grained_thread_binding=not_recommended",
+  "rationale": "所有阈值均未达：45/s << 1000/s；负载 8% 远未饱和；抢占≈0"
+}

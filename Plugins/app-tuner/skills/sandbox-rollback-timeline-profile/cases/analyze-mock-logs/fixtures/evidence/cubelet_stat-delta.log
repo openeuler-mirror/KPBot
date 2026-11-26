@@ -1,0 +1,12 @@
+{"Timestamp":"2026-01-01T00:00:00.000Z","Action":"Rollback","Callee":"rollback-service","InstanceId":"sb-rb-001","CostTime":50,"LogContent":"rollback service"}
+{"Timestamp":"2026-01-01T00:00:01.000Z","Action":"Rollback","Callee":"rollback-service","InstanceId":"sb-rb-002","CostTime":60,"LogContent":"rollback service"}
+{"Timestamp":"2026-01-01T00:00:00.100Z","Action":"Rollback","Callee":"rollback-inner","InstanceId":"sb-rb-001","CostTime":3,"LogContent":"rollback inner residual"}
+{"Timestamp":"2026-01-01T00:00:01.100Z","Action":"Rollback","Callee":"rollback-inner","InstanceId":"sb-rb-002","CostTime":4,"LogContent":"rollback inner residual"}
+{"Timestamp":"2026-01-01T00:00:00.200Z","Action":"Rollback","Callee":"resolve-targets","InstanceId":"sb-rb-001","CostTime":2,"LogContent":"resolve targets"}
+{"Timestamp":"2026-01-01T00:00:01.200Z","Action":"Rollback","Callee":"resolve-targets","InstanceId":"sb-rb-002","CostTime":2,"LogContent":"resolve targets"}
+{"Timestamp":"2026-01-01T00:00:00.300Z","Action":"Rollback","Callee":"derive-rootfs","InstanceId":"sb-rb-001","CostTime":1,"LogContent":"ficlone derive rootfs"}
+{"Timestamp":"2026-01-01T00:00:01.300Z","Action":"Rollback","Callee":"derive-rootfs","InstanceId":"sb-rb-002","CostTime":1,"LogContent":"ficlone derive rootfs"}
+{"Timestamp":"2026-01-01T00:00:00.900Z","Action":"Rollback","Callee":"persist-rootfs","InstanceId":"sb-rb-001","CostTime":1,"LogContent":"persist rootfs"}
+{"Timestamp":"2026-01-01T00:00:01.900Z","Action":"Rollback","Callee":"persist-rootfs","InstanceId":"sb-rb-002","CostTime":1,"LogContent":"persist rootfs"}
+{"Timestamp":"2026-01-01T00:00:00.950Z","Action":"Rollback","Callee":"network-bump","InstanceId":"sb-rb-001","CostTime":2,"LogContent":"bump network generation"}
+{"Timestamp":"2026-01-01T00:00:01.950Z","Action":"Rollback","Callee":"network-bump","InstanceId":"sb-rb-002","CostTime":2,"LogContent":"bump network generation"}

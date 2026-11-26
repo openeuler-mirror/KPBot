@@ -1,0 +1,43 @@
+{
+  "skill_name": "flink-velox-nexmark-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-ready",
+      "prompt": "nexmark 准备好了没，jar 和可运行树都在吗",
+      "should_trigger": true,
+      "note": "场景入口类触发词：nexmark 准备好了没、nexmark jar、可运行树"
+    },
+    {
+      "id": "q-run-query",
+      "prompt": "nexmark 的 run_query.sh 在哪，NEXMARK_HOME 指对了没",
+      "should_trigger": true,
+      "note": "位置类触发词：NEXMARK_HOME、run_query.sh"
+    },
+    {
+      "id": "q-benchmark",
+      "prompt": "用 nexmark 测 GlutenFlink 的吞吐",
+      "should_trigger": false,
+      "note": "跑基准 → 基准类 skill（规划中）"
+    },
+    {
+      "id": "q-dist",
+      "prompt": "Flink 装全了没，flink-dist 是不是 1.19",
+      "should_trigger": false,
+      "note": "Flink 发行版 → flink-velox-flink-dist-check"
+    },
+    {
+      "id": "q-lib-state",
+      "prompt": "lib 里 gluten jar 齐不齐",
+      "should_trigger": false,
+      "note": "GlutenFlink 构建分类 → flink-velox-lib-state-check"
+    },
+    {
+      "id": "q-build",
+      "prompt": "把 nexmark-flink 构建出来拷进 lib",
+      "should_trigger": false,
+      "note": "构建 → 安装类 skill（审中 !323）；本 skill 只读"
+    }
+  ]
+}

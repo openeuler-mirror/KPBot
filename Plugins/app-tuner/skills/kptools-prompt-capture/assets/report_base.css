@@ -1,0 +1,141 @@
+/* report_base.css：report.html、sessions.html 共用的版式。report.py 与 session_view.py 生成页面时把它内联进去。
+   层次：页面底色（--page）上放文字说明；数据（图、表、指标卡）放在白色卡片（--bg）里。
+   颜色：分类色取自一套经过色盲与对比度校验的 8 色（蓝 橙 青绿 黄 粉 绿 紫 红），亮、暗两套各自选定；
+   文字一律用墨色（--fg / --fg2 / --fg3），不用数据色。 */
+:root{color-scheme:light;
+--page:#f9f9f7;--bg:#fdfdfc;--bg2:#f3f2ee;--bg3:#e9e8e3;--fg:#0b0b0b;--fg2:#52514e;--fg3:#898781;
+--line:#e6e5df;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--shadow:0 1px 2px rgba(11,11,11,.04),0 8px 28px rgba(11,11,11,.10);
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;
+--accent:#2a78d6;--warn:#8a5a00;--hl:#ffeeb0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+--page:#0d0d0d;--bg:#1a1a19;--bg2:#232322;--bg3:#2e2e2c;--fg:#ffffff;--fg2:#c3c2b7;--fg3:#898781;
+--line:#2c2c2a;--axis:#3d3d3a;--border:rgba(255,255,255,.10);--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
+--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
+--accent:#3987e5;--warn:#e9b04a;--hl:#57470f}}
+:root[data-theme="dark"]{color-scheme:dark;
+--page:#0d0d0d;--bg:#1a1a19;--bg2:#232322;--bg3:#2e2e2c;--fg:#ffffff;--fg2:#c3c2b7;--fg3:#898781;
+--line:#2c2c2a;--axis:#3d3d3a;--border:rgba(255,255,255,.10);--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
+--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
+--accent:#3987e5;--warn:#e9b04a;--hl:#57470f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--fg);font:14px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+main,#app{max-width:1280px;margin:0 auto;padding:0 28px 96px}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.muted{color:var(--fg3)}
+code{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg3);padding:1px 5px;border-radius:4px}
+mark{background:var(--hl);color:inherit;padding:1px 4px;border-radius:4px}
+
+/* 页首 */
+header.top{padding:44px 0 22px}
+header.top .eyebrow{font-size:12px;letter-spacing:.08em;color:var(--fg3);font-weight:600;margin:0 0 6px}
+h1{font-size:30px;line-height:1.25;font-weight:700;margin:0 0 18px;letter-spacing:-.01em}
+.meta{display:grid;grid-template-columns:max-content 1fr;gap:5px 22px;font-size:13px;color:var(--fg2);margin:0}
+.meta dt{color:var(--fg3)}.meta dd{margin:0;min-width:0;overflow-wrap:anywhere}.meta dd b{color:var(--fg);font-weight:650}
+
+/* 粘性目录 */
+nav.toc{position:sticky;top:0;z-index:5;margin:0 -28px 4px;padding:8px 28px;font-size:13px;
+background:color-mix(in srgb,var(--page) 86%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(12px);backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid var(--line)}
+nav.toc .row{display:flex;flex-wrap:wrap;gap:2px 4px;align-items:center}
+nav.toc .row + .row{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+nav.toc .lbl{font-size:11.5px;color:var(--fg3);margin-right:6px;letter-spacing:.04em}
+nav.toc a{color:var(--fg2);text-decoration:none;padding:3px 10px;border-radius:7px;line-height:1.5;white-space:nowrap}
+nav.toc a:hover{background:var(--bg3);color:var(--fg)}
+nav.toc a.cur{background:var(--fg);color:var(--page);font-weight:600}
+nav.toc .row.sec a.cur{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+
+/* 标题 */
+h2{font-size:22px;line-height:1.3;font-weight:700;margin:64px 0 18px;letter-spacing:-.005em;scroll-margin-top:96px;display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
+h2 .no{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 7px;border-radius:8px;background:var(--fg);color:var(--page);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+h2 .srcs{margin-left:auto;display:flex;gap:6px;align-items:center;font-weight:400}
+h2 .sub{font-size:14px;font-weight:500;color:var(--fg3)}
+h3{font-size:15.5px;line-height:1.4;font-weight:650;margin:0 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+
+/* 名词解释：两栏，左边是词，右边是解释 */
+.gloss{display:grid;grid-template-columns:minmax(5em,max-content) 1fr;gap:0 22px;margin:0 0 20px;font-size:13.5px;line-height:1.75}
+.gloss dt{font-weight:650;color:var(--fg);padding:7px 0;border-top:1px solid var(--line);white-space:nowrap}
+.gloss dd{margin:0;color:var(--fg2);padding:7px 0;border-top:1px solid var(--line);min-width:0}
+.gloss dt:first-of-type,.gloss dt:first-of-type + dd{border-top:0}
+.gloss dd b{color:var(--fg);font-weight:650}
+.eg{display:block;margin:6px 0 2px;padding:7px 12px;border-radius:8px;background:var(--bg2);color:var(--fg2);font-size:13px;line-height:1.7}
+.eg b{color:var(--fg)}
+.def{background:var(--bg2);border-radius:10px;padding:12px 16px;margin:0 0 18px;font-size:13.5px;color:var(--fg2);line-height:1.75}
+.def b{color:var(--fg);font-weight:650}
+.read{font-size:13.5px;color:var(--fg2);margin:0 0 14px;line-height:1.75;max-width:120ch}.read b{color:var(--fg);font-weight:650}
+
+/* 图例说明：图标 + 名称 + 解释 */
+.key{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;font-size:13.5px;color:var(--fg2);margin:0 0 16px;line-height:1.7;align-items:start}
+.key dt{display:flex;align-items:center;gap:9px;color:var(--fg);font-weight:650;white-space:nowrap;padding-top:1px}.key dd{margin:0;max-width:96ch}.key dd b{color:var(--fg);font-weight:650}
+.key svg{width:34px;height:16px;flex:none}.key .cell{display:inline-block;width:16px;height:13px;border-radius:3px;flex:none}
+
+/* 结论与注意 */
+.finding,.warn{position:relative;border-radius:10px;padding:11px 16px 11px 18px;margin:14px 0 2px;font-size:14.5px;line-height:1.75;color:var(--fg);
+background:color-mix(in srgb,var(--accent) 8%,var(--bg));box-shadow:inset 3px 0 0 var(--accent)}
+.warn{background:color-mix(in srgb,var(--s4) 13%,var(--bg));box-shadow:inset 3px 0 0 var(--s4)}
+.finding .lbl,.warn .lbl{display:inline-block;font-size:11.5px;line-height:19px;font-weight:700;letter-spacing:.08em;padding:0 8px;border-radius:5px;margin-right:10px;vertical-align:1px;background:var(--accent);color:#fff}
+.warn .lbl{background:var(--s4);color:#2b1d00}
+.finding b,.warn b,.summary b{font-weight:700}
+
+/* 摘要与指标卡 */
+.summary{margin:4px 0 8px;font-size:15px}.summary ul{margin:0;padding:0;list-style:none}
+.summary li{position:relative;margin:0;padding:8px 0 8px 20px;line-height:1.75;border-top:1px solid var(--line)}.summary li:first-child{border-top:0}
+.summary li::before{content:"";position:absolute;left:3px;top:19px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:22px 0 8px}
+.kpis.k4{grid-template-columns:repeat(4,1fr)}.kpis.k3,.kpis.wide{grid-template-columns:repeat(3,1fr)}
+@media(max-width:860px){.kpis.k4,.kpis.k3,.kpis.wide{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px 13px}
+.kpi b{display:block;font-size:28px;font-weight:650;line-height:1.15;letter-spacing:-.01em}
+.kpi small{color:var(--fg3);font-size:12.5px;font-weight:500;margin-left:5px;letter-spacing:0}
+.kpi span.t{display:block;color:var(--fg);font-size:13px;font-weight:600;margin-top:7px}
+.kpi span.d{display:block;color:var(--fg2);font-size:12px;margin-top:3px;line-height:1.55}.kpi .src{margin:8px 0 0}
+
+/* 数据来源标签 */
+.src{display:inline-flex;align-items:center;gap:5px;font-size:11px;line-height:1;padding:4px 8px;border-radius:20px;background:var(--bg3);color:var(--fg2);white-space:nowrap;font-weight:500;cursor:help}
+.src::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c,var(--fg3))}
+.src-proxy{--c:var(--s1)}.src-vllm{--c:var(--s3)}.src-timer{--c:var(--s7)}.src-off{--c:var(--s2)}.src-log{--c:var(--s6)}.src-sim{--c:var(--s4)}
+
+/* 图：放在卡片里 */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:18px;align-items:start;margin:16px 0}
+.grid2 > figure,.grid2 > div > figure:first-child{margin-top:0}.grid2 > figure{margin-bottom:0}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+figure{margin:16px 0;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px 22px 18px;min-width:0}
+svg{width:100%;height:auto;display:block;overflow:visible}
+svg text{fill:var(--fg3);font-size:11px;font-variant-numeric:tabular-nums}
+svg .grid{stroke:var(--line);stroke-width:1}svg .axis{stroke:var(--axis);stroke-width:1}
+svg .val{fill:var(--fg);font-size:11.5px;font-weight:650}svg .sub{fill:var(--fg2);font-size:10.5px}svg .lab{fill:var(--fg2)}svg .pc{fill:var(--fg);font-weight:650}
+svg [data-tip]:not(.hit),svg [data-tiph]:not(.hit){transition:filter .12s}
+svg [data-tip]:not(.hit):hover,svg [data-tiph]:not(.hit):hover{filter:brightness(1.12) saturate(1.1)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.5px;color:var(--fg2);margin:10px 0 2px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.legend b{color:var(--fg);font-weight:650}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+/* 表 */
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;width:100%}
+th{color:var(--fg2);font-size:12px;font-weight:650;text-align:left;border-bottom:1px solid var(--axis);padding:8px 14px 8px 0;white-space:nowrap;vertical-align:bottom}
+th small{display:block;font-weight:400;color:var(--fg3);font-size:11px}
+th[data-tip]{cursor:help}th[data-tip]::after{content:"?";display:inline-grid;place-items:center;width:13px;height:13px;margin-left:4px;border-radius:50%;background:var(--bg3);color:var(--fg3);font-size:9.5px;font-weight:700;vertical-align:1px}
+tr.grp th{border-bottom:0;padding:6px 14px 3px 0;font-size:11.5px;color:var(--fg3);font-weight:600;letter-spacing:.03em}
+tr.grp th.g{text-align:center;box-shadow:inset 0 -2px 0 var(--line)}tr.grp th.g + th.g{border-left:8px solid var(--bg)}
+td{padding:7px 14px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right}td.s{font-weight:650}td.note{color:var(--fg2);font-size:12.5px;line-height:1.65}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--fg) 3.5%,transparent)}
+.scroll{overflow-x:auto;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:4px 20px 6px;margin:14px 0}
+figure .scroll,details .scroll,.tooltip .scroll{background:none;border:0;border-radius:0;padding:0;margin:8px 0 0}
+details{margin:10px 0 0}
+summary{cursor:pointer;color:var(--fg2);font-size:12.5px;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:7px;user-select:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin-right:2px}
+details[open] > summary::before{transform:rotate(45deg) translate(-1px,-1px)}
+summary:hover{background:var(--bg3);color:var(--fg)}
+
+/* 悬停卡片 */
+.tooltip{position:fixed;pointer-events:none;background:var(--bg);color:var(--fg);border:1px solid var(--border);padding:11px 14px;border-radius:12px;font-size:12.5px;z-index:9;white-space:pre-wrap;word-break:break-word;max-width:min(560px,86vw);display:none;line-height:1.6;box-shadow:var(--shadow)}
+.foot{margin-top:72px;color:var(--fg3);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+@media print{nav.toc{position:static}figure,.scroll,.kpi{break-inside:avoid}body{background:#fff}}
+.appendix{background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:10px 16px 12px}
+.appendix details{margin:2px 0}
+svg text.inl{fill:#fff;font-size:11px;font-weight:650}svg text.inl.k{fill:#0b0b0b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) svg text.inl.k,:root:not([data-theme="light"]) .bar i.k{fill:#fff;color:#fff}}
+:root[data-theme="dark"] svg text.inl.k,:root[data-theme="dark"] .bar i.k{fill:#fff;color:#fff}
+#rt th[data-tip]::after,#mt th[data-tip]::after{width:11px;height:11px;font-size:8.5px;margin-left:3px}

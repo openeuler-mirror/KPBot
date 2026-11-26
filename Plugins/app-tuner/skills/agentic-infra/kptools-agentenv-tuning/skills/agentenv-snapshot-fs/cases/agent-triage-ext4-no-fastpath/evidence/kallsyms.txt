@@ -1,0 +1,3 @@
+# Synthetic fixture; result of: grep ext4_iomap_buffered_write_ops /proc/kallsyms
+ext4_iomap_buffered_write_ops: not found
+iomap symbols in ext4 total: 11 (DAX/fiemap legacy use only)

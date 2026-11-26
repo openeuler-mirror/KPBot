@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "KPBot code optimization",
+    "description": "Loads KPBot code optimization skills in DSH. This first version supports ordinary subagent orchestration, excluding app-tuner, Claude batch drivers, and the legacy workflow entry. Package-based discovery tolerates domain directory splits."
+  }
+}

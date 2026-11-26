@@ -1,0 +1,70 @@
+{
+  "name": "@kunpengbot/kpbot",
+  "version": "1.0.0",
+  "description": "鲲鹏/ARM 高性能计算工具集 — 面向 Claude Code、OpenCode、Codex 和 DSH 的性能优化 Agent 插件",
+  "exports": {
+    "./package.json": "./package.json",
+    "./dsh": "./adapters/dsh/index.mjs",
+    "./locale/*.json": "./adapters/dsh/locale/*.json",
+    "./dsh/locale/*.json": "./adapters/dsh/locale/*.json"
+  },
+  "dsh": {
+    "bundle": { "patch": "./adapters/dsh/cordis.patch.yml" }
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "bin": {
+    "kpbot": "bin/kpbot"
+  },
+  "files": [
+    "bin/",
+    "adapters/dsh/",
+    "adapters/codex/install.py",
+    "adapters/windows/InstallTree.cs",
+    "Plugins/",
+    ".claude-plugin/",
+    "install.sh",
+    "install.ps1",
+    "docs/STANDARDS.md",
+    "docs/dsh.md",
+    "docs/dsh-validation.md",
+    "docs/codex.md",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "THIRD PARTY OPEN SOURCE SOFTWARE NOTICE"
+  ],
+  "scripts": {
+    "test:dsh": "node --test tests/test_dsh_*.mjs",
+    "test:install": "bash tests/test_install_platform.sh",
+    "pack:inspect": "npm pack --dry-run",
+    "prepublishOnly": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=18",
+    "dsh": ">=0.2.2-rc.3 <0.3.0"
+  },
+  "license": "MulanPSL-2.0",
+  "homepage": "https://atomgit.com/openeuler/KPBot",
+  "repository": {
+    "type": "git",
+    "url": "https://atomgit.com/openEuler/KPBot.git"
+  },
+  "keywords": [
+    "kunpeng",
+    "arm",
+    "aarch64",
+    "performance",
+    "optimization",
+    "claude-code",
+    "opencode",
+    "codex",
+    "skills",
+    "neon",
+    "sve"
+  ],
+  "author": {
+    "name": "Kunpeng Acceleration Team"
+  }
+}

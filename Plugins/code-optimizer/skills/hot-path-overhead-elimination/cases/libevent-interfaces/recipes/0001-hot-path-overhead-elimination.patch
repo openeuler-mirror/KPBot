@@ -1,0 +1,214 @@
+--- a/buffer.c
++++ b/buffer.c
+@@ -511,13 +511,8 @@
+ }
+ 
+ void
+-evbuffer_invoke_callbacks_(struct evbuffer *buffer)
++evbuffer_invoke_callbacks_slow_(struct evbuffer *buffer)
+ {
+-	if (LIST_EMPTY(&buffer->callbacks)) {
+-		buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
+-		return;
+-	}
+-
+ 	if (buffer->deferred_cbs) {
+ 		if (event_deferred_cb_schedule_(buffer->cb_queue, &buffer->deferred)) {
+ 			evbuffer_incref_and_lock_(buffer);
+@@ -1724,10 +1719,33 @@
+ 
+ #define EVBUFFER_CHAIN_MAX_AUTO_SIZE 4096
+ 
++static inline void
++evbuffer_add_hot_copy(unsigned char *dst, const unsigned char *src, size_t len)
++{
++#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
++	if (len == 5)
++		__builtin_memcpy(dst, src, 5);
++	else if (len == 4)
++		__builtin_memcpy(dst, src, 4);
++	else if (len == 6)
++		__builtin_memcpy(dst, src, 6);
++	else if (len == 2)
++		__builtin_memcpy(dst, src, 2);
++	else
++#endif
++		memcpy(dst, src, len);
++}
++
+ /* Adds data to an event buffer */
+ 
++#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
++static int __attribute__((noinline))
++evbuffer_add_general_(struct evbuffer *buf, const void *data_in,
++	size_t datlen)
++#else
+ int
+ evbuffer_add(struct evbuffer *buf, const void *data_in, size_t datlen)
++#endif
+ {
+ 	struct evbuffer_chain *chain, *tmp;
+ 	const unsigned char *data = data_in;
+@@ -1767,10 +1785,17 @@
+ 		if (remain >= datlen) {
+ 			/* there's enough space to hold all the data in the
+ 			 * current last chain */
+-			memcpy(chain->buffer + chain->misalign + chain->off,
++			evbuffer_add_hot_copy(
++			    chain->buffer + chain->misalign + chain->off,
+ 			    data, datlen);
+ 			chain->off += datlen;
+ 			buf->total_len += datlen;
++			if (LIST_EMPTY(&buf->callbacks)) {
++				EVUTIL_ASSERT(buf->n_add_for_cb == 0);
++				EVUTIL_ASSERT(buf->n_del_for_cb == 0);
++				result = 0;
++				goto done;
++			}
+ 			buf->n_add_for_cb += datlen;
+ 			goto out;
+ 		} else if (!CHAIN_PINNED(chain) &&
+@@ -1823,6 +1848,92 @@
+ 	return result;
+ }
+ 
++#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
++static inline int
++evbuffer_add_5_(struct evbuffer *buf, const void *data_in)
++{
++	struct evbuffer_chain *chain;
++	size_t off, remain, total_len;
++
++#ifndef EVENT__DISABLE_THREAD_SUPPORT
++	if (buf->lock != NULL)
++		return evbuffer_add_general_(buf, data_in, 5);
++#endif
++	total_len = buf->total_len;
++	if (buf->freeze_end || 5 > EV_SIZE_MAX - total_len ||
++	    !LIST_EMPTY(&buf->callbacks))
++		return evbuffer_add_general_(buf, data_in, 5);
++
++	EVUTIL_ASSERT(buf->n_add_for_cb == 0);
++	EVUTIL_ASSERT(buf->n_del_for_cb == 0);
++	chain = *buf->last_with_datap;
++	if (chain == NULL)
++		chain = buf->last;
++	if (chain == NULL || (chain->flags & EVBUFFER_IMMUTABLE))
++		return evbuffer_add_general_(buf, data_in, 5);
++
++	EVUTIL_ASSERT(chain->misalign >= 0 &&
++	    (ev_uint64_t)chain->misalign <= EVBUFFER_CHAIN_MAX);
++	off = chain->off;
++	remain = chain->buffer_len - (size_t)chain->misalign - off;
++	if (remain < 5)
++		return evbuffer_add_general_(buf, data_in, 5);
++
++	__builtin_memcpy(chain->buffer + chain->misalign + off, data_in, 5);
++	chain->off = off + 5;
++	buf->total_len = total_len + 5;
++	return 0;
++}
++
++int
++evbuffer_add(struct evbuffer *buf, const void *data_in, size_t datlen)
++{
++	struct evbuffer_chain *chain;
++	size_t remain;
++
++	if (datlen == 5)
++		return evbuffer_add_5_(buf, data_in);
++	if (datlen > 6)
++		return evbuffer_add_general_(buf, data_in, datlen);
++	switch (datlen) {
++	case 2:
++	case 4:
++	case 6:
++		break;
++	default:
++		return evbuffer_add_general_(buf, data_in, datlen);
++	}
++#ifndef EVENT__DISABLE_THREAD_SUPPORT
++	if (buf->lock != NULL)
++		return evbuffer_add_general_(buf, data_in, datlen);
++#endif
++	if (buf->freeze_end || datlen > EV_SIZE_MAX - buf->total_len ||
++	    !LIST_EMPTY(&buf->callbacks))
++		return evbuffer_add_general_(buf, data_in, datlen);
++
++	EVUTIL_ASSERT(buf->n_add_for_cb == 0);
++	EVUTIL_ASSERT(buf->n_del_for_cb == 0);
++	chain = *buf->last_with_datap;
++	if (chain == NULL)
++		chain = buf->last;
++	if (chain == NULL || (chain->flags & EVBUFFER_IMMUTABLE))
++		return evbuffer_add_general_(buf, data_in, datlen);
++
++	EVUTIL_ASSERT(chain->misalign >= 0 &&
++	    (ev_uint64_t)chain->misalign <= EVBUFFER_CHAIN_MAX);
++	remain = chain->buffer_len - (size_t)chain->misalign - chain->off;
++	if (remain < datlen)
++		return evbuffer_add_general_(buf, data_in, datlen);
++
++	evbuffer_add_hot_copy(
++	    chain->buffer + chain->misalign + chain->off,
++	    data_in, datlen);
++	chain->off += datlen;
++	buf->total_len += datlen;
++	return 0;
++}
++#endif
++
+ int
+ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
+ {
+@@ -3320,11 +3431,14 @@
+ 		struct evbuffer_cb_entry *ent =
+ 		    evbuffer_add_cb(buffer, NULL, cbarg);
+ 		if (!ent) {
++			buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
+ 			EVBUFFER_UNLOCK(buffer);
+ 			return -1;
+ 		}
+ 		ent->cb.cb_obsolete = cb;
+ 		ent->flags |= EVBUFFER_CB_OBSOLETE;
++	} else {
++		buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
+ 	}
+ 	EVBUFFER_UNLOCK(buffer);
+ 	return 0;
+@@ -3351,6 +3465,8 @@
+ {
+ 	EVBUFFER_LOCK(buffer);
+ 	LIST_REMOVE(ent, next);
++	if (LIST_EMPTY(&buffer->callbacks))
++		buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
+ 	EVBUFFER_UNLOCK(buffer);
+ 	mm_free(ent);
+ 	return 0;
+--- a/evbuffer-internal.h
++++ b/evbuffer-internal.h
+@@ -337,7 +337,23 @@
+ /** Set the parent bufferevent object for buf to bev */
+ void evbuffer_set_parent_(struct evbuffer *buf, struct bufferevent *bev);
+ 
+-void evbuffer_invoke_callbacks_(struct evbuffer *buf);
++void evbuffer_invoke_callbacks_slow_(struct evbuffer *buf);
++
++/** Invoke pending callbacks for buf.
++ *
++ * Fast path: when no callbacks are registered (the common case during
++ * high-throughput buffer operations), clear the add/del counters and return
++ * without an out-of-line call.  The slow path -- deferred-callback
++ * scheduling and callback iteration -- lives in buffer.c. */
++static inline void
++evbuffer_invoke_callbacks_(struct evbuffer *buf)
++{
++	if (LIST_EMPTY(&buf->callbacks)) {
++		buf->n_add_for_cb = buf->n_del_for_cb = 0;
++		return;
++	}
++	evbuffer_invoke_callbacks_slow_(buf);
++}
+ 
+ 
+ int evbuffer_get_callbacks_(struct evbuffer *buffer,

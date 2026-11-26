@@ -1,0 +1,13 @@
+{
+  "verdict": "imbalanced",
+  "recommendation": {
+    "action": "optimize_with_cap",
+    "memory": {"verdict": "tight", "affordable_redundant": 16},
+    "handoff": {
+      "mode": "dynamic",
+      "redundant_experts": null,
+      "window_size": 1000,
+      "step_interval": 1000
+    }
+  }
+}

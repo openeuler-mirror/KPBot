@@ -1,0 +1,25 @@
+{
+  "skill_name": "kptools-doris-benchmark",
+  "evals": [
+    {
+      "id": "DB-E01",
+      "query": "对已有 Doris 实际跑一个只读 SELECT 基准，默认预热后至少三轮。",
+      "expected": "独立实时 preflight 后运行固定合成 SELECT，保存原始 JSONL、逐轮和汇总客户端时延/吞吐、精确 SUM/COUNT；不把 mock 当 E2E。"
+    },
+    {
+      "id": "DB-E02",
+      "query": "查询结果不对或客户端超时也要保留性能测试证据。",
+      "expected": "精确 correctness 校验 fail closed，保留 result.json 和 queries.jsonl 中已完成样本，后续轮次不执行。"
+    },
+    {
+      "id": "DB-E03",
+      "query": "用非默认 FE 端点和安全密码配置跑 Doris 查询测试。",
+      "expected": "显式传递 endpoint/user/config，密码只在安全文件或环境中且不进入 argv/日志；重新检查实际连接，不信任旧报告。"
+    },
+    {
+      "id": "DB-E04",
+      "query": "帮我跑 Doris TPC-H 并导入数据。",
+      "expected": "说明本 skill 仅是有界 numbers 生成行 SELECT-only 合成测量，不导入、不写库、不宣称 TPC-H；完整 TPC-H 需另行授权和对应工具链。"
+    }
+  ]
+}

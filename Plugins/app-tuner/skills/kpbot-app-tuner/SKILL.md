@@ -1,0 +1,381 @@
+---
+name: kpbot-app-tuner
+description: 使用该 skill 构建和执行服务器应用优化 Agent 的自顶向下优化流程，覆盖用户场景输入、Agent 可选操作确认、基线数据确认、环境诊断与备份、磁盘/网卡/内存/CPU/GPU/NPU/硬件规格瓶颈识别、基线后按进程火焰图/热点函数/热点 so/topdown L1 icache miss/L3 cache miss/线程切换等性能信息采集、根据采集信息生成候选优化 skill 列表、按候选列表依次执行 CPU 亲和性、网络参数、性能库、应用配置、BIOS、OS、编译和 Other 等优化 skill、候选完成后覆盖执行未命中 skill、分轮收益统计、review 与环境还原、案例归档和最终报告输出。适用于 Claude Code、Codex、Cursor、OpenCode 以及其他支持目录式 SKILL.md 的编程 Agent 环境。
+---
+
+# Server Application Optimization
+
+## Overview
+
+该 skill 是“服务器应用优化 Agent”的主编排入口。主流程必须严格按架构图自顶向下执行：先完成用户界面层确认，再完成环境诊断与备份，再进行性能采集和瓶颈识别，随后根据采集信息生成候选优化 skill 列表并依次执行，最后输出报告、review、环境还原并归档为案例。
+
+当前仓库已经沉淀了服务器应用优化能力；本次架构以服务器应用优化为上层框架，CPU 亲和性、网络、性能库、应用配置、BIOS、OS、编译等能力均作为候选优化 skill 列表中的可选 skill 执行。
+
+当用户明确要求 AgentENV 沙箱的 ublk、Pvspinlock、内核 HZ 或 cluster TLBI
+专项适配/调优时，转交独立的 `kptools-agentenv-tuning` 入口。安装后的同级路径为
+`../kptools-agentenv-tuning/SKILL.md`；源码路径为
+`../../skills/kptools-agentenv-tuning/SKILL.md`。携带已有环境证据、测试命令和授权范围，
+由该技能包完成后续流程。普通应用的 OS/亲和性调优仍使用下述通用流程。
+
+## Startup Banner
+
+本 skill 被触发时，第一步必须执行以下命令，再开始任何其他工作流程：
+
+```bash
+SKILL_NAME=kpbot-app-tuner; bash .opencode/skills/$SKILL_NAME/scripts/print_logo.sh 2>/dev/null || bash "$HOME/.config/opencode/skills/$SKILL_NAME/scripts/print_logo.sh" 2>/dev/null || bash .claude/skills/$SKILL_NAME/scripts/print_logo.sh 2>/dev/null || bash "$HOME/.claude/skills/$SKILL_NAME/scripts/print_logo.sh"
+```
+
+该 banner 只在全流程首次启动时打印一次，后续阶段不再重复。
+
+## Dynamic Workflows Runtime
+
+本 skill 在 OpenCode 中按 Dynamic Workflows 运行：主 agent 只负责门控、状态、路由、候选池、收益统计和报告；具体优化分支只有在证据命中后才加载和执行。
+
+运行时必须维护 `current_workflow_state`：
+
+```json
+{
+  "current_gate": "bootstrap",
+  "completed_gates": [],
+  "blocked_gate": null,
+  "next_gate": "scenario-intake",
+  "current_run_id": null,
+  "evidence_status": "missing",
+  "candidate_skill_list": [],
+  "coverage_skill_list": [],
+  "active_workflow": null,
+  "workflow_trace": []
+}
+```
+
+Dynamic Workflows 由五类 workflow 组成：
+
+| Workflow 类型 | 触发条件 | 输出 |
+|---|---|---|
+| Gate workflow | 上游确认、备份、基线、证据尚未完成 | gate 状态、阻塞原因、下一步 |
+| Candidate routing workflow | 已有当前基线和深度性能证据 | `candidate_skill_list` |
+| Candidate skill workflow | `candidate_skill_list` 命中对应 subskill | 候选动作、风险、验证、回退、轮次收益 |
+| Coverage skill workflow | 候选 workflow 完成后仍有主优化 subskill 未形成结论 | coverage 分析、阻塞原因或验证结果 |
+| Closeout workflow | 无活动瓶颈、全部 skill 停止或流程阻塞 | 报告、review、还原计划、案例归档 |
+
+执行原则：
+
+- 启动时不得批量读取所有 subskill；只读取 Phase 1 强制 references。
+- 每次进入、跳过、阻塞、回流或停止 workflow，都必须追加 `workflow_trace`。
+- `candidate_skill_list` 是候选阶段的 subskill 加载依据；未命中的主优化 subskill 只在 coverage 阶段加载并形成结论。
+- **OpenCode 平台必须使用 `task` 工具启动独立 subagent 执行每个候选 skill 和 coverage skill**，禁止主 agent 自己读取 subskill 并手写分析结果。仅在平台完全不提供 subagent 工具时允许降级，OpenCode 不在此列。详见 `references/subagent-orchestration.md`。
+- 单个 candidate 或 coverage workflow 需验证完全 subskill 给出的所有推荐；若仍有候选或 coverage 项，继续下一个 workflow。
+- 当前证据缺失、过期或与 `current_run_id` 不一致时，只能输出 `blocked` 或 `degraded`。
+
+### Dynamic Workflow State 持久化
+
+`current_workflow_state` 必须通过 `scripts/dynamic_workflow_manager.js` 持久化到磁盘。每个关键节点调用对应 CLI 命令：
+
+| 时机 | CLI 命令 | 说明 |
+|------|----------|------|
+| 启动门控完成 | `init --run-id <id> --output-dir <dir>` | 创建初始 state，写入 workflow_state.json |
+| 进入每个新门控 | `gate-enter --state <path> --gate <name>` | 更新 current_gate / next_gate |
+| 完成每个门控 | `gate-complete --state <path> --gate <name> [--evidence <path>]` | 追加到 completed_gates |
+| 门控阻塞 | `gate-block --state <path> --gate <name> --reason <text>` | 设置 blocked_gate，记录阻塞原因 |
+| 阻塞解除 | `gate-unblock --state <path>` | 清除 blocked_gate |
+| 证据采集完成 | `set-evidence --state <path> --status current` | 更新 evidence_status |
+| 候选列表生成 | `set-candidates --state <path> --candidates '<json>'` | 自动预置 cpu-affinity 到首位 |
+| coverage 生成 | `auto-coverage --state <path>` | 自动补充未命中 coverage skill |
+| **候选 skill 完成/阻塞** | **`update-candidate-status --state <path> --subskill <name> --status <pending\|running\|completed\|stopped\|blocked> [--result <json>]`** | **每个 skill 完成时必须调用，否则 validate 失败** |
+| **每次进入其他 skill 前** | **`verify-order --state <path>`** | **强制门控：确认 cpu-affinity-optimization 已排在候选首位且状态为 completed/stopped。未通过（exit≠0）时禁止启动任何其他候选或 coverage skill 的分析/执行 subagent** |
+| **任意 skill 标记 completed 前** | **`verify-skill-completeness --state <path>`** | **强制门控：校验每个已完成的 skill 其全部推荐动作都有结论（执行/拒绝/阻塞/停止且说明原因）。`incomplete_skills` 非空时禁止标记该 skill 为 completed** |
+| **每轮动作完成** | **`set-iteration-state --state <path> --data '<json>'`** | **写入 per_skill_iteration_state，记录轮次收益和停止原因** |
+| **每轮动作完成** | **`set-timing --state <path> --data '<json>'`** | **写入 agent_timing_summary + optimization_timing + optimization_timing_details** |
+| **每个 subagent 调用** | **`append-subagent-log --state <path> --data '<json>'`** | **记录 subagent 调用，缺失则禁止生成完成态报告** |
+| **所有 skill 完成** | **`set-per-skill-gains --state <path> --data '<json>'`** | **写入 per_skill_gain_summary** |
+| **每次真实变更执行后** | **`record-execution --state <path> --data '<json>'`** | **记录 forward_cmd + reverse_cmd，用于环境恢复** |
+| 追加 trace 条目 | `trace --state <path> --gate <name> --event <name>` | 记录跳过、回流等事件 |
+| **报告生成前** | **`report-ready --state <path>`** | **合并硬门控：同时执行 validate + validate-report-inputs + skill-completeness。任一项失败则输出 issues + remediation 并 exit≠0，绝对禁止继续生成完成态报告** |
+| 报告生成时 | `summary --state <path>` | 输出合规摘要 + workflow_trace（**内部自动调用 report-ready，未就绪则阻塞并 exit≠0**） |
+| **环境恢复确认** | **`restore-plan --state <path>`** | **生成恢复计划（LIFO 逆序），供用户确认后执行** |
+| **恢复步骤完成** | **`mark-step-reverted --state <path> --index <n>`** | **标记单个恢复步骤已完成** |
+
+### 强制持久化检查点
+
+以下节点**必须**调用对应 CLI 命令写入 workflow_state.json，不得只在对话上下文中记录：
+
+1. **每个 candidate skill 执行完毕后** → `update-candidate-status` + `set-iteration-state` + `set-timing`
+2. **每次启动 subagent 前后** → `append-subagent-log`（启动时 status=running，完成时 status=completed）
+3. **每次执行真实变更时** → `record-execution`，必须同时写入 `forward_cmd` 和 `reverse_cmd`。`reverse_cmd` 必须可独立执行且不依赖上下文
+4. **所有 skill 迭代完成后、报告生成前** → `set-per-skill-gains` → `report-ready`（合并硬门控，替代单独的 validate + validate-report-inputs）
+5. **若 report-ready 返回 `ready: false`** → 根据输出的 `issues` 和 `remediation` 补齐缺失数据，重新校验直到 `ready: true`。**绝对禁止跳过此门控直接生成完成态报告**。`summary` 命令内部也会自动调用 `report-ready`，未就绪时拒绝输出
+6. **报告完成后** → 展示恢复计划，**使用 `question` 询问用户是否恢复环境**，未获确认前不得跳过
+
+### 🕐 每轮耗时实时记录（Anti-事后补数据）
+
+**每轮动作（分析→实施→验证→回退判断）完成后，必须在验证结果输出后 30 秒内调用以下命令**，不得累积到报告阶段补写：
+
+```bash
+# 1. 记录轮次状态与收益（per_skill_iteration_state 以 skill 名为键，脚本按此校验轮次与停止原因）
+node scripts/dynamic_workflow_manager.js set-iteration-state \
+  --state <workflow_state.json> \
+  --data '{"<skill-name>":{"status":"<completed|stopped>","stop_reason":"<reason>","round_gains_pct":[<x.x>],"applied_action_ids":["<action-id>"]}}'
+
+# 2. 追加单条 optimization_timing_details 记录（必须包含本轮实际秒数）
+node scripts/dynamic_workflow_manager.js set-timing \
+  --state <workflow_state.json> \
+  --data '{"optimization_timing_details":[{"stage":"candidate-skill-iteration","skill_name":"<name>","round_name":"round-<n>","status":"completed","analysis_seconds":<n>,"implementation_seconds":<n>,"validation_seconds":<n>,"total_seconds":<n>}]}'
+
+# 3. 若执行了真实变更（skill_name/round_name/action_desc 是脚本持久化字段，index/时间戳自动生成）
+node scripts/dynamic_workflow_manager.js record-execution \
+  --state <workflow_state.json> \
+  --data '{"skill_name":"<name>","round_name":"round-<n>","action_desc":"<description>","forward_cmd":"<cmd>","reverse_cmd":"<cmd>"}'
+```
+
+**违规判定**：若 `report-ready` 阶段发现 `optimization_timing_details` 条目数少于实际执行轮次数，或 `set-timing` 调用时间晚于验证完成 >5 分钟，报告必须标记 `timing_recorded_retroactively=true` 并降级为 `degraded`。
+
+## Three-Phase Refactor Contract
+
+本 skill 的实现和后续迭代分三阶段维护：
+
+1. **Phase 1 - 顶层 Agent 架构与用户界面契约**
+   - 建立测试场景输入、Agent 可选操作确认、基线数据确认、数据统计输出。
+   - 执行环境诊断与环境备份，形成可回退基线。
+   - 读取 `references/application-agent-architecture.md`、`references/input-contract.md`、`references/user-interaction-gates.md`、`references/checklist.md`、`references/environment-diagnosis.md`。
+2. **Phase 2 - 性能信息采集与候选优化 skill 列表生成**
+   - 使用性能采集工具识别磁盘、网卡、内存、CPU、GPU/NPU、硬件规格瓶颈。
+   - 基线确认后抓取按进程火焰图、热点函数、热点 DSO/so、进程/线程、topdown L1 icache miss、L3/LLC cache miss 和上下文切换证据。
+   - 根据采集信息生成 `candidate_skill_list`，详见 `references/candidate-skill-list.md`。
+3. **Phase 3 - 迭代优化、review、还原与案例归档**
+   - 每个 skill 独立跟踪轮次收益，需验证完全 subskill 给出的所有推荐。
+   - 先执行证据命中的候选 skill；候选完成后覆盖执行未进入候选列表的主优化 skill，直到所有主优化 skill 都有结论后输出报告。
+   - 执行 review、环境还原和案例归档，详见 `references/review-restore-archive.md`。
+
+## Architecture-Aligned Dynamic Workflow
+
+按以下顺序执行，不得跳过上游确认直接进入下游优化：
+
+0. **启动门控**
+   - 读取 `references/application-agent-architecture.md`、`references/input-contract.md`、`references/user-interaction-gates.md`、`references/checklist.md`、`references/environment-diagnosis.md`。
+   - 创建 todowrite 检查清单，覆盖用户界面、环境备份、瓶颈识别、候选 skill 列表、优化轮次、报告、review、还原和归档。
+   - 初始化并持续更新 `overall_progress`，至少包含 `current_gate`、`completed_gates`、`blocked_gate`、`next_gate` 和 `status`。每进入或阻塞一个门控，都必须向用户展示当前总体进度。
+   - 初始化并持续更新 `current_workflow_state`；没有该状态时不得进入候选 skill 或 coverage skill workflow。
+   - 初始化 `workflow_execution_plan`、`workflow_stage_trace` 和 `timing_jsonl_path`。每个门控进入时记录 `started_at`，离开时记录 `ended_at`、`duration_seconds`、`status` 和证据路径；不得只在最终报告里补写流程。
+   - 每次进入新门控时，必须向用户展示当前 workflow 阶段，例如 `Phase 1/3 - environment_diagnosis_confirmation`、已完成阶段和下一阶段。
+1. **用户界面层确认**
+   - 按 `references/user-interaction-gates.md` 主动询问用户是否已提供当前应用场景信息和环境信息；缺失项必须形成待补充清单，不能默默进入下游。
+   - 收集测试场景输入：应用、workload、部署组网、压测方法、目标规格、允许变更范围。
+   - 即使用户提供的是完整测试报告，也必须先抽取并概括 `scenario_environment_summary`，至少包含场景、环境、客户端/服务端节点、容器/虚拟化、压测命令、目标规格、已发现历史结果和缺失项，并要求用户显式确认。`scenario_confirmation_status != confirmed` 时不得进入环境备份。
+   - 询问并记录 `optimization_entry_mode`：`baseline_first`、`running_app` 或 `historical_baseline_review`。提问中必须逐项注释三种模式的含义、适用场景和后续门控，再按用户选择进入对应路线。
+   - 输出 Agent 可选操作清单：只读分析、dry-run、允许在线变更、允许重启、允许重编译、允许硬件调整建议。涉及 `agent_action_mode` 或其他模式选择时，提问中必须说明每个模式会允许/禁止哪些动作。
+   - 场景和操作边界确认后生成本轮唯一 `current_run_id` 和 `current_run_manifest`，所有基线、证据、任务包、候选池、轮次结果和报告都必须引用该 ID。没有本轮 ID 的产物只能作为历史记录，不能作为当前结论。
+   - 基线测试后必须让用户确认基线数据，确认前不得进入候选优化 skill 列表生成。
+   - 建立数据统计口径：Agent 调优耗时统计、各手段提升比例、阶段收益与累计收益。
+2. **环境诊断 + 环境备份**
+   - 先识别 `node_inventory`。涉及多台机器时，必须按节点角色逐台处理，例如 `benchmark_client`、`application_server`、`database_server`、`load_balancer`。每台机器都必须使用相同的环境备份和诊断契约，不能只采服务端。
+   - 执行环境备份前必须逐个物理节点询问是否采集 BIOS 配置；用户选择采集时，再询问该节点的 BMC/IPMI/Redfish 地址、账号、密码/token 或环境变量传递方式；用户不采集时也必须得到显式 `skip` 确认并记录为跳过。未询问或未确认时，停止在 `bmc_redfish_confirmation`。
+   - 运行或指导运行 `scripts/backup_environment.sh <output-dir>`。多节点场景必须为每个节点生成独立 `environment_backup_dir`，并在 `per_node_environment_backups` 中汇总。
+   - 记录 CPU/NUMA、内存、磁盘、网卡、GPU/NPU、BIOS、OS、Kernel、容器/虚拟化、编译器、运行时、应用配置。
+   - 容器场景必须同时采集宿主机视角和容器内视角。宿主机采集用于硬件、内核、PMU、网卡和 IRQ；容器内采集用于应用配置、进程、文件路径、cgroup、用户态依赖和数据库状态。只要容器可进入，应用操作和配置读取优先在容器内执行；不能进入时必须记录 `container_access_status=blocked|degraded` 和最小修复建议。
+   - 备份后必须按 `references/environment-diagnosis.md` 执行环境诊断，至少检查：历史 reference 问题集回归、BIOS 是否高性能配置、perf/PMU 采集能力是否可用、内核补丁是否齐全。
+   - 多节点场景必须输出 `per_node_environment_diagnosis`。服务端和客户端都要诊断工具依赖、OS/Kernel、网络、CPU/NUMA、容器/虚拟化和权限；服务端额外诊断应用/数据库实例，客户端额外诊断压测工具和客户端瓶颈风险。
+   - 历史 reference 问题集或内核补丁清单不存在时，对应诊断项标记为 `skipped` / `not_present`，不得报错；存在时必须逐项检查并输出证据。
+   - 若 perf、PMU 事件、root/capability、容器/虚拟机映射或系统命令权限不足，必须提前告知用户受影响的采集能力和修复建议。
+   - 环境诊断完成后必须向用户展示诊断摘要、阻塞项、降级项、证据路径和下一步建议，并记录 `environment_diagnosis_confirmation_status`。
+   - 用户显式确认诊断结果前，不得进入服务健康检查、目标实例身份确认、正式基线或基线性能确认；用户要求修复或补采时，必须停在 `environment_diagnosis_confirmation` 门控。
+   - 生成 `environment_backup_dir` 和 `restore_baseline_manifest`，供 Phase 3 review 与还原使用。
+3. **服务健康检查与目标实例身份确认**
+   - 进入本步骤前必须满足 `environment_diagnosis_confirmation_status=confirmed`。
+   - 在正式基线前必须检查目标服务是否可用于压测：端口监听、协议级连接、认证/权限、最小查询或请求、1 线程/最小负载 smoke test。
+   - 必须记录 `service_health_status`、`service_health_evidence` 和 `target_instance_identity`。服务未启动、端口不通、认证失败、实例身份不明或 smoke test 失败时，必须停止在该门控，向用户报告具体问题和修复建议。
+   - 服务健康检查未通过时，不得运行正式基线、不得进入瓶颈识别、不得基于历史报告直接交付优化结论。
+4. **基线建立与确认**
+   - 在目标规格约束下建立基线；若用户给出 `8U32G` 等规格，必须先约束资源再测试。
+   - 记录测试组网、测试用例信心、压测命令、原始日志、目标实例身份和基线指标。
+   - **基线运行期间只能采集资源级指标**：CPU %util（mpstat/pidstat）、内存 RSS、磁盘 IOPS（iostat）、网络带宽（sar -n DEV）。**不得采集微架构级证据**：perf stat -e（cycles/instructions/cache-misses 等）、perf record（火焰图数据）、topdown 指标均属于深度证据，必须在用户显式确认基线后才进入 Step 6 采集。
+   - 基线测试完成后必须展示基线指标、资源利用率、压测命令、用例信息、目标规格和目标实例身份，让用户确认该基线与用例可作为本轮调优依据。
+   - 用户显式确认基线后写入 `checkpoint_5.json`。如果用户未回复或确认不明确，`baseline_confirmation_status` 必须保持 `pending`，不得进入瓶颈识别、深度证据采集、候选列表或任何优化动作。
+   - 发现历史日志、历史报告或旧轮次结果时，只能记录为 `historical_records_status=discovered_unconfirmed`；是否作为本轮输入必须先由用户确认。未经确认不得用历史记录替代现场基线或触发进一步调优。
+5. **性能采集与瓶颈识别**
+   - 使用 `scripts/detect_bottleneck.sh` 和相关采集命令识别磁盘、网卡、内存、CPU、GPU/NPU、硬件规格瓶颈。
+   - 若仍有瓶颈且未达到停止条件，继续进入性能信息采集和候选列表生成；若无法识别瓶颈或所有优化完成，进入报告阶段。
+6. **基线后深度证据采集**
+   - 运行或指导运行 `scripts/collect_evidence_snapshot.sh`，必须传入 `--current-run-id`、`--current-run-started-at`；若已生成目标实例身份 JSON，同时传入 `--target-identity-path`。
+   - 必须尽量采集按进程火焰图或 perf data、热点函数、热点 DSO/so 排序、进程/线程分布、topdown L1 icache miss、L3/LLC cache miss、上下文切换、FE bound 等证据。
+   - `scripts/collect_evidence_snapshot.sh` 应生成 `performance_signal_summary.json`，至少包含 `hotspot_function_rank`、`hotspot_dso_rank`、`topdown`、`threading` 和 `detected_signals`。
+   - 证据不足时，候选列表生成只能输出 `blocked` 或 `degraded`，不得把猜测当结论。
+   - 若发现证据缺失、过期、run_id 不一致、目标实例不一致或混入历史产物，必须设置 `current_evidence_status=stale|mixed|invalid` 并停止在当前门控，优先输出异常状态。
+ 7. **候选优化 skill 列表生成**
+    - 读取 `references/candidate-skill-list.md`。
+    - 根据采集信息生成 `candidate_skill_list`，而不是只按静态瓶颈表选择 skill。
+    - **`cpu-affinity-optimization` 始终作为第一优先级候选 skill**：无论采集信号是否命中，`cpu-affinity-optimization` 必须始终位于 `candidate_skill_list` 首位（`priority=highest`），在所有其他候选 skill 之前执行。它是唯一不受信号阈值约束的强制候选 skill。
+    - **`performance-library-selection` 先于 `os-optimization`**：当两者同时进入候选列表（evidence_candidate 或 coverage）时，`performance-library-selection` 必须排在 `os-optimization` 之前。库替换会改变 malloc 路径，是 OS 大页/GLIBC_TUNABLES 调优的前置依赖；`scripts/dynamic_workflow_manager.js set-candidates` 会自动归一化该顺序，`references/candidate-skill-list.md` 执行顺序节也强制该规则。
+    - 热点 DSO/so 中存在高占比第三方库时，把 `performance-library-selection` 加入候选列表。
+    - 密码学/压缩算法热点（AES/SM4/DES/SM3/SHA/MD5/HMAC/RSA/DH/deflate/inflate 等符号聚合占比 ≥0.5%）时，把 `uadk-accelerator-optimization` 加入候选列表；其候选动作与 `performance-library-selection` 的 crypto/compression 候选互斥，按互斥方案全量验证规则选优。
+    - 网络相关热点函数占比高时，把 `network-optimization` 加入候选列表。
+    - 场景为 Ceph 存储集群（RBD/RGW/CephFS）或瓶颈证据落在 OSD/存储集群路径（OSD 进程 CPU 高、PG 分布不均、存储 IO 瓶颈）时，把 `ceph-optimization` 加入候选列表。
+    - topdown 或 perf stat 显示 L1 icache miss 高时，把 `compiler-optimization` 加入候选列表，重点分析 PGO/LTO。
+    - **`compiler-optimization` 排最后**：当 `compiler-optimization` 进入候选列表（evidence_candidate 或 coverage）时，它必须排在候选列表**最末位**，晚于所有其他候选 skill。原因：编译级改造（PGO/LTO、重编译、融合策略）会重建二进制，干扰后续其他 skill 的现场 A/B 收益归因，需在其他运行时类手段（应用配置、性能库、加速卡、OS）验证完毕后再执行。`scripts/dynamic_workflow_manager.js set-candidates` 会归一化该顺序，`references/candidate-skill-list.md` 执行顺序节也强制该规则；用户显式推翻该默认时以用户指令为准并在 trace 记录。
+    - 线程切换高且 L3/LLC cache miss 高时，把 `cpu-affinity-optimization` 加入候选列表（当证据触发时，理由为证据命中；未触发时，理由为强制基线检查）。
+    - 候选列表完成后，必须追加未命中的主优化 skill 作为 coverage 阶段，确保最终所有主优化 skill 都有分析、执行验证或阻塞结论。
+    - 使用 `scripts/create_subagent_tasks.py` 生成任务包后，主 agent 必须按 `references/subagent-orchestration.md` 为 `candidate_skill_list` 中每个 skill 启动独立分析 subagent；禁止由主 agent 直接代替所有子 skill 分析并手写结果。OpenCode 使用 `task` 工具分发：分析 subagent 使用统一 agent 类型 `subagent_type: "analyzer"`（从任务包 `subskill_name` 字段确定要加载的 skill，所有分析 agent 共用这一类型），执行验证 subagent 使用 `subagent_type: "executor"`。
+    - **任务包 `instructions` 字段是背景参考非执行指令**：任务包中的预设路径、参数值和历史经验仅供 subagent 了解上下文。subagent 必须独立执行对应 subskill SKILL.md 的完整流程，基于现场证据独立判断推荐内容，不得直接照搬 instructions 中的预设路径或参数。详见 `references/subagent-orchestration.md` 分析 Subagent 职责。
+ 8. **Skill 迭代优化**
+    - 每个候选 skill 先由独立分析 subagent 产出候选动作、实施计划、验证方法、风险和回退方法。
+    - **分析 subagent 必须独立执行 subskill SKILL.md 完整流程**：subagent 不得以任务包 instructions 中的预设路径或历史案例替代 subskill 的完整流程。任务包中的路径、参数和历史经验仅作为背景参考。subagent 必须基于现场采集证据独立判断：推荐哪些候选动作、拒绝哪些动作、哪些证据需要现场补充采集。详见 `references/subagent-orchestration.md` 分析 Subagent 职责。
+    - **单变量原则（Single-Variable Principle）**：每个执行轮次只能变更来自一个候选 skill 的变量。即使多个 skill 的变更都只需要同一次重启（如 MySQL 重启），也必须拆分为独立轮次，每轮仅变更一个 skill 的变量，并在每轮间执行基准验证以隔离收益归因。禁止将多个 skill 的变更合并到同一轮次中执行。当因实际限制必须合并执行时，结果必须标记为 `confounded`。
+   - **环境隔离流程（默认全克隆共用方案）**：进入候选 skill 迭代阶段前，主 agent 先使用 `scripts/manage_verify_env.sh create --source <conda-env-path> --name <src>-verify` **一次性**克隆源 conda 环境为独立验证环境（整个迭代阶段只克隆一次），并记录到 `subagent_invocation_log`。**所有候选/coverage subskill 的全部后续分析（分析 subagent）、实施（执行验证 subagent）、复测和回退轮次都共用这一个隔离克隆环境执行**，原环境零接触。全部候选/coverage skill 验证完成后，主 agent 返回用户确认门控，由用户选择：
+     - **全部回退** → `manage_verify_env.sh destroy --name <src>-verify --force` 销毁克隆环境，原环境不改动；
+     - **应用原环境** → 将隔离环境中验证有效的优化手段（各 skill 累计）应用到原环境（`conda list --explicit`/`pip list` 对比 diff → `pip/conda install` 到原环境；环境变量/绑核类变更按记录的 forward_cmd/reverse_cmd 手动应用），并执行 `record-execution` 记录应用命令与回退命令。
+   - 该隔离流程为强制默认（`isolation_policy=planA_full_clone_shared`）；用户显式选择其他策略时记录为 `isolation_policy=<user_choice>`。克隆不可用或不适用时（无 conda 环境等），降级为每轮 `forward_cmd`/`reverse_cmd` 回退并标注 `isolation_degraded=true`。
+   - **环境使用手册（Environment Handbook，强制）**：共享克隆环境创建后，主 agent 必须生成/确认一份**环境事实文档**（如 `<run_dir>/tasks/verify_env_handbook.md`），该文档必须包含：验证环境绝对路径、python/site-packages 路径、最低可用 env 组合（PATH/LD_LIBRARY_PATH/所需 source 脚本，且必须实际验证过可加载应用栈）、训练/评测命令模板、指标提取方法、before_metrics 基线、变更与回退要求、常见错误规避（`command not found`/`lib not found`/NPU 占用等）。**主 agent 启动每个执行验证 subagent 时，必须把该手册路径和关键环境命令直接写入任务包/提示**，禁止让 subagent 自行探测或反复试错环境（如激活 conda、寻找 python、调试 CANN 加载失败）。subagent 遇到与其不一致的环境发现时优先信任手册并报告差异，不得无限重试环境安装。
+   - **cpu-affinity-optimization 执行顺序门控**：进入任何其他候选 skill 的【分析 subagent 或执行轮次】前，主 agent 必须先执行 `node scripts/dynamic_workflow_manager.js verify-order --state <workflow_state.json>` 确认通过（cpu-affinity 在候选首位且状态为 `completed`/`stopped`）。该命令失败（exit≠0）时**必须阻塞**，禁止进入下一个 skill。违规执行视为合规失败，相关收益在 `per_skill_gain_summary` 中必须标记为 `confounded`。
+   - **有效手段继承强制规则（Inheritance of Effective Changes）**：后续 skill/轮次必须在**上一轮有效配置**（含全部已 `accepted` 手段）之上叠加验证，禁止静默回退到原始基线。任何已生效手段，无论变更形态是持久配置还是 **runtime-only**（taskset 临时绑核、LD_PRELOAD、临时环境变量等，训练进程结束即失效），主 agent 在创建后续轮次执行任务包时，必须把该手段的重新应用命令/脚本写入任务包 `inherited_active_changes` 字段并下发 executor；executor 在本轮训练启动时**显式重新应用全部继承手段**，确保 before 基线 = 上一轮有效配置状态。因实际限制无法继承时，该轮收益必须标记 `attribution_degraded=true` 并说明原因，不得按独立基线静默计算。
+   - **验证完整性门控（Skill Verification Completeness）**：任意 skill 标记为 `completed` 前，主 agent 必须执行 `node scripts/dynamic_workflow_manager.js verify-skill-completeness --state <workflow_state.json>`。该校验要求**该 skill 分析 subagent 输出的全部 `candidate_actions` 都有结论**：已执行并记录 `applied_changes`/`action_ids`、已显式拒绝并写入 `rejected_optimization_actions`、或在 `stopped`/`blocked` 时记录了 `stop_reason`/`block_reason`。`incomplete_skills` 非空时禁止标记 completed，必须先补齐未验证动作的结论。**禁止把"验证了部分推荐"当作 skill 完成**。
+   - OpenCode 按 Dynamic Workflows 调度候选 skill：优先执行 `candidate_skill_list` 命中的 workflow，再进入未命中主优化 skill 的 coverage workflow；未进入当前候选或 coverage 阶段的 subskill 不得提前加载或执行。
+   - 基线确认后，不得对每个 skill 或每轮动作逐个询问用户是否继续。主 agent 只校验已确认的 `agent_action_mode`、`change_scope`、重启/重编译/远程执行/硬件建议等授权边界；若候选动作都在已确认边界内，直接串行下发执行验证 subagent。只有出现超出已确认边界的新动作、风险等级升级、需要新增权限、需要重启/重编译/硬件调整但未授权，或用户显式要求人工确认时，才返回用户确认门控。
+   - 真实危险动作仍必须处于 `approved_execute` 且有回退计划；但该批准应来自启动阶段或基线确认后的批量执行授权，不得退化为每个子 skill 的重复确认。
+   - 每个 skill、每轮候选动作和每次验证都必须记录 `analysis_seconds`、`implementation_seconds`、`validation_seconds`、`total_seconds`，并写入 `optimization_timing`、`optimization_timing_details` 和 `timing_jsonl_path`。推荐使用 `scripts/record_timing.py`，也可生成等价 JSONL。
+   - **单 skill 收益归因要求**：每个 skill 完成后必须记录其独立可量化的收益归因，写入 `per_skill_gain_summary`。归因必须包含 skill 名称、执行轮次、各轮阶段收益、累计收益、归因方法（`single_variable_round` / `baseline_reset` / `merged_unresolvable` / `confounded`）、证据路径和停止原因。合并轮次或无法隔离的收益必须标记为 `confounded` 并说明不可归因的原因。
+   - 每轮必须启动一个独立的**执行验证 subagent**（OpenCode 使用 `task` 工具，`subagent_type: "executor"`）串行负责当前 skill 的实施、复测、回退和结果记录。**禁止主 agent 自行执行验证、伪造 before/after_metrics 或手写轮次结果**；验证动作必须在独立 subagent 上下文中完成，并通过 `append-subagent-log` 记录真实的 `subagent_id`。**`subagent_id` 必须是主 agent 从平台 `task`/`Agent` 工具返回结果中取得的真实任务 ID（如 OpenCode 的 `ses_<hash>`），禁止使用 subagent 自拟的 ID（如 `ses_exec_<skill>_r<n>`）、禁止用主 agent 簿记号或降级上下文 ID 顶替真实 ID**；主 agent 必须先获取真实 task ID 再调用 `append-subagent-log`（启动时 `status=running`，完成后更新为 `completed`）。同一时间只允许一个执行主体修改环境。未产生 subagent 任务包、subagent ID 或结果 JSON 的 skill 不能标记为完成。主 agent 只负责调度与整理各 skill 的推荐优化方案及最终各方案的优化效果（轮次收益、累计收益、归因表），不代替执行验证。
+   - **经验库伴随输入（Experience Library Guidance）**：主 agent 在启动每个候选/coverage skill 的【分析 subagent】和【执行验证 subagent】时，除任务包/证据外，必须同时将**对应 skill 的 reference 经验库路径列表**随提示/任务包一并输入，供 subagent 在独立判断时参考：
+      - 通用路由映射：`references/knowledge-technique-routing.md`（技术层→镜像信号→subskill 映射）。
+      - skill 专属经验库：优先读取 `subskills/<skill_name>/references/` 目录下全部 `.md`/`.json` 资源（如 `performance-library-selection/references/allocator-decision-guide.md`、`optimization_kb.json`；`application-config-optimization/references/ascend-torchtitan-training-config.md`；`cpu-affinity-optimization/references/ascend-vllm-binding.md`；`compiler-optimization/references/*-playbook.md`）。
+      - 生命周期经验库：`references/iteration-execution.md`（单变量/留下回退规则）、`references/platform-tuning-notes.md`（平台调优笔记）、`references/examples.md`（端到端案例）。
+      - 用法约束：经验库**只作为候选方向与预期收益范围参考**，不得替代本轮现场证据和独立判断；报告收益必须来自本轮 A/B。subagent 输出候选动作时应在 `findings` 中标注命中的经验库技术名。
+   - **验证规则契约（下发给执行验证 subagent）**：主 agent 在启动执行验证 subagent 前，必须把以下规则随任务包/提示一并告知 subagent，subagent 必须逐条遵守：
+     0. **输入来源契约**：subagent 必须从执行任务包（`create_execution_task.py` 产物）的以下字段读取本轮全部输入，不得凭对话上下文或自行猜测路径：`baseline_path`（基线指标）、`previous_round_summary_path`（上一轮有效配置）、`candidate_pool_path`（候选动作池，含 `selected_actions`）、`per_skill_state_path`（skill 迭代状态）、`evidence_snapshot_dir` + `evidence_metadata_path`（现场证据与新鲜度）、`execution_authorization_scope`（授权边界）、`required_output_path`（轮次结果写回路径）。任一输入文件缺失或不可读时输出 `blocked` 并说明缺失项，不得静默跳过。
+     1. 只负责当前轮一个 skill 的动作，单变量原则；不自行进入下一 skill。
+     2. 执行前再次校验目标实例身份、资源约束、压测命令与回退条件；`current_evidence_status != current` 时输出 `blocked`。
+     3. 实施动作前必须记录 `forward_cmd` 与可独立执行的 `reverse_cmd`（包含完整环境变量和路径，不依赖对话上下文）。
+     4. dry-run 模式下允许使用模拟验证数据（如 before/after_metrics），但必须显式标记 `simulated: true` 并在 `after_metrics` 中注明"非现场实跑，不计入真实收益"。
+     5. 每轮结果写入 `rounds/round_N_summary.json`，必须包含 `round`、`subskill_name`、`current_run_id`、`action_ids[]`、`execution_status`、`target_instance_identity`、`before_metrics`、`after_metrics`、`stage_gain_pct`、`cumulative_gain_pct`、`per_skill_gain_pct`（归因受污染时为 `null`）、`applied_changes[]`、`rollback_result`、`logs[]`、`timing{analysis_seconds,implementation_seconds,validation_seconds,total_seconds}`、`subagent_id`。
+     6. 覆盖该 skill 分析结果中的全部推荐动作；无法/不验证的动作必须显式进入 `rejected_optimization_actions`（附原因）或由 `stop_reason`/`block_reason` 覆盖。未覆盖的动作导致 `verify-skill-completeness` 的 `incomplete_skills` 非空时，该 skill 不得标记为 `completed`。
+7. 验证失败、收益为负、身份不一致或触发拒绝条件时执行回退并输出 `rejected_optimization_actions`；结果标记为 `rolled_back`/`rejected`。
+      8. 标记真实变更已应用必须伴随 `record-execution`（forward+reverse），否则轮次不得标记为完成。
+      9. **越权禁止（No Overreach）**：executor 只负责当前轮被指派 skill 的动作实施、复测、回退与本轮结果写入。**禁止修改其他候选方案或任何其他 skill 的状态和评估结果**，包括：不得调用 `update-candidate-status`/`append-subagent-log`/`set-iteration-state`/`set-per-skill-gains` 改变其他 skill 的 `status`/`result`；不得改写其他 skill 的结果 JSON、`candidate_pool.json` 或任务包；不得对未指派 skill 的候选动作给出评估结论。`per_skill_state_path` 与 `candidate_pool_path` 是本轮**只读输入**，评估结果只能通过任务包 `required_output_path` 写回。仅允许追加本轮 `forward_cmd`/`reverse_cmd` 到 `execution_log`。其他 skill 状态变更只能由主 agent 在下发其专属轮次时执行。
+      10. **互斥/替代方案必须全量验证（Mutually-Exclusive Full Validation）**：当分析 subagent 针对同一目标输出多个互斥或相互替代的候选方案（如 tcmalloc vs jemalloc、SwapOptimizer 开关 vs 降级次数、不同绑核策略等）时，主 agent 必须为**每个互斥方案分别创建独立轮次并全部完成 A/B 验证**，不得在第一个方案验证为正收益后就以"已有正收益、单变量原则"为由拒绝其余互斥方案。全部互斥方案均得到 `after_metrics` 后，由主 agent 选择收益最优者保留（标记 `accepted` 为唯一有效配置），其余进入 `rejected_optimization_actions` 并附各方案对比数据（after_metrics + stage_gain）。前一方案若仅因最优结果覆盖而落选，必须执行其 `reverse_cmd` 回退并在结果中注明 `superseded_by=<最优action_id>`。凡是提案存在互斥关系，`candidate_actions` 中必须显式声明 `mutually_exclusive_with` 字段。
+    - **验证决策硬规则（每轮单变量 + 正向保留 / 负向回退）**：
+      - **单变量**：遵循上文"单变量原则（Single-Variable Principle）"，每轮只允许变更一个候选 skill 的一个或一组绑定动作，禁止跨 skill 合并。
+      - **正向 > 1% 保留**：本轮阶段收益（相对上一轮有效配置）> 1% 时，标记 `accepted`，保留变更进入下一轮。
+      - **负向回退**：本轮阶段收益 ≤ 0%（含负收益）时，标记 `rejected`，执行验证 subagent 必须**立即执行回退**（`reverse_cmd`），恢复上一轮有效配置，记录到 `rejected_optimization_actions`。
+      - **噪声区（0%-1%）**：本轮阶段收益在 0%-1% 之间时，标记 `inconclusive`，保留变更但记录噪声。
+      - **互斥方案选优（Mutually-Exclusive Selection）**：互斥方案各自独立成轮全部验证后，统一比较相对同一基准的 `after_metrics`/`stage_gain_pct`，收益最优者 `accepted` 并保留，其余 `rejected` 并回退；严格按"每个互斥方案都验证完再选最优"，禁止只验证一个就下结论。收益接近（差值 ≤1%）时选风险更低或实现更简单者，并在 track 记录选优理由。
+    - **归档原始数据**：执行验证 subagent 每轮必须归档以下原始数据到 `rounds/round_N_<skill_name>/` 目录：
+     - `benchmark_raw.csv` — 压测原始 CSV 输出
+     - `env_before.json` — 变更前环境变量和进程状态快照
+     - `env_after.json` — 变更后环境变量和进程状态快照
+     - `forward_cmd.txt` + `reverse_cmd.txt` — 本轮变更和回退命令
+     - `server_log.txt` — 服务启动/运行日志片段
+     - `npu_metrics.json`（AI 推理场景）— NPU 利用率/HBM 带宽采样
+     - `perf_data.bin`（如有采集）— perf record 原始数据
+   - 主 agent 只维护全局状态、候选池、收益统计和继续/停止决策，不并发修改环境。
+   - 单个 skill 需验证完全 subskill 给出的所有推荐；该 skill 停止后继续下一个候选或 coverage skill。
+   - 所有主优化 skill 都完成、停止或阻塞并说明原因后，才能进入最终报告。
+9. **报告输出** — **必须使用 `scripts/generate_report.py` 生成，禁止手写 markdown**
+
+	   1. 从 `workflow_state.json` 和本轮产物中汇总 `report-input.json`。
+	   2. **必须通过** `scripts/generate_report.py --input report-input.json --output <final_report.md>` 生成报告。
+	      ```bash
+	      python3 scripts/generate_report.py --input <report-input.json> --output <final_report.md>
+	      ```
+	   3. 脚本内置**完整模板**（所有强制字段 + 所有章节），永远不会遗漏耗时统计、贡献分解、Gate 轨迹、回退计划等章节。手写 markdown 无此保证。
+	   4. 若脚本输出 `Missing architecture fields` → 补全 `report-input.json` 对应字段后重新生成。
+	   5. **报告生成前必须通过硬门控 `report-ready`**：
+	     ```bash
+	     node scripts/dynamic_workflow_manager.js report-ready --state <workflow_state.json>
+	     ```
+	     该命令合并执行原 `validate`（11 项合规自检）+ `validate-report-inputs`（5 项必填字段检查）+ `skill-completeness`（每个 skill 推荐动作完整性校验）。若 `ready: false`，根据输出的 `issues` 和 `remediation` 补齐缺失数据，重新执行直到通过。**绝对禁止跳过此门控**。
+	   - 运行 `node scripts/dynamic_workflow_manager.js summary --state <workflow_state.json>` 获取合规摘要和 `workflow_trace`，一并写入报告。**`summary` 内部自动调用 `report-ready`，未就绪时拒绝输出（exit≠0）**。
+	   - **报告写完后必须自查以下 5 个高频遗漏章节是否已在 markdown 中出现**（不依赖用户提醒）：
+
+	     | # | 章节 | 关键词 grep | 数据源 |
+	     |---|------|-------------|--------|
+	     | 1 | **Agent 耗时统计** | `耗时统计` 或 `timing` | `workflow_state.json` → `agent_timing_summary` + `optimization_timing` + `optimization_timing_details` |
+	     | 2 | **各 Skill 贡献分解** | `贡献分解` 或 `per_skill` | `workflow_state.json` → `per_skill_gain_summary` |
+	     | 3 | **Workflow Gate 执行轨迹** | `Gate` 和 `completed` | `summary` 输出 → `workflow_trace` |
+	     | 4 | **恢复/回退计划** | `回退` 或 `reverse` 或 `restore` | `execution_log` → 每条 `forward_cmd` + `reverse_cmd` |
+	     | 5 | **环境诊断摘要** | `环境诊断` | `environment_diagnosis.json` |
+
+	     **自查方法**：报告写出后，用上述关键词 grep 报告文件。缺失任一章 → 补齐后再提交给用户。禁止把"等用户提醒再补"当作正常流程。
+   - 最终报告必须包含环境信息与软硬件信息、测试组网与测试用例信心、`workflow_execution_plan`、`workflow_stage_trace`、`workflow_trace`、Dynamic Workflows 合规摘要、调优报告 workflow 流程分析、瓶颈分析、优化手段验证效果和耗时、结论与下一步计划。
+   - `overall_progress.status=completed` 的报告必须包含非空 `agent_timing_summary`、`optimization_timing` 和 `optimization_timing_details`。缺失任一耗时字段时不得生成完成态报告，必须停在 `report_input_validation` 并补齐计时记录。
+   - 若流程阻塞在服务健康、实例身份、基线确认或权限门控，报告必须明确 `overall_progress`、`blocked_gate`、失败证据和下一步修复建议；不得把历史报告或旧日志包装成最终优化结果。
+   - 若 `current_evidence_status != current` 或 `current_run_id` 缺失，报告必须转为阻塞/降级报告，说明当前异常和需要补采的最小证据；不得输出正式收益、候选动作或优化结论。
+   - 报告 schema 见 `references/report-schema.md`，生成规则见 `references/report-generation.md`。
+10. **Review、环境还原与案例归档**
+   - 执行 review，确认最终有效配置、已回退配置、残留风险和不可实施动作。
+   - 按 `restore_baseline_manifest` 执行或输出环境还原计划。
+   - 归档 `case_archive.json`，后续作为案例迭代输入。
+
+## Dynamic Skill Catalog
+
+主编排只负责候选 skill 列表生成、门控、候选池、收益统计和报告，不把所有专项逻辑写进主上下文。
+
+| 架构图 skill | 当前目录实现 |
+|---|---|
+| CPU 亲和性 skill | `subskills/cpu-affinity-optimization/SKILL.md` |
+| 网络参数调优 skill | `subskills/network-optimization/SKILL.md` |
+| 性能库选型 skill | `subskills/performance-library-selection/SKILL.md` |
+| 应用配置参数调优 skill | `subskills/application-config-optimization/SKILL.md` |
+| BIOS 优化 skill | `subskills/bios-optimization/SKILL.md` |
+| OS 优化 skill | `subskills/os-optimization/SKILL.md` |
+| 编译优化 skill | `subskills/compiler-optimization/SKILL.md` |
+| 加速卡 skill（HPRE/KAE 密码卸载） | `subskills/accelerator-optimization/SKILL.md` |
+| UADK 硬件加速 skill | `subskills/uadk-accelerator-optimization/SKILL.md` |
+| 更换高规格硬件 | `subskills/hardware-upgrade-analysis/SKILL.md` |
+| Other 优化 skill | `subskills/other-optimization/SKILL.md` |
+| 非 CPU 瓶颈预筛与 IO/内存专项证据 | `subskills/io-optimization/SKILL.md` |
+| 数据库专项 | `subskills/database-workload-analysis/SKILL.md`，由应用配置 skill 按需引用 |
+| Ceph 存储调优 skill | `subskills/ceph-optimization/SKILL.md` |
+| vLLM Ascend NPU profiling | `subskills/vllm-ascend-profiling/SKILL.md`，由 `gpu_npu_bottleneck` 路由直接派发，或由加速卡 skill 在 NPU+vLLM 委托场景按需引用（Stage-1 环境诊断/TTFT profiling 采集） |
+| 模型精度验证 | `../model-precision-analysis/SKILL.md`，由应用配置 skill 在量化、精度策略、图或算子变更后按需引用；不进入候选列表、不修改环境，只输出精度回归结论 |
+
+## Framework Ownership Boundary
+
+主框架只维护跨 skill 的公共能力，不承接各专项 skill 的领域细节：
+
+- 主框架负责：用户输入确认、环境诊断备份、基线确认、瓶颈分类、性能信息采集契约、候选优化 skill 列表生成、任务包 schema、候选池合并、执行验证门禁、收益统计、报告、review、环境还原和案例归档。
+- 主框架负责：检查每个 subskill 的 `SKILL.md` 是否存在、名称是否与目录一致、是否能按任务包和结果 JSON 契约接入。
+- 主框架不负责：重写 CPU 亲和性、网络、编译、BIOS、OS、性能库、GPU/NPU 等专项分析细节；这些内容由对应 subskill 维护者迭代。
+- 子 skill 优化建议应作为独立任务下发，不能阻塞主框架发布；只有当子 skill 缺失、命名不一致或输出契约不兼容时，才视为主框架阻塞问题。
+
+## Safety Gates
+
+- 默认从 `analysis_only` 开始；任何真实变更前必须经过 `dry_run` 和用户确认。
+- 所有用户确认点都必须是显式确认，不能由“用户要求继续优化”“任务看起来完整”或历史材料自动推断。确认缺失时必须停止在对应门控，输出当前 workflow 阶段、待确认问题和可继续的最小答复。
+- 场景与环境摘要确认、BMC/Redfish 采集或跳过确认、环境诊断结果用户确认、服务健康检查、目标实例身份确认和基线确认是候选列表生成前的硬门控；失败或未确认时必须停下并报告，不得使用历史记录绕过。
+- 历史日志、历史报告、旧轮次结果只能作为 `historical_records_status=discovered_unconfirmed` 的候选输入；是否用于分析、对比或调优必须由用户显式确认。
+- 当前产物优先级高于历史产物：只要本轮服务健康、基线、证据或 run_id 校验失败，必须报告当前异常；禁止用历史成功结果覆盖当前失败状态。
+- 所有下游结论必须能追溯到同一个 `current_run_id`。run_id 缺失、不一致或证据时间早于本轮启动时间时，结论状态只能是 `blocked` 或 `degraded`。
+- BIOS、OS、网络、防火墙、IRQ、重启、重编译、LD_PRELOAD、远程 SSH、硬件调整建议均属于高风险路径，必须输出风险、验证方法和回退方法。
+- 子 skill 在分析阶段不得修改系统；实施只能在主流程的迭代优化阶段串行执行。
+- 敏感信息、客户路径、账号、IP 和原始业务数据进入报告前必须脱敏。
+
+## References
+
+### Phase 1 强制读取
+
+- `references/application-agent-architecture.md` — 架构图到 skill 的顶层映射和三阶段重构边界
+- `references/input-contract.md` — 用户界面输入、确认项和输出字段
+- `references/user-interaction-gates.md` — 启动、BMC/Redfish、环境诊断和基线确认的主动询问机制
+- `references/checklist.md` — 自顶向下执行检查清单
+- `references/environment-diagnosis.md` — 环境备份后的诊断规则，包括历史 reference 问题集、BIOS 高性能配置、perf/PMU 可用性和内核补丁齐全性
+
+### Phase 2 按需读取
+
+- `references/candidate-skill-list.md` — 根据采集信息生成候选优化 skill 列表的规则
+- `references/knowledge-technique-routing.md` — 知识库技术层、案例与当前子 skill 的映射
+- `references/prerequisites.md` — 工具依赖、权限和降级策略
+- `references/optimization-decision-tree.md` — 优化决策树和变更模式
+- `references/candidate-skill-analysis.md` — 候选 skill 分析清单与输出校验
+- `references/subagent-orchestration.md` — subagent 任务包、JSON schema 和候选池合并
+- `references/platform-tuning-notes.md` — 平台调优笔记
+
+### Phase 3 按需读取
+
+- `references/iteration-execution.md` — 迭代执行、收益归因、单 skill 停止与全局停止规则
+- `references/review-restore-archive.md` — review、环境还原、案例归档
+- `references/report-schema.md` — 报告字段契约
+- `references/report-generation.md` — 报告生成要求
+- `references/examples.md` — 端到端示例
+
+## Compatibility Notes
+
+- 主源目录为 `skills/kpbot-app-tuner/`。
+- `.claude/`、`.opencode/`、`.agents/` 中的入口只做发现和跳转；Codex、Cursor 等编程 Agent 可直接加载主源目录，所有行为以本主源为准。

@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-nmon",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "采集 30 秒系统性能数据并解读 CPU 利用率情况。",
+      "expected_output": "运行 collect.sh -d 30 采集，基于 CSV 原文给出 CPU_ALL 的 User%/Sys%/Wait%/Idle% 摘要，指出空闲度和负载特征；引用数据中的真实数值，不编造 CSV 中不存在的指标。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "采集系统性能数据，判断是否存在磁盘 IO 瓶颈。",
+      "expected_output": "运行 collect.sh 采集，基于 DISKBUSY/DISKREAD/DISKWRITE 段给出每设备利用率与吞吐摘要，结合 CPU_ALL 的 Wait% 判断是否存在 IO 瓶颈并给出依据；不编造数据。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "做一次系统资源基线快照，覆盖 CPU、内存、磁盘、网络四个域。",
+      "expected_output": "运行 collect.sh --snapshot（或 -d 短时长），按域（CPU_ALL/MEM/DISK*/NET*）输出各域关键指标摘要表，注明快照模式仅代表瞬时状态；不编造数据。",
+      "files": []
+    }
+  ]
+}

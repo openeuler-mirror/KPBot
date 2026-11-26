@@ -1049,6 +1049,19 @@ def ensure_workdir_pipeline_skills(workdir: Path, source_project: Path) -> Path 
         os.symlink(source, dest, target_is_directory=True)
     except OSError:
         shutil.copytree(source, dest)
+    # opencode reads project skills from .opencode/skill/<name>/SKILL.md
+    # (not .claude/skills), so mirror the tree there as well. The symlink is
+    # reused when possible so skill edits stay in sync between both locations.
+    oc_dest = workdir / ".opencode" / "skill"
+    oc_dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        remove_path(oc_dest)
+    except OSError as exc:
+        raise RuntimeError(f"failed to replace opencode skills at {oc_dest}: {exc}") from exc
+    try:
+        os.symlink(source, oc_dest, target_is_directory=True)
+    except OSError:
+        shutil.copytree(source, oc_dest)
     return source
 
 
@@ -1778,8 +1791,43 @@ def invoke_auto_claude(
     context_hard_limit_tokens: int = DEFAULT_CONTEXT_HARD_LIMIT_TOKENS,
     transcript_tail_lines: int = DEFAULT_TRANSCRIPT_TAIL_LINES,
     progress_callback: Callable[[], None] | None = None,
+    worker_type: str | None = None,
 ) -> dict[str, Any]:
     log_dir = target_out / "claude_log"
+    if worker_type == "opencode":
+        cmd = [
+            sys.executable,
+            str(SCRIPT_DIR / "auto_opencode_http.py"),
+            "--project-path",
+            str(workdir),
+            "--log-dir",
+            str(log_dir),
+            "--timeout-seconds",
+            str(timeout_minutes * 60),
+            "--idle-timeout-seconds",
+            str(idle_timeout_minutes * 60),
+        ]
+        returncode, stdout_tail = run_streamed(
+            cmd,
+            progress_callback=progress_callback,
+            progress_interval_seconds=progress_interval_seconds,
+            timeout_seconds=timeout_minutes * 60 + 30,
+        )
+        result_path = log_dir / "auto_result.json"
+        if result_path.exists():
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+        else:
+            result = {
+                "status": "failed",
+                "error": f"opencode-http runner did not write result; exit={returncode}; output={stdout_tail[-2000:]}",
+                "exit_code": returncode,
+                "log_dir": str(log_dir),
+            }
+        if returncode != 0 and result.get("status") == "running":
+            result["status"] = "failed"
+            result["error"] = result.get("error") or f"auto runner exited with code {returncode} before final result"
+            result["exit_code"] = returncode
+        return result
     cmd = [
         sys.executable,
         str(SCRIPT_DIR / "auto_claude_logged.py"),
@@ -1806,6 +1854,8 @@ def invoke_auto_claude(
         cmd += ["--context-hard-limit-tokens", str(context_hard_limit_tokens)]
     if claude_bin:
         cmd += ["--claude-bin", claude_bin]
+    if worker_type:
+        cmd += ["--worker-type", worker_type]
     returncode, stdout_tail = run_streamed(
         cmd,
         progress_callback=progress_callback,
@@ -1837,6 +1887,7 @@ def run_target(
     claude_bin: str | None,
     legacy_driver: bool = False,
     progress_callback: Callable[[], None] | None = None,
+    worker_type: str | None = None,
 ) -> dict[str, Any]:
     target_id = target_manifest_id(target)
     target_out = out / "targets" / target_id
@@ -1924,6 +1975,7 @@ def run_target(
             context_hard_limit_tokens=context_hard_limit_tokens,
             resume_prompt_max_tokens=resume_prompt_max_tokens,
             transcript_tail_lines=transcript_tail_lines,
+            worker_type=worker_type,
             legacy_driver=legacy_driver,
         ),
         attempts_path,
@@ -2175,6 +2227,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Reserved for outer slash-command menus; this script remains non-interactive.",
     )
     parser.add_argument("--claude-bin")
+    parser.add_argument(
+        "--worker",
+        choices=["claude", "opencode"],
+        default=None,
+        help="TUI worker binary to drive (default: claude); can also be set as run.worker_type in the manifest",
+    )
     parser.add_argument("--timeout-minutes", type=int)
     parser.add_argument("--idle-timeout-minutes", type=int)
     parser.add_argument("--legacy-driver", action="store_true", help="Use the previous long-session batch driver behavior.")

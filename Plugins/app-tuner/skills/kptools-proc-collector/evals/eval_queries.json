@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-proc-collector",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "PQ-01", "prompt": "看看线程在哪些核上运行", "should_trigger": true },
+    { "id": "PQ-02", "prompt": "分析这个进程的线程分布是否均衡", "should_trigger": true },
+    { "id": "PQ-03", "prompt": "采集进程的上下文切换情况", "should_trigger": true },
+    { "id": "PQ-04", "prompt": "进程发生了很多 CPU 迁移怎么确认", "should_trigger": true },
+    { "id": "PQ-05", "prompt": "查看容器的 cgroup 资源限制", "should_trigger": true },
+    { "id": "PQ-06", "prompt": "这个进程加载了哪些动态库", "should_trigger": true },
+    { "id": "PQ-07", "prompt": "查看每个线程的 CPU 亲和性掩码", "should_trigger": true },
+    { "id": "PQ-08", "prompt": "确认二进制是不是 aarch64 架构", "should_trigger": true },
+    { "id": "PQ-09", "prompt": "采集 topdown 微架构指标", "should_trigger": false, "note": "routes to kptools-devkit" },
+    { "id": "PQ-10", "prompt": "采集系统 CPU 利用率", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "PQ-11", "prompt": "排查网络丢包", "should_trigger": false, "note": "routes to kptools-network-collector" },
+    { "id": "PQ-12", "prompt": "给 Java 进程采火焰图", "should_trigger": false, "note": "routes to kptools-devkit java-perf" }
+  ]
+}

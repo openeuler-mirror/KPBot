@@ -1,0 +1,7 @@
+name: cubesandbox-monitor-connection-reuse-monitor-health
+skill: cubesandbox-monitor-connection-reuse
+tier: B
+entrypoint: ["python3", "cases/monitor-health/run.py"]
+assert:
+  - type: exit_code
+    expect: 0

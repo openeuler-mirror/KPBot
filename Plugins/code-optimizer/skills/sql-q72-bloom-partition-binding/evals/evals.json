@@ -1,0 +1,60 @@
+{
+  "skill_name": "sql-q72-bloom-partition-binding",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "false-under-or",
+      "prompt": "剩余过滤是 bloom(date) OR country=CN，能提取 Bloom 单独否决 split 吗？",
+      "expected_output": "不能，OR 另一侧可能为 true；只提取顶层连续 AND 下的必要条件。",
+      "files": [],
+      "assertions": [
+        "拒绝析取内提取",
+        "保留剩余过滤"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "int32-widening",
+      "prompt": "日期列 INTEGER 在探针里转 BIGINT，描述符只保留 64 位类型行吗？",
+      "expected_output": "保留原列 32 位解析域及 64 位哈希域，超原范围不能据此拒绝。",
+      "files": [],
+      "assertions": [
+        "区分解析与哈希类型",
+        "扩宽保值证明"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "same-name",
+      "prompt": "两个扫描都有 date_sk，按名字找到一个就能绑定吗？",
+      "expected_output": "按 scan ID、列句柄和分区属性证明归属，编译后再次复核。",
+      "files": [],
+      "assertions": [
+        "拒绝同名错绑",
+        "编译后复核"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "compile-and-lifetime",
+      "prompt": "能每个 split 重编译并把临时 Bloom 常量地址存起来吗？",
+      "expected_output": "在扫描上下文复用已编译原表达式，持有常量；重建计划或上下文失效后重新绑定。",
+      "files": [],
+      "assertions": [
+        "持有原常量与上下文",
+        "避免每 split 重编译"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "descriptor-already-bound",
+      "prompt": "已经拿到有效的原生分区绑定，某个 split 的文本值越界，应该重新提取 Bloom 吗？",
+      "expected_output": "由 sql-q72-parquet-split-pruning 处理原类型解析并回退提交，不重新放宽表达式提取。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
+    }
+  ]
+}

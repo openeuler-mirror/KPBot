@@ -1,0 +1,38 @@
+{
+  "collection_status": {
+    "completed": [
+      "processes",
+      "python_profiles"
+    ],
+    "failed": {},
+    "never_started": []
+  },
+  "processes": [
+    {
+      "comm": "vllm",
+      "args": [
+        "vllm",
+        "serve",
+        "example",
+        "--max-num-seqs",
+        "256"
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "python_executable_used": "/usr/bin/python3",
+      "environment_source": "runtime_process",
+      "packages_source": "pip list",
+      "packages_errors": [
+        "importlib.metadata: timeout"
+      ],
+      "pip_list": [
+        {
+          "name": "vllm",
+          "version": "0.9.1"
+        }
+      ]
+    }
+  ]
+}

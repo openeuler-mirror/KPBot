@@ -1,0 +1,39 @@
+# npm
+node_modules/
+*.tgz
+npm-debug.log*
+.npm/
+
+# Python
+__pycache__/
+*.pyc
+/.test-tmp/
+/test-results.log
+/test-results-latest.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# KPBot 本地安装产物 / 运行现场（项目级 skills、host 快照、runs）
+.kpbot/
+.opencode/
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# SKILL 采集证据产物（运行时生成）
+*-evidence/
+
+# case 运行产物（entrypoint 写入，不入库）
+Plugins/app-tuner/skills/*/cases/*/results/
+Plugins/public/kpbot-skill-quality-review/skills/kpbot-skill-quality-review/cases/static-review-contract/results/
+
+# 临时目录与临时文件（mktemp / 图表产物，防止误提交）
+/tmp*/
+*.tmp
+Plugins/app-tuner/skills/*/subskills/*/cases/*/results/

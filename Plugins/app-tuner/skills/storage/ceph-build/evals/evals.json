@@ -1,0 +1,39 @@
+{
+  "skill_name": "ceph-build",
+  "evals": [
+    {
+      "id": "CB-E01",
+      "prompt": "在鲲鹏服务器 openEuler 22.03 上从源码编译 Ceph 14.2.8，编译环境和编译步骤怎么做？",
+      "expected_output": "按 build-guide.md 的 openEuler 22.03 路径执行：挂载 openEuler-22.03-LTS-SP2 系统镜像为本地源并配置 local.repo（baseurl=file:///media/，gpgcheck=0）；yum clean all && yum makecache 生成缓存；安装编译依赖（含 openeuler-lsb、cmake、gcc-c++ 等）；获取源码包（官方 tarballs 下载 + sha256sum 校验）并解压，升级 isa-l（记录 commit 号、核验 aarch64 目录）后下载并应用 22.03_adaptation.patch 补丁；以 tar -jcvf 重新打包为 tar.bz2 并 bzip2 -t 校验；rpmdev-setuptree 后将 ceph.spec 与源码包分别放入 SPECS/SOURCES 目录，rpmbuild -ba ceph.spec 编译；编译产物通过 local_ceph 本地源 yum install ceph-14.2.8 安装并用 ceph -v 验证",
+      "files": [],
+      "expectations": [
+        "给出 openEuler 22.03 路径的本地镜像挂载与 local.repo 配置（baseurl 指向 /media/，gpgcheck=0）",
+        "给出依赖安装、升级 isa-l（含 commit 号与 aarch64 目录核验）、22.03_adaptation.patch、tar -jcvf 重打包与 bzip2 -t 校验的步骤，并声明源码包经官方渠道获取与 sha256sum 校验",
+        "给出 rpmdev-setuptree 准备目录、spec 放入 SPECS、源码包放入 SOURCES、rpmbuild -ba 编译 spec 的步骤",
+        "说明编译产物经 local_ceph 本地源安装 Ceph 14.2.8，并以 ceph -v 显示版本号为成功判据"
+      ]
+    },
+    {
+      "id": "CB-E02",
+      "prompt": "CentOS 7.6 编译 Ceph 14.2.8，cmake 和 devtoolset 这些依赖怎么装？编译完怎么把产物装回本机？",
+      "expected_output": "按 build-guide.md 的 CentOS 7.6 路径执行：配置镜像源后安装编译依赖（含 cmake3 与 devtoolset-8-gcc-c++ 等）；rpmdev-setuptree 准备 SPECS/SOURCES 目录，将 ceph.spec 与源码包放入对应目录后 rpmbuild -ba ceph.spec 编译；编译产物在 RPMS/aarch64 目录下，配置 local_ceph 本地源（enabled=1）后 yum install ceph-14.2.8 安装，以 ceph -v 显示 14.2.8 版本号且 rpm -q ceph 包 NEVRA 与本机 rpmbuild 产物一致（来自 local_ceph 源）为成功判据",
+      "files": [],
+      "expectations": [
+        "给出 CentOS 7.6 路径的编译依赖安装（含 cmake3 与 devtoolset-8-gcc-c++）",
+        "给出 rpmdev-setuptree 与 rpmbuild -ba ceph.spec 的编译步骤",
+        "说明编译产物经 local_ceph 本地源（enabled=1）安装，以 ceph -v 版本号与 rpm -q ceph 包 NEVRA 一致性为成功判据"
+      ]
+    },
+    {
+      "id": "CB-E03",
+      "prompt": "编译安装 Ceph 后执行 ceph -s 提示 no module named xxx 或 auth: unable to find a keyring，还有 conf_read_file 报错，怎么排查？",
+      "expected_output": "按 build-guide.md 故障排除三则：提示 no module named xxx 时按报错安装对应 Python 依赖包；提示 auth: unable to find a keyring 为非 root 用户权限问题，安装 acl 包（yum），以管理员身份（sudo + client.admin keyring）为预期用户创建只读 CephX 身份 client.ro-status（mon allow r），排查完成后回收（setfacl -x + ceph auth rm），并对该身份 keyring 用 setfacl 赋读权限（client.admin keyring 仅管理员持有，预期用户不接触）；提示 Error initializing cluster client: InvalidArgumentError（conf_read_file）时确认在正确的用户与正确的集群目录（如 /root/ceph-mycluster/）下执行 ceph -s",
+      "files": [],
+      "expectations": [
+        "给出 no module named xxx 按报错用 pip3 安装对应 Python 依赖包的处置",
+        "给出 auth: unable to find a keyring 用 yum 安装 acl 包并以管理员身份（sudo + client.admin keyring）配置只读 CephX 身份（client.ro-status，mon allow r）setfacl 赋权、排查完成后回收（setfacl -x + ceph auth rm）、预期用户不接触 client.admin keyring 的处置",
+        "给出 conf_read_file 报错确认正确用户与集群目录（如 /root/ceph-mycluster/）的处置"
+      ]
+    }
+  ]
+}

@@ -24,6 +24,10 @@ class StageExecutorConfig:
     resume_prompt_max_tokens: int
     transcript_tail_lines: int
     legacy_driver: bool
+    worker_type: str | None = None
+
+
+
 
 
 class StageExecutor:
@@ -74,6 +78,7 @@ class StageExecutor:
                 target_out=config.target_out,
                 answer_bank_file=config.answer_bank_file,
                 claude_bin=config.claude_bin,
+                worker_type=config.worker_type,
                 timeout_minutes=config.timeout_minutes,
                 idle_timeout_minutes=config.idle_timeout_minutes,
                 progress_interval_seconds=config.progress_interval_seconds,

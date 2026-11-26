@@ -1,0 +1,9 @@
+{
+  "rule": "governor == performance -> 该参数跳过（已最优）",
+  "evidence": {
+    "governor": "performance",
+    "scaling_driver": "acpi-cpufreq",
+    "source": "os-collector --governor 输出（E-A 真机，2026-11-02 A/B 对拍）"
+  },
+  "expected_conclusion": "governor 参数 status=skipped（无优化空间）"
+}

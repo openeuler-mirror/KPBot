@@ -5,6 +5,22 @@
 
 set -e
 
+case "${1:-}:${2:-}" in
+    codex:*|project:codex|global:codex)
+        _codex_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        exec bash "$_codex_root/bin/_codex.sh" install "$@"
+        ;;
+esac
+
+# DSH is the first argument, or follows an explicit installation level.
+# Later arguments may be legacy install paths named "dsh".
+case "${1:-}:${2:-}" in
+    dsh:*|project:dsh|global:dsh)
+        _dsh_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        exec node "$_dsh_root/adapters/dsh/install.mjs" install "$@"
+        ;;
+esac
+
 # --- Color & output helpers ---
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'
@@ -18,6 +34,23 @@ warn() { echo -e "  ${YELLOW}⚠${NC}${DIM} $*${NC}"; }
 err()  { echo -e "  ${RED}✗${NC}${DIM} $*${NC}"; }
 info() { echo -e "  ${DIM}${CYAN}→${NC}${DIM} $*${NC}"; }
 step() { echo -e "${DIM}$*${NC}"; }
+
+PYTHON_BIN=""
+for _cand in python3 python; do
+    if command -v "$_cand" >/dev/null 2>&1 && \
+       "$_cand" -c 'import json,sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)' >/dev/null 2>&1; then
+        PYTHON_BIN="$_cand"
+        break
+    fi
+done
+
+python_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -am "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
 
 # Safe install config file with backup and conflict handling.
 # $1 = generated temp file path
@@ -82,7 +115,6 @@ safe_install_file() {
 
 
 BRAND="kpbot"
-VERSION="0.1.0"
 
 show_banner() {
   echo ""
@@ -110,7 +142,7 @@ Usage: install.sh [level] [tool] [install_path]
 
 Arguments:
   level        - Installation level: "project" (default) or "global"
-  tool         - Target tool: "claude" (default) or "opencode"
+  tool         - Target tool: "claude" (default), "opencode", "codex", or "dsh"
   install_path - Project-level installation directory (default: current working directory)
 
 Options:
@@ -122,17 +154,26 @@ Examples:
   install.sh global claude                # Global-level, Claude Code
   install.sh project opencode             # Project-level, OpenCode
   install.sh global opencode              # Global-level, OpenCode
+  install.sh project codex "/my project" # Codex project skills
+  install.sh global codex                 # Codex user skills
   install.sh project claude /path/to/proj # Project-level, Claude Code, custom path
+  install.sh project dsh "/my project"    # DSH project root (spaces supported)
+  install.sh global dsh                    # DSH_HOME or ~/.dsh
+  install.sh global dsh "/my dsh home"     # Custom DSH home
 
 Installation paths:
   Claude:   .claude/skills/     + CLAUDE.md in project root (project)
             ~/.claude/skills/   + ~/.claude/CLAUDE.md (global)
   OpenCode: .opencode/skills/   + AGENTS.md in project root (project)
             ~/.config/opencode/ + AGENTS.md (global)
+  DSH:      .dsh/skills/ (project)
+            DSH_HOME/skills/ or ~/.dsh/skills/ (global; explicit path overrides DSH home)
+  Codex:    .agents/skills/ (project), ~/.agents/skills/ (global)
 
 After installation, launch directly:
   Claude:   claude
   OpenCode: opencode
+  Codex:    codex
 EOF
 }
 
@@ -141,10 +182,82 @@ TOOL="claude"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
+VERSION=$("${PYTHON_BIN}" -c 'import json,sys; sys.stdout.buffer.write(str(json.load(open(sys.argv[1], encoding="utf-8"))["version"]).encode("utf-8"))' "$(python_path "$PLUGIN_ROOT/package.json")" 2>/dev/null || echo "unknown")
 # Plugins: iterate all plugin skill directories dynamically
 PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
-# claude-only 的 skill：opencode 无对应工具，安装时跳过
-OPENCODE_SKIP="drive-claude-optimize-pipeline batch-drive-optimize-pipeline"
+
+# Read JSON field from a plugin.json with a tiny python fallback.
+# Usage: plugin_matches_platform <plugin_dir>
+plugin_supports_tool() {
+    local plugin_dir="$1"
+    local pjson="$plugin_dir/.claude-plugin/plugin.json"
+    [ -f "$pjson" ] || return 0   # legacy plugin without metadata: install everywhere
+    "${PYTHON_BIN}" - "$(python_path "$pjson")" "$TOOL" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+    platforms = d.get("platforms")
+except Exception:
+    platforms = None
+if not platforms:
+    sys.exit(0)  # no platform declaration: treat as supported everywhere
+sys.exit(0 if sys.argv[2] in platforms else 1)
+PY
+}
+
+# Get skills excluded on the current tool from a plugin.json.
+# Usage: plugin_skill_excludes <plugin_dir>
+plugin_skill_excludes() {
+    local plugin_dir="$1"
+    local pjson="$plugin_dir/.claude-plugin/plugin.json"
+    [ -f "$pjson" ] || return 0
+    "${PYTHON_BIN}" - "$(python_path "$pjson")" "$TOOL" <<'PY' | tr -d '\r'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+    excludes = (d.get("opencode") or {}).get("exclude")
+except Exception:
+    excludes = None
+if not excludes:
+    sys.exit(0)
+# Current tool is not opencode: no per-skill exclusions apply.
+if sys.argv[2] != "opencode":
+    sys.exit(0)
+sys.stdout.buffer.write(("\n".join(excludes) + "\n").encode("utf-8"))
+PY
+}
+
+# Enumerate skill directories under a skills/ root, one "<src-dir>\t<skill-name>"
+# line per skill.
+#   - a directory holding SKILL.md is a skill;
+#   - a directory holding DOMAIN.md is a domain group: its children are searched
+#     recursively (≤4 levels), so `skills/<domain>/<skill>/SKILL.md` and
+#     `skills/<domain>/<sub-domain>/<skill>/SKILL.md` both resolve;
+#   - anything else (subskills/, references/, a nested package's own skills/) is
+#     skill-internal and is not enumerated.
+# Domain groups exist only in the source tree: installation always lands each
+# skill at <config>/skills/<skill-name>/ because both Claude Code and OpenCode
+# discover skills one level deep.
+list_skills() {
+    _walk_skills "$1" 1
+}
+
+_walk_skills() {
+    local dir="$1" depth="$2" child
+    for child in "$dir"/*/; do
+        [ -d "$child" ] || continue
+        child="${child%/}"
+        if [ -f "$child/SKILL.md" ]; then
+            printf '%s\t%s\n' "$child" "$(basename "$child")"
+        elif [ -f "$child/DOMAIN.md" ] && [ "$depth" -lt 4 ]; then
+            _walk_skills "$child" $((depth + 1))
+        elif ls "$child"/*/SKILL.md >/dev/null 2>&1; then
+            # 目录里有子 skill，但自身没有 DOMAIN.md ⇒ 整组会被静默跳过
+            # 注意必须写 stderr：list_skills 的 stdout 被 while-read 当数据流消费
+            warn "skill group without DOMAIN.md, not installed: ${child#"$PLUGIN_ROOT"/}" >&2
+        fi
+    done
+}
 
 # --- No arguments: show error + usage ---
 if [ $# -eq 0 ]; then
@@ -173,6 +286,11 @@ if [ $# -gt 0 ]; then
     esac
 fi
 
+if [ -z "$PYTHON_BIN" ]; then
+    err "python 3.x is required but not found in PATH (tried: python3, python). Install python3 and retry."
+    exit 1
+fi
+
 # --- Determine config root directory ---
 if [ "$LEVEL" = "global" ]; then
     if [ "$TOOL" = "opencode" ]; then
@@ -183,6 +301,10 @@ if [ "$LEVEL" = "global" ]; then
 else
     # Project-level: default to current directory, allow override via install_path arg
     if [ -n "$INSTALL_PATH" ]; then
+        if ! mkdir -p "$INSTALL_PATH" 2>/dev/null; then
+            err "Cannot create install path: $INSTALL_PATH"
+            exit 1
+        fi
         INSTALL_BASE="$(cd "$INSTALL_PATH" && pwd)"
     else
         INSTALL_BASE="$PWD"
@@ -210,20 +332,32 @@ echo ""
 # --- Step 0: Preview ---
 step "[0/4] Checking items to be installed..."
 
-# Collect skills from all plugins (including nested packages)
+# Collect skills from all plugins supported by the target tool (including nested packages)
 SKILL_COUNT=0
 SKILLS_TO_INSTALL=""
-for plugin_dir in "$PLUGINS_DIR"/*/; do
+for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
     [ -d "$plugin_dir" ] || continue
+    # Skip plugins that do not declare support for the target tool
+    if ! plugin_supports_tool "$plugin_dir"; then
+        warn "skip plugin: $(basename "$plugin_dir") (not supported on $TOOL)"
+        continue
+    fi
     skill_src="$plugin_dir/skills"
     [ -d "$skill_src" ] || continue
-    for skill_dir in "$skill_src"/*/; do
-        [ -d "$skill_dir" ] || continue
-        name=$(basename "$skill_dir")
+    while IFS=$'\t' read -r skill_src_path name; do
+        [ -n "$name" ] || continue
+        # Per-plugin exclusions (e.g. opencode-only skips for claude-only skills)
+        if plugin_skill_excludes "$plugin_dir" | grep -qx "$name"; then
+            continue
+        fi
+        case " $SKILLS_TO_INSTALL " in
+            *" $name "*) warn "duplicate skill name: $name ($skill_src_path)"; continue ;;
+        esac
         SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $name"
         SKILL_COUNT=$((SKILL_COUNT + 1))
         # Detect package: skills/<name>/skills/<inner>/SKILL.md
-        for inner_dir in "$skill_dir"skills/*/; do
+        # 注意 skill_src_path 来自 _walk_skills，结尾斜杠已去掉，必须显式补 '/'
+        for inner_dir in "$skill_src_path"/skills/*/; do
             [ -d "$inner_dir" ] || continue
             [ -f "$inner_dir/SKILL.md" ] || continue
             inner_name=$(basename "$inner_dir")
@@ -233,7 +367,7 @@ for plugin_dir in "$PLUGINS_DIR"/*/; do
                 *) SKILLS_TO_INSTALL="$SKILLS_TO_INSTALL $inner_name"; SKILL_COUNT=$((SKILL_COUNT + 1)) ;;
             esac
         done
-    done
+    done < <(list_skills "$skill_src")
 done
 
 echo ""
@@ -283,32 +417,104 @@ echo ""
 step "[1/4] Setting up KPBot skills..."
 mkdir -p "$CONFIG_ROOT/skills"
 
-# 清理目标目录下旧内容（幂等重装）
-rm -rf "$CONFIG_ROOT/skills"/*
+# 仅替换 KPBot 所属的 skills，保留用户自有的 skills：
+# 1) 与当前插件源同名的 skill（KPBot 管理的名字，重装时整体刷新）
+# 2) 上次安装清单 kpbot-manifest.json 中记录的 skill（覆盖已改名/下线的无主残留）
+CLEAN_LIST="$SKILLS_TO_INSTALL"
+if [ -f "$CONFIG_ROOT/kpbot-manifest.json" ]; then
+    manifest_skills=$("${PYTHON_BIN}" - "$(python_path "$CONFIG_ROOT/kpbot-manifest.json")" "$TOOL" <<'PY'
+import json, re, sys
 
-# 基底：拷贝全部 plugins 的 skills（claude 格式）
-for plugin_dir in "$PLUGINS_DIR"/*/; do
+def fail(reason, legacy=False):
+    message = "KPBot manifest validation failed: " + reason + "\nManifest: " + sys.argv[1]
+    if legacy:
+        message += ("\nA legacy manifest may have recorded user-created skill directories."
+                    "\nBack up the installation directory and manifest, then remove only the manifest file: "
+                    + sys.argv[1] + "\nRetry the command after checking the backed-up skill directories.")
+    else:
+        message += "\nNo managed skills were removed. Restore a valid manifest from backup before retrying."
+    sys.stderr.buffer.write((message + "\n").encode("utf-8"))
+    raise SystemExit(1)
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        manifest = json.load(stream)
+except (OSError, ValueError) as error:
+    fail("Cannot read manifest: " + str(error))
+if not isinstance(manifest, dict) or manifest.get("brand") != "KPBot" or manifest.get("tool") != sys.argv[2]:
+    fail("Invalid KPBot installation manifest")
+names = manifest.get("installed_skills")
+if not isinstance(names, list):
+    fail("Invalid installed_skills: expected an array")
+for name in names:
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
+        fail("Invalid installed_skills entry: " + repr(name), legacy=True)
+if len(names) != len(set(names)):
+    fail("Invalid duplicate installed_skills in KPBot manifest")
+sys.stdout.buffer.write(("\n".join(names) + "\n").encode("utf-8"))
+PY
+    )
+    for ms in $manifest_skills; do
+        case " $CLEAN_LIST " in
+            *" $ms "*) ;;
+            *) CLEAN_LIST="$CLEAN_LIST $ms" ;;
+        esac
+    done
+fi
+clean_count=0
+for name in $CLEAN_LIST; do
+    if [ -e "$CONFIG_ROOT/skills/$name" ] || [ -L "$CONFIG_ROOT/skills/$name" ]; then
+        rm -rf "$CONFIG_ROOT/skills/$name"
+        clean_count=$((clean_count + 1))
+    fi
+done
+
+# 基底：拷贝目标工具支持的 plugins 的 skills（claude 格式）
+for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
     [ -d "$plugin_dir" ] || continue
+    if ! plugin_supports_tool "$plugin_dir"; then
+        continue
+    fi
     skill_src="$plugin_dir/skills"
     [ -d "$skill_src" ] || continue
-    plugin_name=$(basename "$plugin_dir")
-    cp -r "$skill_src/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+    while IFS=$'\t' read -r skill_src_path name; do
+        [ -n "$name" ] || continue
+        rm -rf "${CONFIG_ROOT:?}/skills/$name"
+        cp -r "$skill_src_path" "$CONFIG_ROOT/skills/$name"
+    done < <(list_skills "$skill_src")
 done
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$TOOL" = "opencode" ]; then
     # 应用每个插件的 opencode/ 覆盖层（差异文件覆盖 claude 版本）
-    for plugin_dir in "$PLUGINS_DIR"/*/; do
+    for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
         [ -d "$plugin_dir" ] || continue
+        if ! plugin_supports_tool "$plugin_dir"; then
+            continue
+        fi
         if [ -d "$plugin_dir/opencode" ]; then
-            cp -r "$plugin_dir/opencode/"* "$CONFIG_ROOT/skills/" 2>/dev/null || true
+            while IFS=$'\t' read -r overlay_src name; do
+                [ -n "$name" ] || continue
+                # 覆盖层只存差异文件：必须"合并覆盖"到主源已安装的 skill 上，
+                # 不能先删后拷，否则主源的 references/scripts/subskills 会整片丢失。
+                mkdir -p "$CONFIG_ROOT/skills/$name"
+                cp -r "$overlay_src"/. "$CONFIG_ROOT/skills/$name/"
+            done < <(list_skills "$plugin_dir/opencode")
         fi
     done
     ok "OpenCode overlays applied"
-    # 跳过 claude-only 的 skill（opencode 无对应工具）
-    for skip_name in $OPENCODE_SKIP; do
-        [ -e "$CONFIG_ROOT/skills/$skip_name" ] && rm -rf "$CONFIG_ROOT/skills/$skip_name"
+    # 应用各插件声明的排除列表（拷贝与覆盖层完成后统一删除，防止被重新带回来）
+    for plugin_dir in "$PLUGINS_DIR"/*/ "$PLUGINS_DIR"/*/*/; do
+        [ -d "$plugin_dir" ] || continue
+        if ! plugin_supports_tool "$plugin_dir"; then
+            continue
+        fi
+        plugin_skip="$(plugin_skill_excludes "$plugin_dir")"
+        for skip_name in $plugin_skip; do
+            rm -rf "$CONFIG_ROOT/skills/$skip_name" 2>/dev/null || true
+        done
     done
+    ok "OpenCode skill exclusions applied"
 else
     :
 fi
@@ -316,7 +522,7 @@ fi
 # Nested packages → tool-discoverable symlinks
 # When a plugin directory has skills/<inner>/SKILL.md, the tool scans one-level
 # deep only. Mirror the inner skill at root via symlinks so relative paths
-# (subskills/, references/, ref-skills/) still resolve correctly.
+# (subskills/, references/, scripts/, agents/) still resolve correctly.
 link_count=0
 for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
     [ -d "$pkg_dir" ] || continue
@@ -333,11 +539,11 @@ for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
         # Copy main SKILL.md (the tool reads content from here)
         cp "$inner_dir/SKILL.md" "$target/"
         # Symlink sub-resources so relative path references resolve
-        for sub in subskills references scripts agents ref-skills; do
+        for sub in subskills references scripts agents; do
             if [ -d "$inner_dir/$sub" ] && [ ! -e "$target/$sub" ]; then
                 ln -s "../$pkg_name/skills/$inner_name/$sub" "$target/$sub"
             elif [ -d "$pkg_dir/$sub" ] && [ ! -e "$target/$sub" ]; then
-                # Fallback: package-level resource (e.g. ref-skills/)
+                # Fallback: package-level resource
                 ln -s "../$pkg_name/$sub" "$target/$sub"
             fi
         done
@@ -345,6 +551,52 @@ for pkg_dir in "$CONFIG_ROOT/skills"/*/; do
         link_count=$((link_count + 1))
     done
 done
+
+# Register skill-owned agents (agents/*.md) into the platform agent directory.
+# 目录名 "agents" 在两种平台均被识别：
+#   - Claude Code : .claude/agents/<name>.md
+#   - OpenCode    : .opencode/agent/<name>.md 或 .opencode/agents/<name>.md（复数目录兼容）
+# 使用 symlink 保持插件源为唯一事实源（single source of truth）。
+mkdir -p "$CONFIG_ROOT/agents"
+# Clean stale links pointing at skills that were just re-installed (idempotent)
+find "$CONFIG_ROOT/agents" -maxdepth 1 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+agent_count=0
+for skill_dir in "$CONFIG_ROOT/skills"/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name=$(basename "$skill_dir")
+    [ -d "$skill_dir/agents" ] || continue
+    for agent_file in "$skill_dir"/agents/*.md; do
+        [ -f "$agent_file" ] || continue
+        agent_name=$(basename "$agent_file")
+        target="$CONFIG_ROOT/agents/$agent_name"
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            continue
+        fi
+        ln -s "../skills/$skill_name/agents/$agent_name" "$target"
+        agent_count=$((agent_count + 1))
+        ok "Agent: $skill_name/agents/$agent_name"
+    done
+done
+
+# Copy shared scripts (e.g. print_logo.sh) into skills whose SKILL.md references them
+for skill_dir in "$CONFIG_ROOT/skills"/*/; do
+    [ -d "$skill_dir" ] || continue
+    [ -f "$skill_dir/SKILL.md" ] || continue
+        for shared_script in "$PLUGINS_DIR/common/scripts/"*.sh; do
+        [ -f "$shared_script" ] || continue
+        script_name=$(basename "$shared_script")
+        if grep -q "$script_name" "$skill_dir/SKILL.md" 2>/dev/null; then
+            mkdir -p "$skill_dir/scripts"
+            [ -f "$skill_dir/scripts/$script_name" ] && continue
+            cp "$shared_script" "$skill_dir/scripts/"
+        fi
+    done
+done
+
+# Ensure helper scripts (e.g. print_logo.sh) are executable
+chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*.sh 2>/dev/null || true
+# Also cover nested helper scripts (e.g. skills/<name>/scripts/tools/*.sh)
+chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*"/"*.sh 2>/dev/null || true
 
 # Final count (after overlays, skips, and discovery links)
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
@@ -408,9 +660,15 @@ step "[3/4] Configuring tool discovery..."
 if [ "$TOOL" = "opencode" ]; then
     # OpenCode auto-scans .opencode/skills/ — Step 1 already done
     ok "Auto-scan: skills/"
+    if [ "$agent_count" -gt 0 ]; then
+        ok "Auto-scan: agents/ ($agent_count subagent definition(s) registered)"
+    fi
 else
     # Claude: skills installed to .claude/skills/ in Step 1
     ok "Skills: $skill_count ready in .claude/skills/"
+    if [ "$agent_count" -gt 0 ]; then
+        ok "Agent files: $agent_count registered in .claude/agents/"
+    fi
 fi
 echo ""
 
@@ -453,9 +711,11 @@ MANIFEST="$CONFIG_ROOT/kpbot-manifest.json"
 
 SKILLS_JSON="[]"
 if [ -d "$CONFIG_ROOT/skills" ]; then
-  SKILLS_JSON=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | while read d; do
-    basename "$d"
-  done | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))" 2>/dev/null || echo "[]")
+  SKILLS_JSON=$(for name in $SKILLS_TO_INSTALL; do
+    if [ -d "$CONFIG_ROOT/skills/$name" ]; then
+      printf '%s\n' "$name"
+    fi
+  done | "${PYTHON_BIN}" -c 'import sys,json; names = list(dict.fromkeys(sys.stdin.read().splitlines())); sys.stdout.buffer.write(json.dumps(names).encode("utf-8"))')
 fi
 
 cat > "$MANIFEST" << MANIFEST_EOF

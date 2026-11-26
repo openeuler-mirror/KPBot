@@ -1,0 +1,15 @@
+# Tier A: fake host, no real Release traffic, systemd, installer, or host writes.
+# Run from any directory: bash cases/preflight-contract/run.sh
+name: preflight-contract
+skill: cubesandbox-deployment-preflight
+tier: A
+assert:
+  - {type: exit_code, expect: 0}
+  - {type: json_field, file: results/result.json, field: success, expect: true}
+  - {type: json_field, file: results/result.json, field: preflight_success, expect: true}
+  - {type: json_field, file: results/result.json, field: missing_sha_refused, expect: true}
+  - {type: json_field, file: results/result.json, field: failure_detected, expect: true}
+  - {type: json_field, file: results/result.json, field: missing_shared_blocked, expect: true}
+  - {type: json_field, file: results/result.json, field: report_path_safe, expect: true}
+  - {type: json_field, file: results/result.json, field: no_side_effects, expect: true}
+  - {type: json_field, file: results/result.json, field: secret_safe, expect: true}

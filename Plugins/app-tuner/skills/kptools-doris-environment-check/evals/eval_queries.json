@@ -1,0 +1,17 @@
+{
+  "skill_name": "kptools-doris-environment-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {"id": "DEP-01", "prompt": "Doris 压测前只读预检已有 FE", "should_trigger": true},
+    {"id": "DEP-02", "prompt": "检查 Doris 客户端和 FE/BE 是否满足查询基准条件", "should_trigger": true},
+    {"id": "DEP-03", "prompt": "验证非默认 Doris 9030 以外端点和认证", "should_trigger": true},
+    {"id": "DEP-04", "prompt": "Doris 认证失败，帮我做只读环境诊断", "should_trigger": true},
+    {"id": "DEP-05", "prompt": "检查 Doris 版本是否支持这个查询基准", "should_trigger": true},
+    {"id": "DEP-06", "prompt": "Doris 预检要 ready/blocked/unknown JSON 证据", "should_trigger": true},
+    {"id": "DEN-01", "prompt": "实际运行三轮 Doris SELECT 性能测量", "should_trigger": false, "note": "routes to kptools-doris-benchmark"},
+    {"id": "DEN-02", "prompt": "安装并启动一个新的 Doris 集群", "should_trigger": false, "note": "deployment is outside this read-only skill"},
+    {"id": "DEN-03", "prompt": "创建 Doris 表并导入 TPC-H 数据", "should_trigger": false, "note": "write workflow, not this skill"},
+    {"id": "DEN-04", "prompt": "优化 Kafka 生产者吞吐", "should_trigger": false, "note": "different service and write workload"}
+  ]
+}

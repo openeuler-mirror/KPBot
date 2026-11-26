@@ -1,0 +1,58 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 operation-fusion 消除中间 Vec
+#
+# 构建（本机容器无法解析 openeuler 源，需 --network host）：
+#   docker build --network host -f skills/operation-fusion/cases/agent-optimize-fused-positivity/Dockerfile \
+#       -t kpbot/code-optimizer-agent-fused-positivity:1.0-openeuler24.03 .
+#   # A/B 对照
+#   ./run_ab.sh --save results-ab
+
+name: agent-optimize-fused-positivity
+skill: operation-fusion
+tier: agent                  # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/code-optimizer-agent-fused-positivity:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection           # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON 环境变量注入
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: speedup
+  uplift: speedup_with / speedup_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/operation-fusion/cases/agent-optimize-fused-positivity/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机（NEON 可用）
+  - opencode 二进制（运行时只读挂载，路径白名单校验）
+  - OPENCODE_AUTH_JSON（auth.json 整文件 base64 经环境变量注入）
+  - 容器可访问 deepseek API（模型 API 由运行环境代为调用，agent 无网络权限）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+  N: 4000000
+  ITERS: 20
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: optimized_correct
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: speedup
+    op: gte
+    expect: 1.0

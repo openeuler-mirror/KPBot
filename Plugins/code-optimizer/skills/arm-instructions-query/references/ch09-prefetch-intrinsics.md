@@ -2,6 +2,8 @@
 
 ACLE 提供了用于显式数据和指令预取的内联函数。这些是对 CPU 的提示 — 在某些硬件上可能被实现为空操作。
 
+若需要读取程序实际采用的 L1/L2 预取策略、追踪调用与消费位置或比较架构分支，使用 `analyze-prefetch-policy` 技能；其 `references/instruction-semantics.md` 说明参数判读与证据边界。
+
 ### 简单数据预取
 
 ```c

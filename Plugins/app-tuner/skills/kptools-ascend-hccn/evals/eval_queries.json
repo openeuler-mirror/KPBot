@@ -1,0 +1,13 @@
+{
+  "skill_name": "kptools-ascend-hccn",
+  "queries": [
+    {"id": "HQ-01", "query": "多机训练 allreduce 慢，查下 NPU 网络错包", "should_trigger": true},
+    {"id": "HQ-02", "query": "看下各 NPU 芯片 RoCE 网卡 IP 地址", "should_trigger": true},
+    {"id": "HQ-03", "query": "训练卡顿怀疑网络闪断，检查 NPU 网口 link 状态", "should_trigger": true},
+    {"id": "HQ-04", "query": "用 hccn_tool 查网口带宽速率", "should_trigger": true},
+    {"id": "HQ-05", "query": "测一下两台机器之间的 RoCE 时延", "should_trigger": true},
+    {"id": "HQ-06", "query": "查 NPU 健康状态和 HBM 使用率", "should_trigger": false, "route_to": "kptools-ascend-smi"},
+    {"id": "HQ-07", "query": "看 NPU 拓扑和 CPU 亲和性", "should_trigger": false, "route_to": "kptools-ascend-smi"},
+    {"id": "HQ-08", "query": "采集网卡中断分布和软中断负载", "should_trigger": false, "route_to": "network-collector"}
+  ]
+}

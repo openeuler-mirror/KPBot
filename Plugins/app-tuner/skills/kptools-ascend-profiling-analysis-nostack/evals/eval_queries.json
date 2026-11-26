@@ -1,0 +1,18 @@
+{
+  "skill_name": "kptools-ascend-profiling-analysis-nostack",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "这份 trace 没有 python_function，帮我看有几个 step", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "无栈 profiling trace 怎么切 step", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "没有 ProfilerStep#N 的 trace 每步耗时是多少", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "分析 without-stack 的 vLLM trace，每步 Free 时间去哪了", "should_trigger": true },
+    { "id": "EQ-05", "prompt": "这个 trace 没有堆栈，帮我出无栈分析报告", "should_trigger": true },
+    { "id": "EQ-06", "prompt": "用侧车把无栈 trace 的 step 时间找出来", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "分析带 python_function 的 profiling trace，看 P1/P2/P3", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis" },
+    { "id": "EQ-08", "prompt": "采集 NPU 利用率和温度", "should_trigger": false, "note": "routes to kptools-ascend-smi" },
+    { "id": "EQ-09", "prompt": "查 HCCN 网卡链路状态", "should_trigger": false, "note": "routes to kptools-ascend-hccn" },
+    { "id": "EQ-10", "prompt": "帮我把推理服务吞吐调高", "should_trigger": false, "note": "routes to kpbot-app-tuner" },
+    { "id": "EQ-11", "prompt": "对比 P/D 容器环境差异", "should_trigger": false, "note": "routes to kptools-ascend-pd-env" }
+  ]
+}

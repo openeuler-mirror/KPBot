@@ -1,0 +1,18 @@
+{
+  "skill_name": "kptools-py-spy",
+  "queries": [
+    { "id": "PQ-01", "prompt": "采集这个 Python 进程的火焰图", "should_trigger": true, "note": "core scenario" },
+    { "id": "PQ-02", "prompt": "看看训练脚本的 Python 热点函数", "should_trigger": true, "note": "python hotspot" },
+    { "id": "PQ-03", "prompt": "分析一下 GIL 竞争", "should_trigger": true, "note": "gil" },
+    { "id": "PQ-04", "prompt": "torchrun 多个 rank 的进程都采样一下", "should_trigger": true, "note": "subprocesses" },
+    { "id": "PQ-05", "prompt": "这个 Python 进程卡死了，dump 一下线程栈", "should_trigger": true, "note": "dump" },
+    { "id": "PQ-06", "prompt": "Python 线程很多但 CPU 利用率低，看看在等什么", "should_trigger": true, "note": "idle / off-CPU approximation" },
+    { "id": "PQ-07", "prompt": "用 py-spy 采集 PID 1234", "should_trigger": true, "note": "explicit tool" },
+    { "id": "NQ-01", "prompt": "给这个 Java 服务采火焰图", "should_trigger": false, "note": "routes to kptools-devkit java-perf" },
+    { "id": "NQ-02", "prompt": "采集系统 CPU 利用率", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "NQ-03", "prompt": "看看线程在哪些核上运行", "should_trigger": false, "note": "routes to kptools-proc-collector" },
+    { "id": "NQ-04", "prompt": "排查网络丢包", "should_trigger": false, "note": "routes to kptools-network-collector" },
+    { "id": "NQ-05", "prompt": "给 Node.js 网关进程采火焰图", "should_trigger": false, "note": "routes to kptools-node-profiler" },
+    { "id": "NQ-06", "prompt": "看看 NPU 算子执行时间", "should_trigger": false, "note": "routes to kptools-ascend-profiling" }
+  ]
+}

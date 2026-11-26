@@ -12,7 +12,7 @@ import json
 import sys
 import os
 
-DEFAULT_JSON_PATH = os.path.join(os.path.dirname(__file__), '[REDACTED]_full.json')
+DEFAULT_JSON_PATH = os.path.join(os.path.dirname(__file__), 'uarch_b_full.json')
 
 def load_data(json_path=DEFAULT_JSON_PATH):
     with open(json_path, 'r', encoding='utf-8') as f:

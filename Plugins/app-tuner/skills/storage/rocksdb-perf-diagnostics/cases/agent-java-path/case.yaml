@@ -1,0 +1,56 @@
+# 用例：agent 级端到端 —— Java(JNI) 接入的 RocksDB 写停顿诊断
+#
+# 说明：tier agent。with-skill 在容器内接入 rocksdb-perf-diagnostics，prompt 显式要求调用；
+# without-skill 不接入任何 skill，prompt 只描述任务，其余（模型/任务/判定）完全一致。
+# 本用例只读诊断，不修改数据库。
+#
+# 构建/运行（在 KPBot 插件根目录，需容器可访问模型 API）：
+#   docker build --network host \
+#     -f skills/rocksdb-perf-diagnostics/cases/agent-java-path/Dockerfile \
+#     -t kpbot/app-tuner-agent-java-path:1.0-openeuler24.03 .
+#   ./run_ab.sh --save results-ab
+
+name: agent-java-path
+skill: rocksdb-perf-diagnostics
+tier: agent
+
+image: kpbot/app-tuner-agent-java-path:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: assertion_pass_rate
+  uplift: pass_rate_with / pass_rate_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/rocksdb-perf-diagnostics/cases/agent-java-path/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode / cannbot 二进制（运行时挂载，白名单校验）
+  - 凭证经 OPENCODE_AUTH_JSON base64 env 注入（不挂载 auth.json）
+  - provider 配置由宿主导出 MODEL / ANTHROPIC_*（额外变量用 OPENCODE_EXTRA_ENV）
+  - 容器默认 bridge 网络（不支持 --network=host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: assertion_pass_rate
+    op: gte
+    expect: 1.0

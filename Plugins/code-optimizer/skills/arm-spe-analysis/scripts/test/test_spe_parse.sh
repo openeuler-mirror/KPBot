@@ -454,6 +454,79 @@ test_whitespace_in_output() {
 }
 
 # =============================================================================
+# 测试组: --by-function 函数级聚合
+# =============================================================================
+
+# mock perf 输出含 Rust mangled 符号的合成记录
+setup_mock_rust() {
+    rm -rf "$TEST_RESULTS_DIR"
+    mkdir -p "$MOCK_BIN"
+    touch "$MOCK_DATA"
+
+    cat > "$MOCK_BIN/perf" <<'PERFEOF'
+#!/bin/bash
+if [[ "$1" == "script" ]]; then
+    cat <<'EOF'
+rust_app 100 [000] 100.0: 1000 l1d-miss: ffff80001000 _ZN4calc3dot17haaaa1111aaaa1111E+0x10 (/app/rust_app)
+rust_app 100 [000] 100.1: 1000 l1d-miss: ffff80001000 _ZN4calc3dot17haaaa1111aaaa1111E+0x10 (/app/rust_app)
+rust_app 100 [001] 100.2: 1000 llc-miss: ffff80002000 _ZN4calc3dot17haaaa1111aaaa1111E+0x20 (/app/rust_app)
+c_app    200 [002] 100.3: 1000 l1d-miss: ffff80003000 my_c_func (/app/c_app)
+EOF
+fi
+PERFEOF
+    chmod +x "$MOCK_BIN/perf"
+}
+
+test_byfunction_output() {
+    blue "测试: --by-function 追加函数聚合段"
+    setup_mock_rust
+    local output
+    output=$(run_parse --by-function "$MOCK_DATA" 2>&1) || true
+    assert_contains "$output" "=== 按函数聚合 ===" "应包含函数聚合段标题"
+    assert_contains "$output" "FUNCTION" "应包含函数表头"
+    # 3 条 rust 指令记录归并为同一函数 count=3
+    local fn_line
+    fn_line=$(echo "$output" | grep "按函数聚合" -A3 | grep "_ZN4calc3dot" | head -1)
+    assert_contains "$fn_line" "3" "Rust 函数 COUNT 应为 3（指令归并）"
+    # 加权 miss: l1=2/3=66.7%, llc=1/3=33.3%
+    assert_contains "$fn_line" "66.7%" "L1 miss 率应为加权 66.7%"
+    assert_contains "$fn_line" "33.3%" "LLC miss 率应为加权 33.3%"
+    assert_contains "$output" "my_c_func" "C 函数应出现在函数表"
+}
+
+test_byfunction_default_unchanged() {
+    blue "测试: 无 --by-function 输出与基线一致"
+    setup_mock_rust
+    local output
+    output=$(run_parse "$MOCK_DATA" 2>&1) || true
+    assert_not_contains "$output" "按函数聚合" "无 --by-function 不应出现函数表"
+    assert_not_contains "$output" "FUNCTION  COUNT" "无 --by-function 不应出现函数表头"
+    assert_contains "$output" "=== Top 20 (按 sample_count 排序) ===" "应保留 Top 段（默认输出布局不变）"
+    assert_contains "$output" "ADDRESS" "应保留指令地址表头"
+    # Rust mangled 符号在指令表保留完整 hash（normalize 在 spe-compare 侧完成）
+    assert_contains "$output" "_ZN4calc3dot17haaaa1111aaaa1111E" "指令表应保留完整 mangled 符号"
+}
+
+test_byfunction_summary_unchanged() {
+    blue "测试: --summary 与 --by-function 组合时 summary 优先（无函数表）"
+    setup_mock_rust
+    local output
+    output=$(run_parse --summary --by-function "$MOCK_DATA" 2>&1) || true
+    assert_contains "$output" "SPE 采样汇总" "summary 模式应输出汇总"
+    assert_not_contains "$output" "按函数聚合" "summary 模式不应输出函数表"
+    assert_not_contains "$output" "按指令聚合" "summary 模式不应输出指令聚合"
+}
+
+test_byfunction_json_unchanged() {
+    blue "测试: -f json --by-function 输出不变（函数段仅 text 追加）"
+    setup_mock_rust
+    local output
+    output=$(run_parse -f json --by-function "$MOCK_DATA" 2>&1) || true
+    assert_contains "$output" "\"total_records\"" "JSON 输出应保留"
+    assert_not_contains "$output" "按函数聚合" "JSON 输出不应追加函数表"
+}
+
+# =============================================================================
 # 测试组: spe-collect.sh 集成（真实环境）
 # =============================================================================
 
@@ -558,6 +631,15 @@ run_all_tests() {
     test_top_n_greater_than_records
     test_combined_options
     test_whitespace_in_output
+    echo ""
+
+    # --by-function 函数级聚合
+    blue "===== 测试组: --by-function 函数级聚合 ====="
+    echo ""
+    test_byfunction_output
+    test_byfunction_default_unchanged
+    test_byfunction_summary_unchanged
+    test_byfunction_json_unchanged
     echo ""
 
     # 真实环境

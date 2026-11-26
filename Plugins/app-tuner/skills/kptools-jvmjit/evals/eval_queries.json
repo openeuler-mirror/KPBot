@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-jvmjit",
+  "queries": [
+    { "id": "JP-01", "prompt": "perf 采 Java 进程全是 unknown 符号，怎么解析出方法名", "should_trigger": true, "note": "core scenario: symbol resolution" },
+    { "id": "JP-02", "prompt": "容器里的 Java 服务怎么做 perf 指令级分析", "should_trigger": true, "note": "container scenario" },
+    { "id": "JP-03", "prompt": "用 libperf-jvmti 采集这个 JVM 的 JIT 信息", "should_trigger": true, "note": "explicit tool" },
+    { "id": "JP-04", "prompt": "perf inject --jit 报错 jitted code must be sampled with perf record -k 1", "should_trigger": true, "note": "explicit -k 1 error" },
+    { "id": "JP-05", "prompt": "看下热点方法 JIT 编译出来的机器码长什么样", "should_trigger": true, "note": "jit disassembly" },
+    { "id": "JP-06", "prompt": "确认这个 Java 热点循环有没有被自动向量化", "should_trigger": true, "note": "vectorization via jit elf" },
+    { "id": "JP-07", "prompt": "JVM 加了 -agentpath 之后对性能有多大影响", "should_trigger": true, "note": "agent overhead concern" },
+    { "id": "JP-08", "prompt": "报告里一堆 [JIT] 开头的百分比行是什么", "should_trigger": true, "note": "jit residue" },
+    { "id": "JN-01", "prompt": "Java 接口慢，看下方法耗时分布和入参", "should_trigger": false, "note": "routes to 外部工具 arthas（免重启方法级分析，非本仓库 skill）" },
+    { "id": "JN-02", "prompt": "给这个 Java 进程采一张 CPU 火焰图", "should_trigger": false, "note": "routes to kptools-devkit java-perf" },
+    { "id": "JN-03", "prompt": "分析这个 Python 进程哪个函数烧 CPU", "should_trigger": false, "note": "routes to kptools-py-spy" },
+    { "id": "JN-04", "prompt": "JVM 的堆和 GC 参数怎么调", "should_trigger": false, "note": "调优动作 → kpbot-app-tuner" },
+    { "id": "JN-05", "prompt": "不重启给运行中的 Java 加个诊断探针", "should_trigger": false, "note": "运行期 attach → 外部工具 arthas（非本仓库 skill；本 skill 的 agent 无法运行期补加）" },
+    { "id": "JN-06", "prompt": "看看系统整体的 CPU 和内存趋势", "should_trigger": false, "note": "routes to kptools-nmon" }
+  ]
+}

@@ -1,0 +1,51 @@
+# 用例：tier C —— 把 hot-path-overhead-elimination 的配方应用到真实 libevent
+#
+# 这是"方法论可落地"的端到端证据：在一个未改动的 libevent 2.1.12 源码树上，
+# 只应用本 skill 的配方补丁，然后核对正确性与三个 evbuffer 接口的表现。
+#
+#   recipes/0001-hot-path-overhead-elimination.patch
+#       空观察者谓词内联 + 无消费者记账跳过；另含仅在 AArch64 生效的叶子入口、
+#       常量宽度拷贝与频率优先分派（仅在 AArch64 目标编译，因此该补丁验证的是 Kunpeng 上的完整配方）。
+#       补丁不含任何分配路径改动。
+#
+# 断言：
+#   1. 正确性：候选构建必须通过 libevent 自身的 evbuffer 回归组；
+#   2. 主指标：append 提升 ≥1.10x（该接口的成本全在调用与回调记账上）；
+#   3. 回归守卫：readline ≥0.95x、drain ≥0.90x；
+#   4. 解耦守卫（静态）：补丁文本不得出现分配路径配方的符号
+#      `evbuffer_chain_new_reference`——本 skill 不得靠分配路径取收益。
+#      这是防串味的文本检查，不采集运行期分配字节数。
+#
+# 运行（在技能根目录下）：
+#   LIBEVENT_SRC=/path/to/libevent-2.1.12 \
+#     bash cases/libevent-interfaces/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier C（需要 cc、cmake、binutils、python3，以及一份 libevent 2.1.12
+# 源码）。第三方源码不随用例分发，因此未设置 LIBEVENT_SRC 时用例记录
+# skipped=true 并退出 0——这是显式的"未验证"，不是静默通过。
+
+name: libevent-interfaces
+skill: hot-path-overhead-elimination
+tier: C
+
+image: host-runtime
+entrypoint: ["bash", "cases/libevent-interfaces/run.sh"]
+
+env_requires:
+  - libevent_2_1_12_source_tree
+
+env_vars:
+  PAIRS: 15
+  OPS: 200000
+
+# run.sh 自己执行全部实质门槛（回归组、append ≥1.10x、readline/drain 守卫、
+# 静态解耦守卫），不满足即以 1 退出；这里只断言"跳过或通过"，两者可区分：
+# skipped_or_success 为 true 表示本次要么跳过（无源码树），要么所有门槛通过。
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: skipped_or_success
+    expect: true

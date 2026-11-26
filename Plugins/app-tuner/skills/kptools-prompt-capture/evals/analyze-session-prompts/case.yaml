@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: analyze-session-prompts
+expected_outcome: |
+  只分析指定的采集分段和会话，标明推断会话及正文缺失轮次。生成默认无原文的会话产物，不兜底采集或分析全部会话。

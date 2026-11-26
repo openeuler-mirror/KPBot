@@ -1,0 +1,49 @@
+{
+  "skill_name": "flink-velox-lib-state-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-partial",
+      "prompt": "部署完 gluten 后报 NoClassDefFoundError，lib 里是不是少拷了 jar",
+      "should_trigger": true,
+      "note": "判据类触发词：NoClassDefFoundError、少拷、partial"
+    },
+    {
+      "id": "q-which-build",
+      "prompt": "lib 里是 native 还是 GlutenFlink 构建，gluten 的 jar 在不在",
+      "should_trigger": true,
+      "note": "场景入口类触发词：lib 里是哪套构建、gluten jar 在不在"
+    },
+    {
+      "id": "q-expect-native",
+      "prompt": "跑 native 侧之前确认 lib 里没有 gluten/velox 的 jar",
+      "should_trigger": true,
+      "note": "期望类触发词：--expect native"
+    },
+    {
+      "id": "q-cluster",
+      "prompt": "集群加载的是哪套 jar，和 lib 一致吗",
+      "should_trigger": false,
+      "note": "集群实际加载 → flink-velox-cluster-check"
+    },
+    {
+      "id": "q-dist",
+      "prompt": "Flink 装全了没，是不是 1.19",
+      "should_trigger": false,
+      "note": "Flink 发行版 → flink-velox-flink-dist-check"
+    },
+    {
+      "id": "q-overall",
+      "prompt": "这台机器能不能编译并运行 GlutenFlink 栈",
+      "should_trigger": false,
+      "note": "总裁决 → 统筹 flink-velox-env-check"
+    },
+    {
+      "id": "q-move-jars",
+      "prompt": "把 lib 里旧版 gluten jar 删了并重启集群",
+      "should_trigger": false,
+      "note": "挪 jar/重启 → 构建部署/切换类 skill（审中 !324 / !325）；本 skill 只读"
+    }
+  ]
+}

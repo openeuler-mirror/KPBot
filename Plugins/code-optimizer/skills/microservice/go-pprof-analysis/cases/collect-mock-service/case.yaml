@@ -1,0 +1,35 @@
+# 用例：tier A 纯逻辑 mock —— 用 python stdlib 假 pprof 服务验证 pprof_collect.sh
+#
+# 运行方法（人类可读）：
+#   bash Plugins/code-optimizer/skills/go-pprof-analysis/cases/collect-mock-service/run.sh
+#
+# 说明：tier A。fixtures/mock_pprof_server.py 用 python3 标准库模拟
+# /debug/pprof/ 各端点（profile/heap/allocs/goroutine/trace）返回固定 payload，
+# 驱动 pprof_collect.sh 后断言：退出码、5 类产物文件存在且内容与 mock
+# payload 一致，以及对未监听端口的失败路径（非零退出 + 诊断信息）。
+# 真实 Go 服务端到端采集属 tier C（需 Go 工具链 + 目标服务），不在本用例覆盖。
+
+name: collect-mock-service
+skill: go-pprof-analysis
+tier: A
+
+entrypoint: ["bash", "cases/collect-mock-service/run.sh"]
+
+env_requires: []                        # 仅需 bash + curl + python3（标准库）
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_passed
+    expect: 13
+
+# tier C（真实 Go 服务）待办：起 net/http/pprof demo 服务做端到端采集，
+# 需声明 Go 工具链前置，按 case-spec「真机项可 SKIP」处理。

@@ -1,0 +1,798 @@
+diff --git a/CubeMaster/pkg/sandboxspec/async.go b/CubeMaster/pkg/sandboxspec/async.go
+new file mode 100644
+index 0000000..8d1f581
+--- /dev/null
++++ b/CubeMaster/pkg/sandboxspec/async.go
+@@ -0,0 +1,214 @@
++// Copyright (c) 2026 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++
++package sandboxspec
++
++import (
++	"context"
++	"sync"
++	"time"
++
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/constants"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/db/models"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/log"
++	sandboxtypes "github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/service/sandbox/types"
++)
++
++const (
++	asyncPutQueueSize = 512
++	asyncPutWorkers   = 2
++	// The worker's gate wait and all retry attempts share this deadline;
++	// time spent waiting in the queue is not part of it.
++	asyncPutTimeout = 10 * time.Second
++	asyncPutRetries = 3
++)
++
++// specWriteState belongs to one sandbox ID in this process. Its reference
++// count includes queued items and waiting/in-flight operations, so it cannot
++// expire while an old write is still capable of running.
++type specWriteState struct {
++	id         string
++	permit     chan struct{}
++	generation uint64 // protected by permit
++	refs       int    // protected by specWriteStatesMu
++}
++
++type asyncPutItem struct {
++	rec        *models.SandboxSpec
++	state      *specWriteState
++	generation uint64
++}
++
++var (
++	asyncPutOnce  sync.Once
++	asyncPutQueue chan asyncPutItem
++
++	specWriteStatesMu sync.Mutex
++	specWriteStates   = make(map[string]*specWriteState)
++)
++
++func retainSpecWriteState(id string) *specWriteState {
++	specWriteStatesMu.Lock()
++	defer specWriteStatesMu.Unlock()
++	state := specWriteStates[id]
++	if state == nil {
++		state = &specWriteState{id: id, permit: make(chan struct{}, 1)}
++		state.permit <- struct{}{}
++		specWriteStates[id] = state
++	}
++	state.refs++
++	return state
++}
++
++func releaseSpecWriteState(state *specWriteState) {
++	specWriteStatesMu.Lock()
++	defer specWriteStatesMu.Unlock()
++	state.refs--
++	if state.refs == 0 && specWriteStates[state.id] == state {
++		delete(specWriteStates, state.id)
++	}
++}
++
++func (state *specWriteState) lock(ctx context.Context) error {
++	select {
++	case <-ctx.Done():
++		return ctx.Err()
++	case <-state.permit:
++		if err := ctx.Err(); err != nil {
++			state.unlock()
++			return err
++		}
++		return nil
++	}
++}
++
++func (state *specWriteState) unlock() {
++	state.permit <- struct{}{}
++}
++
++// withSpecWrite linearizes a newer write/delete against all queued and
++// in-flight writes for this ID. The permit is held across the actual DB call.
++// This is a process-local protocol; other masters need database fencing.
++func withSpecWrite(ctx context.Context, id string, operation func() error) error {
++	state := retainSpecWriteState(id)
++	defer releaseSpecWriteState(state)
++	if err := state.lock(ctx); err != nil {
++		return err
++	}
++	defer state.unlock()
++	state.generation++
++	return operation()
++}
++
++func writeRecordOrdered(ctx context.Context, rec *models.SandboxSpec) error {
++	return withSpecWrite(ctx, rec.SandboxID, func() error { return upsertRecord(ctx, rec) })
++}
++
++func deleteRecordOrdered(ctx context.Context, id string) error {
++	return withSpecWrite(ctx, id, func() error { return deleteRecord(ctx, id) })
++}
++
++func startAsyncPutWorkers() {
++	asyncPutOnce.Do(func() {
++		asyncPutQueue = make(chan asyncPutItem, asyncPutQueueSize)
++		for i := 0; i < asyncPutWorkers; i++ {
++			go asyncPutWorker()
++		}
++	})
++}
++
++// PutAsync materializes an independent record on the caller goroutine and
++// hands it to a bounded queue. A full queue falls back to an ordered synchronous
++// write; an uninitialized store returns its explicit error. Persistence remains
++// best-effort, so callers must preserve their existing failure reporting.
++func PutAsync(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) error {
++	rec, err := buildRecord(sandboxID, req, opts)
++	if err != nil {
++		recordPersistFailure(persistFailureReason(err))
++		return err
++	}
++	if !IsReady() {
++		recordPersistFailure(persistFailureReason(ErrSandboxSpecStoreNotReady))
++		return ErrSandboxSpecStoreNotReady
++	}
++	startAsyncPutWorkers()
++	state := retainSpecWriteState(rec.SandboxID)
++	if err := state.lock(ctx); err != nil {
++		releaseSpecWriteState(state)
++		recordPersistFailure(persistFailureReason(err))
++		return err
++	}
++	queued := false
++	defer func() {
++		state.unlock()
++		if !queued {
++			releaseSpecWriteState(state)
++		}
++	}()
++	state.generation++
++	item := asyncPutItem{rec: rec, state: state, generation: state.generation}
++	select {
++	case asyncPutQueue <- item:
++		// Transfer this reference to the worker, which releases it even when
++		// the item has been superseded before its turn.
++		queued = true
++		return nil
++	default:
++		if err := upsertRecord(ctx, rec); err != nil {
++			recordPersistFailure(persistFailureReason(err))
++			return err
++		}
++		return nil
++	}
++}
++
++func asyncPutWorker() {
++	for item := range asyncPutQueue {
++		if err := persistAsyncPutItem(item); err != nil {
++			recordPersistFailure(persistFailureReason(err))
++			log.G(context.Background()).Warnf("async persist sandbox spec failed sandbox=%s: %v", item.rec.SandboxID, err)
++		}
++	}
++}
++
++func persistAsyncPutItem(item asyncPutItem) error {
++	if item.state == nil {
++		return nil
++	}
++	defer releaseSpecWriteState(item.state)
++	if item.rec == nil {
++		return nil
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), asyncPutTimeout)
++	defer cancel()
++	if err := item.state.lock(ctx); err != nil {
++		return err
++	}
++	defer item.state.unlock()
++	if item.generation != item.state.generation {
++		return nil
++	}
++	var err error
++	for attempt := 1; attempt <= asyncPutRetries; attempt++ {
++		err = upsertRecord(ctx, item.rec)
++		if err == nil || attempt == asyncPutRetries || ctx.Err() != nil {
++			return err
++		}
++		select {
++		case <-time.After(time.Duration(attempt) * 50 * time.Millisecond):
++		case <-ctx.Done():
++			return ctx.Err()
++		}
++	}
++	return err
++}
++
++func deleteRecord(ctx context.Context, sandboxID string) error {
++	client := getDB()
++	if client == nil {
++		return ErrSandboxSpecStoreNotReady
++	}
++	return client.WithContext(ctx).Table(constants.SandboxSpecTableName).
++		Where("sandbox_id = ?", sandboxID).
++		Delete(&models.SandboxSpec{}).Error
++}
+diff --git a/CubeMaster/pkg/sandboxspec/store.go b/CubeMaster/pkg/sandboxspec/store.go
+index d351aef..9e862c4 100644
+--- a/CubeMaster/pkg/sandboxspec/store.go
++++ b/CubeMaster/pkg/sandboxspec/store.go
+@@ -49,6 +49,8 @@ func Init(client *gorm.DB) error {
+ 	dbMu.Lock()
+ 	db = client
+ 	dbMu.Unlock()
++	// Background writers for the best-effort create-time spec write.
++	startAsyncPutWorkers()
+ 	return nil
+ }
+ 
+@@ -80,29 +82,35 @@ type PutOptions struct {
+ // should log and proceed, as the spec store is recovery-friendly: a missing
+ // record is later detected and backfilled best-effort.
+ func Put(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) error {
+-	err := doPut(ctx, sandboxID, req, opts)
++	rec, err := buildRecord(sandboxID, req, opts)
+ 	if err != nil {
+ 		recordPersistFailure(persistFailureReason(err))
++		return err
++	}
++	// Serialize the actual write with queued/in-flight create-time writes.
++	if err = writeRecordOrdered(ctx, rec); err != nil {
++		recordPersistFailure(persistFailureReason(err))
++		return err
+ 	}
+-	return err
++	return nil
+ }
+ 
+-func doPut(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) error {
+-	client := getDB()
+-	if client == nil {
+-		return ErrSandboxSpecStoreNotReady
+-	}
++// buildRecord canonicalizes the create request and materializes the row that
++// will be written. It performs no DB work, which lets the async create path do
++// the CPU-only part on the caller goroutine and leave only the UPSERT to the
++// background worker.
++func buildRecord(sandboxID string, req *sandboxtypes.CreateCubeSandboxReq, opts PutOptions) (*models.SandboxSpec, error) {
+ 	sandboxID = strings.TrimSpace(sandboxID)
+ 	if sandboxID == "" || req == nil {
+-		return errors.New("sandboxspec.Put: sandbox_id and req are required")
++		return nil, errors.New("sandboxspec.Put: sandbox_id and req are required")
+ 	}
+ 	canonical, err := CanonicalizeRequest(req)
+ 	if err != nil {
+-		return err
++		return nil, err
+ 	}
+ 	payload, err := json.Marshal(canonical)
+ 	if err != nil {
+-		return err
++		return nil, err
+ 	}
+ 	templateID := ""
+ 	if canonical.Annotations != nil {
+@@ -118,10 +126,10 @@ func doPut(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSa
+ 		canonical.Annotations[constants.CubeAnnotationStorageBackend] = normalized
+ 		payload, err = json.Marshal(canonical)
+ 		if err != nil {
+-			return err
++			return nil, err
+ 		}
+ 	}
+-	rec := &models.SandboxSpec{
++	return &models.SandboxSpec{
+ 		SandboxID:    sandboxID,
+ 		TemplateID:   templateID,
+ 		InstanceType: canonical.InstanceType,
+@@ -131,6 +139,16 @@ func doPut(ctx context.Context, sandboxID string, req *sandboxtypes.CreateCubeSa
+ 		RequestJSON:  string(payload),
+ 		Backend:      backend,
+ 		Backfilled:   opts.Backfilled,
++	}, nil
++}
++
++func upsertRecord(ctx context.Context, rec *models.SandboxSpec) error {
++	client := getDB()
++	if client == nil {
++		return ErrSandboxSpecStoreNotReady
++	}
++	if rec == nil || strings.TrimSpace(rec.SandboxID) == "" {
++		return errors.New("sandboxspec.Put: sandbox_id and req are required")
+ 	}
+ 	// Single-roundtrip UPSERT keyed on the unique sandbox_id index so the
+ 	// hot create-success path doesn't pay for a SELECT+INSERT/UPDATE pair.
+@@ -213,9 +231,8 @@ func Delete(ctx context.Context, sandboxID string) error {
+ 	if sandboxID == "" {
+ 		return errors.New("sandboxspec.Delete: sandbox_id is required")
+ 	}
+-	return client.WithContext(ctx).Table(constants.SandboxSpecTableName).
+-		Where("sandbox_id = ?", sandboxID).
+-		Delete(&models.SandboxSpec{}).Error
++	// Wait for an in-flight write and invalidate all older queued writes.
++	return deleteRecordOrdered(ctx, sandboxID)
+ }
+ 
+ // CanonicalizeRequest strips transient fields that are not part of the
+diff --git a/CubeMaster/pkg/service/httpservice/cube/cubeboxutil.go b/CubeMaster/pkg/service/httpservice/cube/cubeboxutil.go
+index e2953e7..2d6da2a 100644
+--- a/CubeMaster/pkg/service/httpservice/cube/cubeboxutil.go
++++ b/CubeMaster/pkg/service/httpservice/cube/cubeboxutil.go
+@@ -11,6 +11,7 @@ import (
+ 	"maps"
+ 	"strconv"
+ 	"strings"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/config"
+@@ -542,12 +543,81 @@ func snapshotRestoreHasRawHostMount(req, templateReq *types.CreateCubeSandboxReq
+ 		sandbox.CreateRequestHasHostMount(templateReq)
+ }
+ 
++// skipLocalityDecisionTTL bounds how long the "can this template restore skip
++// the local-replica check" answer is memoized. The lookup is a point SELECT on
++// t_cube_snapshot that runs on every create; for an AppSnapshot template the
++// row does not exist at all, so the same failing query is repeated per create.
++// The memo is per templateID, short lived, and only stores answers derived
++// from a completed DB read (transient DB errors are never memorized).
++const skipLocalityDecisionTTL = 1 * time.Second
++
++type skipLocalityDecision struct {
++	skip     bool
++	expireAt time.Time
++}
++
++var (
++	skipLocalityMu    sync.Mutex
++	skipLocalityCache = make(map[string]skipLocalityDecision)
++)
++
++func loadSkipLocalityDecision(templateID string) (bool, bool) {
++	skipLocalityMu.Lock()
++	defer skipLocalityMu.Unlock()
++	decision, ok := skipLocalityCache[templateID]
++	if !ok {
++		return false, false
++	}
++	if time.Now().After(decision.expireAt) {
++		delete(skipLocalityCache, templateID)
++		return false, false
++	}
++	return decision.skip, true
++}
++
++func storeSkipLocalityDecision(templateID string, skip bool) {
++	now := time.Now()
++	skipLocalityMu.Lock()
++	if len(skipLocalityCache) > 1024 {
++		for k, v := range skipLocalityCache {
++			if now.After(v.expireAt) {
++				delete(skipLocalityCache, k)
++			}
++		}
++	}
++	skipLocalityCache[templateID] = skipLocalityDecision{skip: skip, expireAt: now.Add(skipLocalityDecisionTTL)}
++	skipLocalityMu.Unlock()
++}
++
++// resetSkipLocalityDecisionCache drops every memoized decision. Test helper.
++func resetSkipLocalityDecisionCache() {
++	skipLocalityMu.Lock()
++	skipLocalityCache = make(map[string]skipLocalityDecision)
++	skipLocalityMu.Unlock()
++}
++
+ func skipTemplateLocalityReady(ctx context.Context, templateID string) bool {
++	if skip, ok := loadSkipLocalityDecision(templateID); ok {
++		return skip
++	}
+ 	src, err := getSnapshotRestoreSourceFn(ctx, templateID)
+-	if err != nil || src == nil {
++	if err != nil {
++		if errors.Is(err, templatecenter.ErrSnapshotNotFound) {
++			// Template identifiers are not snapshot identifiers on the
++			// AppSnapshot path, so the point SELECT consistently reports
++			// "not found". Memorize that negative answer only for the bounded
++			// TTL above; answering false is the conservative choice because it
++			// keeps the full local-replica check.
++			storeSkipLocalityDecision(templateID, false)
++		}
++		return false
++	}
++	if src == nil {
+ 		return false
+ 	}
+-	return restoreplace.CanCrossNode(src.Backend, src.RemoteStatus)
++	skip := restoreplace.CanCrossNode(src.Backend, src.RemoteStatus)
++	storeSkipLocalityDecision(templateID, skip)
++	return skip
+ }
+ 
+ func constrainSnapshotCreateScope(ctx context.Context, snapshotID string, reqInOut *types.CreateCubeSandboxReq) error {
+diff --git a/CubeMaster/pkg/templatecenter/cache.go b/CubeMaster/pkg/templatecenter/cache.go
+index 08052a8..8fb36e4 100644
+--- a/CubeMaster/pkg/templatecenter/cache.go
++++ b/CubeMaster/pkg/templatecenter/cache.go
+@@ -221,6 +221,7 @@ func invalidateTemplateCaches(templateID string) {
+ 	templateLocalityReadyCache.Delete(templateID)
+ 	templateKindCache.Delete(templateID)
+ 	templateInfoCache.Delete(templateID)
++	invalidateResolveResultCache(templateID)
+ 	// Any single-template write can change the aggregate list (status, replica
+ 	// counts), so the list cache is dropped alongside the per-template one.
+ 	templateListCache.Delete(templateListCacheKey)
+diff --git a/CubeMaster/pkg/templatecenter/resolve_cache.go b/CubeMaster/pkg/templatecenter/resolve_cache.go
+new file mode 100644
+index 0000000..a719021
+--- /dev/null
++++ b/CubeMaster/pkg/templatecenter/resolve_cache.go
+@@ -0,0 +1,172 @@
++// Copyright (c) 2026 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++//
++
++package templatecenter
++
++import (
++	"errors"
++	"strconv"
++	"strings"
++	"sync"
++	"time"
++)
++
++// resolveResultCacheTTL bounds reuse after a successful fill. Invalidation is
++// process-local; cross-master freshness still requires shared invalidation or
++// the target deployment's explicitly accepted stale-metadata budget.
++const resolveResultCacheTTL = 1 * time.Second
++
++var errResolveGenerationChanged = errors.New("template resolution generation changed")
++
++// A nil value is an in-flight placeholder. Its lifetime belongs to the query,
++// not the value TTL: a DB read slower than the TTL must still be able to finish.
++type resolveCacheEntry struct {
++	value      interface{}
++	expireAt   time.Time
++	generation uint64
++}
++
++// resolveTTLCache is a tiny concurrency-safe TTL map used for the create-path
++// resolution results. It has no hard capacity bound. Generation IDs are never
++// recycled when entries expire or are invalidated, so old queries cannot
++// publish into a replacement slot (the ABA case).
++type resolveTTLCache struct {
++	mu             sync.Mutex
++	ttl            time.Duration
++	entries        map[string]resolveCacheEntry
++	nextGeneration uint64
++}
++
++func newResolveTTLCache(ttl time.Duration) *resolveTTLCache {
++	return &resolveTTLCache{ttl: ttl, entries: make(map[string]resolveCacheEntry)}
++}
++
++// Lookup atomically obtains a cached value or a generation-owned miss slot.
++// All callers for that slot share metadata I/O, but never the final decision.
++func (c *resolveTTLCache) Lookup(key string) (interface{}, bool, uint64) {
++	now := time.Now()
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	if entry, ok := c.entries[key]; ok {
++		if entry.value == nil || now.Before(entry.expireAt) {
++			return entry.value, entry.value != nil, entry.generation
++		}
++		delete(c.entries, key)
++	}
++	// Opportunistic expiry cleanup; pending queries retain their placeholders.
++	if len(c.entries) > 256 {
++		for k, v := range c.entries {
++			if v.value != nil && !now.Before(v.expireAt) {
++				delete(c.entries, k)
++			}
++		}
++	}
++	c.nextGeneration++
++	entry := resolveCacheEntry{generation: c.nextGeneration}
++	c.entries[key] = entry
++	return nil, false, entry.generation
++}
++
++// Store and invalidation use the same lock: an old reader cannot refill a
++// deleted/replaced slot. The value TTL starts here, after metadata I/O finishes.
++func (c *resolveTTLCache) Store(key string, generation uint64, value interface{}) bool {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	entry, ok := c.entries[key]
++	if !ok || entry.generation != generation {
++		return false
++	}
++	entry.value, entry.expireAt = value, time.Now().Add(c.ttl)
++	c.entries[key] = entry
++	return true
++}
++
++// Discard releases a failed query's placeholder without deleting a newer fill.
++func (c *resolveTTLCache) Discard(key string, generation uint64) bool {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	entry, ok := c.entries[key]
++	if !ok || entry.generation != generation {
++		return false
++	}
++	delete(c.entries, key)
++	return true
++}
++
++// ReadCurrent rechecks an existing slot without allocating a replacement. An
++// obsolete/canceled flight must not leave a new pending slot that it never owns.
++func (c *resolveTTLCache) ReadCurrent(key string, generation uint64) (interface{}, bool, bool) {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	entry, ok := c.entries[key]
++	if !ok || entry.generation != generation {
++		return nil, false, false
++	}
++	if entry.value != nil && !time.Now().Before(entry.expireAt) {
++		delete(c.entries, key)
++		return nil, false, false
++	}
++	return entry.value, entry.value != nil, true
++}
++
++func (c *resolveTTLCache) Current(key string, generation uint64) bool {
++	_, hit, current := c.ReadCurrent(key, generation)
++	return hit && current
++}
++
++func resolveFlightKey(kind, key string, generation uint64) string {
++	return kind + "\x00" + key + "\x00" + strconv.FormatUint(generation, 10)
++}
++
++// DeletePrefix removes every entry whose key starts with prefix. Used by the
++// replica / template write paths to invalidate a template without touching
++// unrelated templates.
++func (c *resolveTTLCache) DeletePrefix(prefix string) {
++	if prefix == "" {
++		return
++	}
++	c.mu.Lock()
++	for k := range c.entries {
++		if strings.HasPrefix(k, prefix) {
++			delete(c.entries, k)
++		}
++	}
++	c.mu.Unlock()
++}
++
++var (
++	// replicaSchedulableResultCache stores immutable ReplicaStatus metadata
++	// keyed by templateID + "\x00" + nodeID, never a schedulability bool.
++	// Each request must invoke isReplicaSchedulableNow with its own context.
++	replicaSchedulableResultCache = newResolveTTLCache(resolveResultCacheTTL)
++	// readyReplicaResultCache stores READY metadata candidates by templateID.
++	// Live schedulability and preferred-node selection run on every request,
++	// outside singleflight. Metadata freshness remains bounded by the TTL
++	// and the target version's invalidation protocol; health is not cached.
++	readyReplicaResultCache = newResolveTTLCache(resolveResultCacheTTL)
++	// resolveResultFetchGroup collapses a burst of identical cache misses into
++	// a single DB read (single-flight), mirroring templateRequestFetchGroup.
++	resolveResultFetchGroup = &templateFetchGroup{calls: make(map[string]*templateFetchCall)}
++)
++
++func replicaSchedulableCacheKey(templateID, nodeID string) string {
++	return templateID + "\x00" + nodeID
++}
++
++func readyReplicaCacheKey(templateID string) string {
++	return templateID + "\x00ready"
++}
++
++// invalidateResolveResultCache drops every cached resolution result for the
++// template. Called from the replica / template write paths.
++func invalidateResolveResultCache(templateID string) {
++	templateID = strings.TrimSpace(templateID)
++	if templateID == "" {
++		return
++	}
++	// Keys always start with templateID; DeletePrefix("tpl") could over-match
++	// templates that share a prefix, so use the exact key separator form.
++	replicaSchedulableResultCache.DeletePrefix(templateID + "\x00")
++	readyReplicaResultCache.DeletePrefix(templateID + "\x00")
++}
+diff --git a/CubeMaster/pkg/templatecenter/store.go b/CubeMaster/pkg/templatecenter/store.go
+index 31312a3..76a449f 100644
+--- a/CubeMaster/pkg/templatecenter/store.go
++++ b/CubeMaster/pkg/templatecenter/store.go
+@@ -425,7 +425,11 @@ func configureSandboxSpecHooks() {
+ 			return err
+ 		}
+ 		delete(storedReq.Annotations, sandbox.AnnotationPluginVolumeSources)
+-		return sandboxspec.Put(ctx, sandboxID, storedReq, sandboxspec.PutOptions{
++		// Best-effort spec persistence: building the row stays on the caller
++		// goroutine, but the MySQL UPSERT runs on a bounded background worker
++		// so it no longer sits on the create reply path. The Redis proxy route
++		// and the lifecycle publish remain synchronous.
++		return sandboxspec.PutAsync(ctx, sandboxID, storedReq, sandboxspec.PutOptions{
+ 			HostID: hostID,
+ 			HostIP: hostIP,
+ 		})
+@@ -1982,12 +1986,22 @@ func UpsertReplica(ctx context.Context, templateID, instanceType string, replica
+ 		if !errors.Is(err, gorm.ErrRecordNotFound) {
+ 			return err
+ 		}
+-		return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+-			Create(replicaStatusToModel(templateID, instanceType, replica)).Error
++		if createErr := store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++			Create(replicaStatusToModel(templateID, instanceType, replica)).Error; createErr != nil {
++			return createErr
++		}
++		invalidateResolveResultCache(templateID)
++		return nil
+ 	}
+-	return store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++	if updateErr := store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+ 		Where("template_id = ? AND node_id = ?", templateID, replica.NodeID).
+-		Updates(replicaStatusUpdateFields(instanceType, replica)).Error
++		Updates(replicaStatusUpdateFields(instanceType, replica)).Error; updateErr != nil {
++		return updateErr
++	}
++	// A replica status / placement change must be visible to the very next
++	// create, so the short-TTL resolution results are dropped on every write.
++	invalidateResolveResultCache(templateID)
++	return nil
+ }
+ 
+ func EnsureReadyReplica(ctx context.Context, templateID string) error {
+@@ -2007,13 +2021,76 @@ func EnsureReadyReplica(ctx context.Context, templateID string) error {
+ }
+ 
+ func ResolveTemplateReadyReplica(ctx context.Context, templateID, preferredNodeID string) (ReplicaStatus, error) {
+-	replicas, err := ListReplicas(ctx, templateID)
+-	if err != nil {
+-		return ReplicaStatus{}, err
+-	}
+ 	preferredNodeID = strings.TrimSpace(preferredNodeID)
+-	for _, item := range replicas {
+-		replica := replicaModelToStatus(item)
++	cacheKey := readyReplicaCacheKey(templateID)
++	for {
++		if err := ctx.Err(); err != nil {
++			return ReplicaStatus{}, err
++		}
++		v, hit, generation := readyReplicaResultCache.Lookup(cacheKey)
++		if hit {
++			if replicas, ok := v.([]ReplicaStatus); ok {
++				return selectReadyReplica(ctx, replicas, preferredNodeID)
++			}
++		}
++		value, err := resolveResultFetchGroup.Do(resolveFlightKey("bind", cacheKey, generation), func() (interface{}, error) {
++			v, hit, current := readyReplicaResultCache.ReadCurrent(cacheKey, generation)
++			if !current {
++				return nil, errResolveGenerationChanged
++			}
++			if hit {
++				return v, nil
++			}
++			rows, err := ListReplicas(ctx, templateID)
++			if err != nil {
++				if !readyReplicaResultCache.Discard(cacheKey, generation) {
++					return nil, errResolveGenerationChanged
++				}
++				return nil, err
++			}
++			ready := make([]ReplicaStatus, 0, len(rows))
++			for _, item := range rows {
++				replica := replicaModelToStatus(item)
++				// Share READY metadata, never this caller's live health decision.
++				if strings.TrimSpace(replica.Status) == ReplicaStatusReady {
++					ready = append(ready, replica)
++				}
++			}
++			if len(ready) == 0 {
++				if !readyReplicaResultCache.Discard(cacheKey, generation) {
++					return nil, errResolveGenerationChanged
++				}
++				return nil, ErrTemplateHasNoReadyReplica
++			}
++			cached := append([]ReplicaStatus(nil), ready...)
++			if !readyReplicaResultCache.Store(cacheKey, generation, cached) {
++				return nil, errResolveGenerationChanged
++			}
++			return cached, nil
++		})
++		if err := ctx.Err(); err != nil {
++			return ReplicaStatus{}, err
++		}
++		if err == errResolveGenerationChanged {
++			continue
++		}
++		if err != nil {
++			return ReplicaStatus{}, err
++		}
++		// A follower may resume after the completed flight was invalidated.
++		if !readyReplicaResultCache.Current(cacheKey, generation) {
++			continue
++		}
++		replicas, _ := value.([]ReplicaStatus)
++		return selectReadyReplica(ctx, replicas, preferredNodeID)
++	}
++}
++
++// selectReadyReplica rechecks the target version's current schedulability
++// predicate for each request, including cache hits. Never cache this decision.
++// Preferred-node selection is applied only after that request-local check.
++func selectReadyReplica(ctx context.Context, replicas []ReplicaStatus, preferredNodeID string) (ReplicaStatus, error) {
++	for _, replica := range replicas {
+ 		if !isReplicaSchedulableNow(ctx, replica) {
+ 			continue
+ 		}
+@@ -2028,14 +2105,56 @@ func isTemplateReplicaSchedulable(ctx context.Context, templateID, nodeID string
+ 	if !isReady() || strings.TrimSpace(templateID) == "" || strings.TrimSpace(nodeID) == "" {
+ 		return false
+ 	}
+-	replica := models.TemplateReplica{}
+-	err := store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
+-		Where("template_id = ? AND node_id = ?", templateID, nodeID).
+-		First(&replica).Error
+-	if err != nil {
+-		return false
++	cacheKey := replicaSchedulableCacheKey(templateID, nodeID)
++	for {
++		if ctx.Err() != nil {
++			return false
++		}
++		v, hit, generation := replicaSchedulableResultCache.Lookup(cacheKey)
++		if hit {
++			if replica, ok := v.(ReplicaStatus); ok {
++				return isReplicaSchedulableNow(ctx, replica)
++			}
++		}
++		value, err := resolveResultFetchGroup.Do(resolveFlightKey("sched", cacheKey, generation), func() (interface{}, error) {
++			v, hit, current := replicaSchedulableResultCache.ReadCurrent(cacheKey, generation)
++			if !current {
++				return nil, errResolveGenerationChanged
++			}
++			if hit {
++				return v, nil
++			}
++			replica := models.TemplateReplica{}
++			readErr := store.db.WithContext(ctx).Table(constants.TemplateReplicaTableName).
++				Where("template_id = ? AND node_id = ?", templateID, nodeID).
++				First(&replica).Error
++			if readErr != nil {
++				if !replicaSchedulableResultCache.Discard(cacheKey, generation) {
++					return nil, errResolveGenerationChanged
++				}
++				return nil, readErr
++			}
++			metadata := replicaModelToStatus(replica)
++			if !replicaSchedulableResultCache.Store(cacheKey, generation, metadata) {
++				return nil, errResolveGenerationChanged
++			}
++			return metadata, nil
++		})
++		if ctx.Err() != nil {
++			return false
++		}
++		if err == errResolveGenerationChanged {
++			continue
++		}
++		if err != nil {
++			return false
++		}
++		if !replicaSchedulableResultCache.Current(cacheKey, generation) {
++			continue
++		}
++		replica, ok := value.(ReplicaStatus)
++		return ok && isReplicaSchedulableNow(ctx, replica)
+ 	}
+-	return isReplicaSchedulableNow(ctx, replicaModelToStatus(replica))
+ }
+ 
+ func isReplicaSchedulableNow(ctx context.Context, replica ReplicaStatus) bool {

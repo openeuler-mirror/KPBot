@@ -1,13 +1,56 @@
 # KPBot
 
-面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code 和 OpenCode 提供专业的性能分析与优化插件。
+[![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](LICENSE)
+[![Scenarios: 18](https://img.shields.io/badge/Scenarios-18-brightgreen.svg)](#optimization-scenarios)
 
-## 插件列表
+面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code、OpenCode、Codex 和 DSH 提供专业的性能分析与优化插件。
+
+
+
+
+
+## 🎯 优化场景
+
+**app-tuner** 在不修改业务源码的前提下，通过系统与 OS 配置、运行环境、编译参数、性能库替换和应用参数进行调优；**code-optimizer** 通过修改源码优化算法、数据结构、算子和框架执行路径。两者可以围绕同一业务场景协同使用。
+
+当前按下表业务场景去重统计，共覆盖 **18 类场景**；场景数不等同于 SKILL 数，具体模型、硬件与验证范围以链接中的说明为准。
+
+<!-- 增删场景时同步更新顶部 Scenarios 徽章及上方场景数。 -->
+
+| 优化场景 | 场景优化简介 |
+|----------|--------------|
+| [Qwen2.5-1.5B 模型 @ 鲲鹏 + 昇腾 vLLM 推理](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/ascend-vllm-config.md) | **app-tuner**：围绕 vLLM-Ascend 推理吞吐与首 Token 延迟，调整 Host 线程、CPU/NUMA 亲和性、任务队列、内存分配及 KV cache/batch 配置。 |
+| [DeepSeek-V4 debug 模型 @ ARM Host + 昇腾 torchtitan-npu 训练](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/ascend-torchtitan-training-config.md) | **app-tuner**：面向训练 Host 瓶颈，结合绑核、分配器选型、编译与 wheel 打包，调优 optimizer swap、activation checkpoint 和 FSDP 配置；已有案例为 307M 参数 debug 模型。 |
+| [TensorFlow CPU 推理 / Serving @ 鲲鹏](Plugins/code-optimizer/skills/tf-inference-optimizer/SKILL.md) | **code-optimizer**：通过图与运行时 profiling 定位瓶颈，进行图重写、算子融合、自定义 fused kernel 和性能库接入，并验证端到端吞吐与延迟。 |
+| [ONNX Runtime Attention / MHA @ 鲲鹏 + KDNN](Plugins/code-optimizer/skills/ort-kdnn-attention-opt/SKILL.md) | **code-optimizer**：识别 Attention/MHA 子图，实施融合内核与 ORT 框架接入，配套模型扫描、正确性验证和 A/B 基准。 |
+| [llama.cpp Embedding 推理 @ 鲲鹏 CPU](Plugins/code-optimizer/skills/kunpeng-llama-cpp-tuning/SKILL.md) | **code-optimizer**：优化 llama.cpp/ggml 的 CPU 后端路由、权重转换缓存和点积实现，按短、中、长输入验证 Embedding 精度与延迟。 |
+| [GEMM / BRGEMM 框架集成 @ 鲲鹏](Plugins/code-optimizer/skills/brgemm-optimization/SKILL.md) | **code-optimizer**：面向 oneDNN adapter、ONNX Runtime EP 与自研 runtime，优化 PackB/PrePack、blocked layout、scratch、parallel-K、分块和 primitive cache。 |
+| [PyTorch Embedding lookup @ ARM CPU](Plugins/code-optimizer/skills/parallel-unique-pytorch/SKILL.md) | **code-optimizer**：针对 raw_id → unique → hashmap → gather 链路，使用并行排序与 OpenMP 优化 Host 侧去重，并注册兼容 `torch.compile` 的自定义算子。 |
+| [向量数据库与向量检索](Plugins/code-optimizer/skills/vector-search-optimize/SKILL.md) | **code-optimizer**：使用通用 CP0–CP7 执行环境调查、基线、候选优化与复验，并按目标路由到 Faiss 或 DiskANN 专项工作流。 |
+| [Agent 记忆系统 / 图数据库后端 @ 鲲鹏 / x86_64](Plugins/code-optimizer/skills/agent-memory-optimize/SKILL.md) | **code-optimizer**：以 LLM 缓存回放冻结确定性负载，把 ingest/search 耗时拆成客户端、驱动、服务端三段，再按 top-down 与缓存缺失率建模，分层实施载荷瘦身、解码下沉、读路径多副本扩展与服务端解码快路径；要求缓存 0 未命中 + 图规模校验和 + 结果等价，负结果入台账。 |
+| [哈希表与特征 / KV 查表 @ 鲲鹏](Plugins/code-optimizer/skills/hashmap-optimization/SKILL.md) | **code-optimizer**：从查询链路与负载特征出发，区分计算、带宽和延迟瓶颈，通过数据布局与查询实现等改动优化查表热点。 |
+| [MySQL / InnoDB OLTP @ 鲲鹏](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/database-workload-analysis/SKILL.md) | **app-tuner**：结合 sysbench 与数据库内部指标，调优 NUMA/IRQ 亲和性、buffer pool、线程与表缓存、OS 参数及 PGO 编译配置。 |
+| [Spark / Flink 大数据处理 @ ARM](Plugins/app-tuner/skills/kpbot-app-tuner/subskills/application-config-optimization/references/bigdata-playbook.md) | **app-tuner**：根据物理机或容器的 CPU、内存配额，调整 executor、TaskManager、并行度、内存与框架参数，并结合性能库选型优化运行环境。 |
+| [DPDK 应用 @ 鲲鹏 / ARM](Plugins/app-tuner/skills/kptools-dpdk-tuning/SKILL.md) | **app-tuner**：DPDK 应用性能调优双模式 — 现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延）；不修改业务源码，改码需求移交 code-optimizer。 |
+| [DPDK 数据面转发代码 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/dpdk-optimization/SKILL.md) | **code-optimizer**：DPDK 业务热路径代码五阶段优化 — 线速预算与基线冻结、worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类）、分层代码杠杆（双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用）与交错 A/B 验证；配置层联动 app-tuner。 |
+| [通用服务器应用与 Java 服务 @ 鲲鹏](Plugins/app-tuner/README.md) | **app-tuner**：使用 DevKit、nmon、进程与网络采集定位 CPU、内存、I/O 和网络瓶颈，调优 BIOS、OS、NUMA、网卡队列、编译参数与性能库。 |
+| [分配路径 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/allocation-path-optimization/SKILL.md) | **code-optimizer**：针对"每操作都在申请/释放"的热点，用每操作申请字节、峰值活字节与分配器对照实验定位成本，把仅元数据对象的分配下限改为精确申请，并识别抖动、成对释放与内核回收（brk/trim/页回收）成本；配分配计数探针做确定性核对。 |
+| [热点路径机制开销 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/hot-path-overhead-elimination/SKILL.md) | **code-optimizer**：针对"函数算法已足够短、成本来自调用与分派机制"的热点，用实测分布与反汇编证据消除调用边界开销、叶子入口栈帧、通用例程调用与无消费者的记账，并以 guard 完备性对照表约束 fallback。 |
+| [C/C++ 性能库与热点代码 @ 鲲鹏 / ARM](Plugins/code-optimizer/skills/kpbot-code-optimizer/SKILL.md) | **code-optimizer**：覆盖 NEON/SVE/SME 向量化、循环展开、分支消除、操作融合、预取、访存布局、精度变换与汇编优化；部分知识型 SKILL 已扩展 Rust 支持。 |
+
+> 已按领域归并的 skill 不再在本表逐条列出，其成员、收益与域内路由见对应域目录的 `DOMAIN.md`：
+> [sra](Plugins/code-optimizer/skills/sra/DOMAIN.md) · [vectordb](Plugins/code-optimizer/skills/vectordb/DOMAIN.md) · [libco](Plugins/code-optimizer/skills/libco/DOMAIN.md) ·
+> [agentic-infra](Plugins/code-optimizer/skills/agentic-infra/DOMAIN.md) · [microservice](Plugins/code-optimizer/skills/microservice/DOMAIN.md) ·
+> [storage](Plugins/code-optimizer/skills/storage/DOMAIN.md)。本表因此只在**场景层**变更时才需要改动，避免每个新 skill 都来抢同一张表。
+
+## 🧩 插件列表
 
 | 插件 | 类别 | 描述 |
 |------|------|------|
-| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline（36 skills） |
+| **[code-optimizer](Plugins/code-optimizer/)** | performance | 鲲鹏/ARM 代码优化 — 自动化 C/C++ 性能分析与优化 Pipeline，含 TF 与 ORT/KDNN 推理优化、向量检索优化、OpenZL 压缩内核与基准调优、DPDK 数据面热路径代码优化（104 skills） |
 | **[app-tuner](Plugins/app-tuner/)** | performance | 应用级调优 — 针对具体应用场景的深度性能调优 |
+| **[openwiki-sync](Plugins/public/openwiki-sync/)** | documentation | OpenWiki 代码仓文档生成与同步 — 独立 wiki 仓托管 + commit 级联动更新 + 关联恢复，支持 GitCode/Gitee/GitHub |
+| **[kunpeng-knowledge](Plugins/public/kunpeng-knowledge/skills/kunpeng-knowledge/SKILL.md)** | documentation | 鲲鹏知识库只读查询 — 搜索 Wiki、读取页面并返回来源；在 OpenCode 中通过 WeKnora 账号授权 |
 
 ### 即将推出
 
@@ -18,9 +61,38 @@
 
 ---
 
-## 安装
+## 📥 安装
 
-KPBot 提供统一的安装脚本 `install.sh`，同时支持 Claude Code 和 OpenCode。
+KPBot 提供两种安装方式：npm 包（推荐，正式版本）和 git clone（开发者，获取最新 HEAD）。
+
+### 方式一：npm 安装（推荐）
+
+```bash
+# 全局安装 CLI
+npm install -g @kunpengbot/kpbot
+
+# 安装 skills 到目标工具
+kpbot install global opencode      # 全局安装到 OpenCode
+kpbot install project codex        # 项目级安装到 Codex
+kpbot install global codex         # 全局安装到 Codex
+kpbot install project claude       # 项目级安装到 Claude Code
+kpbot install project opencode /path/to/project  # 指定路径
+```
+
+安装后验证：
+```bash
+npm ls -g @kunpengbot/kpbot         # 确认版本
+opencode debug skill | grep optimize  # 确认 skills 注册（OpenCode）
+```
+
+卸载：
+```bash
+kpbot uninstall global opencode
+```
+
+### 方式二：git clone（开发者，获取最新 HEAD）
+
+从源码安装时，Linux 和 macOS 使用 `install.sh`，支持 Claude Code、OpenCode、Codex 和 DSH；Windows 原生 `install.ps1` 支持 Claude Code、OpenCode 和 DSH。Codex 的安装、卸载与 Windows 使用方式见 [Codex 指南](docs/codex.md)。
 
 ### 前置条件
 
@@ -38,24 +110,41 @@ install.sh [level] [tool] [install_path]
 | 参数 | 可选值 | 默认值 | 说明 |
 |------|--------|--------|------|
 | `level` | `project` / `global` | `project` | 安装级别：项目级或全局级 |
-| `tool` | `claude` / `opencode` | `claude` | 目标 AI 编码工具 |
-| `install_path` | 任意路径 | 当前目录 | 项目级安装的目标路径 |
+| `tool` | `claude` / `opencode` / `codex` / `dsh` | `claude` | 目标 AI 编码工具（Codex 使用 Bash/Python 入口） |
+| `install_path` | 任意路径 | 当前目录（项目级） | 项目根目录，或全局 DSH 安装目录 |
 
 ### 安装示例
 
 ```bash
 # 项目级安装（Claude Code，当前目录）
-/path/to/KPBot/install.sh
+bash /path/to/KPBot/install.sh project claude
 
 # 项目级安装（OpenCode，指定路径）
 cd /path/to/your-c-project
-/path/to/KPBot/install.sh project opencode
+bash /path/to/KPBot/install.sh project opencode
 
 # 全局安装（Claude Code）
-/path/to/KPBot/install.sh global claude
+bash /path/to/KPBot/install.sh global claude
 
 # 全局安装（OpenCode）
-/path/to/KPBot/install.sh global opencode
+bash /path/to/KPBot/install.sh global opencode
+```
+
+### Windows PowerShell 安装
+
+在 KPBot 仓库目录下，用 Windows PowerShell 5.1 或 PowerShell 7 运行。Claude Code 和 OpenCode 安装仅需 PowerShell。DSH 还需要 Node.js 18 或更新版本，并先在仓库目录运行 `npm ci --ignore-scripts`。
+
+Claude Code 和 OpenCode 的技能目录使用 Win32 扩展路径复制和清理，允许技能资源的绝对路径超过 260 个字符，无需修改系统的长路径设置。
+
+```powershell
+# 将 Claude Code 技能安装到指定项目
+.\install.ps1 project claude 'C:\Work\My Project'
+
+# 为当前用户安装 OpenCode 技能
+.\install.ps1 global opencode
+
+# 将 DSH 技能安装到指定项目（先安装 npm 依赖）
+.\install.ps1 project dsh 'C:\Work\My Project'
 ```
 
 ### 安装路径
@@ -64,15 +153,25 @@ cd /path/to/your-c-project
 |------|--------|------|
 | Claude Code | `.claude/skills/` + `CLAUDE.md` | `~/.claude/skills/` + `~/.claude/CLAUDE.md` |
 | OpenCode | `.opencode/skills/` + `AGENTS.md` | `~/.config/opencode/skills/` + `AGENTS.md` |
+| Codex | `.agents/skills/` | `~/.agents/skills/` |
+| DSH | `.dsh/skills/` | `$env:DSH_HOME/skills/` 或 `~/.dsh/skills/` |
+
+PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能装到该目录下的 `opencode/skills/`。
 
 ### 安装脚本自动完成
 
 1. **Skills 拷贝** — 将插件技能拷贝到目标工具的 skills 目录
-   - Claude Code：拷贝全部 36 个 skills（claude 格式）
-   - OpenCode：先拷贝全部 skills 作基底，再用 `opencode/` 覆盖层替换 26 个差异文件为 opencode 格式，并跳过 2 个 claude-only skill（共 34 个）
+    - Claude Code：拷贝各插件的 skills（claude 格式）；其中 code-optimizer 包含其全部技能（数量随仓库演进，以安装生成的 `kpbot-manifest.json` 为准）
+    - OpenCode：先拷贝 skills 作基底，再用 `opencode/` 覆盖层替换工具差异文件，并按各插件 `opencode.exclude` 过滤；code-optimizer 跳过 3 个 claude-only skill，安装其余全部技能（数量以 `kpbot-manifest.json` 为准）
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
+
+Claude/OpenCode 安装的用户技能保留范围：新版生成的清单只记录 KPBot 管理的技能。
+旧版曾把用户自建目录一并写入清单，缺少归属信息；首次升级安装或卸载时，旧清单中名称合规的用户技能
+仍会按清单清理。升级前请备份安装目录并核对旧清单；如包含误记的用户技能，备份后移除
+`<配置目录>/kpbot-manifest.json` 再重装。名称含空格、中文等不合规条目会停止操作并给出具体恢复提示，
+不会自动删除清单。与当前 KPBot 技能同名的目录仍会被重装替换。
 
 ### 验证安装
 
@@ -84,13 +183,29 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 # 启动 claude 后，skills 会根据上下文自动激活
 ```
 
+### 平台过滤回归测试
+
+```bash
+bash tests/test_install_platform.sh
+```
+
+该测试在临时目录分别执行 `install.sh project claude` 和 `install.sh project opencode`，验证：
+
+- OpenCode 模式不安装 `opencode.exclude` 声明的 claude-only skill
+
+PowerShell 入口的安装和重装回归在临时目录运行。
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -File .\tests\test_install_platform.ps1
+```
+
 ---
 
-## 使用指南
+## 🚀 使用指南
 
 ### 快速上手：一句话优化
 
-安装后直接在 Claude Code 或 OpenCode 中用自然语言描述你的优化需求：
+安装后直接在 Claude Code、OpenCode 或 Codex 中用自然语言描述你的优化需求：
 
 ```
 帮我优化 matrix_multiply 函数，目标平台是 Kunpeng-0xd01
@@ -132,7 +247,8 @@ opencode debug skill | grep optimize   # 确认 skills 已注册
 
 ### 可用技能列表
 
-Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 2 个 claude-only）。
+code-optimizer 在 Claude Code 中安装其全部 skill，在 OpenCode 中跳过 3 个 claude-only skill；
+实际数量以安装后生成的 `kpbot-manifest.json` 为准（避免随仓库新增 skill 漂移）。
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -143,6 +259,7 @@ Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 
 - `analyze-caller-context` — 调用上下文 14 维度分析
 - `analyze-testcase` — 测试用例性能画像分析
 - `arm-spe-analysis` — ARM SPE 采样分析
+- `gcov-coverage-analysis` — gcov/lcov 覆盖率驱动的性能优化点识别（热点行/冷路径/循环画像/函数调用计数）
 - `register-pressure-analysis` — 寄存器压力诊断
 
 **优化类**
@@ -160,6 +277,15 @@ Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 
 - `precision-transform` — 精度变换
 - `special-case-optimization` — 特例快路径
 - `compiler-flag-tuning` — 编译选项调优
+- `hashmap-optimization` — 哈希表四阶段优化流程（链路识别→瓶颈建模→仿真测试→杠杆实施）
+- `agent-memory-optimize` — Agent 记忆系统/图数据库后端优化技能族入口（20 个可独立使用的 skill：负载冻结、三段归因、瓶颈建模、7 个分层杠杆、矩阵复测、负结果）
+- `openzl-compression-tuning` — OpenZL 压缩内核调优（熵 codec 根表/位流优化、熵选型、无损逐字节门禁、归因方法论与负结果档案）
+- `openzl-bench-protocol` — OpenZL unitBench 基准协议（场景注册、KV 数据准备、多机部署复测、topdown 采集，含 3 个脚本）
+- `allocation-path-optimization` — 分配路径优化（分配下限/尺寸类审计、精确申请、抖动合并、分配器与内核成本归因）
+- `hot-path-overhead-elimination` — 热点路径机制开销消除（主导结果内联、叶子入口、值频率分派、无消费者记账跳过）
+- `parallel-accumulator` — 串行累加器并行化（多累加器展开、NEON 向量累加器，重叠依赖链隐藏浮点延迟）
+- `libco-aarch64-context-switch` — libco AArch64 上下文切换、32 槽布局、栈对齐与首次启动检查
+- `generic-timer-optimization` — 通用定时器时钟读取优化（cntvct_el0/cntfrq_el0 替换自旋循环内 Clock::now()/clock_gettime，锚点保域、tick 域比较、防溢出换算，含 tier-A 契约用例）
 
 **Pipeline/编排类**
 - `kpbot-code-optimizer` — 完整优化 Pipeline（Subagent 编排）
@@ -174,7 +300,7 @@ Claude Code 安装全部 **36 个** skill；OpenCode 安装 **34 个**（跳过 
 - `batch-drive-optimize-pipeline` — 批量自动化评估 _(claude-only)_
 
 **平台知识**
-- `kunpeng_microarch` — Kunpeng-0xd01/0xd03/0xd06 微架构知识库
+- `kunpeng_microarch` — Kunpeng-0xd01/0xd03/0xd06 微架构知识库（含目标平台 ISA 能力矩阵，供向量化选型判断 SVE/SME/DotProd/BF16 等是否可用）
 - `arm-instructions-query` — ARM 指令集查询（1527+ 条）
 
 **质量保障**
@@ -223,7 +349,7 @@ Pipeline 会自动执行：项目准备 → 性能基线 → 热点分析 → �
 
 ---
 
-## 插件机制
+## 🔌 插件机制
 
 KPBot 采用插件化架构，每个插件独立封装，通过 marketplace 统一管理。
 
@@ -251,7 +377,7 @@ claude plugins install code-optimizer --marketplace kpbot-marketplace
 
 ---
 
-## 卸载
+## 🗑️ 卸载
 
 ### OpenCode
 
@@ -274,7 +400,7 @@ claude plugins marketplace remove kpbot-marketplace
 
 ---
 
-## 常见问题
+## ❓ 常见问题
 
 ### Q: 安装后技能没有被发现？
 
@@ -310,14 +436,14 @@ cd /path/to/KPBot && git pull
 
 ---
 
-## 目录结构
+## 📂 目录结构
 
 ```
 KPBot/
 ├── .claude-plugin/
 │   └── marketplace.json           # Claude Code Marketplace 索引
 ├── Plugins/
-│   ├── code-optimizer/            # 代码优化插件 (36 skills)
+│   ├── code-optimizer/            # 代码优化插件 (104 skills)
 │   │   ├── .claude-plugin/
 │   │   │   └── plugin.json        #   插件清单
 │   │   ├── skills/                #   技能源目录（claude 格式，单一源）
@@ -326,12 +452,13 @@ KPBot/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
 │       └── skills/                #   技能源目录
-├── install.sh                     # 统一安装脚本（Claude Code + OpenCode）
+├── install.sh                     # Bash 安装脚本
+├── install.ps1                    # Windows PowerShell 安装脚本
 ├── README.md
 └── LICENSE
 ```
 
-## 添加新插件
+## 🛠️ 添加新插件
 
 1. 在 `Plugins/` 下创建新目录
 2. 添加 `.claude-plugin/plugin.json`（插件清单，含 name、version、description、author 等）
@@ -339,4 +466,8 @@ KPBot/
 4. 在 `.claude-plugin/marketplace.json` 的 `plugins` 数组中添加条目
 5. 提交 PR
 
-## License
+## 📄 License
+
+KPBot 采用 [木兰宽松许可证，第2版（Mulan PSL v2）](http://license.coscl.org.cn/MulanPSL2) 开源许可证。
+
+详见 [LICENSE](LICENSE) 文件。

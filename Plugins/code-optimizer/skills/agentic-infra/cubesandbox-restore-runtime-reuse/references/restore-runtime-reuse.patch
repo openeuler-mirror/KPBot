@@ -1,0 +1,131 @@
+diff --git a/hypervisor/vmm/src/device_manager.rs b/hypervisor/vmm/src/device_manager.rs
+index 2e2edae..2edea55 100644
+--- a/hypervisor/vmm/src/device_manager.rs
++++ b/hypervisor/vmm/src/device_manager.rs
+@@ -4470,50 +4470,93 @@ impl DeviceManager {
+         snapshot: Snapshot,
+     ) -> std::result::Result<(), MigratableError> {
+         let total_nodes = device_groups.0.len() + device_groups.1.len();
+-        let work_thread_num = if total_nodes > MAX_WORKER_THREADS {
+-            MAX_WORKER_THREADS
+-        } else {
+-            total_nodes
+-        };
+-
+-        let rt = tokio::runtime::Builder::new_multi_thread()
+-            .worker_threads(work_thread_num)
+-            .enable_all()
+-            .build()
+-            .unwrap();
+-
+-        rt.block_on(async move {
+-            // Process device groups in order to ensure correct restoration sequence
++        if total_nodes == 0 {
++            return Ok(());
++        }
++        let work_thread_num = total_nodes.min(MAX_WORKER_THREADS);
++        let restore = async move {
++            // Complete the current group before starting the next one.
+             let groups = [device_groups.0, device_groups.1];
+             for nodes in groups {
+-                let mut thread_pool: Vec<JoinHandle<Result<(), MigratableError>>> = vec![];
+-
++                let mut work = Vec::new();
+                 for node in nodes {
+                     if let Some(migratable) = node.migratable {
++                        let device_snapshot = snapshot.snapshots.get(&node.id).cloned().ok_or_else(|| {
++                            MigratableError::Restore(anyhow!("Missing device {}", node.id))
++                        })?;
+                         debug!("Restoring {} from DeviceManager", node.id);
+-                        if let Some(snapshot) = snapshot.snapshots.get(&node.id).cloned() {
+-                            thread_pool.push(tokio::spawn(async move {
+-                                let mut guard = migratable.lock().unwrap();
+-                                guard.pause()?;
+-                                guard.restore(*snapshot)?;
+-                                Ok(())
+-                            }));
+-                        } else {
+-                            return Err(MigratableError::Restore(anyhow!(
+-                                "Missing device {}",
+-                                node.id
+-                            )));
+-                        }
++                        work.push((migratable, device_snapshot));
+                     }
+                 }
+ 
+-                // Wait for all devices in current group to complete before processing next group
+-                for t in thread_pool {
+-                    t.await.unwrap()?;
++                let mut thread_pool: Vec<JoinHandle<Result<(), MigratableError>>> =
++                    Vec::with_capacity(work.len());
++                for (migratable, device_snapshot) in work {
++                    thread_pool.push(tokio::spawn(async move {
++                        let mut guard = migratable.lock().unwrap();
++                        guard.pause()?;
++                        guard.restore(*device_snapshot)?;
++                        Ok(())
++                    }));
++                }
++
++                let mut tasks = thread_pool.into_iter();
++                while let Some(task) = tasks.next() {
++                    let result = match task.await {
++                        Ok(result) => result,
++                        Err(err) => Err(MigratableError::Restore(anyhow!(
++                            "Device restore task failed: {}",
++                            err
++                        ))),
++                    };
++                    if let Err(err) = result {
++                        // The process-wide runtime survives this call. Stop pending
++                        // work and wait for running device operations to finish.
++                        for pending in tasks.as_slice() {
++                            pending.abort();
++                        }
++                        for pending in tasks {
++                            let _ = pending.await;
++                        }
++                        return Err(err);
++                    }
+                 }
+             }
+             Ok(())
+-        })
++        };
++
++        // Keep at most one device-restore pool resident. A writer waits for
++        // active restores before retiring the old pool and building the new one.
++        static RESTORE_RUNTIME: std::sync::RwLock<Option<(usize, tokio::runtime::Runtime)>> =
++            std::sync::RwLock::new(None);
++        let cache = RESTORE_RUNTIME.read().map_err(|_| {
++            MigratableError::Restore(anyhow!("Device restore runtime lock poisoned"))
++        })?;
++        if let Some((threads, rt)) = cache.as_ref() {
++            if *threads == work_thread_num {
++                return rt.block_on(restore);
++            }
++        }
++        drop(cache);
++
++        let mut cache = RESTORE_RUNTIME.write().map_err(|_| {
++            MigratableError::Restore(anyhow!("Device restore runtime lock poisoned"))
++        })?;
++        if cache.as_ref().map(|(threads, _)| *threads) != Some(work_thread_num) {
++            drop(cache.take());
++            let rt = tokio::runtime::Builder::new_multi_thread()
++                .worker_threads(work_thread_num)
++                .enable_all()
++                .build()
++                .map_err(|err| {
++                    MigratableError::Restore(anyhow!("Build device restore runtime: {}", err))
++                })?;
++            *cache = Some((work_thread_num, rt));
++        }
++        let (_, rt) = cache.as_ref().ok_or_else(|| {
++            MigratableError::Restore(anyhow!("Device restore runtime is unavailable"))
++        })?;
++        rt.block_on(restore)
+     }
+ 
+     pub fn restore_devices(

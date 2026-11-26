@@ -1,0 +1,62 @@
+# 用例：agent 级端到端 —— 容器内用 opencode 调用 memory-access-optimization 优化矩阵乘法
+#
+# 拉取与测试方法（人类可读）：
+#   docker build --network host -f skills/memory-access-optimization/cases/agent-optimize-memlayout/Dockerfile \
+#       -t kpbot/code-optimizer-agent-memlayout:1.0-openeuler24.03 .
+#   # A/B 对照：同一任务分别在有 skill / 无 skill 下各跑一次
+#   ./run_ab.sh --save results-ab
+#
+# 说明：tier agent。待优化目标为朴素 ijk 矩阵乘法，重点考察访存优化
+# （循环重排 ikj / 缓存分块 tiling），baseline 与 optimized 均 -O2，
+# 加速来自缓存利用率提升而非向量化。with/without 唯一差异是 skill 与 prompt 是否提及 skill。
+
+name: agent-optimize-memlayout
+skill: memory-access-optimization
+tier: agent
+
+image: kpbot/code-optimizer-agent-memlayout:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: runtime_mount
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: speedup
+  uplift: speedup_with / speedup_without
+
+build:
+  context: ../../../..
+  dockerfile: skills/memory-access-optimization/cases/agent-optimize-memlayout/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - aarch64 主机
+  - opencode 二进制（运行时挂载）
+  - opencode auth.json（运行时挂载）
+  - 容器可访问 deepseek API（必要时 --network host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with             # 每次运行设 with 或 without（A/B 对照）
+  N: 256
+  ITERS: 5
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: optimized_correct
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: speedup
+    op: gte
+    expect: 1.0

@@ -15,6 +15,8 @@ description: 对单个优化点进行确认/跳过门控，设定架构和风险
 
 从 `$ARGUMENTS` 或对话上下文中获取**单个优化点**：
 
+仅需调查当前预取行为时，直接调用独立入口 `analyze-prefetch-policy`；这类请求不构成本阶段的 `optimization_point` 输入，不应为它创建虚构优化点。本阶段只对已有优化点补充证据并返回决策 JSON，不提供独立调查报告的完成分支，也不将该报告包装成 `diagnose`、`confirmed` 或 `skipped` 决策。
+
 ```json
 {
   "optimization_point": {
@@ -22,7 +24,8 @@ description: 对单个优化点进行确认/跳过门控，设定架构和风险
     "type": "vectorization",
     "target_arch": "neon",
     "confidence": 0.9,
-    "expected_speedup": "2-4x",
+    "expected_speedup": null,
+  "prediction_basis": "estimate: 尚无完整候选收益实测",
     "priority": 1,
     "evidence": {
       "static": "双层嵌套循环 + 标量运算 + 连续访存 + 无跨迭代依赖",
@@ -51,6 +54,12 @@ description: 对单个优化点进行确认/跳过门控，设定架构和风险
 - `context.prepareProject`：项目信息（编译器、构建系统、基线）
 - `context.analyzeHotspot`：analyze-hotspot 的完整输出（供交叉验证）
 - `context.intent`：用户优化意图（优化目标、风险容忍度、平台约束、性能目标），用于确认门控判断
+
+## 实验证据门控
+
+消费 designExperiment 与 validateExperiment 的完整输出，检查 feedback.next_stage=DecideOptimization、hypothesis_verdict=supported、两个 checked=true 且 hypothesis_id / experiment_id / record_path 引用当前条件。缺少支持或出现新反证时输出 status=diagnose、next_stage=AnalyzeHotspot（反驳）或 DesignExperiment（未决/条件变化），reason 说明缺项；不得确认后直接 apply。
+
+默认沿用已有策略，也可因新证据转向诊断。保留 expected_speedup 旧字段，但未测收益必须 null 或明确标记 estimate 并输出 prediction_basis；局部实测只能说明该 scope 的结果，不能宣称完整系统收益。confirmed 之后先经过 AdversarialReview，改变假设的替代方案必须重新设计实验。
 
 ## 执行步骤
 
@@ -95,6 +104,8 @@ TaskUpdate({ taskId: validate_task_id, status: "in_progress" })
    | math-rewrite | —（v1 仅检测） | LUT/闭式/近似/阈值改写均需人工验证 |
 
    `register-pressure-analysis` 是验证/诊断 skill，不作为源码改写 strategy 参与本表。若优化点来自 SIMD、inline asm、standalone assembly 或 micro-kernel 设计，应在 plan input 中记录 `diagnostics.register_pressure_analysis_required=true`，交给 `verify-optimization` 调用。
+
+   `analyze-prefetch-policy` 也是只读诊断 skill，不作为源码改写 strategy 参与本表。若当前预取优化点缺少已有 L1/L2 策略的触发条件、目标地址、提前量或缓存层级提示证据，按技能名调用它读取现有源码、反汇编及已有材料，将报告作为该优化点的补充证据，再按本阶段原有门控输出决策 JSON。诊断报告不证明缓存实际驻留、性能瓶颈或优化收益，不能代替实验证据或据此直接确认候选；软件预取改写仍使用 `prefetch-optimization`。
 
 3. **自动跳过规则**（仅以下条件触发 skip）：
    - `optimization_point.type == "math-rewrite"` → **自动 skip**（`auto_route == false`），`skip_reason: "数学/算法改写需人工验证语义正确性，流水线 v1 不做自动路由。建议查看 detection_report 和 correctness checklist 后手动实施。"`
@@ -241,7 +252,7 @@ TaskUpdate({ taskId: plan_task_id, status: "completed" })
 
 ## 输出
 
-完成后，输出以下 JSON 契约（不要输出其他内容）：
+对有效单个优化点完成门控后，输出以下 JSON 契约（不要输出其他内容）：
 
 ```json
 {
@@ -251,7 +262,8 @@ TaskUpdate({ taskId: plan_task_id, status: "completed" })
   "skill": "apply-vectorization",
   "arch": "neon",
   "confidence": 0.9,
-  "expected_speedup": "2-4x",
+  "expected_speedup": null,
+  "prediction_basis": "estimate: 尚无完整候选收益实测",
   "risk": "low",
   "input": {
     "source_file": "<file_path>",
@@ -268,12 +280,18 @@ TaskUpdate({ taskId: plan_task_id, status: "completed" })
     "optimization_type": "<仅 asm-optimization 策略，其他为 null>"
   },
   "throughput_enhancement": null,
+  "hypothesis_id": "<已支持假设 ID>",
+  "experiment_id": "<已支持实验 ID>",
+  "record_path": "<最终实验记录路径>",
+  "next_stage": "AdversarialReview",
+  "reason": "<证据与门控依据>",
   "status": "confirmed"
 }
 ```
 
 `status` 取值：
-- `confirmed`：优化点确认，进入 apply-optimization
+- `diagnose`：证据变化或不足，next_stage 为 AnalyzeHotspot / DesignExperiment；保留预算
+- `confirmed`：当前实验支持的优化点确认，先进入 AdversarialReview
 - `skipped`：优化点跳过（需人工验证语义 / 不满足安全前提 / 用户拒绝）
 
 `strategy` 取值：`vectorization` | `vectorization_deepen` | `autovec-source-transform` | `throughput-enhancement` | `branch-elimination` | `memory-access-optimization` | `prefetch-optimization` | `compiler-flag-tuning` | `asm-optimization` | `scalar-vector-hybrid` | `bulk-memory-opt` | `math-rewrite` | `algorithm-substitution` | `variant-selection` | `code_hoisting` | `special-case-optimization` | `operation-fusion` | `precision-transform`
@@ -300,6 +318,8 @@ TaskUpdate({ taskId: plan_task_id, status: "completed" })
 - asm-optimization → `asm-optimization`
 
 `register-pressure-analysis` 不在 `strategy` 取值中；它只作为 `verify-optimization` 诊断增强使用。
+
+`analyze-prefetch-policy` 不在 `strategy` 取值或 apply 子 Skill 映射中；它提供已有预取策略的只读诊断证据，软件预取改写仍映射到 `prefetch-optimization`。
 
 ## 规则
 

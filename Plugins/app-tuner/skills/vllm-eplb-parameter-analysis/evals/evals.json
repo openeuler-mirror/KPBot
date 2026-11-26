@@ -1,0 +1,65 @@
+{
+  "skill_name": "vllm-eplb-parameter-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "imbalanced-to-dynamic-plan",
+      "prompt": "vllm-eplb-analysis 判定 imbalanced，action=optimize_dynamic，handoff 建议 redundant_experts=16, window_size=1000, step_interval=1000。现场 EP=16、384 个逻辑专家、每槽 2.4GiB、余量 6GiB。给我一套要落到模板的 EPLB 参数方案。",
+      "expected_output": "输出 dynamic 参数方案：redundant_experts=16（4.17%）、每 rank 1 个、显存 +2.4GiB 适配；window/step=1000/1000；template_changes 含 VLLM_USE_V2_MODEL_RUNNER=1、DYNAMIC_EPLB=true 和 4 个 serve flag。",
+      "assertions": [
+        "mode = dynamic",
+        "redundant_experts = 16 且能被 ep_size=16 整除",
+        "ratio_pct ≈ 4.17",
+        "memory.fits = true",
+        "template_changes.env.DYNAMIC_EPLB = \"true\"",
+        "template_changes.add_flags 含 --enable-eplb 与三个 --eplb-config.*"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "non-multiple-rounds-up",
+      "prompt": "analysis 给 redundant_experts=7，但现场 EP=16，帮我确认该写多少，别写非整数倍。",
+      "expected_output": "指出必须为 ep_size 整数倍，向上取整为 16，并说明实际生效值与手填 7 不一致。",
+      "assertions": [
+        "redundant_experts 输出 16",
+        "说明非整倍向上取整",
+        "不把 7 原样作为最终参数"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "borderline-force-probe",
+      "prompt": "analysis 结论 borderline，让我先测上限再决定，参数怎么给？",
+      "expected_output": "输出 mode=force 的上限探针方案：V2=0、unset DYNAMIC_EPLB、additional_config 合并 enable_force_eplb:true，并强调 force 不可上线。",
+      "assertions": [
+        "mode = force",
+        "template_changes.env.VLLM_USE_V2_MODEL_RUNNER = \"0\"",
+        "unset_env 含 DYNAMIC_EPLB",
+        "additional_config.enable_force_eplb = true",
+        "说明 force 只用于定标、不可上线"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "memory-cap-converges",
+      "prompt": "handoff 建议 32 个冗余专家，但显存只剩 3GiB，每槽 2.4GiB，怎么定？",
+      "expected_output": "按可负担上限收敛到 16（每 rank 1 个、+2.4GiB），并提示先释放显存或降 KV 压力。",
+      "assertions": [
+        "redundant_experts 收敛为 16",
+        "memory.max_affordable_redundant_experts = 16",
+        "给出显存不足告警"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "balanced-do-not-enable",
+      "prompt": "analysis 结论 balanced，还有必要给 EPLB 参数吗？",
+      "expected_output": "mode=off，不产出 dynamic 参数，说明此时开 EPLB 只会增加副本显存与重排抖动。",
+      "assertions": [
+        "mode = off",
+        "template_changes 为空或 add_flags 为空",
+        "说明无失衡信号不要开 dynamic"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vector-opt-run.v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "workflow",
+    "run_id",
+    "repo",
+    "source",
+    "contract",
+    "experiment",
+    "stages",
+    "selected_candidate",
+    "results",
+    "decisions",
+    "knowledge_sync"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "vector-opt-run.v2"
+    },
+    "workflow": {
+      "enum": [
+        "diskann-optimize",
+        "diskann-source-investigation"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "repo": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "baseline_commit",
+        "candidate_commit"
+      ],
+      "properties": {
+        "baseline_commit": {
+          "type": "string",
+          "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64}|unknown)$"
+        },
+        "candidate_commit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "contract": {
+      "type": "object",
+      "required": [
+        "manifest",
+        "frozen"
+      ],
+      "properties": {
+        "manifest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "experiment": {
+      "type": "object",
+      "required": [
+        "experiment_root",
+        "experiment_id",
+        "run_dir",
+        "wiki_root"
+      ],
+      "properties": {
+        "experiment_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "experiment_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "run_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wiki_root": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "stages": {
+      "type": "object",
+      "required": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[0-8]$": {
+          "type": "object",
+          "required": [
+            "status",
+            "artifacts",
+            "verdict"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "pending",
+                "running",
+                "completed",
+                "blocked",
+                "failed",
+                "skipped"
+              ]
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+              }
+            },
+            "verdict": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "selected_candidate": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "results": {
+      "type": "object"
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "knowledge_sync": {
+      "type": "object",
+      "required": [
+        "status",
+        "raw_path",
+        "experiment_page",
+        "decision_page",
+        "receipt",
+        "validation_receipt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "blocked",
+            "failed",
+            "not_applicable"
+          ]
+        },
+        "raw_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "experiment_page": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision_page": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "receipt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation_receipt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true,
+  "description": "DiskANN v2 local workflow; CP8 is opt-in. Filesystem and phase invariants are checked by validate_state.py."
+}

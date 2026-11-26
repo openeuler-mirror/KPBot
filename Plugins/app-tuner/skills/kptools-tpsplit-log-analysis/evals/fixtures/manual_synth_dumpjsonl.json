@@ -1,0 +1,8 @@
+{"req": "req_0000", "client_send_ts": 1732000100000, "first_token_ts": 1732000100365.1003, "client_ttft": 365.1004286410159}
+{"req": "req_0001", "client_send_ts": 1732000101500, "first_token_ts": 1732000101877.229, "client_ttft": 377.229084897287}
+{"req": "req_0002", "client_send_ts": 1732000103000, "first_token_ts": 1732000103800.8708, "client_ttft": 800.8708286646877}
+{"req": "req_0003", "client_send_ts": 1732000104500, "first_token_ts": 1732000105299.6338, "client_ttft": 799.6338296000207}
+{"req": "req_0004", "client_send_ts": 1732002000000, "first_token_ts": 1732002000359.871, "client_ttft": 359.87119910238977}
+{"req": "req_0005", "client_send_ts": 1732002001500, "first_token_ts": 1732002001903.2725, "client_ttft": 403.2725140337875}
+{"req": "req_0006", "client_send_ts": 1732002003000, "first_token_ts": 1732002003394.5862, "client_ttft": 394.5861471694974}
+{"req": "req_0007", "client_send_ts": 1732002004500, "first_token_ts": 1732002004876.6614, "client_ttft": 376.66147665344306}

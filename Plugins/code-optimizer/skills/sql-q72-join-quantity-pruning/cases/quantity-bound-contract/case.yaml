@@ -1,0 +1,79 @@
+name: quantity-bound-contract
+skill: sql-q72-join-quantity-pruning
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: quantity_bound_route_positive
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: pair_order_and_multiplicity
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: strict_boundary_and_active_mask
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: cross_key_still_filtered
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unsupported_inputs_fall_back
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: spill_preserves_later_match
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: null_and_empty_build
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: signed_extremes
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: economic_gates_and_nullable_fallback
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: null_join_keys_do_not_match
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: hash_table_change_recomputes_bound
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: sqlite_reference_agrees
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: pre_filter_candidates_are_workload
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: equal_quantity_changes_work_not_result
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: equal_boundary_baseline_candidates
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: equal_boundary_pruned_candidates
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: equal_boundary_post_filter_pairs
+    expect: 0

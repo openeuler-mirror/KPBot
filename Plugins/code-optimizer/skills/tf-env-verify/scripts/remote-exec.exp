@@ -1,0 +1,73 @@
+#!/usr/bin/expect -f
+################################################################
+#  remote-exec.exp（脱敏版）
+#  ---------------
+#  通过堡垒机在远程目标服务器上执行任意命令。
+#
+#  登录链路: 本地 → <BASTION_HOST> → ext主机(root) → 目标服务器
+#
+#  使用前请填写以下占位符（脱敏后未包含真实凭据）：
+#    <BASTION_HOST>  堡垒机地址（如 bastion.example.com）
+#    <BASTION_USER>  堡垒机登录用户
+#    <BASTION_PASS>  堡垒机登录密码
+#    <TARGET_IP>     目标服务器 IP（默认）
+#
+#  用法:
+#    expect remote-exec.exp [target_ip] [command...]
+#
+#  示例:
+#    expect remote-exec.exp                     # 默认执行 lscpu
+#    expect remote-exec.exp 10.0.0.1 lscpu
+#    expect remote-exec.exp 10.0.0.1 "df -h; free -m"
+################################################################
+
+set bastion_host   "<BASTION_HOST>"
+set bastion_user   "<BASTION_USER>"
+set bastion_pass   "<BASTION_PASS>"
+
+set target_ip [lindex $argv 0]
+set command   [lindex $argv 1]
+set cmd_timeout     [lindex $argv 2]
+
+if {$target_ip eq ""} {
+    set target_ip "<TARGET_IP>"
+}
+if {$command eq ""} {
+    set command "lscpu"
+}
+if {$cmd_timeout eq ""} {
+    set cmd_timeout 10
+}
+
+set timeout 30
+
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 $bastion_user@$bastion_host
+
+expect -re "assword:"
+send "$bastion_pass\r"
+sleep 5
+send "1\r"
+sleep 8
+send "printf '__EXT_READY__\\n'\r"
+expect "__EXT_READY__"
+
+send "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 $target_ip\r"
+send "printf '__TARGET_READY__\\n'\r"
+expect "__TARGET_READY__"
+
+send "$command; printf '\\n__REMOTE_EXEC_DONE__\\n'\r"
+set command_timeout $cmd_timeout
+set timeout $command_timeout
+expect "__REMOTE_EXEC_DONE__"
+
+set timeout 10
+send "exit\r"
+expect {
+    -re "Connection to .* closed" {}
+    timeout {}
+}
+send "exit\r"
+expect {
+    eof {}
+    timeout {}
+}

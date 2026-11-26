@@ -1,0 +1,7 @@
+name: cubesandbox-restore-runtime-reuse-runtime-budget
+skill: cubesandbox-restore-runtime-reuse
+tier: B
+entrypoint: ["python3", "cases/runtime-budget/run.py"]
+assert:
+  - type: exit_code
+    expect: 0

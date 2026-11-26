@@ -1,0 +1,55 @@
+# 用例：tier A —— vllm-ascend-profiling Stage-1 脚本纯逻辑单测
+#
+# 拉取与测试方法（人类可读）：
+#   # 构建（本机容器无法解析 openeuler 源，需 --network host）
+#   docker build --network host \
+#     -f skills/kpbot-app-tuner/subskills/vllm-ascend-profiling/cases/unit-stage1-fix-contract/Dockerfile \
+#     -t kpbot/app-tuner-unit-stage1:1.0-openeuler24.03 .
+#   # 运行（不走 A/B，tier A 无 agent 参与）
+#   docker run --rm kpbot/app-tuner-unit-stage1:1.0-openeuler24.03
+#   # 也可宿主机直跑（仅 python3 标准库）：
+#   cd skills/kpbot-app-tuner/subskills/vllm-ascend-profiling/cases/unit-stage1-fix-contract && ./entrypoint.sh? 见 run.sh
+#
+# 说明：tier A。依赖仅 python3 标准库（unittest + mock），无 docker daemon、
+# 无网络、无 NPU。看守点：
+#   1. references/vllm_fork.json 契约（repo/commit/markers/pip 版本字段齐全，
+#      且【不得】出现 local_tarball —— 即"无离线兜底"回归断言）
+#   2. fix_pythonpath.py 源码中不再存在本地/离线索（vllm_fork_src、
+#      docker cp、wget 兜底），安装路径只有 tarball_url 直接下载
+#   3. install_fork 生成"容器内 curl|tar 直接下载"命令（失败时不回退）
+#   4. verify_fork / write_profile（幂等）在 mock docker 下行为正确
+#   5. env_check.py 纯函数与 mock 检查项：进程行解析（过滤 shell 噪声）、
+#      PYTHONMALLOC、fork 特征码 grep、config 解析、emit 摘要
+#   6. fix_pythonpath.py 对不存在容器的入口行为（exit 2，不误装）
+
+name: unit-stage1-fix-contract
+skill: vllm-ascend-profiling
+tier: A                    # A=纯逻辑  B=需工具链  C=真机  agent=端到端
+
+image: kpbot/app-tuner-unit-stage1:1.0-openeuler24.03
+model: none                # tier A 无模型参与
+auth: none
+
+ab: []                     # tier A 不做 A/B 对照
+
+build:
+  context: ../../../../../../          # 指向 Plugins/app-tuner/
+  dockerfile: skills/kpbot-app-tuner/subskills/vllm-ascend-profiling/cases/unit-stage1-fix-contract/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires: []           # 纯标准库，无前置
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: tests_failed
+    expect: 0

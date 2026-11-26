@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-hub",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "对比这两份 profiling，全面看看瓶颈变化", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "优化前后两份 trace 帮我出一份总报告", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "这两份采集差多少？算子、拷贝、气泡都看一下", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "我想一次看全两份 profiling 的差异，别一个个跑", "should_trigger": true },
+    { "id": "EQ-05", "prompt": "两份 trace 的瓶颈迁移和主要变化分量是什么", "should_trigger": true },
+    { "id": "EQ-06", "prompt": "单份 trace 也想看看 stream 和气泡情况", "should_trigger": true },
+    { "id": "EQ-07", "prompt": "只看算子种类和 shape 怎么变的", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-opstats" },
+    { "id": "EQ-08", "prompt": "只看 H2D 拷贝带宽和重叠率", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-h2d-d2h" },
+    { "id": "EQ-09", "prompt": "帮我切一下这份无标识 trace 的 step", "should_trigger": false, "note": "routes to kptools-ascend-profiling-step-split（规划中）或 -analysis-nostack" },
+    { "id": "EQ-10", "prompt": "分析这份带 python_function 的 trace 调用树", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis" },
+    { "id": "EQ-11", "prompt": "融合前后合并了哪些算子", "should_trigger": false, "note": "routes to kptools-ascend-profiling-compare-fusion" },
+    { "id": "EQ-12", "prompt": "NPU 卡当前功耗和温度", "should_trigger": false, "note": "routes to kptools-ascend-smi" }
+  ]
+}

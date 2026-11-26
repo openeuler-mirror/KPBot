@@ -1,0 +1,26 @@
+{
+  "skill_name": "kptools-devkit",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "TRIG-J01", "prompt": "Java 火焰图", "should_trigger": true },
+    { "id": "TRIG-J02", "prompt": "分析 Java 进程热点函数", "should_trigger": true },
+    { "id": "TRIG-J03", "prompt": "JVM 内存分配在哪", "should_trigger": true },
+    { "id": "TRIG-J04", "prompt": "Java 锁竞争怎么定位", "should_trigger": true },
+    { "id": "TRIG-J05", "prompt": "C++ 火焰图", "should_trigger": true, "note": "routes to tuner hotspot, not java-perf" },
+    { "id": "TRIG-J06", "prompt": "Python 火焰图", "should_trigger": false, "note": "routes to py-spy" },
+    { "id": "TRIG-J07", "prompt": "查看 GC 日志", "should_trigger": false },
+    { "id": "TRIG-D01", "prompt": "采集 topdown 微架构指标", "should_trigger": true },
+    { "id": "TRIG-D02", "prompt": "分析 CPU 流水线瓶颈", "should_trigger": true },
+    { "id": "TRIG-D03", "prompt": "查看每个 CPU 核的实时频率", "should_trigger": true },
+    { "id": "TRIG-D04", "prompt": "采集 Socket 功耗和温度", "should_trigger": true },
+    { "id": "TRIG-D05", "prompt": "分析 NUMA 访存跨节点情况", "should_trigger": true },
+    { "id": "TRIG-D06", "prompt": "采集内存带宽和 Cache 命中率", "should_trigger": true },
+    { "id": "TRIG-D07", "prompt": "定位哪些函数 Cache Miss 最多", "should_trigger": true },
+    { "id": "TRIG-D08", "prompt": "给 C++ 进程采个火焰图", "should_trigger": true },
+    { "id": "TRIG-D09", "prompt": "系统 CPU 利用率采集", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "TRIG-D10", "prompt": "看看磁盘 IO 情况", "should_trigger": false, "note": "routes to kptools-nmon" },
+    { "id": "TRIG-D11", "prompt": "TLB Miss 分析", "should_trigger": true },
+    { "id": "TRIG-D12", "prompt": "网络丢包排查", "should_trigger": false, "note": "routes to kptools-network-collector" }
+  ]
+}

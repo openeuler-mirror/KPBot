@@ -1,0 +1,43 @@
+{
+  "skill_name": "kitex-transport-tuning",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-core-not-scaling",
+      "prompt": "Kitex 服务加到 64 核后 QPS 不涨，fd 数量很多",
+      "should_trigger": true,
+      "note": "现象类触发词：加核不涨、fd 暴涨"
+    },
+    {
+      "id": "q-mux-tradeoff",
+      "prompt": "要不要改成复用连接，长尾会不会变差",
+      "should_trigger": true,
+      "note": "连接形态类触发词：复用连接、长尾"
+    },
+    {
+      "id": "q-poller-count",
+      "prompt": "netpoll 的事件循环线程数怎么设",
+      "should_trigger": true,
+      "note": "参数类触发词：事件循环、poller"
+    },
+    {
+      "id": "q-protocol",
+      "prompt": "该用 Framed 还是 TTHeader",
+      "should_trigger": false,
+      "note": "协议选型 → kitex-transport-protocol-selection"
+    },
+    {
+      "id": "q-codec",
+      "prompt": "要不要换 frugal",
+      "should_trigger": false,
+      "note": "编解码选型 → kitex-thrift-codec-selection"
+    },
+    {
+      "id": "q-gc",
+      "prompt": "GOGC 设多少合适",
+      "should_trigger": false,
+      "note": "运行时参数 → go-runtime-tuning"
+    }
+  ]
+}

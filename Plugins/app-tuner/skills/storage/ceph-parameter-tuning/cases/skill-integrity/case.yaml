@@ -1,0 +1,49 @@
+# 用例：tier A —— ceph-parameter-tuning skill 契约与知识库事实单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 触发语、metadata.domain=distributed_storage、
+#                  license 对齐域内惯例 MulanPSL-2.0）
+#                  红线不变量（只读体检先行、requires_restart_window 重启窗口、逐节点契约、
+#                  结论三态 recommended/already_tuned/blocked、confidence 恒不标 measured）
+#   引用完整性     references/tuning-playbook.md、references/tuning-kb.json 存在，
+#                  playbook 文首含"独立使用说明"（独立/双轨两种模式）
+#   知识库事实     tuning-kb.json：source 引用《鲲鹏 Ceph 官方指南》、os_tuning 7 项及建议值
+#                  （swappiness 0/MTU 9000/pid_max 4194303/read_ahead 8192KB/调度器/nr_requests）、
+#                  ceph_conf 四节段（含 mon）、global/client/osd 全量建议值（PG 阈值 3000/300000、
+#                  throttle 2097152000、osd_max_write_size 256、bluestore 比例 0.8/0.2 等）、
+#                  debug_* 清单 59 项、PG 公式与 balancer upmap、osd_numa_node、
+#                  ownership 双轨表述含 99-os-optimization.conf
+#   playbook SOP   ceph.conf 备份/重启命令、balancer 命令、blockdev/调度器命令、debug 59 项
+#   evals 契约     evals.json（≥4 条 CPT-E、expectations 全中文、禁乱码、OS 命令禁入模式）、
+#                  eval_queries.json（≥6 条、正例 ≥3、负例 ≥3 且 note 含 routes to）
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/storage/ceph-parameter-tuning/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/静态，python3+bash 标准库，无真机依赖）。
+
+name: skill-integrity
+skill: ceph-parameter-tuning
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: integrity_ran
+    op: gte
+    expect: 38
+  - type: json_field
+    file: results/result.json
+    field: integrity_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0

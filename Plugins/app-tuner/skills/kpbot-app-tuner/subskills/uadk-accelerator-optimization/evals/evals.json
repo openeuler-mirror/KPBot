@@ -1,0 +1,54 @@
+{
+  "skill_name": "uadk-accelerator-optimization",
+  "evals": [
+    {
+      "id": "UADK-E01",
+      "prompt": "perf 显示服务热点在 AES_encrypt 和 SHA256_Update，合计占比 8%，鲲鹏服务器上能否用硬件加速器卸载？",
+      "expected_output": "命中 AES/SHA（SEC 设备）→ 结论 recommended：输出 SVA 驱动加载（uacce→hisi_qm→hisi_sec2，uacce_mode=1）、WD_CIPHER_CTX_NUM/WD_DIGEST_CTX_NUM 队列建议、uadk_engine 接入方式与 uadk_tool/openssl speed 验证方案，并声明与 performance-library-selection 的互斥关系",
+      "files": [],
+      "expectations": [
+        "结论为 recommended 且命中算法为 AES 与 SHA（SEC 设备）",
+        "给出 uacce→hisi_qm→hisi_sec2 驱动加载顺序且 uacce_mode=1",
+        "WD_CIPHER_CTX_NUM/WD_DIGEST_CTX_NUM 格式为 sync:N@node,async:M@node 且 node 与应用 NUMA 一致",
+        "给出 uadk_engine 接入（openssl.cnf 或 -engine uadk_engine）与 uadk_tool benchmark --mode sva 验证命令",
+        "声明与 performance-library-selection 的 crypto/compression 候选互斥关系"
+      ]
+    },
+    {
+      "id": "UADK-E02",
+      "prompt": "网关服务热点在 deflate/inflate 压缩（占比 6%），机器上有 /dev/hisi_zip，怎么加速？",
+      "expected_output": "命中 gzip/zlib（ZIP 设备）→ recommended：走 UADK 原生 wd_comp API（压缩无 engine 路径），给出 hisi_zip uacce_mode=1 加载与 pf_q_num 建议，pktlen 按业务值验证并标注小报文负收益风险",
+      "files": [],
+      "expectations": [
+        "结论为 recommended 且命中 gzip/zlib（ZIP 设备）",
+        "接入方式为 UADK 原生 wd_comp API，不使用 openssl engine（压缩无 engine 路径）",
+        "驱动加载 hisi_zip uacce_mode=1，pf_q_num 以默认 64 起步",
+        "验证要求使用业务典型 pktlen，并对小于 1KB 报文显式标注负收益风险"
+      ]
+    },
+    {
+      "id": "UADK-E03",
+      "prompt": "RSA 签名验签是热点（RSA_private_decrypt 占 5%），如何用加速器并验证收益？",
+      "expected_output": "命中 RSA（HPRE 设备）→ recommended：hisi_hpre 驱动加载、WD_RSA_CTX_NUM 队列配置、openssl genrsa/rsautl -engine uadk_engine 功能验证与 openssl speed -elapsed -engine uadk_engine -async_jobs N rsa2048 性能对比",
+      "files": [],
+      "expectations": [
+        "结论为 recommended 且命中 RSA（HPRE 设备）",
+        "驱动加载 hisi_hpre uacce_mode=1，并给出 WD_RSA_CTX_NUM 队列建议",
+        "功能验证使用 openssl genrsa/rsautl -engine uadk_engine",
+        "性能对比使用 openssl speed -elapsed -engine uadk_engine -async_jobs N rsa2048 与 SW 基线对照"
+      ]
+    },
+    {
+      "id": "UADK-E04",
+      "prompt": "热点显示 malloc/free 占 20%，加密和压缩都没有热点，需要上 UADK 吗？",
+      "expected_output": "结论 not_applicable：报告中列出全部已检查算法类别与占比（均低于 0.5% 阈值），说明热点实际落点为内存分配，交回 performance-library-selection 处理，不产生 UADK 候选动作",
+      "files": [],
+      "expectations": [
+        "结论为 not_applicable 而非 recommended",
+        "报告列出全部已检查算法类别及占比（含低于 0.5% 阈值的噪声类）",
+        "热点落点指向内存分配并建议交回 performance-library-selection",
+        "不产生任何 UADK 候选动作"
+      ]
+    }
+  ]
+}

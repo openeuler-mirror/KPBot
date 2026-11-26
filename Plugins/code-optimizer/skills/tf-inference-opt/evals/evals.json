@@ -1,0 +1,113 @@
+{
+  "skill_name": "tf-inference-opt",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "systematic-tuning",
+      "prompt": "我们的 TensorFlow 推理服务部署在 ARM 服务器上（Docker 容器，cgroup 限了 16 核），最近业务方反馈 QPS 上不去、p99 时延也偏高。模型是推荐排序模型（embedding 查表 + DNN 全连接 + softmax），服务是我们自己编译的 TF Serving 风格 C++ 进程。老板让我下周拿出一份优化方案。我该从哪里下手？给我一份系统的分析和行动方案。",
+      "expected_output": "先测量后优化的工作流：建议先建基线（分段计时、timeline、线程数核查），按症状定位到层（线程/图/算子），再分层给出手段，强调冷启动稳态分离、A/B 验证与正确性回归；不应上来就瞎猜瓶颈或直接堆优化",
+      "files": [],
+      "assertions": [
+        "给出优化手段之前先强调建立基线/先测量（出现 基线、baseline、先测、profiling 优先 等表述）",
+        "提到定位瓶颈的具体手段：分段计时、timeline、profiler、火焰图 之一",
+        "分别考虑请求并发、RPC/inter/intra/库线程与 CPU quota/cpuset，不要求所有线程池都设为 16；建议核查实际生效值与节流",
+        "针对 embedding+DNN 模型结构提到图优化/算子融合机会（embedding 链、融合、grappler）",
+        "提到 A/B 对照验证，或冷启动与稳态分开评估",
+        "未在无数据支撑时直接断定唯一瓶颈并只给单一方案（方案覆盖多个候选层）"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "graph-fusion-design",
+      "prompt": "我想把我们推荐模型里 embedding 那条链做算子融合。现在的子图大致是：字符串特征 → hash → 切片取列 → Unique 去重 → Gather 查表 → SparseSegmentSum 池化 → 补零 padding → reshape，十几个小算子，profile 显示 kernel 调度开销很大、中间张量来回拷贝。怎么设计一个融合算子落地到 TensorFlow？匹配、算子签名、内核实现各要注意什么坑？",
+      "expected_output": "设计融合边界与完整输入输出语义，使用当前 TF 分支适用的重写入口；在减少中间张量时保留外部 fanout、控制依赖及稀疏归约语义，验证重写命中、正确性与服务性能。",
+      "files": [],
+      "assertions": [
+        "讨论融合算子的签名设计（输入/输出规划，含多输出或输出语义）",
+        "提到图重写的挂载机制（grappler、pass、加载期重写、模式匹配器之一）",
+        "内核实现要点：一遍扫描、消除中间张量、就地写入、shape-only 变体 至少其一",
+        "明确讨论融合边界/融合范围的选择（哪些节点纳入、边界上移如把去重簿记并入等）",
+        "明确保持外部消费者/控制依赖，并校验空输入、重复 ID、segment/索引合法性等与本融合相关的语义；不以罗列无关 transpose 或 DCLP 术语代替判断",
+        "提到内核并行策略（线程池切分）或数值段向量化（NEON/SIMD）"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "op-library-integration",
+      "prompt": "我们内部有一个高性能 GEMM 算子库（ARM NEON 优化，闭源 .so，C 接口，支持 fused bias+ReLU 的 epilogue），想把 TF 的 MatMul / _FusedMatMul 路由到它上面。需要考虑：什么条件下走这个库（路由条件）、不支持时怎么回退、线程模型怎么处理（库里自己开线程还是用 TF 的池）、权重能不能缓存加速。有没有成熟的做法和常见的坑？",
+      "expected_output": "按库真实能力设计路由与安全回退，先确认闭源库是否提供外部线程池接口；支持时评估 TF 池适配，不支持时限制库线程并联合调优请求并发。prepack 明确权重身份、所有权、有效期和总内存预算，epilogue 与独立收尾用实际 shape 对拍和 A/B。",
+      "files": [],
+      "assertions": [
+        "路由条件分层：运行时开关/flag + dtype、shape、rank、transpose 等算子内守卫（至少两层）",
+        "不支持时保留 TF 原生路径；执行失败后仅在输入/状态可安全重试时回退",
+        "先确认闭源库是否支持外部线程池；支持则评估复用 TF 池，不支持则提供可执行的限线程/限制并发方案，不假设可修改闭源库运行时",
+        "权重缓存说明不可变或版本化前提、源 Tensor 所有权/生命周期及模型或进程总内存预算；不把指针+shape 当无条件安全身份",
+        "提到小输入/小 shape 的阈值判断，防止路由在小算子上反而变慢",
+        "提到 bias+ReLU epilogue 的接线（post-ops 或手动收尾）"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "enabled-but-not-hit",
+      "prompt": "同一二进制 A/B：enable_opt=true 已打印；模型有 6 个 MatMul+BiasAdd 模式；日志 registered_rewriters=0、platform_allowed=false，优化后 _FusedMatMul=0，库路由计数=0，吞吐差 0.3%。下一步做什么，能否认定融合无收益？",
+      "expected_output": "先定位平台能力/门控和注册通路，验证当前硬件是否满足实现条件；支持后再查重写、实际后端与性能，不凭启用日志下结论。",
+      "files": [],
+      "assertions": [
+        "指出尚未测到融合效果，0.3% 不能归因于融合",
+        "按 platform_allowed→注册→重写节点→后端计数补证据",
+        "不未经能力验证就移除全部硬件门控"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "checkpoint-cache-identity",
+      "prompt": "BN 折叠缓存 manifest 只有变量名、dtype=float32、shape=[128]。checkpoint A 的 gamma 全为 1，checkpoint B 的 gamma 全为 2，其他参数相同。服务重载 B 后命中 A 的落盘缓存。shape 哈希没有碰撞，可以继续用吗？同时 prepack key 只有 data_ptr+shape，源 Tensor 已释放。请评审。",
+      "expected_output": "拒绝两种不完整身份；落盘绑定 checkpoint 内容与折叠参数，内存缓存保护源身份和所有权，重载隔离新旧版本。",
+      "files": [],
+      "assertions": [
+        "明确无哈希碰撞也会复用错权重，必须失效重算",
+        "要求 checkpoint 内容身份/变量/参数或同等可靠版本识别",
+        "指出地址复用与源 Tensor 生命周期风险，不能只增加 shape 字段",
+        "提出同 shape 不同权重及重载在飞请求的正确性验证"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "fusion-backend-interaction",
+      "prompt": "固定 batch=59、并发=4，同机配对多轮误差小于 1%。吞吐：Eigen/FM关=100，Eigen/FM开=105，库/FM关=120，库/FM开=110。之前只做 Eigen 下融合 A/B，准备默认全部开启。你如何解释和选择配置？",
+      "expected_output": "识别融合×后端交互：融合在 Eigen 为正，在库为负；本配置库/FM关最优，核查 fused 消费路径，并在目标 batch/并发复测。",
+      "files": [],
+      "assertions": [
+        "计算或准确描述 Eigen +5%、库约 -8.3% 的融合效应",
+        "本负载选择库/FM关=120，不选择全开=110",
+        "不把融合或库一概判为无效；建议对实际 fused 后端及其他负载复测"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "overload-measurement",
+      "prompt": "同一输入、batch=1、60s open-loop 目标 1000 request/s。A：发送60000，成功59400，超时600，客户端丢弃0，成功p99=40ms。B：发送50000，成功45000，超时5000，客户端丢弃10000，成功p99=30ms。B 平均迟发20ms未计入p99，A迟发可忽略。能宣布 B 提速25%吗？给出结论和缺失指标。",
+      "expected_output": "不能只按成功p99判提速；B 成功吞吐和服务质量下降，须报告迟发、丢弃、超时及匹配负载下 SLO。",
+      "files": [],
+      "assertions": [
+        "拒绝直接宣布整体提速25%",
+        "指出 A成功990 request/s、B成功750 request/s，batch=1时 sample/s相同",
+        "识别成功延迟的样本选择与未计入迟发，不把20ms均值直接加到p99",
+        "分别给超时/发送与丢弃/计划口径，并要求检查压测端容量及超载策略"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "thread-budget",
+      "prompt": "cgroup v2 cpu.max=\"1600000 100000\"，cpuset.cpus.effective=0-31，进程 affinity=0-31。服务并发8，RPC=16、inter=16、intra=16、库线程=16，库使用 TF intra 池；日志 cpu.stat 节流明显，p99偏高。有人说三处都16已对齐所以线程配置没问题。请给排查与调优方案。",
+      "expected_output": "16核时间预算不等于16个指定核，32个允许CPU也不代表32核预算；检查节流和共享池任务竞争，独立扫描并发与各层线程，按 SLO选择。",
+      "files": [],
+      "assertions": [
+        "区分16核quota时间预算与32个允许CPU，不说配额对应CPU0-15",
+        "不认可各池=16就最优，也不把共享池线程简单相乘当实际线程数",
+        "独立调节库线程上限、intra/inter与请求并发并测p99/吞吐/节流",
+        "核查首个Session及共享池实际生效配置"
+      ]
+    }
+  ]
+}

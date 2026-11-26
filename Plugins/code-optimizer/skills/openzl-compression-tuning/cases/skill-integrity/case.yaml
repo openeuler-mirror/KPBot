@@ -1,0 +1,46 @@
+# 用例：tier A —— openzl-compression-tuning 知识型 skill 的完整性看护
+#
+# 覆盖（checks.py）：
+#   1. SKILL.md frontmatter：name 与目录一致、description 非空
+#   2. SKILL.md 中全部 references/*.md 链接可解析（防文档漂移）
+#   3. 关键方法论不变量仍在文档中（位容器约束公式、根表三重门、
+#      逐字节无损门禁）——防止后续编辑丢失硬约束
+#   4. 敏感内容扫描（私网 IP、凭据字面量、个人 home 路径）
+#
+# 运行：
+#   bash skills/openzl-compression-tuning/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑，python3 标准库）。知识型 skill 无可执行脚本，
+#       agent 层用例（给定熵内核热点，验证 skill 引导出根表/归因决策）
+#       待后续迭代补充。
+
+name: skill-integrity
+skill: openzl-compression-tuning
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: links_checked
+    op: gte
+    expect: 2
+  - type: json_field
+    file: results/result.json
+    field: anchors_found
+    op: gte
+    expect: 5
+  - type: json_field
+    file: results/result.json
+    field: sensitive_findings
+    expect: 0

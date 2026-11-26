@@ -1,0 +1,48 @@
+{
+  "skill_name": "nginx-kunpeng-tuning",
+  "version": 1,
+  "notes": "Accel-level Safety Gates discipline and risk triage. New evals written for the split skill.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "可以直接给生产 nginx 加 tcmalloc（LD_PRELOAD）并重启吗？给出完整正确的流程。",
+      "expected_output": "不可以直接上。按 Safety Gates：先做前置快照（二进制/conf/启动环境）→ 注入 LD_PRELOAD 并重启 → 生效验证（/proc/<pid>/maps 含 tcmalloc）→ A/B 压测证实收益 → 才保留；无增益或失败立即回退（unset LD_PRELOAD 重启，maps 确认无映射）。说明 LD_PRELOAD 影响 master 与全部 worker 及子进程、与其他预加载分配器互斥、版本不匹配可段错误。",
+      "files": [],
+      "expectations": [
+        "要求先做前置快照（二进制 sha256、conf、launch.env）",
+        "给出生效验证方法（grep tcmalloc /proc/<pid>/maps）",
+        "要求 A/B 压测证实收益后才保留",
+        "给出完整回退步骤（unset + 重启 + maps 确认）",
+        "说明 LD_PRELOAD 影响全部子进程与互斥/段错误风险",
+        "优先使用发行版包（gperftools-libs），源码编译须固定 tag 禁止 HEAD"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "要把 hisi_hpre 切到 uacce_mode=2，直接 modprobe -r hisi_hpre 可以吗？需要注意什么？",
+      "expected_output": "不可以直接卸载。先确认无占用：fuser -v /dev/uacce* 有输出表示有进程占用，禁止继续；ls /sys/class/uacce/ 非空只表示 uacce 设备已注册，不代表有进程占用；卸载驱动影响全机所有占用该加速器的进程（多租户节点高风险）；完整设备判定/引擎使能/验证工作流引用 kpbot-app-tuner 的 accelerator-optimization skill；回退为 modprobe hisi_hpre 恢复默认模式。",
+      "files": [],
+      "expectations": [
+        "给出占用检查命令并区分语义（fuser 表示进程占用；ls /sys/class/uacce/ 只表示设备已注册）",
+        "说明驱动卸载影响全机占用进程（多租户高风险）",
+        "提及 accelerator-optimization skill 的完整工作流（交叉引用）",
+        "给出回退命令（modprobe hisi_hpre 恢复默认模式）",
+        "说明无鲲鹏加速器硬件时整节跳过"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "nginx https 握手是瓶颈，配置级优化（ECDSA 证书、TLS1.3）已做仍不达标。该按什么顺序选加速手段？KAL 和 xcall 使用前各自要确认什么？",
+      "expected_output": "按可用性排序：KAL OpenSSL（前提：现场已具备 KAL 部署——源码/制品获取渠道不在 skill 内维护，路径由现场提供；运行期 LD_LIBRARY_PATH 注入 + ldd 生效验证 + unset 回退）→ KAE/UADK（需鲲鹏加速器硬件，切换前 fuser/ls uacce 确认无占用）→ tcmalloc（仅分配竞争热点相关）。xcall 是微架构级最高风险项：开关序列不在 skill 维护、共享节点禁止、仅独占环境基线存档后按原始实测记录使用、重启消除。每步 A/B 验证。",
+      "files": [],
+      "expectations": [
+        "KAL 排首位但明确前提：源码/制品获取渠道不在 skill 维护、需现场已具备部署",
+        "KAL 给出运行期注入（LD_LIBRARY_PATH）与 ldd 生效验证、unset 回退",
+        "KAE/UADK 需硬件且切换前用 fuser 确认无进程占用（ls uacce 只表示设备已注册）",
+        "tcmalloc 说明与分配热点相关性（不必然有效）",
+        "xcall 给出微架构级最高风险、序列不在 skill 维护、共享节点禁止、重启消除的限制",
+        "每步要求 A/B 压测验证后才保留"
+      ]
+    }
+  ]
+}

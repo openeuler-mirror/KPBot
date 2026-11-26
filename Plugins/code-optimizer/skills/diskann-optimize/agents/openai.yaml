@@ -1,0 +1,4 @@
+interface:
+  display_name: "DiskANN 优化工作流"
+  short_description: "连接源码分析、基线测试、候选实现和独立验收，交付可复现的性能优化结果"
+  default_prompt: "使用 $diskann-optimize 组织一次 DiskANN 实现优化，复用现有向量测量与 UT/ST 技能。"

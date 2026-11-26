@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:vector-test-report:v1",
+  "title": "Vector UT/ST Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "subject",
+    "baseline_commit",
+    "candidate_commit",
+    "feature_switch",
+    "platform",
+    "build",
+    "suites",
+    "risk_checks",
+    "raw_artifacts",
+    "verdict"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "vector-test-report.v1"
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "feature_switch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "off_tested",
+        "on_tested"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "off_tested": {
+          "const": true
+        },
+        "on_tested": {
+          "const": true
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "required": [
+        "arch",
+        "cpu",
+        "os",
+        "target_hardware_tested"
+      ],
+      "properties": {
+        "arch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cpu": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_hardware_tested": {
+          "const": true
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "required": [
+        "compiler",
+        "flags"
+      ]
+    },
+    "suites": {
+      "type": "object",
+      "required": [
+        "ut",
+        "st"
+      ],
+      "properties": {
+        "ut": {
+          "$ref": "#/$defs/suite"
+        },
+        "st": {
+          "$ref": "#/$defs/suite"
+        }
+      }
+    },
+    "risk_checks": {
+      "type": "object",
+      "required": [
+        "boundary",
+        "concurrency",
+        "fallback",
+        "feature_off"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "raw_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "verdict": {
+      "enum": [
+        "READY",
+        "REWORK",
+        "BLOCKED"
+      ]
+    }
+  },
+  "$defs": {
+    "suite": {
+      "type": "object",
+      "required": [
+        "executed",
+        "passed",
+        "failed",
+        "skipped"
+      ],
+      "properties": {
+        "executed": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": [
+        "status",
+        "evidence",
+        "rationale"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "not_applicable"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

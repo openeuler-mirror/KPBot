@@ -1,0 +1,35 @@
+{
+  "skill_name": "kptools-ascend-smi",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "检查一下这台机器上昇腾 NPU 的健康状态和 HBM 使用率，跑大模型训练前想确认设备没问题。",
+      "expected_output": "调用 collect.sh health 和 info（或 all），汇总 Health 状态与 HBM-Usage，发现 Alarm/Warning 或 HBM 接近上限时给出风险提示",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "训练压测期间帮我持续观察 NPU 的利用率和内存带宽，判断当前瓶颈是算力还是带宽。",
+      "expected_output": "调用 collect.sh watch -i <id> -d <sec> -s abn（或类似组合），解读 AICore 占用率与内存带宽占用率的关系并给出瓶颈判断",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "这台 8 卡 910B 服务器上多卡训练 allreduce 很慢，查一下 NPU 之间的拓扑和 HCCS 链路状态。",
+      "expected_output": "调用 collect.sh topology 和 collect.sh hccs -i <id> -c <chip>，输出 NPU 拓扑/亲和性与 HCCS 链路速率、误码计数，指出可疑链路",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "容器里跑 torch_npu 报设备打不开，帮我看看设备权限和 CANN、驱动版本。",
+      "expected_output": "调用 collect.sh permission 查 /dev/davinci* 权限与用户组，调用 collect.sh version 查 npu-smi/CANN/torch_npu 版本，判断是否用户组缺失或版本不匹配",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "npu-smi info 显示 AICore 一直是 0，是卡坏了吗？",
+      "expected_output": "解释开启 profiling 时 AICore(%) 返回 0 属官方已知限制而非硬件故障，建议关闭 profiling 后用 usages 或 watch -s a 复测",
+      "files": []
+    }
+  ]
+}

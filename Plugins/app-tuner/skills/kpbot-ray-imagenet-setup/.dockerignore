@@ -1,0 +1,16 @@
+*
+!Dockerfile
+!requirements.txt
+!requirements-lock.txt
+!requirements-cpu-lock.txt
+!SKILL.md
+!scripts
+!scripts/check_environment.py
+!scripts/make_fixture.py
+!scripts/run_pipeline.py
+!cases
+!cases/image-smoke
+!cases/image-smoke/case.yaml
+!cases/image-smoke/check.py
+!cases/image-smoke/run.sh
+!cases/image-smoke/test_exit_codes.py

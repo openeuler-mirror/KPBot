@@ -1,0 +1,25 @@
+{
+  "version": "v2.0",
+  "motor_deploy_config": {
+    "deploy_mode": "multi_deployment"
+  },
+  "motor_coordinator_config": {
+    "api_config": {
+      "coordinator_api_host": "127.0.0.1",
+      "coordinator_api_infer_port": 7200,
+      "coordinator_api_mgmt_port": 7201,
+      "coordinator_obs_port": 7202
+    },
+    "mgmt_api_key_config": {
+      "enable_api_key": false,
+      "api_key_file": ""
+    },
+    "scheduler_config": {
+      "prefill_scheduler_type": "load_balance",
+      "decode_scheduler_type": "load_balance",
+      "enable_pd_separation_fallback_to_hybrid": true,
+      "endpoint_instance_score_weight": 0.05,
+      "dp_stats_window": 15
+    }
+  }
+}

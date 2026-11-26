@@ -1,0 +1,52 @@
+{
+  "skill_name": "kptools-pypto-deploy",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "PQ-01",
+      "prompt": "在 Ascend NPU 上启动 PyPTO Serving",
+      "should_trigger": true
+    },
+    {
+      "id": "PQ-02",
+      "prompt": "部署 P/D 分离推理服务",
+      "should_trigger": true
+    },
+    {
+      "id": "PQ-03",
+      "prompt": "Router 怎么配置",
+      "should_trigger": true
+    },
+    {
+      "id": "PQ-04",
+      "prompt": "用模拟器跑 PyPTO",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-sim-deploy"
+    },
+    {
+      "id": "PQ-05",
+      "prompt": "给 P 节点加耗时打点",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-monitor"
+    },
+    {
+      "id": "PQ-06",
+      "prompt": "从日志生成 HTML 报告",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-monitor-viz"
+    },
+    {
+      "id": "PQ-07",
+      "prompt": "采集系统 CPU 利用率",
+      "should_trigger": false,
+      "note": "routes to kptools-nmon"
+    },
+    {
+      "id": "PQ-08",
+      "prompt": "查看 NPU 利用率",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-smi"
+    }
+  ]
+}

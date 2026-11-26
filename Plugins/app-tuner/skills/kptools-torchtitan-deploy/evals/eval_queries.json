@@ -1,0 +1,19 @@
+{
+  "skill_name": "kptools-torchtitan-deploy",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "TD-01", "prompt": "部署 torchtitan-npu", "should_trigger": true },
+    { "id": "TD-02", "prompt": "torchtitan 在昇腾上跑不起来怎么排查", "should_trigger": true },
+    { "id": "TD-03", "prompt": "run_train.sh 怎么用", "should_trigger": true },
+    { "id": "TD-04", "prompt": "--module --config 该怎么配", "should_trigger": true },
+    { "id": "TD-05", "prompt": "HCCL 建连超时了", "should_trigger": true },
+    { "id": "TD-06", "prompt": "torchao-npu 低精度训练怎么部署", "should_trigger": true },
+    { "id": "TD-07", "prompt": "多机 NODE_IPS 启动 torchtitan-npu", "should_trigger": true },
+    { "id": "TD-08", "prompt": "编译报 DT_INT64 not supported", "should_trigger": true },
+    { "id": "TD-09", "prompt": "看训练的 mfu 和 tps 指标", "should_trigger": false, "note": "训练指标无仓内对应 skill，由所在部署环境的指标工具承接" },
+    { "id": "TD-10", "prompt": "上板采集算子性能做加速比对比", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis" },
+    { "id": "TD-11", "prompt": "把代码同步到 NPU Pod 上", "should_trigger": false, "note": "远程环境链路归环境操作手册 (kptools-cannlab-env, MR #199 评审中)" },
+    { "id": "TD-12", "prompt": "分析训练进程的线程绑核", "should_trigger": true, "note": "绑核失效排障是本 skill B-18 的核心场景 (CPU_AFFINITY_CONF 静默失效/亲和扩展配置)；线程侧持续画像可配合 kptools-proc-collector --affinity" }
+  ]
+}

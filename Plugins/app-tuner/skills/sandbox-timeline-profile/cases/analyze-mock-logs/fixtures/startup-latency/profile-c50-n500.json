@@ -1,0 +1,1 @@
+{"summary":{"successful":2,"errors":0,"success_rate":1,"total_time_s":0.5,"throughput_qps":4},"create":{"avg":115,"min":100,"p95":120,"max":120},"raw":[{"seq":1,"create_ms":100},{"seq":2,"create_ms":120}]}

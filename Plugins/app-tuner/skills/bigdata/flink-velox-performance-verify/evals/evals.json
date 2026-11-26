@@ -1,0 +1,35 @@
+{
+  "skill_name": "flink-velox-performance-verify",
+  "evals": [
+    {
+      "id": "native-baseline-before-optimization",
+      "query": "GlutenFlink 优化前后要量化，先把原生 Flink 的 nexmark 吞吐基线测出来",
+      "expected": "触发本 skill：plan 确认原生侧（lib 无 gluten/velox jar）、槽位够、REST 在跑；用户同意后 run --yes，逐格出指标表与证据树，conf 跑完恢复"
+    },
+    {
+      "id": "fixed-calibre",
+      "query": "跑 nexmark 基准测试，口径要跟以后 GlutenFlink 侧可比",
+      "expected": "触发本 skill：口径固定在 conf/nexmark-bench.yaml（1 亿 events / 5000 万 tps / blackhole / warmup），不接受现场改数；r0 必跑，--object-reuse 加跑 r1 两个基线"
+    },
+    {
+      "id": "pick-a-few-queries",
+      "query": "改动只涉及 q3 和 q19，把这两个查询在原生侧重放一遍拿吞吐",
+      "expected": "触发本 skill：--queries q3,q19 显式选型（q0 是吞吐基线，选型对照见 references/bench-table.md）"
+    },
+    {
+      "id": "refuse-gluten-side",
+      "query": "lib 里现在是 GlutenFlink 的 jar，直接跑基准",
+      "expected": "触发本 skill 但拒绝：只跑原生侧，fix 给出 flink-velox-cluster-switch --to native 先切栈"
+    },
+    {
+      "id": "not-correctness",
+      "query": "验证两侧 nexmark 查询结果集一致",
+      "expected": "不触发：正确性校验是另一个 skill（规划中）；本 skill 只报吞吐数、不下结论"
+    },
+    {
+      "id": "not-install",
+      "query": "机器上没有 nexmark，先把 jar 和树装上",
+      "expected": "不触发 apply：install 属 flink-velox-runtime-install；本 skill 在 runner 缺失时 BLOCKED 并指向它"
+    }
+  ]
+}

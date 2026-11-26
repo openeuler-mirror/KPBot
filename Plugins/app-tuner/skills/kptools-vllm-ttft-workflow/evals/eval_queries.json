@@ -1,0 +1,40 @@
+{
+  "skill_name": "kptools-vllm-ttft-workflow",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "TTFT-01",
+      "prompt": "协调 vLLM 和 vLLM-Ascend 的 TTFT 打点、单次请求采集和 HTML 报告，逐阶段告诉我需要确认什么。",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-02",
+      "prompt": "我有改动前的 Prefill 日志。请规划本轮 TTFT 打点并重新采集，用旧日志和新采集结果做对照，不要拿旧日志替代本轮采集。",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-03",
+      "prompt": "用这份 Prefill 日志和完整请求 ID 离线生成 TTFT 交接 JSON 和 HTML 两项产物，禁止发请求。",
+      "should_trigger": true
+    },
+    {
+      "id": "TTFT-04",
+      "prompt": "用已有的交接 JSON 和授权的本地日志副本只生成一份 TTFT HTML 报告。",
+      "should_trigger": false,
+      "note": "routes to kptools-vllm-ttft-report"
+    },
+    {
+      "id": "TTFT-05",
+      "prompt": "这份 Prefill 日志只需转换成 TTFT 采集交接 JSON，不要发请求，不用生成报告。",
+      "should_trigger": false,
+      "note": "routes to kptools-vllm-ttft-collect"
+    },
+    {
+      "id": "TTFT-06",
+      "prompt": "只为 vLLM 主仓生成 TTFT 打点计划，不应用、不采集、不出报告。",
+      "should_trigger": false,
+      "note": "routes to kptools-vllm-ttft-instrumentation"
+    }
+  ]
+}

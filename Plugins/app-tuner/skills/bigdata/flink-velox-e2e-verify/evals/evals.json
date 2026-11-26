@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-e2e-verify",
+  "evals": [
+    {
+      "id": "pushdown-equivalence",
+      "query": "刚给 Flink 实现了 velox 聚合下推，把同一 SQL 在原生 Flink 和 GlutenFlink 上双跑，对比输出是否一致",
+      "expected": "触发 flink-velox-e2e-verify：备固定 CSV 用例，双跑捕获 print changelog（每侧过 lib 门/FINISHED/栈校验/非空四道门禁），折叠后零容差精确对比，产出 MATCH/MISMATCH 裁决"
+    },
+    {
+      "id": "regression-after-upgrade",
+      "query": "velox4j 升级到新版本了，回归验证既有下推改写是否仍然等价",
+      "expected": "触发本 skill：复用 e2e/ 用例库（同名用例内容一致即复用），重跑双侧对比"
+    },
+    {
+      "id": "changelog-fold-diff",
+      "query": "两份 print sink 捕获文件，做 changelog 回撤折叠对比",
+      "expected": "触发本 skill 步骤 5：changelog_diff.py 多重集折叠对比，回撤不存在的行与空捕获均判 MISMATCH"
+    },
+    {
+      "id": "side-not-complete",
+      "query": "native 侧跑完作业还没确认 FINISHED，能直接切栈重启集群跑 gfv 侧吗",
+      "expected": "触发本 skill 步骤 3 规则：不能——只有上一侧 run-sql.sh 退出 0（FINISHED+栈校验+捕获落盘）才允许切栈重启，且重启须征得用户同意，skill 绝不自动重启"
+    },
+    {
+      "id": "not-speedup-benchmark",
+      "query": "度量这条用例在 GlutenFlink 上比原生 Flink 快多少，多跑几次取中位数",
+      "expected": "不触发：吞吐/耗时基准与加速比统计不属本 skill（只做等价性验证、不计时）；应走标准基准套件口径（nexmark/TPC-DS 等）"
+    },
+    {
+      "id": "not-nexmark-suite",
+      "query": "跑 nexmark 全套查询集，测不同规模因子下的吞吐",
+      "expected": "不触发：标准吞吐基准套件（nexmark/TPC-DS 查询集+规模因子）属专用基准 skill，本 skill 只做双跑等价性验证"
+    },
+    {
+      "id": "not-stack-build",
+      "query": "编译部署 gluten-flink 与 velox4j 构建产物到集群",
+      "expected": "不触发：GlutenFlink 栈构建部署属构建侧工作流，本 skill 只消费其产物"
+    }
+  ]
+}

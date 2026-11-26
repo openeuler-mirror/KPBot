@@ -1,0 +1,9 @@
+name: cubesandbox-owned-preconnect-lifecycle
+skill: cubesandbox-create-optimize
+tier: B
+entrypoint: ["python3", "cases/preconnect-lifecycle/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 从附带 patch 提取实际 setup/join 代码，使用 Tokio 虚拟时钟执行故障和取消测试。
+# 依赖 Python 3.9+、Rust/Cargo 与已缓存或可下载的锁定 crates。

@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{{ title }}</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --bg-soft: #f2f4f6; --card: #ffffff;
+    --ink: #171c26; --ink-2: #3d4655; --muted: #71798a;
+    --line: #e6e9ee; --line-soft: #f0f2f5;
+    --brand: #c7000b; --brand-deep: #a00009; --brand-bright: #dd3340;
+    --brand-soft: #fdf1f1; --brand-line: #f3d3d5;
+    --ok: #15803d; --ok-bg: #ecfdf3;
+    --warn: #b45309; --warn-bg: #fff7ed;
+    --fail: #b91c1c; --fail-bg: #fef2f2;
+    --shadow-1: 0 1px 2px rgba(23,28,38,.05), 0 2px 10px rgba(23,28,38,.05);
+    --shadow-2: 0 6px 16px rgba(23,28,38,.09), 0 16px 40px rgba(23,28,38,.10);
+    --radius: 12px; --radius-s: 9px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin:0; font-family: var(--font); background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  ::selection { background: rgba(199,0,11,.16); }
+  :focus-visible { outline: 2px solid rgba(199,0,11,.45); outline-offset: 2px; border-radius: 4px; }
+
+  header {
+    color: #fff; padding: 30px 28px 28px;
+    background:
+      radial-gradient(900px 320px at 88% -140px, rgba(255,255,255,.16), transparent 62%),
+      radial-gradient(700px 300px at -8% 130%, rgba(255,255,255,.07), transparent 55%),
+      linear-gradient(135deg, #8a000a 0%, #c7000b 58%, #dd3340 100%);
+    box-shadow: 0 2px 14px rgba(154,0,10,.28);
+  }
+  .header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; opacity: .88; margin-bottom: 7px; }
+  header h1 { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: .01em; }
+  .header-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hstat { background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.26); padding: 6px 13px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+
+  main { padding: 22px 28px 48px; max-width: 1200px; margin: 0 auto; }
+  section {
+    background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--radius);
+    padding: 22px 24px 16px; margin-bottom: 20px; box-shadow: var(--shadow-1);
+    transition: box-shadow .2s ease;
+  }
+  section:hover { box-shadow: var(--shadow-2); }
+  section[id^="sec-"] { scroll-margin-top: 84px; }
+  h2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; font-size: 17px; font-weight: 700; color: var(--ink); }
+  .sec-num {
+    flex: none; min-width: 30px; height: 24px; padding: 0 8px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--brand-deep), var(--brand-bright));
+    color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .06em;
+    font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(199,0,11,.30);
+  }
+  .h2-note { font-size: 12px; font-weight: 500; color: var(--muted); }
+  h3 { margin: 18px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .kpi { position: relative; background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--radius-s); padding: 13px 14px 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(23,28,38,.04); }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--kpi-c, var(--brand)); }
+  .kpi:nth-child(4n+1) { --kpi-c: #c7000b; }
+  .kpi:nth-child(4n+2) { --kpi-c: #e8833a; }
+  .kpi:nth-child(4n+3) { --kpi-c: #2f6f9f; }
+  .kpi:nth-child(4n+4) { --kpi-c: #0e9c8a; }
+  .kpi .label { font-size: 11.5px; color: var(--muted); }
+  .kpi .value { font-size: 23px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .kpi.primary { background: linear-gradient(180deg, #fff, #fdf4f4); border-color: var(--brand-line); }
+  .kpi.primary .value { color: var(--brand); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0; z-index: 1; background: var(--card);
+    font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    text-align: left; padding: 9px 10px; border-bottom: 2px solid var(--line);
+  }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); }
+  td:first-child { color: var(--ink); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #fdf6f6; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.5; }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pass { background: var(--ok-bg); color: var(--ok); }
+  .warn { background: var(--warn-bg); color: var(--warn); }
+  .fail { background: var(--fail-bg); color: var(--fail); }
+  .muted { color: var(--muted); font-size: 12px; line-height: 1.75; }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius-s); }
+  .pane-src { margin: 0 0 14px 4px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  code { font-family: var(--mono); font-size: 12px; background: var(--bg-soft); border: 1px solid var(--line-soft); padding: 1px 6px; border-radius: 5px; }
+  pre.muted { font-family: var(--mono); font-size: 11.5px; line-height: 1.6; background: var(--bg-soft); border: 1px solid var(--line-soft); border-radius: var(--radius-s); padding: 12px 14px; overflow: auto; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 10px 0 30px; }
+
+  .chart-row { margin: 16px 0 22px; }
+  .chart-box {
+    position: relative; width: 100%;
+    background: linear-gradient(180deg, #fff, #fcfdfe);
+    border: 1px solid var(--line-soft); border-radius: var(--radius-s);
+    padding: 10px 10px 6px; box-shadow: 0 1px 2px rgba(23,28,38,.03);
+  }
+  .chart-title { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 0 8px 4px; }
+  .chart-title::before { content: ''; display: inline-block; width: 3px; height: 12px; border-radius: 2px; background: var(--brand); margin: 0 7px 0 2px; vertical-align: -1px; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; align-items: center; }
+  .tab {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink-2);
+    padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(23,28,38,.04);
+    transition: color .15s, border-color .15s, background .15s, box-shadow .15s;
+  }
+  .tab:hover { color: var(--brand); border-color: var(--brand-line); background: var(--brand-soft); }
+  .tab.active { background: linear-gradient(135deg, var(--brand-deep), var(--brand-bright)); color: #fff; border-color: transparent; box-shadow: 0 3px 10px rgba(199,0,11,.30); }
+  .tab-group-label { align-self: center; color: var(--muted); font-size: 12px; padding: 0 2px 0 8px; }
+  .tab-divider { width: 1px; align-self: stretch; background: var(--line); margin: 0 8px; }
+  .pane[hidden] { display: none; }
+
+  .pane-nav {
+    position: sticky; top: 10px; z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 10px; margin-bottom: 16px;
+    background: rgba(255,255,255,.93); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--line-soft); border-radius: var(--radius); box-shadow: var(--shadow-1);
+  }
+  .pane-nav .chip {
+    text-decoration: none; color: var(--ink-2); font-size: 12.5px; font-weight: 600;
+    padding: 6px 13px; border-radius: 999px; border: 1px solid transparent;
+    transition: color .15s, background .15s;
+  }
+  .pane-nav .chip:hover { color: var(--brand); background: var(--brand-soft); }
+  .pane-nav .chip.active { color: #fff; background: linear-gradient(135deg, var(--brand-deep), var(--brand-bright)); box-shadow: 0 2px 8px rgba(199,0,11,.28); }
+
+  #back-to-top {
+    position: fixed; right: 26px; bottom: 26px; z-index: 40; width: 42px; height: 42px;
+    border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink-2);
+    cursor: pointer; box-shadow: var(--shadow-2); display: flex; align-items: center; justify-content: center;
+    opacity: 0; visibility: hidden; transform: translateY(10px);
+    transition: opacity .2s, transform .2s, visibility .2s, color .15s, border-color .15s;
+  }
+  #back-to-top.show { opacity: 1; visibility: visible; transform: none; }
+  #back-to-top:hover { color: var(--brand); border-color: var(--brand); }
+
+  @media (max-width: 760px) {
+    header { padding: 22px 16px; }
+    main { padding: 16px 12px 40px; }
+    section { padding: 16px 14px 10px; }
+    .pane-nav { top: 6px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="header-title">
+      <div class="eyebrow">Ascend NPU · Profiling</div>
+      <h1>{{ title }}</h1>
+    </div>
+    <div class="header-stats">
+      {% if multi %}
+      <span class="hstat">{{ machine_count }} 台机器</span>
+      {% if runs | selectattr('kind', 'equalto', 'rank') | list %}
+      <span class="hstat">{{ runs | selectattr('kind', 'equalto', 'rank') | list | length }} 个 Rank 页签</span>
+      {% endif %}
+      {% else %}{% if runs %}
+      <span class="hstat">时间跨度 {{ '%.0f'|format(runs[0].summary.span_ms) }} ms</span>
+      <span class="hstat">事件 {{ runs[0].summary.event_count }}</span>{%- endif %}
+      {% endif %}
+    </div>
+  </div>
+</header>
+<main>
+
+{% if multi and groups | length > 1 %}
+<nav class="tabs machine-tabs">
+  <span class="tab-group-label">机器</span>
+  {% for g in groups %}
+  <button type="button" class="tab{% if loop.first %} active{% endif %}" data-mgroup="{{ g.idx }}">{{ g.label }}</button>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{% for g in groups %}
+<div class="mgroup" id="mgroup-{{ g.idx }}"{% if not loop.first %} hidden{% endif %}>
+
+{% if g.machine_ctx %}
+{% set m = g.machine_ctx %}
+{% set mi = g.idx %}
+{% set msprof = m.msprof %}
+{% set metrics = m.metrics %}
+{% set ttft = m.ttft %}
+{% set ttft_breakdown = m.ttft_breakdown %}
+<section class="machine-sec" id="machine-{{ mi }}">
+  <h2>机器级数据 · {{ m.label }}<span class="h2-note">（{{ m.ranks }} 个 rank · 事件合计 {{ m.event_count }} · 跨度 {{ '%.0f'|format(m.span_ms) }} ms）</span></h2>
+  {% if msprof and msprof.meta and (msprof.meta.torch_npu_version or msprof.meta.cann_version) %}
+  {% set pc = msprof.meta.profiler_config or {} %}
+  <p class="muted">环境：torch_npu {{ msprof.meta.torch_npu_version }} · CANN {{ msprof.meta.cann_version }}
+    {%- if pc.activities %} · 采集 {{ pc.activities | join("+") }}{% endif %}
+    {%- if pc.with_stack is defined %} · with_stack={{ pc.with_stack }}{% endif %}
+    {%- if pc.record_shapes is defined %} · record_shapes={{ pc.record_shapes }}{% endif %}
+    {%- if msprof.meta.parallel_groups %} · 并行组
+      {%- for g, ranks in msprof.meta.parallel_groups.items() %} {{ g }}{{ ranks }}{% endfor %}{% endif %}</p>
+  {% endif %}
+
+  <h3>TTFT 分解（机器级，来自插桩日志）</h3>
+  {% if ttft_breakdown and ttft_breakdown.composition %}
+  <div class="grid">
+    <div class="kpi primary"><div class="label">TTFT</div><div class="value">{% if ttft is not none %}{{ ttft }} ms{% else %}—{% endif %}</div></div>
+    <div class="kpi"><div class="label">插桩日志</div><div class="value">{{ ttft_breakdown.matched_lines }} 行</div></div>
+  </div>
+  <p class="muted">来源：{{ ttft_breakdown.source if ttft_breakdown.source else '容器日志' }} · 全量统计。
+    各段为独立打点（计数基准不同），「均值占比」为各段均值占链路均值之和的比例，不能直接相加还原单请求 TTFT。</p>
+  {% if ttft_breakdown.request_chain %}
+  <p class="muted">TTFT 卡片 = 每请求 8 段链路合计（hash/ext/alloc/overhead/load/forward/save/update）的 <b>p50</b>，
+    样本 {{ ttft_breakdown.request_chain.count }} 个完成请求：
+    mean {{ '%.1f'|format(ttft_breakdown.request_chain.mean_ms) }} ms ·
+    p95 {{ '%.1f'|format(ttft_breakdown.request_chain.p95_ms) }} ms ·
+    max {{ '%.1f'|format(ttft_breakdown.request_chain.max_ms) }} ms
+    （不含排队等待 / 分词 / 输出段）。</p>
+  {% endif %}
+  <div class="chart-row">
+    <div class="chart-title">TTFT 分解 · 各段平均耗时（ms，悬停查看 p50/p95/count）</div>
+    <div class="chart-box" id="chart-ttft-comp-m{{ mi }}"></div>
+  </div>
+  <h4>链路分段统计</h4>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>分段</th><th>count</th><th>mean (ms)</th><th>p50 (ms)</th><th>p95 (ms)</th><th>max (ms)</th><th>均值占比</th></tr></thead>
+    <tbody>
+    {% for r in ttft_breakdown.composition %}
+      <tr>
+        <td>{{ r.name }}</td><td>{{ r.count }}</td>
+        <td>{{ '%.3f' % r.mean_ms }}</td><td>{{ '%.3f' % r.p50_ms }}</td>
+        <td>{{ '%.3f' % r.p95_ms }}</td><td>{{ '%.3f' % r.max_ms }}</td>
+        <td>{{ '%.1f' % r.pct }}%</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <h4>KV pool 细分（vllm-ascend 插桩）</h4>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>分段</th><th>count</th><th>mean (ms)</th><th>p50 (ms)</th><th>p95 (ms)</th><th>max (ms)</th></tr></thead>
+    <tbody>
+    {% for r in ttft_breakdown.kvpool_rows %}
+      <tr>
+        <td>{{ r.name }}</td><td>{{ r.count }}</td>
+        <td>{{ '%.3f' % r.mean_ms }}</td><td>{{ '%.3f' % r.p50_ms }}</td>
+        <td>{{ '%.3f' % r.p95_ms }}</td><td>{{ '%.3f' % r.max_ms }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if ttft_breakdown.token_stats %}
+  <p class="muted">Token 命中统计：
+    {%- for k, v in ttft_breakdown.token_stats.items() %} {{ k }}: count={{ v.count }}, mean={{ '%.1f' % v.mean }}{% if not loop.last %} ·{% endif %}{% endfor %}</p>
+  {% endif %}
+  {% if metrics and metrics.available %}
+  <p class="muted">完整指标数据（含外部工具指标）不内嵌于报告以控制体积，见 run 目录 <code>metrics.json</code>。</p>
+  {% endif %}
+  {% elif metrics and metrics.available %}
+  <div class="grid">
+    <div class="kpi primary"><div class="label">TTFT</div><div class="value">{% if ttft is not none %}{{ ttft }} ms{% else %}—{% endif %}</div></div>
+  </div>
+  <p class="muted">完整指标数据不内嵌于报告以控制体积，见 run 目录 <code>metrics.json</code>。</p>
+  {% else %}
+  <p><span class="badge warn">数据源未接入</span>
+    {{ metrics.reason if metrics and metrics.reason else "metrics.json 未提供" }}。
+    通过 <code>parse_metrics.py --container &lt;name&gt; --log-file &lt;容器内日志路径&gt;</code> 解析插桩日志，
+    或 <code>--tool-cmd</code> 接入外部推导工具。</p>
+  {% endif %}
+
+  {% if m.step_total %}
+  <h3>逐步 Overlap（step_trace_time.csv，多 rank 取均值）</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>step</th><th class="num">Computing (ms)</th><th class="num">Comm (ms)</th><th class="num">Comm·NotOverlapped (ms)</th><th class="num">Overlapped (ms)</th><th class="num">Free (ms)</th><th class="num">Stage (ms)</th><th class="num">Bubble (ms)</th></tr></thead>
+    <tbody>
+    {% for s in m.step_display %}
+      <tr><td>{{ s.step }}</td>
+        <td class="num">{{ "%.2f"|format(s.computing_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.communication_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.comm_not_overlapped_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.overlapped_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.free_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.stage_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.bubble_us / 1000) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted">来源 msprof step_trace_time.csv；Computing/Communication/Overlapped/Free 与 Overlap Analysis 轨道同口径。
+    {%- if m.step_total > m.step_display|length %} 已截断显示前 {{ m.step_display|length }} / {{ m.step_total }} 步，全量见 run 目录 msprof_summary.json。{% endif %}</p>
+  {% endif %}
+
+  {% if msprof and msprof.api_statistic %}
+  <h3>Host API 统计（Top 20）</h3>
+  <p class="muted">来源 msprof api_statistic.csv（{{ msprof.api_statistic | length }} 项，按总耗时降序）。
+    Level：acl = AscendCL，runtime，node，communication 等。</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>level</th><th>API</th><th class="num">time (ms)</th><th class="num">count</th><th class="num">avg (us)</th><th class="num">min (us)</th><th class="num">max (us)</th></tr></thead>
+    <tbody>
+    {% for a in msprof.api_statistic[:20] %}
+      <tr><td>{{ a.level }}</td><td>{{ a.name }}</td>
+        <td class="num">{{ "%.2f"|format(a.time_us / 1000) }}</td>
+        <td class="num">{{ a.count }}</td>
+        <td class="num">{{ "%.1f"|format(a.avg_us) }}</td>
+        <td class="num">{{ "%.1f"|format(a.min_us) }}</td>
+        <td class="num">{{ "%.1f"|format(a.max_us) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+
+  {% if msprof and msprof.communication and msprof.communication.ops %}
+  {% set ct = msprof.communication.totals %}
+  <h3>通信耗时分解（communication.json，{{ msprof.communication.ops | length }} 类操作）</h3>
+  <div class="grid">
+    <div class="kpi"><div class="label">总时长</div><div class="value">{{ "%.1f"|format(ct.elapse_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">等待</div><div class="value">{{ "%.1f"|format(ct.wait_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">同步</div><div class="value">{{ "%.1f"|format(ct.sync_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">空闲</div><div class="value">{{ "%.1f"|format(ct.idle_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">传输</div><div class="value">{{ "%.1f"|format(ct.transit_ms) }} ms</div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-title">通信操作耗时构成 · Top 12（等待/同步/空闲/传输 堆叠，悬停查看）</div>
+    <div class="chart-box" id="chart-comm-stack-m{{ mi }}"></div>
+  </div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>op</th><th class="num">count</th><th class="num">elapse (ms)</th><th class="num">wait (ms)</th><th class="num">sync (ms)</th><th class="num">idle (ms)</th><th class="num">transit (ms)</th></tr></thead>
+    <tbody>
+    {% for c in msprof.communication.ops %}
+      <tr><td>{{ c.op }}</td><td class="num">{{ c.count }}</td>
+        <td class="num">{{ "%.2f"|format(c.elapse_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.wait_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.sync_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.idle_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.transit_ms) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if msprof and msprof.communication_matrix %}
+  <h3>通信矩阵（rank-pair，communication_matrix.json）</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>pair</th><th>transport</th><th class="num">size (MB)</th><th class="num">time (ms)</th><th class="num">带宽 (GB/s)</th><th class="num">ops</th></tr></thead>
+    <tbody>
+    {% for mtx in msprof.communication_matrix %}
+      <tr><td>{{ mtx.pair }}</td><td>{{ mtx.transport }}</td>
+        <td class="num">{{ "%.2f"|format(mtx.size_mb) }}</td>
+        <td class="num">{{ "%.3f"|format(mtx.time_ms) }}</td>
+        <td class="num">{{ "%.1f"|format(mtx.bandwidth_gbs) }}</td>
+        <td class="num">{{ mtx.ops }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% set rpanes = g.panes | selectattr('kind', 'equalto', 'rank') | list %}
+{% if rpanes | length > 1 %}
+<nav class="tabs rank-tabs">
+  <span class="tab-group-label">Rank</span>
+  {% for r in rpanes %}
+  <button type="button" class="tab{% if loop.first %} active{% endif %}" data-pane="pane-{{ r.idx }}">{{ r.label }}</button>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{% for run in g.panes %}
+{% set ri = run.idx %}
+{% set summary = run.summary %}
+{% set top = run.top %}
+{% set overlap = run.overlap %}
+{% set mem = run.mem %}
+{% set comm = run.comm %}
+{% set msprof = run.msprof %}
+{% set metrics = run.metrics %}
+{% set ttft = run.ttft %}
+{% set ttft_breakdown = run.ttft_breakdown %}
+{% set completeness = run.completeness %}
+{% set source = run.source %}
+{% set is_machine = run.kind == 'head' %}
+{% set secno = namespace(n=0) %}
+<div class="pane{% if run.kind == 'rank' %} rpane{% else %} hpane{% endif %}" id="pane-{{ ri }}"{% if run.tab_hidden %} hidden{% endif %}>
+<nav class="pane-nav">
+  <a class="chip" href="#sec-{{ ri }}-summary">汇总</a>
+  <a class="chip" href="#sec-{{ ri }}-top">Top 算子</a>
+  <a class="chip" href="#sec-{{ ri }}-npu">NPU 利用率</a>
+  <a class="chip" href="#sec-{{ ri }}-mem">内存</a>
+  <a class="chip" href="#sec-{{ ri }}-comm">通信</a>
+  {% if is_machine and msprof and msprof.api_statistic %}<a class="chip" href="#sec-{{ ri }}-api">Host API</a>{% endif %}
+  {% if is_machine %}<a class="chip" href="#sec-{{ ri }}-ttft">TTFT</a>{% endif %}
+  {% if completeness %}<a class="chip" href="#sec-{{ ri }}-complete">完整性</a>{% endif %}
+</nav>
+<p class="pane-src">source: {{ source }}</p>
+
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-summary">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>汇总统计</h2>
+  <div class="grid">
+    <div class="kpi"><div class="label">时间跨度</div><div class="value">{{ "%.1f"|format(summary.span_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">事件总数</div><div class="value">{{ summary.event_count }}</div></div>
+    <div class="kpi"><div class="label">内核 launch 数</div><div class="value">{{ summary.node_launch_count }}</div></div>
+    <div class="kpi"><div class="label">唯一内核</div><div class="value">{{ summary.unique_kernel_count }}</div></div>
+    <div class="kpi primary"><div class="label">TTFT</div><div class="value">{% if ttft is not none %}{{ ttft }} ms{% else %}—{% endif %}</div></div>
+  </div>
+  {% if msprof and msprof.meta and (msprof.meta.torch_npu_version or msprof.meta.cann_version) %}
+  {% set pc = msprof.meta.profiler_config or {} %}
+  <p class="muted">环境：torch_npu {{ msprof.meta.torch_npu_version }} · CANN {{ msprof.meta.cann_version }}
+    {%- if pc.activities %} · 采集 {{ pc.activities | join("+") }}{% endif %}
+    {%- if pc.with_stack is defined %} · with_stack={{ pc.with_stack }}{% endif %}
+    {%- if pc.record_shapes is defined %} · record_shapes={{ pc.record_shapes }}{% endif %}
+    {%- if msprof.meta.parallel_groups %} · 并行组
+      {%- for g, ranks in msprof.meta.parallel_groups.items() %} {{ g }}{{ ranks }}{% endfor %}{% endif %}</p>
+  {% endif %}
+
+  <h3>逻辑进程</h3>
+  <table>
+    <thead><tr><th>pid</th><th>name</th><th>label</th></tr></thead>
+    <tbody>
+    {% for p in summary.processes %}
+      <tr><td>{{ p.pid }}</td><td>{{ p.name }}</td><td>{{ p.label }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>事件类别</h3>
+  <table>
+    <thead><tr><th>cat</th><th class="num">count</th></tr></thead>
+    <tbody>
+    {% for k, v in summary.categories.items() %}
+      <tr><td>{{ k }}</td><td class="num">{{ v }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-top">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>Top-N 算子<span class="h2-note">（{{ run.top_source }}）</span></h2>
+
+  <div class="chart-row">
+    <div class="chart-title">Top kernels by total duration（悬停查看指标）</div>
+    <div class="chart-box" id="chart-top-kernels-{{ ri }}"></div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-title">Hardware task time by task type（悬停查看指标）</div>
+    <div class="chart-box" id="chart-task-types-{{ ri }}"></div>
+  </div>
+
+  <h3>Top {{ top.top|length }} / 共 {{ top.all_count }} 个内核（按总时长）</h3>
+  <div class="scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>kernel</th>
+        <th class="num">count</th>
+        <th class="num">total (us)</th>
+        <th class="num">avg (us)</th>
+        <th class="num">max (us)</th>
+        <th class="num">%</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in top.top %}
+      <tr>
+        <td>{{ r.kernel }}</td>
+        <td class="num">{{ r.count }}</td>
+        <td class="num">{{ "%.1f"|format(r.total_dur_us) }}</td>
+        <td class="num">{{ "%.2f"|format(r.avg_dur_us) }}</td>
+        <td class="num">{{ "%.1f"|format(r.max_dur_us) }}</td>
+        <td class="num">{{ "%.1f"|format(r.pct_of_kernel_time) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h3>硬件 task type 分布</h3>
+  <table>
+    <thead><tr><th>task type</th><th class="num">count</th><th class="num">total (us)</th></tr></thead>
+    <tbody>
+    {% for t in top.task_types %}
+      <tr><td>{{ t.type }}</td><td class="num">{{ t.count }}</td><td class="num">{{ "%.1f"|format(t.total_dur_us) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-npu">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>NPU 利用率<span class="h2-note">（Overlap Analysis）</span></h2>
+  <div class="chart-row">
+    <div class="chart-title">NPU utilization（悬停查看指标）</div>
+    <div class="chart-box" id="chart-overlap-{{ ri }}"></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-title">NPU activity timeline（悬停查看指标）</div>
+    <div class="chart-box" id="chart-overlap-timeline-{{ ri }}"></div>
+  </div>
+  <h3>轨道时长</h3>
+  <table>
+    <thead><tr><th>track</th><th class="num">count</th><th class="num">total (us)</th><th class="num">%</th></tr></thead>
+    <tbody>
+    {% for t in overlap.tracks %}
+      <tr><td>{{ t.track }}</td><td class="num">{{ t.count }}</td><td class="num">{{ "%.1f"|format(t.total_us) }}</td><td class="num">{{ "%.1f"|format(t.pct) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if is_machine and msprof and msprof.step_trace_time %}
+  <h3>逐步 Overlap（step_trace_time.csv，多 rank 取均值）</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>step</th><th class="num">Computing (ms)</th><th class="num">Comm (ms)</th><th class="num">Comm·NotOverlapped (ms)</th><th class="num">Overlapped (ms)</th><th class="num">Free (ms)</th><th class="num">Stage (ms)</th><th class="num">Bubble (ms)</th></tr></thead>
+    <tbody>
+    {% for s in run.step_display %}
+      <tr><td>{{ s.step }}</td>
+        <td class="num">{{ "%.2f"|format(s.computing_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.communication_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.comm_not_overlapped_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.overlapped_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.free_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.stage_us / 1000) }}</td>
+        <td class="num">{{ "%.2f"|format(s.bubble_us / 1000) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted">来源 msprof step_trace_time.csv；Computing/Communication/Overlapped/Free 与 Overlap Analysis 轨道同口径。
+    {%- if run.step_total > run.step_display|length %} 已截断显示前 {{ run.step_display|length }} / {{ run.step_total }} 步，全量见 run 目录 msprof_summary.json。{% endif %}</p>
+  {% endif %}
+</section>
+
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-mem">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>内存活动代理</h2>
+  <p class="muted">{{ mem.note }}{% if mem.h2d_d2h_bytes %} H2D/D2H 累计 {{ mem.h2d_d2h_bytes }} bytes。{% endif %}</p>
+  <div class="chart-row">
+    <div class="chart-title">Memcpy / empty_tensor / H2D-D2H（悬停查看指标）</div>
+    <div class="chart-box" id="chart-memory-{{ ri }}"></div>
+  </div>
+  <h3>活动量合计</h3>
+  <table>
+    <thead><tr><th>kind</th><th class="num">count</th><th class="num">total</th></tr></thead>
+    <tbody>
+    {% for k, v in mem.totals.items() %}
+      <tr><td>{{ k }}</td><td class="num">{{ mem.counts.get(k, 0) }}</td><td class="num">{{ "%.1f"|format(v) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-comm">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>通信</h2>
+  <div class="grid">
+    <div class="kpi"><div class="label">通信事件</div><div class="value">{{ comm.event_count }}</div></div>
+    <div class="kpi"><div class="label">总字节</div><div class="value">{{ comm.total_bytes }}</div></div>
+    <div class="kpi"><div class="label">平均带宽</div><div class="value">{{ "%.1f"|format(comm.avg_bandwidth_gbs) }} GB/s</div></div>
+    <div class="kpi"><div class="label">峰值带宽</div><div class="value">{{ "%.1f"|format(comm.max_bandwidth_gbs) }} GB/s</div></div>
+  </div>
+  <h3>按 task type</h3>
+  <table>
+    <thead><tr><th>type</th><th class="num">count</th><th class="num">bytes</th></tr></thead>
+    <tbody>
+    {% for t in comm.by_type %}
+      <tr><td>{{ t.type }}</td><td class="num">{{ t.count }}</td><td class="num">{{ t.bytes }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if is_machine and msprof and msprof.communication and msprof.communication.ops %}
+  {% set ct = msprof.communication.totals %}
+  <h3>通信耗时分解（communication.json，{{ msprof.communication.ops | length }} 类操作）</h3>
+  <div class="grid">
+    <div class="kpi"><div class="label">总时长</div><div class="value">{{ "%.1f"|format(ct.elapse_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">等待</div><div class="value">{{ "%.1f"|format(ct.wait_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">同步</div><div class="value">{{ "%.1f"|format(ct.sync_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">空闲</div><div class="value">{{ "%.1f"|format(ct.idle_ms) }} ms</div></div>
+    <div class="kpi"><div class="label">传输</div><div class="value">{{ "%.1f"|format(ct.transit_ms) }} ms</div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-title">通信操作耗时构成 · Top 12（等待/同步/空闲/传输 堆叠，悬停查看）</div>
+    <div class="chart-box" id="chart-comm-stack-{{ ri }}"></div>
+  </div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>op</th><th class="num">count</th><th class="num">elapse (ms)</th><th class="num">wait (ms)</th><th class="num">sync (ms)</th><th class="num">idle (ms)</th><th class="num">transit (ms)</th></tr></thead>
+    <tbody>
+    {% for c in msprof.communication.ops %}
+      <tr><td>{{ c.op }}</td><td class="num">{{ c.count }}</td>
+        <td class="num">{{ "%.2f"|format(c.elapse_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.wait_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.sync_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.idle_ms) }}</td>
+        <td class="num">{{ "%.2f"|format(c.transit_ms) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if is_machine and msprof and msprof.communication_matrix %}
+  <h3>通信矩阵（rank-pair，communication_matrix.json）</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>pair</th><th>transport</th><th class="num">size (MB)</th><th class="num">time (ms)</th><th class="num">带宽 (GB/s)</th><th class="num">ops</th></tr></thead>
+    <tbody>
+    {% for m in msprof.communication_matrix %}
+      <tr><td>{{ m.pair }}</td><td>{{ m.transport }}</td>
+        <td class="num">{{ "%.2f"|format(m.size_mb) }}</td>
+        <td class="num">{{ "%.3f"|format(m.time_ms) }}</td>
+        <td class="num">{{ "%.1f"|format(m.bandwidth_gbs) }}</td>
+        <td class="num">{{ m.ops }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+{% if is_machine and msprof and msprof.api_statistic %}
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-api">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>Host API 统计</h2>
+  <p class="muted">来源 msprof api_statistic.csv（{{ msprof.api_statistic | length }} 项，按总耗时降序 Top 20）。
+    Level：acl = AscendCL，runtime，node，communication 等。</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>level</th><th>API</th><th class="num">time (ms)</th><th class="num">count</th><th class="num">avg (us)</th><th class="num">min (us)</th><th class="num">max (us)</th></tr></thead>
+    <tbody>
+    {% for a in msprof.api_statistic[:20] %}
+      <tr><td>{{ a.level }}</td><td>{{ a.name }}</td>
+        <td class="num">{{ "%.2f"|format(a.time_us / 1000) }}</td>
+        <td class="num">{{ a.count }}</td>
+        <td class="num">{{ "%.1f"|format(a.avg_us) }}</td>
+        <td class="num">{{ "%.1f"|format(a.min_us) }}</td>
+        <td class="num">{{ "%.1f"|format(a.max_us) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+{% if is_machine %}
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-ttft">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>TTFT 分解</h2>
+  {% if ttft_breakdown and ttft_breakdown.composition %}
+  <div class="grid">
+    <div class="kpi primary"><div class="label">TTFT</div><div class="value">{% if ttft is not none %}{{ ttft }} ms{% else %}—{% endif %}</div></div>
+    <div class="kpi"><div class="label">插桩日志</div><div class="value">{{ ttft_breakdown.matched_lines }} 行</div></div>
+  </div>
+  <p class="muted">来源：{{ ttft_breakdown.source if ttft_breakdown.source else '容器日志' }} · 全量统计。
+    各段为独立打点（计数基准不同），「均值占比」为各段均值占链路均值之和的比例，不能直接相加还原单请求 TTFT。</p>
+  {% if ttft_breakdown.request_chain %}
+  <p class="muted">TTFT 卡片 = 每请求 8 段链路合计（hash/ext/alloc/overhead/load/forward/save/update）的 <b>p50</b>，
+    样本 {{ ttft_breakdown.request_chain.count }} 个完成请求：
+    mean {{ '%.1f'|format(ttft_breakdown.request_chain.mean_ms) }} ms ·
+    p95 {{ '%.1f'|format(ttft_breakdown.request_chain.p95_ms) }} ms ·
+    max {{ '%.1f'|format(ttft_breakdown.request_chain.max_ms) }} ms
+    （不含排队等待 / 分词 / 输出段）。</p>
+  {% endif %}
+  <div class="chart-row">
+    <div class="chart-title">TTFT 分解 · 各段平均耗时（ms，悬停查看 p50/p95/count）</div>
+    <div class="chart-box" id="chart-ttft-comp-{{ ri }}"></div>
+  </div>
+  <h3>链路分段统计</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>分段</th><th>count</th><th>mean (ms)</th><th>p50 (ms)</th><th>p95 (ms)</th><th>max (ms)</th><th>均值占比</th></tr></thead>
+    <tbody>
+    {% for r in ttft_breakdown.composition %}
+      <tr>
+        <td>{{ r.name }}</td><td>{{ r.count }}</td>
+        <td>{{ '%.3f' % r.mean_ms }}</td><td>{{ '%.3f' % r.p50_ms }}</td>
+        <td>{{ '%.3f' % r.p95_ms }}</td><td>{{ '%.3f' % r.max_ms }}</td>
+        <td>{{ '%.1f' % r.pct }}%</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <h3>KV pool 细分（vllm-ascend 插桩）</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>分段</th><th>count</th><th>mean (ms)</th><th>p50 (ms)</th><th>p95 (ms)</th><th>max (ms)</th></tr></thead>
+    <tbody>
+    {% for r in ttft_breakdown.kvpool_rows %}
+      <tr>
+        <td>{{ r.name }}</td><td>{{ r.count }}</td>
+        <td>{{ '%.3f' % r.mean_ms }}</td><td>{{ '%.3f' % r.p50_ms }}</td>
+        <td>{{ '%.3f' % r.p95_ms }}</td><td>{{ '%.3f' % r.max_ms }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if ttft_breakdown.token_stats %}
+  <p class="muted">Token 命中统计：
+    {%- for k, v in ttft_breakdown.token_stats.items() %} {{ k }}: count={{ v.count }}, mean={{ '%.1f' % v.mean }}{% if not loop.last %} ·{% endif %}{% endfor %}</p>
+  {% endif %}
+  {% if metrics and metrics.available %}
+  <p class="muted">完整指标数据（含外部工具指标）不内嵌于报告以控制体积，见 run 目录 <code>metrics.json</code>。</p>
+  {% endif %}
+  {% elif metrics and metrics.available %}
+  <div class="grid">
+    <div class="kpi primary"><div class="label">TTFT</div><div class="value">{% if ttft is not none %}{{ ttft }} ms{% else %}—{% endif %}</div></div>
+  </div>
+  <p class="muted">完整指标数据不内嵌于报告以控制体积，见 run 目录 <code>metrics.json</code>。</p>
+  {% else %}
+  <p><span class="badge warn">数据源未接入</span>
+    {{ metrics.reason if metrics and metrics.reason else "metrics.json 未提供" }}。
+    通过 <code>parse_metrics.py --container &lt;name&gt; --log-file &lt;容器内日志路径&gt;</code> 解析插桩日志，
+    或 <code>--tool-cmd</code> 接入外部推导工具。</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if completeness %}
+{% set secno.n = secno.n + 1 %}
+<section id="sec-{{ ri }}-complete">
+  <h2><span class="sec-num">{{ '%02d'|format(secno.n) }}</span>数据完整性
+    <span class="badge {{ completeness.overall }}">{{ completeness.overall }}</span>
+  </h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>check</th><th>status</th><th>detail</th></tr></thead>
+    <tbody>
+    {% for c in completeness.checks %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td><span class="badge {{ c.status }}">{{ c.status }}</span></td>
+        <td class="muted">{{ c.detail }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+</div>
+{% endfor %}
+
+</div>
+{% endfor %}
+
+</main>
+<footer>generated by vllm-ascend-profiling skill · self-contained single-file HTML · interactive charts</footer>
+
+<button id="back-to-top" type="button" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>
+</button>
+
+<script>{{ echarts_js | safe }}</script>
+<script>
+(function () {
+  'use strict';
+  var DATA = {{ chart_data | tojson }};
+  var COLORS = DATA.colors || {};
+  var FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Noto Sans SC", sans-serif';
+  var PALETTE = ['#c7000b', '#e8833a', '#2f6f9f', '#7048c8', '#0e9c8a', '#f2b542', '#8a8fd3', '#64748b'];
+  var MUTED_C = '#71798a', INK2_C = '#3d4655', LINE_C = '#e6e9ee';
+  var SPLIT_LINE = { lineStyle: { color: '#eef0f4', type: 'dashed' } };
+  var TOOLTIP = {
+    confine: true,
+    backgroundColor: '#fff',
+    borderColor: '#eceef2',
+    borderWidth: 1,
+    padding: [10, 14],
+    textStyle: { color: '#171c26', fontSize: 12 },
+    extraCssText: 'box-shadow:0 8px 24px rgba(23,28,38,.14);border-radius:10px;'
+  };
+  function gradH(c1, c2) {
+    return { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: c1 }, { offset: 1, color: c2 }] };
+  }
+  function gradV(c1, c2) {
+    return { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: c1 }, { offset: 1, color: c2 }] };
+  }
+  var fmt = function (v, n) { return Number(v).toFixed(n === undefined ? 2 : n); };
+  var esc = function (t) {
+    return String(t).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  function mkTopKernels(rows) {
+    rows = rows || [];
+    var names = rows.map(function (r) { return r.kernel; }).reverse();
+    var vals = rows.map(function (r) { return +(r.total_dur_us / 1000).toFixed(3); }).reverse();
+    return {
+      h: Math.max(200, rows.length * 24 + 56),
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        grid: { left: 8, right: 56, top: 8, bottom: 24, containLabel: true },
+        tooltip: Object.assign({}, TOOLTIP, {
+          formatter: function (p) {
+            var r = rows[rows.length - 1 - p.dataIndex];
+            if (!r) return '';
+            return '<b>' + esc(r.kernel) + '</b><br/>count: ' + r.count +
+              '<br/>total: ' + fmt(r.total_dur_us / 1000, 3) + ' ms' +
+              '<br/>avg: ' + fmt(r.avg_dur_us / 1000, 3) + ' ms' +
+              '<br/>max: ' + fmt(r.max_dur_us / 1000, 3) + ' ms' +
+              '<br/>占比: ' + fmt(r.pct_of_kernel_time) + '%';
+          }
+        }),
+        xAxis: {
+          type: 'value', axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: MUTED_C, fontSize: 11, formatter: function (v) { return v + ' ms'; } },
+          splitLine: SPLIT_LINE
+        },
+        yAxis: {
+          type: 'category', data: names,
+          axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { width: 320, overflow: 'truncate', color: INK2_C, fontSize: 11 }
+        },
+        series: [{
+          type: 'bar', data: vals, barMaxWidth: 18,
+          itemStyle: { borderRadius: [0, 4, 4, 0], color: gradH('#f2a49e', '#c7000b') },
+          label: { show: true, position: 'right', fontSize: 10, color: MUTED_C, formatter: function (p) { return fmt(p.value, 1); } }
+        }]
+      }
+    };
+  }
+
+  function mkTaskTypes(rows) {
+    rows = rows || [];
+    var total = rows.reduce(function (a, r) { return a + r.count; }, 0) || 1;
+    return {
+      h: 340,
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        color: PALETTE,
+        tooltip: Object.assign({}, TOOLTIP, {
+          formatter: function (p) {
+            var r = rows[p.dataIndex];
+            if (!r) return '';
+            return '<b>' + esc(r.type) + '</b><br/>count: ' + r.count +
+              '<br/>total: ' + fmt(r.total_dur_us / 1000, 1) + ' ms' +
+              '<br/>占比: ' + fmt(100 * r.count / total) + '%';
+          }
+        }),
+        title: {
+          text: String(total), subtext: '事件',
+          left: '50%', top: 'middle', textAlign: 'center',
+          textStyle: { color: '#171c26', fontSize: 24, fontWeight: 700 },
+          subtextStyle: { color: MUTED_C, fontSize: 11 }
+        },
+        legend: {
+          orient: 'vertical', right: 8, bottom: 8, icon: 'roundRect',
+          itemWidth: 11, itemHeight: 8, textStyle: { fontSize: 11, color: INK2_C }
+        },
+        series: [{
+          type: 'pie', radius: ['44%', '68%'], center: ['50%', '50%'],
+          data: rows.map(function (r) { return { name: r.type, value: r.count }; }),
+          label: { show: false },
+          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          emphasis: { scaleSize: 6, itemStyle: { shadowBlur: 14, shadowColor: 'rgba(23,28,38,.22)' } }
+        }]
+      }
+    };
+  }
+
+  function mkOverlap(tracks) {
+    var rows = (tracks || []).slice().reverse();
+    return {
+      h: Math.max(180, rows.length * 34 + 56),
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        grid: { left: 8, right: 52, top: 8, bottom: 24, containLabel: true },
+        tooltip: Object.assign({}, TOOLTIP, {
+          formatter: function (p) {
+            var r = rows[p.dataIndex];
+            if (!r) return '';
+            return '<b>' + esc(r.track) + '</b><br/>count: ' + r.count +
+              '<br/>total: ' + fmt(r.total_us / 1000, 1) + ' ms' +
+              '<br/>占比: ' + fmt(r.pct) + '%';
+          }
+        }),
+        xAxis: {
+          type: 'value', max: 100, axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: MUTED_C, fontSize: 11, formatter: function (v) { return v + '%'; } },
+          splitLine: SPLIT_LINE
+        },
+        yAxis: {
+          type: 'category', data: rows.map(function (r) { return r.track; }),
+          axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { color: INK2_C, fontSize: 11 }
+        },
+        series: [{
+          type: 'bar',
+          data: rows.map(function (r) {
+            return { value: +fmt(r.pct), itemStyle: { color: COLORS[r.track] || '#c7000b', borderRadius: [0, 4, 4, 0] } };
+          }),
+          barMaxWidth: 22,
+          label: { show: true, position: 'right', fontSize: 10, color: MUTED_C, formatter: function (p) { return fmt(p.value, 1) + '%'; } }
+        }]
+      }
+    };
+  }
+
+  function mkTimeline(tl) {
+    var segs = tl || [];
+    var FIXED = ['Computing', 'Communication', 'Communication(Not Overlapped)', 'Free'];
+    var seen = {}, rest = [];
+    segs.forEach(function (g) { if (!seen[g.track]) { seen[g.track] = 1; rest.push(g.track); } });
+    var trackNames = FIXED.filter(function (t) { return seen[t]; })
+      .concat(rest.filter(function (t) { return FIXED.indexOf(t) < 0; }));
+    var tIdx = {};
+    trackNames.forEach(function (t, i) { tIdx[t] = i; });
+    var t0 = segs.length ? segs[0].ts : 0;
+    segs.forEach(function (g) { if (g.ts < t0) t0 = g.ts; });
+    var data = segs.map(function (g) {
+      return [tIdx[g.track], +(((g.ts - t0) / 1000).toFixed(4)), +((g.dur / 1000).toFixed(4)), g.track];
+    });
+    var fmtDur = function (ms) { return ms >= 1 ? fmt(ms) + ' ms' : (ms * 1000).toFixed(1) + ' us'; };
+    return {
+      h: Math.max(220, trackNames.length * 54 + 70),
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        grid: { left: 8, right: 16, top: 10, bottom: 28, containLabel: true },
+        tooltip: Object.assign({}, TOOLTIP, {
+          formatter: function (p) {
+            var d = p.data;
+            return '<b>' + esc(d[3]) + '</b><br/>start: ' + fmtDur(d[1]) + '<br/>dur: ' + fmtDur(d[2]);
+          }
+        }),
+        xAxis: {
+          type: 'value', min: 0, axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { color: MUTED_C, fontSize: 11, formatter: function (v) { return fmt(v, 0) + ' ms'; } },
+          splitLine: SPLIT_LINE
+        },
+        yAxis: {
+          type: 'category', data: trackNames,
+          axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { fontSize: 11, color: INK2_C }
+        },
+        series: [{
+          type: 'custom',
+          renderItem: function (params, api) {
+            var yIdx = api.value(0);
+            var ts = api.value(1);
+            var dur = Math.max(api.value(2), 0.0002);
+            var p0 = api.coord([ts, yIdx]);
+            var p1 = api.coord([ts + dur, yIdx]);
+            var hRect = api.size([0, 1])[1] * 0.62;
+            return {
+              type: 'rect',
+              shape: { x: p0[0], y: p0[1] - hRect / 2, width: Math.max(p1[0] - p0[0], 1.2), height: hRect, r: 3 },
+              style: { fill: COLORS[trackNames[yIdx]] || '#94a3b8' }
+            };
+          },
+          data: data,
+          encode: { x: [1, 2], y: 0 },
+          clip: true
+        }]
+      }
+    };
+  }
+
+  function mkMemory(mem) {
+    mem = mem || {};
+    var series = mem.series || [];
+    var bm = mem.bucket_ms || 50;
+    var n = 0;
+    series.forEach(function (t) { n = Math.max(n, t.points.length); });
+    var x = [];
+    for (var i = 0; i < n; i++) x.push(+(i * bm).toFixed(1));
+    return {
+      h: 300,
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        legend: { top: 0, icon: 'roundRect', itemWidth: 11, itemHeight: 8, textStyle: { fontSize: 11, color: INK2_C } },
+        tooltip: Object.assign({}, TOOLTIP, {
+          trigger: 'axis',
+          formatter: function (ps) {
+            if (!ps || !ps.length) return '';
+            var out = ['<b>t = ' + esc(ps[0].axisValue) + ' ms</b>'];
+            ps.forEach(function (p) {
+              var t = series[p.seriesIndex];
+              out.push(p.marker + ' ' + esc(p.seriesName) + ': ' + fmt(p.value) + (t ? ' ' + t.unit : ''));
+            });
+            return out.join('<br/>');
+          }
+        }),
+        xAxis: {
+          type: 'category', data: x, boundaryGap: false,
+          axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { color: MUTED_C, fontSize: 11, formatter: function (v) { return v + ' ms'; } }
+        },
+        yAxis: [
+          { type: 'value', name: 'us', nameTextStyle: { color: MUTED_C }, axisLabel: { color: MUTED_C, fontSize: 11 }, splitLine: SPLIT_LINE },
+          { type: 'value', name: 'count', nameTextStyle: { color: MUTED_C }, axisLabel: { color: MUTED_C, fontSize: 11 }, splitLine: { show: false } }
+        ],
+        series: series.map(function (t, i) {
+          var isCount = t.unit === 'count';
+          var col = PALETTE[i % PALETTE.length];
+          return {
+            name: t.name, type: 'line', data: t.points, showSymbol: false,
+            yAxisIndex: isCount ? 1 : 0, sampling: 'lttb',
+            lineStyle: { width: 2, color: col }, itemStyle: { color: col },
+            areaStyle: { opacity: 0.07, color: col }
+          };
+        })
+      }
+    };
+  }
+
+  function mkTTFTComp(rows) {
+    rows = (rows || []).slice().reverse();
+    return {
+      h: Math.max(240, rows.length * 30 + 60),
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        grid: { left: 8, right: 56, top: 8, bottom: 24, containLabel: true },
+        tooltip: Object.assign({}, TOOLTIP, {
+          formatter: function (p) {
+            var r = rows[p.dataIndex];
+            if (!r) return '';
+            return '<b>' + esc(r.name) + '</b><br/>count: ' + r.count +
+              '<br/>mean: ' + fmt(r.mean_ms, 3) + ' ms<br/>p50: ' + fmt(r.p50_ms, 3) + ' ms' +
+              '<br/>p95: ' + fmt(r.p95_ms, 3) + ' ms<br/>max: ' + fmt(r.max_ms, 3) + ' ms' +
+              '<br/>均值占比: ' + fmt(r.pct) + '%';
+          }
+        }),
+        xAxis: {
+          type: 'value', axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: MUTED_C, fontSize: 11, formatter: function (v) { return v + ' ms'; } },
+          splitLine: SPLIT_LINE
+        },
+        yAxis: {
+          type: 'category', data: rows.map(function (r) { return r.name; }),
+          axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { interval: 0, width: 280, overflow: 'truncate', fontSize: 12, color: INK2_C }
+        },
+        series: [{
+          type: 'bar', barMaxWidth: 26,
+          data: rows.map(function (r, i) {
+            return {
+              value: +fmt(r.mean_ms, 3),
+              itemStyle: { color: PALETTE[(rows.length - 1 - i) % PALETTE.length], borderRadius: [0, 4, 4, 0] }
+            };
+          }),
+          label: { show: true, position: 'right', fontSize: 10, color: MUTED_C, formatter: function (p) { return fmt(p.value, 1); } }
+        }]
+      }
+    };
+  }
+
+  function mkCommStack(rows) {
+    rows = rows || [];
+    var segs = [
+      ['wait_ms', '等待', '#e8833a'],
+      ['sync_ms', '同步', '#7048c8'],
+      ['idle_ms', '空闲', '#a8b0bd'],
+      ['transit_ms', '传输', '#c7000b']
+    ];
+    return {
+      h: Math.max(220, rows.length * 30 + 70),
+      opt: {
+        animation: false,
+        textStyle: { fontFamily: FONT },
+        legend: { top: 0, icon: 'roundRect', itemWidth: 11, itemHeight: 8, textStyle: { fontSize: 11, color: INK2_C } },
+        tooltip: Object.assign({}, TOOLTIP, {
+          trigger: 'axis', axisPointer: { type: 'shadow' },
+          formatter: function (ps) {
+            if (!ps || !ps.length) return '';
+            var r = rows[rows.length - 1 - ps[0].dataIndex];
+            if (!r) return '';
+            var out = ['<b>' + esc(r.op) + '</b>'];
+            ps.forEach(function (p) {
+              out.push(p.marker + ' ' + p.seriesName + ': ' + fmt(p.value) + ' ms');
+            });
+            return out.join('<br/>');
+          }
+        }),
+        grid: { left: 8, right: 44, top: 30, bottom: 24, containLabel: true },
+        xAxis: {
+          type: 'value', axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: MUTED_C, fontSize: 11, formatter: function (v) { return v + ' ms'; } },
+          splitLine: SPLIT_LINE
+        },
+        yAxis: {
+          type: 'category', data: rows.map(function (r) { return r.op; }).reverse(),
+          axisLine: { lineStyle: { color: LINE_C } }, axisTick: { show: false },
+          axisLabel: { width: 280, overflow: 'truncate', color: INK2_C, fontSize: 11 }
+        },
+        series: segs.map(function (s, i) {
+          return {
+            name: s[1], type: 'bar', stack: 'comm', barMaxWidth: 18,
+            itemStyle: { color: s[2], borderRadius: i === segs.length - 1 ? [0, 4, 4, 0] : 0 },
+            data: rows.map(function (r) { return +fmt(r[s[0]], 3); }).reverse()
+          };
+        })
+      }
+    };
+  }
+
+  var BUILDERS = [
+    { id: 'chart-top-kernels-', build: function (r) { return mkTopKernels(r.top_kernels); } },
+    { id: 'chart-task-types-', build: function (r) { return mkTaskTypes(r.task_types); } },
+    { id: 'chart-overlap-', build: function (r) { return mkOverlap(r.overlap); } },
+    { id: 'chart-overlap-timeline-', build: function (r) { return mkTimeline(r.overlap_timeline); } },
+    { id: 'chart-memory-', build: function (r) { return mkMemory(r.memory); } },
+    { id: 'chart-comm-stack-', build: function (r) { return mkCommStack(r.comm_stack); } },
+    { id: 'chart-ttft-comp-', build: function (r) { return mkTTFTComp(r.ttft_comp); } }
+  ];
+
+  var charts = {};
+  var inited = {};
+
+  var MACHINE_BUILDERS = [
+    { id: 'chart-ttft-comp-m', build: function (m) { return mkTTFTComp(m.ttft_comp); } },
+    { id: 'chart-comm-stack-m', build: function (m) { return mkCommStack(m.comm_stack); } }
+  ];
+  var machineCharts = [];
+  var machineInited = {};
+
+  function initMachine(k) {
+    if (machineInited[k]) return;
+    machineInited[k] = true;
+    var m = (DATA.machines || [])[k];
+    if (!m) return;
+    MACHINE_BUILDERS.forEach(function (b) {
+      var el = document.getElementById(b.id + k);
+      if (!el) return;
+      var built = b.build(m);
+      if (!built) return;
+      var c = echarts.init(el, null, { renderer: 'canvas', height: built.h });
+      c.setOption(built.opt);
+      machineCharts.push(c);
+    });
+  }
+
+  function initVisibleMachines() {
+    var g = document.querySelector('.mgroup:not([hidden])');
+    var m = g && /^mgroup-(\d+)$/.exec(g.id || '');
+    if (m) initMachine(+m[1]);
+  }
+
+  function initPane(i) {
+    if (inited[i]) return;
+    inited[i] = true;
+    var r = (DATA.runs || [])[i];
+    if (!r) return;
+    charts[i] = [];
+    BUILDERS.forEach(function (b) {
+      var el = document.getElementById(b.id + i);
+      if (!el) return;
+      var built = b.build(r);
+      if (!built) return;
+      var c = echarts.init(el, null, { renderer: 'canvas', height: built.h });
+      c.setOption(built.opt);
+      charts[i].push(c);
+    });
+  }
+
+  function setupScrollSpy() {
+    var ticking = false;
+    function update() {
+      ticking = false;
+      var pane = document.querySelector('.mgroup:not([hidden]) .pane:not([hidden])');
+      if (!pane) return;
+      var nav = pane.querySelector('.pane-nav');
+      if (!nav) return;
+      var chips = Array.prototype.slice.call(nav.querySelectorAll('a.chip'));
+      if (!chips.length) return;
+      var firstSec = document.getElementById((chips[0].getAttribute('href') || '').slice(1));
+      var margin = firstSec ? (parseFloat(getComputedStyle(firstSec).scrollMarginTop) || 84) : 84;
+      var threshold = Math.max(nav.getBoundingClientRect().bottom + 12, margin + 8);
+      var current = null;
+      chips.forEach(function (a) {
+        var id = (a.getAttribute('href') || '').slice(1);
+        var sec = document.getElementById(id);
+        if (sec && sec.getBoundingClientRect().top <= threshold) current = a;
+      });
+      if (window.pageYOffset + window.innerHeight >= document.documentElement.scrollHeight - 60) {
+        current = chips[chips.length - 1];
+      }
+      chips.forEach(function (a) { a.classList.toggle('active', a === current); });
+    }
+    window.addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; window.requestAnimationFrame(update); }
+    }, { passive: true });
+    update();
+  }
+
+  function setupBackToTop() {
+    var btt = document.getElementById('back-to-top');
+    if (!btt) return;
+    window.addEventListener('scroll', function () {
+      btt.classList.toggle('show', window.pageYOffset > 480);
+    }, { passive: true });
+    btt.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  function initVisiblePanes() {
+    Array.prototype.slice.call(
+      document.querySelectorAll('.mgroup:not([hidden]) .pane:not([hidden])')
+    ).forEach(function (p) {
+      var m = /^pane-(\d+)$/.exec(p.id || '');
+      if (m) initPane(+m[1]);
+    });
+  }
+
+  function boot() {
+    initVisibleMachines();
+    var mtabs = Array.prototype.slice.call(document.querySelectorAll('.tab[data-mgroup]'));
+    mtabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        mtabs.forEach(function (x) { x.classList.remove('active'); });
+        t.classList.add('active');
+        var gid = t.getAttribute('data-mgroup');
+        Array.prototype.slice.call(document.querySelectorAll('.mgroup')).forEach(function (g) {
+          g.hidden = (g.id !== 'mgroup-' + gid);
+        });
+        initVisibleMachines();
+        initVisiblePanes();
+      });
+    });
+    var rtabs = Array.prototype.slice.call(document.querySelectorAll('.tab[data-pane]'));
+    rtabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        Array.prototype.slice.call(t.parentNode.querySelectorAll('.tab')).forEach(function (x) {
+          x.classList.remove('active');
+        });
+        t.classList.add('active');
+        var target = t.getAttribute('data-pane');
+        var group = t.closest('.mgroup') || document;
+        Array.prototype.slice.call(group.querySelectorAll('.pane.rpane')).forEach(function (p) {
+          p.hidden = (p.id !== target);
+        });
+        var m = /^pane-(\d+)$/.exec(target || '');
+        if (m) initPane(+m[1]);
+      });
+    });
+    initVisiblePanes();
+    window.addEventListener('resize', function () {
+      Object.keys(charts).forEach(function (k) {
+        (charts[k] || []).forEach(function (c) { c.resize(); });
+      });
+      machineCharts.forEach(function (c) { c.resize(); });
+    });
+    setupScrollSpy();
+    setupBackToTop();
+  }
+
+  window.REPORT_CHARTS = {
+    mkTopKernels: mkTopKernels, mkTaskTypes: mkTaskTypes, mkOverlap: mkOverlap,
+    mkTimeline: mkTimeline, mkMemory: mkMemory, mkTTFTComp: mkTTFTComp,
+    mkCommStack: mkCommStack, DATA: DATA
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>

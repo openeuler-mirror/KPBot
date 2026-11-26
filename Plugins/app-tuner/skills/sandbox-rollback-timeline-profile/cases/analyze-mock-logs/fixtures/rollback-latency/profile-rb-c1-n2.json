@@ -1,0 +1,1 @@
+{"case":"profile-rb-c1-n2","concurrency":1,"rounds":2,"dirty_mb":0,"raw":[{"seq":1,"wall_ms":60,"per_ms":60},{"seq":2,"wall_ms":80,"per_ms":80}]}

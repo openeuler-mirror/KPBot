@@ -1,0 +1,4 @@
+{
+  "irq_cpu_conflict_notes": ["672: mlx5_comp0"],
+  "fallback_notes": []
+}

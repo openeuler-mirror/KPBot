@@ -1,0 +1,73 @@
+              THIRD PARTY OPEN SOURCE SOFTWARE NOTICE
+
+
+Please note we provide an open source software notice for the third party
+open source software along with this software and/or this software component
+contributed by openEuler (in the following just "this SOFTWARE"). The open
+source software licenses are granted by the respective right holders.
+
+Warranty Disclaimer
+
+
+THE OPEN SOURCE SOFTWARE IN THIS SOFTWARE IS DISTRIBUTED IN THE HOPE THAT IT
+WILL BE USEFUL, BUT WITHOUT ANY WARRANTY, WITHOUT EVEN THE IMPLIED WARRANTY OF
+MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE. SEE THE APPLICABLE LICENSES
+FOR MORE DETAILS.
+
+Copyright Notice and License Texts
+
+
+Software: KPBot
+Copyright notice: Copyright (c) 2026 Huawei Technologies Co., Ltd. All rights reserved.
+License: Mulan PSL v2
+
+KPBot is licensed under the Mulan PSL v2. You can use this software according
+to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan
+PSL v2 at:
+
+     http://license.coscl.org.cn/MulanPSL2
+
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+See the Mulan PSL v2 for more details.
+
+Third Party Open Source Software
+
+Bundled component: prompt capture collection and analysis implementation
+Location: Plugins/app-tuner/skills/kptools-prompt-capture/
+Source: prompt_capture collection code, offline analysis tools and report assets;
+        import checksums and adaptation details are recorded in references/.
+License: MulanPSL-2.0 (see the repository LICENSE).
+The contributor has confirmed ownership or authorization to distribute the
+imported collection code, analysis tools, CSS and JavaScript under MulanPSL-2.0.
+The vllm-ascend business proxy itself is not bundled by this skill.
+
+Bundled components: vLLM and vLLM-Ascend source and TTFT modifications
+Location: Plugins/app-tuner/skills/kptools-vllm-ttft/payload/
+          Plugins/app-tuner/skills/kptools-vllm-ttft/scripts/gen_ttft_report.py
+License: Apache-2.0. See the skill's references/provenance.md and
+         references/LICENSE-Apache-2.0.txt for sources and license text.
+Original copyright notices are preserved in the bundled source.
+
+The external tools and services referenced by KPBot skills (such as openwiki,
+profiling tools and platform CLIs) are invoked at runtime and are not bundled
+in this repository. Their copyrights and licenses belong to their respective
+owners.
+
+The DSH adapter depends on the npm package "yaml" (https://eemeli.org/yaml/),
+licensed under ISC. It is installed as a dependency rather than vendored here.
+
+Copyright Eemeli Aro <eemeli@gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.

@@ -1,0 +1,11 @@
+name: run-sql-contract
+skill: flink-velox-e2e-verify
+tier: A
+entrypoint: ["python3", "cases/run-sql-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true

@@ -1,0 +1,7 @@
+name: cubesandbox-replica-metadata-ttl-sequential-ttl
+skill: cubesandbox-replica-metadata-ttl
+tier: B
+entrypoint: ["python3", "cases/sequential-ttl/run.py"]
+assert:
+  - type: exit_code
+    expect: 0

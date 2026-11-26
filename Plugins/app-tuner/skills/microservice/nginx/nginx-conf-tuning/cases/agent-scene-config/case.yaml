@@ -1,0 +1,56 @@
+# 用例：agent 级端到端 —— nginx 场景识别与配置决策
+#
+# 说明：tier agent。给定一个具体部署场景（https 短连接网关、4 核 VM、压测环境），
+# 验证 agent 是否按 skill 的场景四要素与决策表产出正确的 nginx.conf 关键决策。
+# with-skill 在容器内接入 nginx-conf-tuning（仅 SKILL.md + references/，不含评分材料）；
+# without-skill 不接入任何 skill，任务完全相同。
+#
+# 构建/运行（在 KPBot 插件根目录，需容器可访问模型 API）：
+#   docker build \
+#     -f skills/microservice/nginx/nginx-conf-tuning/cases/agent-scene-config/Dockerfile \
+#     -t kpbot/app-tuner-agent-nginx-conf-scene-config:1.0-openeuler24.03 .
+#   ./run_ab.sh --save results-ab
+
+name: agent-scene-config
+skill: nginx-conf-tuning
+tier: agent
+
+image: kpbot/app-tuner-agent-nginx-conf-scene-config:1.0-openeuler24.03
+model: deepseek/deepseek-v4-flash
+auth: env_injection          # auth.json 整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载
+
+ab:
+  conditions: [with, without]
+  skill_enabled:
+    with: true
+    without: false
+  metric: assertion_pass_rate
+  uplift: pass_rate_with - pass_rate_without   # 差值，与 run_ab.sh 口径一致
+
+build:
+  context: ../../../../../..
+  dockerfile: skills/microservice/nginx/nginx-conf-tuning/cases/agent-scene-config/Dockerfile
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires:
+  - opencode 二进制（运行时只读挂载，宿主路径需通过白名单校验）
+  - opencode auth.json（整文件 base64 经 OPENCODE_AUTH_JSON env 注入，不挂载）
+  - 容器可访问模型 API（默认 bridge；确需 host 时显式 DOCKER_RUN_ARGS=--network=host）
+
+env_vars:
+  MODEL: deepseek/deepseek-v4-flash
+  SKILL_MODE: with
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: skills_invoked
+    op: contains
+    value: nginx-conf-tuning

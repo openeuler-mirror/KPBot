@@ -1,0 +1,14 @@
+{
+  "verdict": "imbalanced",
+  "signals": ["I1", "I2", "I3"],
+  "recommendation": {
+    "action": "optimize_dynamic",
+    "memory": {"verdict": "ample", "affordable_redundant": 64},
+    "handoff": {
+      "mode": "dynamic",
+      "redundant_experts": 16,
+      "window_size": 1000,
+      "step_interval": 1000
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "skill_name": "kptools-tpsplit-check",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "线上这套 Prefill 集群现在是 TP32，单卡 64G，我想知道还能不能把 TP 切小多开几个 DP 实例，先做个可行性测算，别动线上配置。",
+      "expected_output": "宿主机跑 collect_env.sh（--script 优先，日志/模型在容器里时 --docker 走 docker exec 读）拿 facts.env，再跑 analyze_feasibility.py 扫候选 TP，产出 9 段结构报告（三分类拆桶+日志校准+容量校验+DP 收益+参数 diff），全程只读",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "GLM5.2 W4A8 这套 160 卡部署，TP32 改 TP8 每卡权重会涨多少？显存还够吗？",
+      "expected_output": "按复制/TP/EP 三桶拆权重：EP 桶占九成且按 ep_group 除不随 TP 变，TP32→8 每卡只涨 ~0.9G 而不是 ×4；给出 KV 池、每 DP token 容量校验和 DP 5→20（×4）收益表",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "容器里跑 npu-smi 没输出，之前采的 facts 单卡显存全空，报告里的可用显存一直不对。",
+      "expected_output": "指出采集必须在宿主机执行（容器内 npu-smi 常返回空）；可用口径优先读日志 Desired usage(total) 行，其次日志权重+KV+Total 反推开销，总显存×util−保留 只是兜底并会告警 2-3 GiB 偏差",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "启动脚本里写的是 --tensor-parallel-size $p_tp_size，采集出来的 TP_SIZE 是个变量名字符串，怎么拿到真实值？",
+      "expected_output": "collect_env.sh --script 解析启动脚本的赋值行（export/成对单双引号/行尾注释）并递归展开 $VAR / ${VAR} / ${VAR:-默认}（最多 20 层）；宿主机 ps 会抓到别的容器实例，--script 才是参数可靠来源",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "帮我看下这套部署单卡显存都被什么占了：MTP、激活各占多少，KV cache 还能放多少 token。",
+      "expected_output": "权重按复制/TP/EP/未归类四桶拆解，MTP 层与普通层同规则分桶（不整层算复制）；KV token 容量用日志 KV池÷token数 实测反推（或 Maximum concurrency×max_model_len），config 公式只做兜底并标注 DSA 低估；每个数字带来源标记（实测/日志推算/假设）",
+      "files": []
+    }
+  ]
+}

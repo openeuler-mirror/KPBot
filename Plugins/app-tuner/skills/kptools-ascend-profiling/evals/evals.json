@@ -1,0 +1,25 @@
+{
+  "skill_name": "kptools-ascend-profiling",
+  "evals": [
+    {
+      "id": "AP-E01",
+      "query": "分析 vLLM 推理服务的 NPU 算子热点",
+      "expected": "方案一 pt-start/pt-stop + pt-analyse（服务需已注入 profiler-config）"
+    },
+    {
+      "id": "AP-E02",
+      "query": "看看 HCCL 通信耗时分布",
+      "expected": "方案二 msp-enable（Communication domain）→ msp-parse"
+    },
+    {
+      "id": "AP-E03",
+      "query": "训练每个 step 的 forward/backward 耗时分解",
+      "expected": "方案一 step_trace_time.csv（pt-analyse 产物）"
+    },
+    {
+      "id": "AP-E04",
+      "query": "对比 CPU 侧和 NPU 侧谁是大头",
+      "expected": "本 SKILL（NPU 侧）与 kptools-py-spy（CPU 侧）配合，异构 trace 分析"
+    }
+  ]
+}

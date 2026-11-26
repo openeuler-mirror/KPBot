@@ -1,0 +1,30 @@
+{
+  "skill_name": "kptools-os-collector",
+  "evals": [
+    {
+      "id": "OS-E01",
+      "query": "环境诊断：采集 OS 配置基线",
+      "expected": "--all 输出全部分节"
+    },
+    {
+      "id": "OS-E02",
+      "query": "看看 THP 和 HugePages 配置",
+      "expected": "--thp + --hugepages"
+    },
+    {
+      "id": "OS-E03",
+      "query": "检查 ulimit nofile 是否够用",
+      "expected": "--ulimit（进程级需求提示配合 kptools-proc-collector /proc/PID/limits）"
+    },
+    {
+      "id": "OS-E04",
+      "query": "检查容器资源边界",
+      "expected": "--cgroup（v2 优先 v1 回退）+ --virt"
+    },
+    {
+      "id": "OS-E05",
+      "query": "perf 采不到事件，看看权限",
+      "expected": "--perf 输出 perf_event_paranoid/kptr_restrict + 事件枚举"
+    }
+  ]
+}

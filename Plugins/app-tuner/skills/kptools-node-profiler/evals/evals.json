@@ -1,0 +1,25 @@
+{
+  "skill_name": "kptools-node-profiler",
+  "evals": [
+    {
+      "id": "NP-E01",
+      "query": "分析 Node.js 网关服务的 CPU 热点",
+      "expected": "--guide 注入指引 → 用户重启注入 → --parse/--parse-dir 解析"
+    },
+    {
+      "id": "NP-E02",
+      "query": "已有 isolate 日志，帮我解析火焰图",
+      "expected": "--parse -f / --parse-dir -d"
+    },
+    {
+      "id": "NP-E03",
+      "query": "Node 服务用 --cpu-prof 跑出来的文件怎么分析",
+      "expected": "--cpuprofile 定位 + Chrome DevTools/speedscope 指引"
+    },
+    {
+      "id": "NP-E04",
+      "query": "这个 Node 进程能直接 attach 采样吗",
+      "expected": "说明 V8 无 attach 能力，输出 --guide 注入指引"
+    }
+  ]
+}

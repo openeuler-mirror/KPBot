@@ -41,6 +41,7 @@ from log_handler import (  # noqa: E402
 )
 from safe_env import child_env  # noqa: E402
 from session_manager import SessionManager  # noqa: E402
+from worker_profiles import get_profile  # noqa: E402
 
 
 FINAL_RE = re.compile(
@@ -474,7 +475,6 @@ def resolve_command(command: list[str], env: dict[str, str]) -> list[str]:
         return [resolved] + command[1:]
     raise FileNotFoundError(f"command not found: {executable}; searched PATH={env.get('PATH', '')}")
 
-
 def load_answer_bank(path: Path | None) -> str:
     if not path:
         return ""
@@ -518,7 +518,7 @@ def max_repeats_for_key(key: str, default_max_prompt_repeats: int) -> int:
     return default_max_prompt_repeats
 
 
-def answer_for(buffer: str, answer_bank: str, reply_counts: dict[str, int]) -> tuple[str, str] | None:
+def answer_for(buffer: str, answer_bank: str, reply_counts: dict[str, int], worker=None) -> tuple[str, str] | None:
     text = clean_terminal_text(buffer)
     recent = text[-RECENT_CONTEXT_CHARS:]
     prompt_area = text[-PROMPT_AREA_CHARS:]
@@ -526,16 +526,22 @@ def answer_for(buffer: str, answer_bank: str, reply_counts: dict[str, int]) -> t
     selection_ui = bool(SELECTION_UI_RE.search(prompt_area) or explicit_input_prompt)
     agent_status_ui = bool(AGENT_STATUS_UI_RE.search(prompt_area))
     settings_warning = bool(SETTINGS_WARNING_RE.search(prompt_area))
-    worker_busy = bool(WORKER_BUSY_RE.search(prompt_area))
+    busy_re = worker.busy_re if worker is not None else WORKER_BUSY_RE
+    ready_re = worker.ready_re if worker is not None else re.compile(
+        r"(What would you like|How can I help|Try\s*\"|❯|>)", re.I
+    )
+    worker_busy = bool(busy_re.search(prompt_area))
+    # opencode repaints its input box every frame even while busy; only treat
+    # the box as "ready for input" when the busy indicators are absent.
+    ready_prompt = bool(ready_re.search(prompt_area)) and (
+        worker is None or worker.name == "claude" or not worker_busy
+    )
 
     if RECAP_PAUSE_RE.search(prompt_area) and not worker_busy:
         return ("recap_continue", "继续\n")
 
     if settings_warning and not worker_busy:
         return ("settings_warning_continue", "\n")
-
-    if selection_ui and worker_busy and not explicit_input_prompt:
-        return None
 
     if re.search(
         r"(Quick\s+safety\s+check|Security\s*guide|Do\s+you\s+trust\s+.*folder|trust\s+this\s+folder|I\s+trust\s+this\s+folder|Itrustthisfolder)",
@@ -544,13 +550,15 @@ def answer_for(buffer: str, answer_bank: str, reply_counts: dict[str, int]) -> t
     ):
         return ("trust_workspace", "1\n")
 
-    ready_prompt = re.search(
-        r"(What would you like|How can I help|Try\s*\"|Try\"|foragents|cwd|❯|>)",
-        prompt_area,
-        re.I,
-    )
+    if re.search(r"(BypassPermissionsmode|Yes,Iaccept)", prompt_area, re.I):
+        return ("bypass_accept", "2\n")
+
+    if selection_ui and worker_busy and not explicit_input_prompt:
+        return None
+
     if ready_prompt and not selection_ui and "start_pipeline" not in reply_counts:
-        return ("start_pipeline", "/kpbot-code-optimizer\n")
+        start_cmd = worker.start_pipeline_cmd if worker is not None else "/kpbot-code-optimizer"
+        return ("start_pipeline", f"{start_cmd}\n")
 
     if selection_ui and re.search(r"(运行模式|pipeline_mode|自动模式|collaboration)", prompt_area, re.I):
         return ("mode_auto", "\x1b[B\n")
@@ -693,20 +701,37 @@ def run_session(args: argparse.Namespace) -> dict[str, Any]:
     log_dir = Path(args.log_dir).expanduser().resolve()
     answer_bank = load_answer_bank(Path(args.answer_bank_file).expanduser().resolve() if args.answer_bank_file else None)
     env = child_env(args.claude_bin)
-    command = resolve_command(args.command or ["claude"], env)
+    worker = get_profile(getattr(args, "worker_type", None) or "claude", args.claude_bin)
+    if getattr(args, "worker_type", None) == "opencode" or (
+        not getattr(args, "worker_type", None) and args.command and args.command[0] == "opencode"
+    ):
+        # explicit command args take precedence over the profile default
+        if args.command:
+            worker = get_profile("opencode", args.claude_bin)
+            worker = type(worker)(name=worker.name, command=args.command, ready_re=worker.ready_re,
+                                  busy_re=worker.busy_re, exit_cmd=worker.exit_cmd,
+                                  noise_re=worker.noise_re, start_pipeline_cmd=worker.start_pipeline_cmd,
+                                  ready_stable_seconds=worker.ready_stable_seconds)
+    command = resolve_command(args.command or worker.command, env)
 
     session = SessionManager(project_path, log_dir, command, args)
+    meta = session.meta
     recorder = session.recorder()
     session.write_running_result()
 
     master_fd, slave_fd = pty.openpty()
+    child_environ = env
+    if worker.name == "opencode" and (not env.get("TERM") or env.get("TERM") == "dumb"):
+        # opentui cannot render/accept input with a dumb terminal; the probe
+        # confirmed injection silently no-ops in that case.
+        child_environ = {**env, "TERM": "xterm-256color"}
     proc = subprocess.Popen(
         command,
         cwd=str(project_path),
         stdin=slave_fd,
         stdout=slave_fd,
         stderr=slave_fd,
-        env=env,
+        env=child_environ,
         close_fds=True,
     )
     os.close(slave_fd)
@@ -865,10 +890,10 @@ def run_session(args: argparse.Namespace) -> dict[str, Any]:
 
             if final_seen_at is not None:
                 if not exit_sent and now - final_seen_at > 3:
-                    msg = "/exit\n"
-                    os.write(master_fd, msg.replace("\n", "\r").encode("utf-8"))
-                    recorder.input(msg)
-                    add_worker_input(msg)
+                    msg = worker.exit_cmd
+                    os.write(master_fd, msg)
+                    recorder.input(msg.decode("utf-8", "replace"))
+                    add_worker_input(msg.decode("utf-8", "replace"))
                     exit_sent = True
                 if exit_sent and now - final_seen_at > 20:
                     status = "completed"
@@ -894,7 +919,7 @@ def run_session(args: argparse.Namespace) -> dict[str, Any]:
                     emit_progress(force=True, message="context soft limit rollover requested")
                     answer = None
                 else:
-                    answer = answer_for(buffer, answer_bank, reply_counts)
+                    answer = answer_for(buffer, answer_bank, reply_counts, worker)
                 if answer:
                     key, message = answer
                     if key == "nudge_continue" and now - last_output < args.nudge_after_seconds:
@@ -970,6 +995,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-dir", required=True)
     parser.add_argument("--answer-bank-file")
     parser.add_argument("--claude-bin")
+    parser.add_argument(
+        "--worker-type",
+        choices=["claude", "opencode"],
+        default=None,
+        help="TUI worker to drive; inferred from command when omitted",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--idle-timeout-seconds", type=int, default=DEFAULT_IDLE_TIMEOUT_SECONDS)
     parser.add_argument("--max-prompt-repeats", type=int, default=DEFAULT_MAX_PROMPT_REPEATS)
