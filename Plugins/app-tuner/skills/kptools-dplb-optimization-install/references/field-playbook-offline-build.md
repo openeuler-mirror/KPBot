@@ -85,11 +85,23 @@ mkdir -p /tmp/mm-src/vendor/libc
 tar -xzf /tmp/libc-0.2.191.crate -C /tmp/mm-src/vendor/libc --strip-components=1
 ```
 
-`/tmp/mm-src/vendor/libc/.cargo-checksum.json`（内容为 crate 的 sha256）：
+`/tmp/mm-src/vendor/libc/.cargo-checksum.json`（**内容必须从 crates.io 下载时核对的
+实际 sha256 提取，不要写死预设值**——上传/解包内容变化时写死值无法检出）：
 
-```json
-{"files":{},"package":"65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"}
+```bash
+# 下载 .crate 后，先核对实际 sha256（crates.io 页面或 python3 -c "import hashlib; ..." 均可），
+# 再提取归档内 .cargo-checksum.json（这是 crates.io 构建时生成的逐文件校验，带 files 字典——
+# 覆盖每个文件的独立摘要，比手写一行更能检出传输/解包异常）：
+tar -xzf /tmp/libc-0.2.191.crate -O .cargo-checksum.json > /tmp/mm-src/vendor/libc/.cargo-checksum.json
+# 核对提取的 package 摘要与 crate 整体 sha256 一致（不一致说明解包出错或被篡改，重新上传）：
+python3 -c "import json,hashlib; ck=json.load(open('/tmp/mm-src/vendor/libc/.cargo-checksum.json')); sha=hashlib.sha256(open('/tmp/libc-0.2.191.crate','rb').read()).hexdigest(); assert ck.get('package')==sha, f'checksum mismatch: cargo={ck.get(\"package\")[:12]} file={sha[:12]}'"
+# 确认 files 字典非空（crates.io 构建包应包含逐文件摘要）：
+python3 -c "import json; ck=json.load(open('/tmp/mm-src/vendor/libc/.cargo-checksum.json')); assert len(ck.get('files',{}))>0, 'files 为空——手写预设摘要无法检出逐文件变化，改用完整 crate 归档中的原始 checksum'"
 ```
+
+备选方案（更完备）：用 `cargo vendor` 生成完整 vendor 目录（在可联网的构建机上执行
+`cargo vendor` 后把整个 `vendor/` 目录连同各自的 .cargo-checksum.json 上传），
+保留逐文件校验与完整目录结构。
 
 `/tmp/mm-src/.cargo/config.toml`（把 crates.io 替换为本地 vendor 目录）：
 

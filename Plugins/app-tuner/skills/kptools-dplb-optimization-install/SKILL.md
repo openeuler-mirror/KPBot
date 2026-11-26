@@ -62,6 +62,7 @@ curl -m 5 -sI https://gitcode.com >/dev/null && echo OK || echo UNREACHABLE   # 
 
 - 编译环境缺失时，先与用户确认是否允许 `yum/dnf install` 安装依赖，不要静默装系统包
 - 检查是否已有旧版本：`pip3 show motor`（**包名是 `motor` 不是 `mindie-motor`**——motor 3.x whl 元数据 `Name: motor`，用错名字永远查不到），有则询问覆盖还是并存；覆盖（升级/重装）先按下方停服纪律停旧
+  - **同名异包防误判**：PyPI 的 MongoDB 异步驱动同样叫 `motor`（`pip show motor` 与 `import motor` 均命中）——发现已有 `motor` 时，先核对 **MindIE 专属特征**（`python3 -c "import motor.coordinator"` 成功且 `motor/__file__` 同级有 `libmindie_workload_shm.so`）再判定是旧 MindIE Motor；仅命中 `pip show motor` 但无 coordinator 模块即为 MongoDB 驱动（其他应用的依赖），**禁止覆盖安装**——改用独立虚拟环境（`python3 -m venv /opt/motor-venv && source /opt/motor-venv/bin/activate` 后在 venv 内安装本 skill 的 motor），避免破坏其他应用
 - 外网不可达时立即反馈用户"远端无法访问外网"，给出替代建议（改用方式 A 上传 whl、依赖 whl 由本地经内网镜像下载后上传、用户提供离线源码包），让用户选择，不要自行切换方案后闷头继续
 
 ## 阶段 2：安装（按用户选择的方式二选一）
@@ -84,25 +85,44 @@ curl -m 5 -sI https://gitcode.com >/dev/null && echo OK || echo UNREACHABLE   # 
 #    例：motor-xxx-py3-none-any.whl 或早期命名的 mindie_motor-xxx.whl -> /tmp/mindie-motor-whl/
 #    注意：whl 元数据无 Requires-Dist，pip 安装它不会自动装任何运行依赖；
 #    依赖按上游 requirements.txt 全量补（见第 4 步），缺模块时启动报 ModuleNotFoundError
-# 2. 检查运行依赖是否已存在（完整清单以对应版本 requirements.txt 为准，此处探代表性硬 import）
-python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn" 2>/dev/null && echo DEPS_OK || echo DEPS_MISSING
+# 2. 检查运行依赖——用目标解释器核对 requirements.txt 全量（不只探测 8 个硬 import 模块）：
+#    八个硬 import 只是快速探测（DEPS_OK/DEPS_MISSING）；**交付验证必须用完整清单核对**——
+#    向用户索取/从源码仓库获取对应版本 requirements.txt 后，用目标解释器逐项核对：
+python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn" 2>/dev/null && echo DEPS_PROBE_OK || echo DEPS_MISSING
+#    完整核对（在目标解释器上，版本号以 requirements.txt 为准）：
+pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
+#    上述命令会解析全量依赖并补齐缺失项/版本不满足项（--dry-run 先预览再装，无 --dry-run 直接装）
 # 3. 安装前断言 whl 含原生库（用户拿到的"编译好的 whl"也可能是 pip wheel 空壳，同 ISS-09）。
-#    文件名可能是 motor-*.whl 或 mindie_motor-*.whl，统一用 *motor*.whl 匹配，并防空 glob：
-python3 -c "import zipfile,glob; w=glob.glob('/tmp/mindie-motor-whl/*motor*.whl'); assert w, '目录下找不到 motor whl（*motor*.whl）'; names=zipfile.ZipFile(w[0]).namelist(); assert any(n.endswith('libmindie_workload_shm.so') for n in names), '空壳 whl：缺 libmindie_workload_shm.so，coordinator 起不来，需换完整 whl'; print('native lib OK:', w[0])"
-#    （用户自备的 whl 若确为官方/完整包，此断言秒过；空壳则当场拦截，避免装完才发现起不来）
-# 4. 安装（DEPS_OK 时跳过依赖安装，只装 whl 本体）
+#    **选定一个明确的 whl 文件**（不要 glob——目录含多个 whl 时，校验的是第一个、安装却传全部，
+#    冲突时安装可能失败；由用户指定或列出后选唯一匹配），校验和安装使用同一路径：
+ls /tmp/mindie-motor-whl/*motor*.whl   # 列出后由用户选定或唯一匹配时自动选
+python3 -c "import zipfile,sys; w=sys.argv[1]; names=zipfile.ZipFile(w).namelist(); assert any(n.endswith('libmindie_workload_shm.so') for n in names), '空壳 whl：缺 libmindie_workload_shm.so'; print('native lib OK:', w)" /tmp/mindie-motor-whl/<选定的文件名>.whl
+# 4. 安装（依赖已按 requirements.txt 全量核对/补装后，只装 whl 本体）
 #    在线环境装依赖：向用户索取/从源码仓库获取对应版本 requirements.txt 后
 #      pip3 install -r requirements.txt
-#    离线环境按上游 standalone.md 附录 A 全量下载后上传安装：
+#    离线环境按上游 standalone.md 附录 A 全量下载后上传安装。
+#    **先采集目标解释器版本/ABI/平台标签，据此生成 pip download 参数**（不要写死 Python 3.11）：
+#      目标解释器版本：远端 python3 --version（如 3.12.3）
+#      平台标签：     远端 python3 -c "import sysconfig; print(sysconfig.get_platform())"（如 linux-aarch64）
+#      ABI 标签：     远端 python3 -c "import sysconfig; print(sysconfig.get_config_var('SOABI'))"（如 cpython-312-aarch64-linux-gnu）
 #      本地：pip download -r requirements.txt -d /tmp/offline_pkgs \
-#              --python-version 3.11 --platform manylinux2014_<aarch64|x86_64> --only-binary=:all:
+#              --python-version <目标版本，如 3.12> --platform manylinux2014_<aarch64|x86_64> --only-binary=:all:
 #      上传 /tmp/offline_pkgs 到远端后：pip3 install /tmp/offline_pkgs/*.whl
-#    whl 本体安装（--force-reinstall 而非 --upgrade：同版本号换 whl 内容时 --upgrade 不会重装）：
-pip3 install --no-deps --force-reinstall /tmp/mindie-motor-whl/*motor*.whl
+#    whl 本体安装（--force-reinstall 而非 --upgrade：同版本号换 whl 内容时 --upgrade 不会重装）；
+#    **用第 3 步选定的明确文件名安装，不要 glob**（glob 会把多个匹配项都传给 pip，冲突时安装失败）：
+pip3 install --no-deps --force-reinstall /tmp/mindie-motor-whl/<第 3 步选定的文件名>.whl
 # 5. 验证（3.x 包名为 motor——pip3 show motor；早期 1.x whl 包名可能是 mindie_motor，
 #    对应 pip3 show mindie_motor；入口模块 motor.coordinator；在源码目录之外执行）
-pip3 show motor && python3 -c "import motor; print(motor.__file__)"
-python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn; print('deps ok')"
+#    **先确认外部目录存在再切**（/opt/mindie-motor 可能尚未创建——cd 失败后仍可在源码目录
+#    导入源码版 motor，导致安装验收误报"成功"）；目录不存在时 mkdir 或换已存在的外部目录
+mkdir -p /opt/mindie-motor   # 或用户指定的外部目录
+cd /opt/mindie-motor   # 失败即停（set -e），不要回退到源码目录
+python3 -c "import motor; print(motor.__file__)"   # 应指向 site-packages/motor/__init__.py
+#    核对 motor.__file__ 位于所选解释器的 site-packages（不是源码目录）：
+python3 -c "import motor, os; p=motor.__file__; assert 'site-packages' in p, f'安装验收失败：motor.__file__={p} 不在 site-packages（可能命中的是源码目录）'; print('verified:', p)"
+pip3 show motor
+#    依赖完整性——用目标解释器核对 requirements.txt 全量（不只 8 个硬 import 模块）：
+pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
 ```
 
 ### 方式 B：拉源码、编译 whl、安装
@@ -137,9 +157,12 @@ python3 -c "import zipfile,glob; w=[f for f in glob.glob('dist/motor-*.whl') if 
 #    （glob 会把 -any 与平台包先后装、相互覆盖，最终装上哪个取决于文件名字母序）；
 #    离线加 --no-index（防 pip 尝试访问不可达 index 卡住）；import 验证必须在源码目录之外执行
 pip3 install --no-deps --no-index --force-reinstall dist/<第5步选中的文件名>.whl
-cd /opt/mindie-motor   # 或任意源码目录之外的位置
-python3 -c "import motor; print(motor.__file__)"   # 应指向 site-packages/motor/__init__.py
+mkdir -p /opt/mindie-motor   # 确认外部目录存在再切（不存在时 cd 失败、后续仍可在源码目录导入源码造成误报）
+cd /opt/mindie-motor   # 或任意已确认存在的源码目录之外位置；失败即停
+python3 -c "import motor, os; p=motor.__file__; assert 'site-packages' in p, f'安装验收失败：motor.__file__={p} 不在 site-packages（可能命中的是源码目录）'; print('verified:', p)"
 pip3 show motor
+#    依赖完整性——用目标解释器核对 requirements.txt 全量（不只 8 个硬 import 模块）：
+pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
 ```
 
 **cargo 离线安装**（远端无外网时，完整步骤见 `references/field-playbook-offline-build.md`；空间预检：离线包 ~345MB + 上传/解压两份副本 + cargo target，`df -h /tmp /usr/local` 确认余量——容器 /tmp 常只有几百 MB）：
