@@ -10,6 +10,7 @@ INSTALL_ROOT="/usr/local/services/cubetoolbox"
 readonly SCRIPT_DIR DISCOVER_RELEASE PARSE_ENV LOG_PREFIX INSTALL_ROOT
 ENV_FILE=""
 PREFLIGHT_ONLY=0
+EXPECTED_VERSION=""
 PREFLIGHT_FAILURES=0
 NODE_IP_EXPLICIT=0
 WORK_DIR=""
@@ -53,6 +54,8 @@ official online release. No template, sandbox workload, or benchmark is run.
 Options:
   --env <file>       Source deployment overrides from a shell environment file.
   --preflight-only   Read-only host checks and release discovery; do not install.
+  --expect-version <tag>
+                     Require the resolved release to equal the preflight tag.
   -h, --help         Show this help.
 
 Common environment overrides:
@@ -62,7 +65,7 @@ Common environment overrides:
   CUBE_PVM_ENABLE=auto|0|1        Guest kernel mode (default: auto).
   CUBE_SANDBOX_NETWORK_CIDR=<CIDR> Unused private sandbox CIDR, if needed.
   CUBE_SANDBOX_DOWNLOAD_URL=<URL> Explicit architecture-matching bundle URL.
-  CUBE_SANDBOX_SHA256=<hex>        Expected digest for an explicit bundle URL.
+  CUBE_SANDBOX_SHA256=<hex>        Required trusted digest for every bundle.
 
 Only fresh installation is supported. Existing, partial, or unrecognized install
 roots are refused; use the official installer manually for upgrade/recovery.
@@ -80,6 +83,11 @@ while [[ $# -gt 0 ]]; do
       PREFLIGHT_ONLY=1
       shift
       ;;
+    --expect-version)
+      [[ $# -ge 2 ]] || die "--expect-version requires an exact release tag"
+      EXPECTED_VERSION="$2"
+      shift 2
+      ;;
     --upgrade)
       die "upgrade is outside this skill's scope; use the official installer manually after backup and user confirmation"
       ;;
@@ -93,6 +101,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${EXPECTED_VERSION}" && ! "${EXPECTED_VERSION}" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+  die "--expect-version must be an exact release tag copied from preflight release.version"
+fi
 
 for forbidden_switch in ONE_CLICK_SKIP_PRECHECK ONE_CLICK_SKIP_PVM_CHECK; do
   if [[ "${!forbidden_switch:-0}" != "0" ]]; then
@@ -251,6 +263,9 @@ validate_install_root() {
 }
 
 check_sandbox_cidr() {
+  # Upstream one-click's documented default sandbox CIDR, not a site-specific
+  # address belonging to this repository or its users. Keep it aligned with the
+  # official env.example; conflicting networks must override it explicitly.
   local cidr="${CUBE_SANDBOX_NETWORK_CIDR:-192.168.0.0/18}" error=""
   if ! error="$(python3 - "${cidr}" 2>&1 <<'PY'
 import ipaddress
@@ -513,15 +528,17 @@ else
     || die "download filename must be cube-sandbox-one-click-<version>-${RELEASE_ARCH}.tar.gz"
   RESOLVED_VERSION="${ASSET_NAME#cube-sandbox-one-click-}"
   RESOLVED_VERSION="${RESOLVED_VERSION%-${RELEASE_ARCH}.tar.gz}"
-  [[ -n "${EXPECTED_SHA256}" ]] \
-    || warn "an explicit URL without CUBE_SANDBOX_SHA256 is not integrity-pinned; use only a trusted source"
 fi
 
 [[ -n "${RESOLVED_VERSION}" && -n "${ASSET_NAME}" && -n "${DOWNLOAD_URL}" ]] \
   || die "release helper returned an incomplete record"
-[[ "${EXPECTED_SHA256}" =~ ^([0-9a-fA-F]{64})?$ ]] \
-  || die "CUBE_SANDBOX_SHA256 must be exactly 64 hexadecimal characters"
+[[ "${EXPECTED_SHA256}" =~ ^[0-9a-fA-F]{64}$ ]] \
+  || die "a trusted SHA-256 digest is required for ${ASSET_NAME}; API fallback metadata and custom URLs without CUBE_SANDBOX_SHA256 are not installable"
 EXPECTED_SHA256="${EXPECTED_SHA256,,}"
+if [[ -n "${EXPECTED_VERSION}" && "${RESOLVED_VERSION}" != "${EXPECTED_VERSION}" ]]; then
+  die "resolved version ${RESOLVED_VERSION} differs from preflight release.version ${EXPECTED_VERSION}; rerun preflight and confirm the new release before installation"
+fi
+log "SHA-256 pinning enforced for ${RESOLVED_VERSION}"
 
 redact_url() {
   CUBE_URL_TO_REDACT="$1" python3 - <<'PY'
@@ -601,12 +618,10 @@ if ! download_bundle "${DOWNLOAD_URL}"; then
   fi
 fi
 
-if [[ -n "${EXPECTED_SHA256}" ]]; then
-  ACTUAL_SHA256="$(sha256sum "${BUNDLE_ARCHIVE}" | awk '{ print $1 }')"
-  [[ "${ACTUAL_SHA256}" == "${EXPECTED_SHA256}" ]] \
-    || die "SHA-256 mismatch: expected ${EXPECTED_SHA256}, got ${ACTUAL_SHA256}"
-  log "SHA-256 verified"
-fi
+ACTUAL_SHA256="$(sha256sum "${BUNDLE_ARCHIVE}" | awk '{ print $1 }')"
+[[ "${ACTUAL_SHA256}" == "${EXPECTED_SHA256}" ]] \
+  || die "SHA-256 mismatch: expected ${EXPECTED_SHA256}, got ${ACTUAL_SHA256}"
+log "SHA-256 verified"
 
 log "extracting and validating the official bundle"
 tar -xzf "${BUNDLE_ARCHIVE}" -C "${WORK_DIR}"
@@ -631,7 +646,7 @@ excluded = {
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
     "CUBE_PVM_ENABLE", "CUBE_SANDBOX_NODE_IP", "ONE_CLICK_DEPLOY_ROLE",
     "ONE_CLICK_RUN_QUICKCHECK", "ONE_CLICK_MODE", "ONE_CLICK_ASSUME_YES",
-    "ONE_CLICK_ENV_FILE", "ONE_CLICK_SKIP_PRECHECK", "ONE_CLICK_SKIP_PVM_CHECK",
+    "ONE_CLICK_ENV_FILE", "ONE_CLICK_RUNTIME_ENV_FILE", "ONE_CLICK_SKIP_PRECHECK", "ONE_CLICK_SKIP_PVM_CHECK",
     "ONE_CLICK_ALLOW_DOWNGRADE", "ONE_CLICK_ALLOW_ROLE_CHANGE", "ONE_CLICK_PACKAGE_TAR",
     "CUBE_API_HEALTH_ADDR", "CUBE_OPS_HEALTH_ADDR",
     "CUBE_OPS_UPSTREAM", "WEB_UI_UPSTREAM",
@@ -674,6 +689,7 @@ if [[ -n "${PARSED_ENV_FILE}" ]]; then
   PARSED_ENV_FILE=""
 fi
 export ONE_CLICK_ENV_FILE="${UPSTREAM_ENV_FILE}"
+export ONE_CLICK_RUNTIME_ENV_FILE="${INSTALL_ROOT}/.one-click.env"
 
 ONE_CLICK_MODE="install"
 export ONE_CLICK_MODE

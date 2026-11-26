@@ -35,6 +35,10 @@ ${context.prepareProject}
 - 诊断反馈：${context.validateExperiment}
 - 运行目录：${context.run_dir}
 
+## 测量要求
+
+消费 baseline.measurement_plan，读取 verify-optimization 的重复测量契约。每条既定性能命令须完成计划内的独立重复与同条件基线/候选比较；保留逐次证据及 n、均值 ± 样本标准差、median、min/max。measurement_quality 未决时不能 system_acceptance=passed 或 status=verified；性能单次比较仅为探索性。不得用低 CV 或 1.1x 业务阈值替代噪声判断。
+
 ## 执行
 使用 Skill tool，skill 名称为 `verify-optimization`
 输入：上述完整上下文；执行用户/项目约定的全部构建、完整正确性与系统 benchmark 命令。局部性能不能替代系统验收。叶子不提交，协调者经 --verify-result 校验 Deliver 后再精确提交。
@@ -63,6 +67,9 @@ ${context.prepareProject}
   "commands": [{"command": "<原验收命令>", "exit_code": 0}],
   "local_performance": {},
   "performance": {
+    "measurement_plan": {},
+    "measurement_summary": [],
+    "measurement_quality": {"status": "sufficient", "reasons": ["填写实际完成计划、可比性和收益/噪声判断证据，不照抄示例"]},
     "direction": "lower",
     "baseline_ns": 125000,
     "optimized_ns": 42000,

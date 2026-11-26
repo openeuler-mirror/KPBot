@@ -1,0 +1,63 @@
+{
+  "skill_name": "pggraph-hotspot-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在单核 1c1t 下 `graph.component_stats()` 很慢。请给出从 SQL 到 Rust 的调用链、最可能的热点函数/阶段及各自机制，并说明如何用证据确认。不要执行命令。",
+      "expected_output": "调用链：component_stats_wrapper → with_panic_boundary → Engine::connected_components（单行聚合：num_components/largest_component/num_isolated_nodes/total_active_nodes）→ compute_components_with_neighbors → UnionFind::union/find → component_sizes 计数与 active_count。热点：UnionFind::find 递归路径压缩（约 30% CPU、~810K 次调用）、主循环 active/CSR 遍历、tx_delta::node_deleted 的 thread_local/RefCell（~460K 次）、component_sizes HashMap。注意 to_component_rows 的逐节点 primary_key().to_string() 只在 graph.connected_components() 等逐行 API 出现，component_stats 无逐节点 String 输出。用 perf record -g -p <backend> 看 self/children，perf report 对照函数名（守卫帧是 with_panic_boundary）；用 perf stat 看 IPC/cache；用 EXPLAIN ANALYZE 确认外层时间。component_stats 是 O(V+E) 全图算法，绝对值不能代表 traverse。",
+      "files": [],
+      "expectations": [
+        "给出 SQL→Engine→compute_components→UnionFind 的调用链",
+        "指出 UnionFind::find 递归/路径压缩是最大热点",
+        "指出 node_deleted 的 thread_local/RefCell 高频开销",
+        "指出 component_sizes HashMap 命中计数热点，且 component_stats 为单行聚合、无逐节点 String 输出（to_component_rows 属逐行 API）",
+        "说明用 perf 火焰图/调用栈确认，而非只看总 CPU",
+        "说明 component_stats 是全图 O(V+E)，不能拿它代表所有查询",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "一个 2-hop `graph.traverse(..., hydrate := false, max_rows := 1000)` 很慢，但火焰图里 BFS 循环占比不高。请解释可能的后处理热点，以及如何验证。不要执行命令。",
+      "expected_output": "2-hop 会返回大量节点/路径，后处理包括 to_traversal_results 的 primary_key().to_string()/路径 String/edge_type clone、按 (depth,node_table,node_id String) 排序的 memcmp、分页/JSON/regclass_text、结果向量释放；hydrate=false 时仍有坐标/路径/JSON 成本。验证：用 perf 看 to_traversal_results/sort_by/str::from_utf8/JSON/regclass_text；对比 max_rows 变化；对比 1-hop；对比 hydrate=true/false；检查结果行数/路径长度；把排序键改 node_idx 的 A/B（2-hop 实测 -20~29%）。BFS 循环不是唯一瓶颈。",
+      "files": [],
+      "expectations": [
+        "指出 to_traversal_results 的 String/路径分配",
+        "指出 String 排序 memcmp 是 2-hop 显著热点",
+        "指出分页/JSON/regclass_text/结果释放等每行成本",
+        "说明 hydrate=false 仍有坐标/路径/JSON 成本",
+        "给出 perf 对照/行数/hydrate/排序键 A/B 等验证方法",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "96 并发下 PostgreSQL 绑定 96 个逻辑核，CPU 利用率只有约 40%，QPS 到某个点不再增长。请给出至少两种可能根因、各自的证据，以及如何用实验区分；不要直接断言是 L3 cache miss。不要执行命令。",
+      "expected_output": "可能一：客户端 Python GIL/提交速率——客户端 CPU ~1 核、大量 backend ClientRead、低并发就平台、min 延迟不随并发增加；用 --mp/异步复测，QPS 上升则确认。可能二：服务端每 backend 私有反向 CSR/FilterIndex 工作集超过 L3/CCL——backend 大多 active、IPC 下降、LLC miss/backend stall 上升、每 backend PSS/Private 随并发叠加；用 perf stat、smaps_rollup、容量扫描确认。还可能 SMT/NUMA/PG 锁/IO。实验：先看客户端 CPU/backend 状态，再 PMU/Topdown，再做 1→N 容量扫描和 primary 线程/跨 NUMA 对照。源资料对同一现象有 GIL 与缓存两种结论，必须用目标环境证据判别。",
+      "files": [],
+      "expectations": [
+        "提出客户端 GIL/提交速率假设及证据",
+        "提出服务端私有内存/L3 缓存争用假设及证据",
+        "提到 backend ClientRead vs active 的判别",
+        "提到客户端 CPU、IPC、LLC miss、backend stall、PSS/Private",
+        "给出 --mp、容量扫描、primary 线程/NUMA 等区分实验",
+        "不直接断言单一根因，说明源资料存在冲突结论",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "pgGraph 重启后第一次查询很慢，之后变快；同时 96 并发时内存看起来很大。请解释原因、如何区分共享 mmap 与私有内存、以及哪些指标能证明是加载开销。不要执行命令。",
+      "expected_output": "每个 backend 首次访问图时 mmap .pggraph、CRC32 扫描、CSR/主键/bincode 校验、从正向 CSR 重建反向 CSR、反序列化 FilterIndex/registry；之后复用 thread_local Engine。96 并发时多个 backend 各自加载，warmup 阶段 CPU/IO 抖动。RSS 会把共享 mmap 重复计入每个进程；用 /proc/<pid>/smaps_rollup 的 PSS/Private 区分，或 smaps 中 .pggraph 映射 vs 匿名堆。证明加载开销：PG 日志的 loading from、perf 中 load_graph_file/CRC/EdgeStore::reversed、首次 vs 预热后的延迟、warmup 期间 CPU/IO 峰值。",
+      "files": [],
+      "expectations": [
+        "说明首次 mmap/CRC/校验/反向 CSR/FilterIndex 反序列化",
+        "说明 thread_local Engine 后续复用",
+        "说明多 backend 并发加载导致 warmup 抖动",
+        "说明 RSS 重复计共享 mmap，应用 PSS/Private 区分",
+        "给出 PG 日志/perf 函数/首次 vs 预热延迟等证据",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

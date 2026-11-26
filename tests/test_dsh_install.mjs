@@ -82,7 +82,10 @@ test('installs only packages that name dsh, and never scans inside a package', a
 test('overlay replaces only the instruction file and keeps canonical resources', async t => {
   const { root, options, config } = await fixture(t);
   const directory = await plugin(root, 'domain/package', { platforms: ['dsh'], dsh: { exclude: ['skip'] } });
-  const base = await skill(directory, 'kunpeng_microarch', 'kunpeng-microarch');
+  const group = path.join(directory, 'skills/group');
+  await put(path.join(group, 'DOMAIN.md'), '# Domain');
+  const base = path.join(group, 'kunpeng_microarch');
+  await put(path.join(base, 'SKILL.md'), markdown('kunpeng-microarch'));
   await skill(directory, 'skip', 'skip');
   await put(path.join(base, 'references/file.txt'), 'base resource');
   await put(path.join(base, 'agents/worker.md'), 'prompt resource');

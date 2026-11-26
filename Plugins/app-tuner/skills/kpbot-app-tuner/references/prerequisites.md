@@ -63,7 +63,7 @@
 - 对外数据库型工作负载专项归属 `application-config-optimization`
 - 缺失数据库专项输入时，应由 `application-config-optimization` 输出保守建议和降级说明
 
-### `io-memory-network-bottleneck-analysis`
+### `io-optimization`
 
 | 工具 | 用途 | 分级 | 缺失时处理 |
 | --- | --- | --- | --- |
@@ -73,6 +73,9 @@
 | `iostat` | 磁盘利用率 | 推荐 | 记入 `iostat_missing`，磁盘带宽判定降级 |
 | `ss` | 网络层基础线索 | 推荐 | 记入 `ss_missing`，网络判断降级 |
 | `free` | 内存压力代理指标 | 推荐 | 记入 `free_missing`，内存判断降级 |
+| `findmnt` | 块设备挂载与挂载选项（`collect_io_evidence.sh` 专项采集） | 推荐 | 记入 `findmnt_missing`，挂载选项分析缺失 |
+| `perf` | cache-miss 率采样（`collect_memory_evidence.sh` 专项采集） | 推荐 | 记入 `perf_missing`，内存带宽代理证据缺失 |
+| `numastat` | NUMA 远端缺失率（`collect_memory_evidence.sh` 专项采集） | 推荐 | 记入 `numastat_missing`，NUMA 判定证据缺失 |
 
 ### `compiler-optimization`
 
@@ -81,19 +84,6 @@
 | `gcc` | 编译器版本识别 | 推荐 | 不输出版本感知建议 |
 | `perf` | AutoFDO 证据路径 | 推荐 | 跳过 AutoFDO 路径，保守建议 LTO 或无 profile 路径 |
 | AutoFDO 工具链 | `create_gcov` / `autofdo` | 推荐 | 不输出可执行 AutoFDO 步骤，只保留建议说明 |
-
-### `microservice-go-syncpool-optimization`
-
-| 工具/输入 | 用途 | 分级 | 缺失时处理 |
-| --- | --- | --- | --- |
-| `go` 工具链与 `$GOROOT` 源码 | 读取 `VERSION`、复制源码树并构建新工具链 | 必需 | 输出 `blocked_go_baseline`，不进入分析 |
-| 独立构建根目录 | 复制 Go 源码树、应用补丁和 `make.bash`，避免污染基线 `$GOROOT` | 必需 | 输出 `blocked_build_root` |
-| bootstrap Go 工具链 | 执行 `make.bash` / `make.bat` | 必需 | 输出 `blocked_bootstrap_toolchain` |
-| `git`（源码树） | 记录 tag/commit、校验补丁锚点 | 必需 | 输出 `blocked_go_source` |
-| `patch` / `git apply` | 应用 runtime 补丁 | 必需 | 输出 `blocked_patch_tool` |
-| `pprof`（`go tool pprof`） | CPU/heap 采集与判读 | 推荐 | 降级为 `gctrace` 与 `runtime.MemStats` |
-| 压测客户端与固定负载 | A/B 与内存水位验证 | 推荐 | 标记 `verified=false`，只输出候选动作 |
-| 重编译与重启授权 | 构建工具链、替换二进制 | 必需 | 输出 `blocked_authorization` |
 
 ### `cpu-affinity-optimization`
 
@@ -139,9 +129,12 @@
 
 | 工具/输入 | 用途 | 分级 | 缺失时处理 |
 | --- | --- | --- | --- |
-| `nvidia-smi` / `rocm-smi` / 厂商 NPU 工具 | GPU/NPU 利用率和错误状态 | 推荐 | 标记 `accelerator_tool_missing` |
-| `lspci` | 识别加速卡和 PCIe 链路 | 推荐 | 降级设备存在性判断 |
-| 应用 batch、队列、拷贝路径证据 | 加速卡调度分析 | 推荐 | 只输出需要补采的证据 |
+| `lspci` | 识别 HPRE/KAE 设备和 PCIe 链路 | 推荐 | 降级设备存在性判断 |
+| `openssl`（1.1） | HPRE 引擎自检与证书算法判定 | 必需 | 输出 `blocked_by_missing_dependency` |
+| `modprobe` / sysfs `/sys/class/uacce` | HPRE 设备与 `uacce_mode` | 必需 | 输出 `blocked`，提示 VF 透传与驱动检查 |
+| `ldd` | 引擎运行时依赖（HPRE 路径） | 推荐 | 降级依赖校验，仅按文件存在性判断 |
+| `python3` | 证据新鲜度校验、nginx 配置解析、quota 计划校验 | 必需 | 输出 `blocked`，提示缺失解释器 |
+| `ssh` | 宿主机与 VM 分离部署时执行 HPRE 验证 | 推荐 | 只在单机形态执行 |
 
 ### `hardware-upgrade-analysis`
 

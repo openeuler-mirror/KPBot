@@ -1,0 +1,4 @@
+2026-11-19 09:01:02 INFO vllm.distributed.eplb.eplb_state EPLB step: 100 for model dsv41: avg_tokens=8123.44, max_tokens=10415, balancedness=0.7800, steps until the next rearrangement: 900
+2026-11-19 09:02:02 INFO vllm.distributed.eplb.eplb_state EPLB step: 200 for model dsv41: avg_tokens=8260.17, max_tokens=10197, balancedness=0.8100, steps until the next rearrangement: 800
+2026-11-19 09:03:02 INFO vllm.distributed.eplb.eplb_state EPLB step: 300 for model dsv41: avg_tokens=7990.05, max_tokens=10513, balancedness=0.7600, steps until the next rearrangement: 700
+2026-11-19 09:04:02 INFO vllm.distributed.eplb.eplb_state EPLB step: 400 for model dsv41: avg_tokens=8188.61, max_tokens=10365, balancedness=0.7900, steps until the next rearrangement: 600

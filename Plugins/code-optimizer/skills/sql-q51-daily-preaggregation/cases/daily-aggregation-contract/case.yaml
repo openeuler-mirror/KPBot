@@ -1,0 +1,51 @@
+name: daily-aggregation-contract
+skill: sql-q51-daily-preaggregation
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: eligible_rewrite_selected
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: same_daily_sales
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: date_alias_requires_regroup
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: all_null_stays_null
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: both_branches_equivalent
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: filter_boundaries_preserved
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: dimension_guard_fallback
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unauthorized_rewrite_fallback
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: unsafe_state_fallback
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: bounded_sum_parenthesization_differs
+    expect: true

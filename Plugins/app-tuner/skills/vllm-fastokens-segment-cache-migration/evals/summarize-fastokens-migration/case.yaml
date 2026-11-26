@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: summarize-fastokens-migration
+expected_outcome: |
+  根据 fixtures/report.json 生成中文 summary.md。注明 12 条请求、3 个会话及 64 MiB 缓存预算，并引用分词器层的实际耗时和 RSS。
+  区分验证通过与迁移验收待确认；没有阈值、快照或切换后证据时分别说明，不建议直接切换，也不补跑探测或回放。

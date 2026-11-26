@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: snapshot-tokenizer-environment
+expected_outcome: |
+  使用指定的解释器生成 packages.txt、env.json、fastokens.json 和 RESTORE.md。
+  根据 fastokens.json 说明原环境是否装有 fastokens，以及可用的回退制品；未指定 PID 时不把 shell 环境当作服务环境。
+  不切换或回退服务。

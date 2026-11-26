@@ -1,0 +1,53 @@
+{
+  "skill_name": "sql-q51-cumulative-window",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "batch-boundary-state",
+      "prompt": "商品 1 的日金额 100,NULL,-70 被拆成两批。每批都重置 sum/max，最后得到 -70，可以吗？",
+      "expected_output": "商品分区跨批时保持状态，正确累计 SUM 最后为 30、历史 MAX 为 100；仅真实商品边界重置，全 NULL 新分区不继承旧状态。",
+      "files": [],
+      "assertions": [
+        "区分批次与分区边界",
+        "正确给出 sum30 和 peak100",
+        "保留 NULL 状态"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "rows-range-peers",
+      "prompt": "同一日期有金额 10 和 20，原 frame 是 RANGE 到当前行。候选改为逐行 ROWS 累加并补一个隐含排序键。",
+      "expected_output": "拒绝无证明的 frame 和排序契约变化。RANGE 可同时包含 peers，而逐行首行可能为 10；核对真实实现支持，不适用时回原窗口。",
+      "files": [],
+      "assertions": [
+        "识别 peers 差异",
+        "不擅自改 frame 或 tie-breaker",
+        "保留回退"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "ordering-after-hash-join",
+      "prompt": "两分支各自按日期有序，经过全外哈希连接和 Exchange 后，能直接把后置 MAX 的 inputsSorted 打开吗？",
+      "expected_output": "不能推断顺序继承。逐边核对当前分区、完整排序属性和提供节点；未证明时保留原排序，并验证真实路径。",
+      "files": [],
+      "assertions": [
+        "不继承未声明顺序",
+        "核对当前算子边界",
+        "不把开关当命中"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "already-shared-max",
+      "prompt": "后置两列 MAX 规格相同，计划已经是一个窗口节点。我想按省去两次排序报告收益，还用最后非 NULL 值代替历史 MAX。",
+      "expected_output": "按实际排序构建计数，不能虚构重复排序。两列状态独立，累计下降时最后值不等于历史峰值；分别测局部与整体。",
+      "files": [],
+      "assertions": [
+        "检查已共享基线",
+        "保留各列独立状态与 MAX",
+        "不虚构排序收益"
+      ]
+    }
+  ]
+}

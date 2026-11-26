@@ -1,0 +1,27 @@
+# 验证 tier-B 用例：go-protobuf-fixed-slice-bulk-copy 位级等价与字段终态一致性
+#
+# 内容（自包含 Go 模块，仅标准库，无 protobuf-go 依赖）：
+#   old    按 protobuf-go 1.36.12 consumeFloatSlice/appendFloatPackedSlice packed 分支逐行复刻
+#          （含 growFloat32Slice 精确预分配：先经指针扩容写字段，循环尾部失败返回跳过 *sp = s 写回）
+#   new    按 skill 模板改写：字节探针门控 + %wire_size==0 快路径 + 空载荷/畸形长度/大端
+#          全部落回原路径（畸形载荷不得在快路径内提前报错）
+#   位级断言  NaN payload（含 sNaN/负 NaN）/±Inf/±0/subnormal/随机位模式；float32 用
+#          math.Float32bits、double 用 math.Float64bits 逐位比较；序列化输出 bytes.Equal
+#   负向断言  畸形长度按 wire_size 选边界（fixed32 家族非 4 倍数、fixed64 家族非 8 倍数，
+#          含 fixed64 的 4 字节反例）：错误值与目标字段终态（nil/非 nil、len、cap）新旧一致
+#   回归断言  空 packed 载荷零迭代；多条 packed entry 顺序累积；端序探针与真实主机字节序一致
+#   benchmark  旧/新 A/B（多规模、诚实口径：旧副本含精确预分配），结果记录于 results/bench.txt；
+#             验收门是位级等价与负向断言，不是加速比（数字随机器浮动）
+#
+# 运行（在技能根目录下）：
+#   bash cases/bitexact-bench/run.sh
+#   # 产出 results/result.json（PASS/FAIL/SKIP）+ results/test.log + results/bench.txt
+#
+# 说明：tier-B，需 Go 工具链 ≥ 1.20（unsafe.SliceData，与 skill 的最低版本门控一致）；
+#       go 不可用时按本文件 SKIP 并记录（写 results/result.json 后退出 0）。
+
+name: bitexact-bench
+skill: go-protobuf-fixed-slice-bulk-copy
+tier: B
+
+entrypoint: ["bash", "cases/bitexact-bench/run.sh"]

@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
-将时序图分析结果(JSON)写入Excel表格并生成图片。
-用法: python3 generate_excel_charts.py <profile_results_dir> [output_dir]
+将既有阶段分析 JSON 写入多 sheet Excel 并生成 PNG，不重新运行 analyzer。
+
+直接模式:
+  python3 generate_excel_charts.py --analysis analysis.json --output-dir OUT \
+      [--manifest report-manifest.json]
+旧调用兼容:
+  python3 generate_excel_charts.py <profile_results_dir> [output_dir]
+  读取 <profile_results_dir>/analysis.json；不存在时明确失败，不隐式分析。
 """
+import argparse
+import hashlib
 import sys
 import os
 import json
-import subprocess
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -17,17 +24,44 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-def run_analyze(profile_dir):
-    """运行analyze脚本获取JSON结果"""
-    analyze_script = str(Path(__file__).resolve().parent / "analyze_c50_profile.mjs")
-    result = subprocess.run(
-        ["node", analyze_script, profile_dir],
-        capture_output=True, text=True, timeout=30
-    )
-    if result.returncode != 0:
-        print(f"analyze failed: {result.stderr}", file=sys.stderr)
-        sys.exit(1)
-    return json.loads(result.stdout)
+def load_analysis(path):
+    """Load an existing analyzer result; this module never invokes Node/analyzer."""
+    analysis_path = Path(path)
+    if not analysis_path.is_file():
+        raise ValueError(
+            f"existing analysis is required: {analysis_path}; "
+            "run sandbox-stage-latency-analyze first"
+        )
+    try:
+        data = json.loads(analysis_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid analysis JSON: {error}") from error
+    if not isinstance(data, dict) or not isinstance(data.get("benchmark"), dict):
+        raise ValueError("invalid analysis JSON: benchmark object is required")
+    if not isinstance(data.get("benchmark_blocks"), list) or not data["benchmark_blocks"]:
+        raise ValueError("analysis benchmark_blocks are required for the batch PNG")
+    if not isinstance(data.get("host_intervals"), list) or not data["host_intervals"]:
+        raise ValueError("analysis host_intervals are required for the Host PNG")
+    return data
+
+
+def validate_disjoint_paths(entries):
+    """Reject every input/output alias before creating, removing or writing files."""
+    seen = {}
+    for label, path in entries:
+        candidate = Path(path)
+        try:
+            resolved = candidate.resolve()
+        except (OSError, RuntimeError) as error:
+            raise ValueError(f"cannot resolve {label} path {candidate}: {error}") from error
+        if resolved in seen:
+            other_label, other_path = seen[resolved]
+            raise ValueError(
+                f"path collision: {other_label} ({other_path}) and {label} ({candidate}) "
+                f"both resolve to {resolved}; all inputs and outputs must be distinct"
+            )
+        seen[resolved] = (label, candidate)
+
 
 def style_header(ws, row, cols, fill_color="4472C4"):
     """设置表头样式"""
@@ -133,7 +167,7 @@ def write_cubelet_stages_sheet(wb, data):
     
     row_idx = 2
     for name, s in stages.items():
-        if s.get("count", 0) <= 0:
+        if not s or s.get("count", 0) <= 0:
             continue
         ws.cell(row=row_idx, column=1, value=name)
         ws.cell(row=row_idx, column=2, value=s.get("count", ""))
@@ -159,7 +193,7 @@ def write_shim_stages_sheet(wb, data):
     
     row_idx = 2
     for name, s in stages.items():
-        if s.get("count", 0) <= 0:
+        if not s or s.get("count", 0) <= 0:
             continue
         ws.cell(row=row_idx, column=1, value=name)
         ws.cell(row=row_idx, column=2, value=s.get("count", ""))
@@ -187,7 +221,7 @@ def write_detail_sheet(wb, data):
     
     row_idx = 2
     for name, t in timings.items():
-        if t.get("count", 0) <= 0:
+        if not t or t.get("count", 0) <= 0:
             continue
         ws.cell(row=row_idx, column=1, value=name)
         ws.cell(row=row_idx, column=2, value=t.get("count", ""))
@@ -213,7 +247,7 @@ def write_cubemaster_sheet(wb, data):
     
     row_idx = 2
     for name, s in stages.items():
-        if s.get("count", 0) <= 0:
+        if not s or s.get("count", 0) <= 0:
             continue
         ws.cell(row=row_idx, column=1, value=name)
         ws.cell(row=row_idx, column=2, value=s.get("count", ""))
@@ -230,7 +264,7 @@ def write_host_sheet(wb, data):
     """写入host资源"""
     ws = wb.create_sheet("Host资源")
     
-    summary = data.get("host_summary", {})
+    summary = data.get("host_summary") or {}
     headers = ["指标", "值"]
     
     for col, h in enumerate(headers, 1):
@@ -273,7 +307,7 @@ def generate_stage_chart(data, output_dir, case_name):
         p50s = []
         p95s = []
         for name, s in stages.items():
-            if s.get("count", 0) <= 0:
+            if not s or s.get("count", 0) <= 0:
                 continue
             names.append(name)
             avgs.append(s.get("avg", 0))
@@ -307,7 +341,7 @@ def generate_stage_chart(data, output_dir, case_name):
     p50s = []
     p95s = []
     for name, t in timings.items():
-        if t.get("count", 0) <= 0:
+        if not t or t.get("count", 0) <= 0:
             continue
         names.append(name)
         avgs.append(t.get("avg", 0))
@@ -435,46 +469,100 @@ def generate_host_chart(data, output_dir, case_name):
     plt.close()
     print(f"Chart saved: {chart_path}")
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 generate_excel_charts.py <profile_results_dir> [output_dir]")
-        sys.exit(1)
-    
-    profile_dir = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.dirname(profile_dir)
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print(f"Analyzing: {profile_dir}")
-    data = run_analyze(profile_dir)
-    
-    case_name = data.get("case", "unknown")
-    print(f"Case: {case_name}")
-    
-    # 生成Excel
-    wb = Workbook()
-    wb.remove(wb.active)  # 删除默认sheet
-    
-    write_benchmark_sheet(wb, data)
-    write_blocks_sheet(wb, data)
-    write_cubelet_stages_sheet(wb, data)
-    write_shim_stages_sheet(wb, data)
-    write_detail_sheet(wb, data)
-    write_cubemaster_sheet(wb, data)
-    write_host_sheet(wb, data)
-    
-    excel_path = os.path.join(output_dir, f"timing_report_{case_name}.xlsx")
-    wb.save(excel_path)
-    print(f"Excel saved: {excel_path}")
-    
-    # 生成图片
-    generate_stage_chart(data, output_dir, case_name)
-    generate_blocks_chart(data, output_dir, case_name)
-    generate_host_chart(data, output_dir, case_name)
-    
-    print(f"\nDone! Output in: {output_dir}")
-    print(f"  Excel: timing_report_{case_name}.xlsx")
-    print(f"  Charts: stages_chart_{case_name}.png, blocks_timeline_{case_name}.png, host_resources_{case_name}.png")
+def parse_args(argv):
+    if argv and argv[0] == "--analysis":
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--analysis", required=True)
+        parser.add_argument("--output-dir", required=True)
+        parser.add_argument("--manifest")
+        args = parser.parse_args(argv)
+        return Path(args.analysis), Path(args.output_dir), args.manifest
+    if argv in (["-h"], ["--help"]):
+        print(__doc__)
+        raise SystemExit(0)
+    if not argv or len(argv) > 2:
+        raise ValueError(
+            "usage: --analysis ANALYSIS_JSON --output-dir DIR [--manifest FILE]; "
+            "or legacy PROFILE_DIR [OUTPUT_DIR]"
+        )
+    profile_dir = Path(argv[0])
+    output_dir = Path(argv[1]) if len(argv) == 2 else profile_dir.resolve().parent
+    return profile_dir / "analysis.json", output_dir, None
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    try:
+        analysis_path, output_dir, manifest_arg = parse_args(argv)
+        data = load_analysis(analysis_path)
+        case_name = str(data.get("case", "unknown"))
+        if not case_name or case_name in (".", "..") or "/" in case_name or "\\" in case_name:
+            raise ValueError("analysis case must be a non-empty filename-safe value")
+        excel_path = output_dir / f"timing_report_{case_name}.xlsx"
+        artifacts = [
+            excel_path,
+            output_dir / f"stages_chart_{case_name}.png",
+            output_dir / f"blocks_timeline_{case_name}.png",
+            output_dir / f"host_resources_{case_name}.png",
+        ]
+        manifest_path = Path(manifest_arg) if manifest_arg else output_dir / "report-manifest.json"
+        validate_disjoint_paths([
+            ("analysis input", analysis_path),
+            ("Excel output", excel_path),
+            ("stage PNG output", artifacts[1]),
+            ("blocks PNG output", artifacts[2]),
+            ("Host PNG output", artifacts[3]),
+            ("manifest output", manifest_path),
+        ])
+        print(f"Reusing analysis: {analysis_path}")
+        print(f"Case: {case_name}")
+        os.makedirs(output_dir, exist_ok=True)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        for stale_path in [manifest_path, *artifacts]:
+            stale_path.unlink(missing_ok=True)
+
+        wb = Workbook()
+        wb.remove(wb.active)
+        write_benchmark_sheet(wb, data)
+        write_blocks_sheet(wb, data)
+        write_cubelet_stages_sheet(wb, data)
+        write_shim_stages_sheet(wb, data)
+        write_detail_sheet(wb, data)
+        write_cubemaster_sheet(wb, data)
+        write_host_sheet(wb, data)
+
+        wb.save(excel_path)
+        print(f"Excel saved: {excel_path}")
+        generate_stage_chart(data, str(output_dir), case_name)
+        generate_blocks_chart(data, str(output_dir), case_name)
+        generate_host_chart(data, str(output_dir), case_name)
+
+        missing = [str(path) for path in artifacts if not path.is_file() or path.stat().st_size == 0]
+        if missing:
+            raise ValueError(f"required report artifacts missing or empty: {', '.join(missing)}")
+
+        manifest = {
+            "schema_version": 1,
+            "status": "success",
+            "case": case_name,
+            "analysis_json": str(analysis_path.resolve()),
+            "analysis_sha256": hashlib.sha256(analysis_path.read_bytes()).hexdigest(),
+            "analysis_reused": True,
+            "analyzer_invoked": False,
+            "excel_sheets": ["Bench总体", "分批时延", "Cubelet阶段", "Shim阶段", "详细子阶段", "CubeMaster阶段", "Host资源"],
+            "artifacts": [
+                {"path": str(path.resolve()), "bytes": path.stat().st_size}
+                for path in artifacts
+            ],
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Report manifest saved: {manifest_path}")
+        print(f"Done! Output in: {output_dir}")
+        return 0
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        print(f"ERROR: report generation blocked: {error}", file=sys.stderr)
+        return 2
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

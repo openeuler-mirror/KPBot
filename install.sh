@@ -192,7 +192,7 @@ plugin_skill_excludes() {
     local plugin_dir="$1"
     local pjson="$plugin_dir/.claude-plugin/plugin.json"
     [ -f "$pjson" ] || return 0
-    "${PYTHON_BIN}" - "$pjson" "$TOOL" <<'PY'
+    "${PYTHON_BIN}" - "$pjson" "$TOOL" <<'PY' | tr -d '\r'
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))

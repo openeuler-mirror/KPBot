@@ -1,0 +1,27 @@
+# 用例：tier A —— network-collector 解析逻辑 mock 测试
+# 宿主机直跑（bash + /proc 可用）：bash entrypoint.sh
+name: mock-retrans-sock
+skill: kptools-network-collector
+tier: A
+
+image: none
+model: none
+auth: none
+ab: []
+
+build:
+  context: ../../../..
+  dockerfile: none
+
+entrypoint: ["/workspace/entrypoint.sh"]
+
+env_requires: []
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true

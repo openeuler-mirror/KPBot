@@ -61,7 +61,7 @@ scripts/run_placeholder_benchmark.sh "mysql-8u32g-readonly"
 
 #### Step 6: 瓶颈识别
 
-调用 `io-memory-network-bottleneck-analysis`：
+调用 `io-optimization`：
 - 初始结论为 `unknown_bottleneck` 或 CPU 证据不足，需要排查客户端与测试方法
 
 但由于服务端 CPU 利用率仅 72% < 85%，进入客户端瓶颈排查：
@@ -282,7 +282,7 @@ scripts/run_placeholder_benchmark.sh "vllm-ascend-qwen15b"
 
 #### Step 6: 瓶颈识别
 
-调用 `io-memory-network-bottleneck-analysis` 与 `accelerator-optimization`：
+调用 `io-optimization` 与 `vllm-ascend-profiling`（NPU+vLLM 场景；HPRE/KAE 密码卸载场景才走 `accelerator-optimization`）：
 
 - NPU 利用率 78% 未饱和 → 排除纯 NPU 算力瓶颈
 - CPU 峰值核 95%、826 线程跨 NUMA 散布 → CPU 调度与 NUMA 跨节点访问为主瓶颈

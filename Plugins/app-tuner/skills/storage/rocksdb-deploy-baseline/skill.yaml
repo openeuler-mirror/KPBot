@@ -1,0 +1,32 @@
+id: rocksdb-deploy-baseline
+name: rocksdb-deploy-baseline
+version: 1.0.0
+description: 构建 RocksDB 基线测试所需的 RocksDB jar、YCSB distribution 和 deploy.env。
+entrypoint: scripts/run_deploy.sh
+resources:
+  - SKILL.md
+  - scripts
+  - assets
+  - references
+supervisor:
+  action: deploy
+  inputs:
+    - name: work_root
+      contract: rocksdb-baseline/work-root/v1
+      required: false
+    - name: result_dir
+      contract: rocksdb-baseline/result-dir/v1
+      required: false
+    - name: rocksdb_src
+      contract: rocksdb-source/v1
+      required: false
+    - name: ycsb_src
+      contract: ycsb-source/v1
+      required: false
+  outputs:
+    - name: deploy_env
+      contract: rocksdb-baseline-deploy/v1
+      path: env/deploy.env
+capabilities:
+  - id: rocksdb.baseline.deploy
+    contract: rocksdb-baseline-deploy/v1

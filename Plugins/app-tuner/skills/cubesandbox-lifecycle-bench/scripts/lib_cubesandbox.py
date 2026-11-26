@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from typing import Optional
 import urllib.error
@@ -333,6 +334,13 @@ def capture(command: list[str], env=None, timeout: int = 20) -> subprocess.Compl
             env=env,
             timeout=timeout,
             check=False,
+        )
+    except FileNotFoundError as exc:
+        detail = exc.strerror or "No such file or directory"
+        return subprocess.CompletedProcess(
+            command,
+            127,
+            stdout=f"ERROR: 缺少命令 {command[0]}：{detail}",
         )
     except subprocess.TimeoutExpired as exc:
         output = exc.stdout or ""
@@ -731,13 +739,34 @@ def host_lock(path: Path = Path("/run/lock/cubesandbox-lifecycle-bench.lock")):
             fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
-def write_json(path: Path, payload) -> None:
+def write_json(path: Path, payload, *, reject_symlink: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    if not reject_symlink:
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(content, encoding="utf-8")
+        temporary.replace(path)
+        return
+
+    if path.is_symlink():
+        raise BenchError(f"拒绝写入符号链接报告：{path}")
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
     )
-    temporary.replace(path)
+    temporary = Path(temporary_name)
+    try:
+        # mkstemp uses O_EXCL and mode 0600; os.replace publishes the directory
+        # entry itself and therefore never follows a racing final symlink.
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(content)
+        if path.is_symlink():
+            raise BenchError(f"拒绝写入符号链接报告：{path}")
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def command_text(command: list[str]) -> str:

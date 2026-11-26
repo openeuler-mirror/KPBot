@@ -9,6 +9,9 @@ description: |
   有栈 trace 请使用 kptools-ascend-profiling-analysis。
 ---
 
+
+> **只读契约**：本 skill 严格只读——采集/分析过程不修改任何系统配置、不写入被测环境（产物仅写入输出目录）；需要变更的优化动作归属对应调优 skill。
+
 # Ascend 无栈 Profiling Step 分析
 
 ## 开始前：主动收集信息
