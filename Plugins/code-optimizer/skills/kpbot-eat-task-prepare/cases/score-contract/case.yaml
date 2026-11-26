@@ -1,5 +1,5 @@
 name: score-contract
-skill: eat-task-prepare
+skill: kpbot-eat-task-prepare
 tier: A
 entrypoint: ["python3", "check.py"]
 env_requires:
