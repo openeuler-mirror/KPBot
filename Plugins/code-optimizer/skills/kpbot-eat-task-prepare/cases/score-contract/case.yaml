@@ -1,0 +1,14 @@
+name: score-contract
+skill: kpbot-eat-task-prepare
+tier: A
+entrypoint: ["python3", "check.py"]
+env_requires:
+  - Python 3.9+、Bash、mktemp
+# 在本目录运行 python3 check.py 可复验随包的接入结果。
+# 要测试 agent 生成的结果，把 fixture 复制到空目录，请它根据 bench.py
+# 接成 EAT 任务。再运行 python3 check.py <该项目目录>。
+assert:
+  - type: exit_code
+    expect: 0
+# 检查器独立核对三个分数：原版 1，正确候选 8，答错一个用例的候选 0。
+# benchmark 异常退出、输出非 JSON、分数非有限值时，评分入口须非零退出，且 stdout/stderr 均不泄漏可提取的分数。
