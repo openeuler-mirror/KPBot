@@ -1,0 +1,34 @@
+{
+  "skill_name": "kptools-pypto-sim-deploy",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "PS-01",
+      "prompt": "用 a2a3sim 模拟器跑 PyPTO",
+      "should_trigger": true
+    },
+    {
+      "id": "PS-02",
+      "prompt": "PyPTO 模拟器冒烟",
+      "should_trigger": true
+    },
+    {
+      "id": "PS-03",
+      "prompt": "验证 P 节点 timing（测试替身）",
+      "should_trigger": true
+    },
+    {
+      "id": "PS-04",
+      "prompt": "在真实 NPU 上部署",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-deploy"
+    },
+    {
+      "id": "PS-05",
+      "prompt": "采集打点日志",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-monitor"
+    }
+  ]
+}
