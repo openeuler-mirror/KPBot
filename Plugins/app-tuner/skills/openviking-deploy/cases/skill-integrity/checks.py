@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
-"""Tier-A integrity checks for the openviking-deploy skill.
+"""Tier-A integrity and behavior checks for the openviking-deploy skill.
 
 Guards the parts that are easy to break during later edits:
   1. SKILL.md frontmatter: name matches the directory, description present,
-     within the 1024-character limit, no XML-like tags in frontmatter
+     within the 200-character limit, no XML-like tags in frontmatter
   2. every references/*.md, scripts/* and assets/* path mentioned in the docs
      exists
-  3. the default version stays pinned to master, the official repo URL and
-     root-private build root stay fixed; security markers remain in the scripts
-  4. critical anchors are present in the docs (deploy.env, doctor, /health,
-     /ready, 0640, root_api_key, Rust 1.91.1, --source-dir, release/current)
+  3. the default version stays pinned to main (master alias), the official repo
+     URL and root-private build root stay fixed; security markers remain
+  4. critical anchors are present in the docs
   5. evals/evals.json is well formed and has at least 5 cases
   6. no sensitive content (private IPs, credentials, personal home paths)
+  7. offline behavior checks for auth, key permissions, config validation,
+     untrusted source dirs, and git-url userinfo rejection
+  8. every --flag mentioned in SKILL.md / references exists in the scripts
 
 Writes results/result.json; exits non-zero on any failure.
 """
 
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parents[2]
@@ -36,6 +42,10 @@ assets_checked = 0
 anchors_found = 0
 evals_checked = 0
 sensitive_findings = []
+behavior_results = {}
+behavior_failures = []
+doc_flags_checked = 0
+doc_flags_missing = []
 
 
 def fail(message):
@@ -105,8 +115,8 @@ else:
         fail("frontmatter: missing/empty description")
     else:
         description = desc_match.group(1).strip()
-        if len(description) > 1024:
-            fail("frontmatter: description is {} chars (max 1024)".format(len(description)))
+        if len(description) > 200:
+            fail("frontmatter: description is {} chars (max 200)".format(len(description)))
         if "<" in description or ">" in description:
             fail("frontmatter: description must not contain angle brackets")
     if re.search(r"<[A-Za-z/?][^>]*>", frontmatter):
@@ -151,8 +161,10 @@ deps_text = read(SCRIPTS_DIR / "install_deps.sh")
 common_text = read(SCRIPTS_DIR / "lib" / "common.sh")
 gen_text = read(SCRIPTS_DIR / "gen_ov_conf.py")
 
-if not re.search(r"^OPENVIKING_VERSION=master$", install_text, re.MULTILINE):
-    fail("install_openviking.sh must default OPENVIKING_VERSION=master")
+if not re.search(r"^OPENVIKING_VERSION=main$", install_text, re.MULTILINE):
+    fail("install_openviking.sh must default OPENVIKING_VERSION=main")
+if not re.search(r'OPENVIKING_VERSION" == "master"', install_text):
+    fail("install_openviking.sh must keep the historical master alias mapping")
 if not re.search(
     r"^GIT_URL=https://github\.com/volcengine/OpenViking\.git$",
     install_text,
@@ -179,6 +191,10 @@ for marker in (
     "maturin",
     "systemctl",
     "root_api_key",
+    "url_has_userinfo",
+    "set_deploy_failed",
+    "!/^DEPLOY_STATUS=/",
+    "chmod -R u=rwX",
     "0640",
 ):
     if marker not in install_text:
@@ -206,10 +222,12 @@ for marker in (
     "prepare_private_dir",
     "check_build_parents",
     "check_secret_file",
+    "untrusted_parent_reason",
+    "url_has_userinfo",
 ):
     if marker not in common_text:
         fail("common.sh lost helper: {!r}".format(marker))
-for marker in ("root_api_key", "embedding", "vlm", "workspace"):
+for marker in ("root_api_key", "embedding", "vlm", "workspace", "11434/v1"):
     if marker not in gen_text:
         fail("gen_ov_conf.py lost config marker: {!r}".format(marker))
 
@@ -224,7 +242,8 @@ if re.search(r"curl\s*\|\s*(ba)?sh", scan_all):
 
 # ---- 4. methodology / safety anchors ----
 ANCHORS = [
-    (r"默认.*master|master.*默认|未指定版本", "default master policy is documented"),
+    (r"默认.*main|main.*默认|未指定版本", "default main/master-alias policy is documented"),
+    (r"userinfo", "git URL userinfo rejection is documented"),
     (r"deploy\.env", "deploy.env contract is documented"),
     (r"doctor", "doctor verification is documented"),
     (r"/health", "health endpoint is documented"),
@@ -320,10 +339,224 @@ for path in scan_files:
 if sensitive_findings:
     fail("sensitive content found: {} hit(s)".format(len(sensitive_findings)))
 
+
+# ---- 7. offline behavior checks ----
+def record_behavior(name, ok, detail=""):
+    behavior_results[name] = {"ok": bool(ok), "detail": str(detail)[:600]}
+    if not ok:
+        behavior_failures.append("{}: {}".format(name, str(detail)[:600]))
+
+
+def run_process(argv):
+    try:
+        return subprocess.run(
+            argv,
+            cwd=str(SKILL_DIR),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8"),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None
+
+
+bash_bin = shutil.which("bash")
+shell_scripts = [
+    SCRIPTS_DIR / "lib" / "common.sh",
+    SCRIPTS_DIR / "preflight_check.sh",
+    SCRIPTS_DIR / "install_deps.sh",
+    SCRIPTS_DIR / "install_openviking.sh",
+    Path(__file__).resolve().parent / "run.sh",
+]
+if bash_bin:
+    for script in shell_scripts:
+        proc = run_process([bash_bin, "-n", str(script)])
+        record_behavior(
+            "bash_n:{}".format(script.name),
+            proc is not None and proc.returncode == 0,
+            "" if proc is None else (proc.stderr or proc.stdout),
+        )
+else:
+    record_behavior("bash_available", False, "bash not found")
+
+gen_script = SCRIPTS_DIR / "gen_ov_conf.py"
+installer = SCRIPTS_DIR / "install_openviking.sh"
+with tempfile.TemporaryDirectory(prefix="openviking-deploy-check-") as tmp:
+    tmp_dir = Path(tmp)
+    workspace = tmp_dir / "workspace"
+    key600 = tmp_dir / "key600"
+    key600.write_text("sk-placeholder\n", encoding="utf-8")
+    os.chmod(key600, 0o600)
+    key644 = tmp_dir / "key644"
+    key644.write_text("sk-placeholder\n", encoding="utf-8")
+    os.chmod(key644, 0o644)
+
+    def run_gen(extra):
+        proc = run_process([sys.executable, str(gen_script)] + extra)
+        if proc is None:
+            return 1, "gen_ov_conf.py failed to start"
+        return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
+    non_loopback_conf = tmp_dir / "non-loopback.conf"
+    rc, out = run_gen(
+        [
+            "--out",
+            str(non_loopback_conf),
+            "--workspace",
+            str(workspace),
+            "--host",
+            "0.0.0.0",
+            "--provider",
+            "openai",
+            "--embedding-model",
+            "text-embedding-3-small",
+            "--vlm-model",
+            "gpt-4o",
+            "--api-key-file",
+            str(key600),
+        ]
+    )
+    record_behavior(
+        "non_loopback_requires_root_key",
+        rc != 0 and "root-api-key-file" in out and not non_loopback_conf.exists(),
+        out,
+    )
+
+    rc, out = run_gen(
+        [
+            "--out",
+            str(tmp_dir / "wide-key.conf"),
+            "--workspace",
+            str(workspace),
+            "--provider",
+            "openai",
+            "--embedding-model",
+            "text-embedding-3-small",
+            "--vlm-model",
+            "gpt-4o",
+            "--api-key-file",
+            str(key644),
+        ]
+    )
+    record_behavior("key_file_mode_enforced", rc != 0 and "权限过宽" in out, out)
+
+    ollama_conf = tmp_dir / "ollama.conf"
+    rc, out = run_gen(
+        [
+            "--out",
+            str(ollama_conf),
+            "--workspace",
+            str(workspace),
+            "--provider",
+            "ollama",
+            "--embedding-model",
+            "nomic-embed-text",
+            "--vlm-model",
+            "llava",
+        ]
+    )
+    ollama_text = ollama_conf.read_text(encoding="utf-8") if ollama_conf.exists() else ""
+    record_behavior(
+        "ollama_without_key_and_v1",
+        rc == 0 and "api_key" not in ollama_text and "11434/v1" in ollama_text,
+        out,
+    )
+
+    incomplete = tmp_dir / "incomplete.conf"
+    incomplete.write_text(
+        json.dumps(
+            {
+                "embedding": {"dense": {"provider": "openai"}},
+                "vlm": {"provider": "openai"},
+                "storage": {"workspace": str(workspace)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc, out = run_gen(["--check", str(incomplete)])
+    record_behavior(
+        "check_rejects_incomplete_config",
+        rc != 0 and "model" in out and "api_key" in out,
+        out,
+    )
+
+    if bash_bin:
+        untrusted_src = tmp_dir / "src"
+        untrusted_src.mkdir()
+        (untrusted_src / "pyproject.toml").write_text("", encoding="utf-8")
+        (untrusted_src / "setup.py").write_text("", encoding="utf-8")
+        os.chmod(untrusted_src, 0o777)
+        result_dir = tmp_dir / "result"
+        proc = run_process(
+            [
+                bash_bin,
+                str(installer),
+                "--source-dir",
+                str(untrusted_src),
+                "--provider",
+                "ollama",
+                "--embedding-model",
+                "m",
+                "--vlm-model",
+                "v",
+                "--workspace",
+                str(tmp_dir / "ws"),
+                "--result-dir",
+                str(result_dir),
+                "--dry-run",
+            ]
+        )
+        detail = "" if proc is None else (proc.stdout or "") + (proc.stderr or "")
+        record_behavior(
+            "untrusted_source_dir_rejected",
+            proc is not None and proc.returncode != 0 and not result_dir.exists(),
+            detail,
+        )
+
+        proc = run_process(
+            [
+                bash_bin,
+                str(installer),
+                "--git-url",
+                "https://user:token@example.com/repo.git",
+                "--provider",
+                "ollama",
+                "--embedding-model",
+                "m",
+                "--vlm-model",
+                "v",
+                "--dry-run",
+            ]
+        )
+        detail = "" if proc is None else (proc.stdout or "") + (proc.stderr or "")
+        record_behavior(
+            "git_url_userinfo_rejected",
+            proc is not None
+            and proc.returncode != 0
+            and ("userinfo" in detail or "用户名/密码" in detail),
+            detail,
+        )
+    else:
+        record_behavior("untrusted_source_dir_rejected", False, "bash not found")
+        record_behavior("git_url_userinfo_rejected", False, "bash not found")
+
+# ---- 8. documented flags must exist in scripts ----
+script_text = "\n".join(read(p) for p in sorted(SCRIPTS_DIR.glob("*.sh"))) + "\n" + read(gen_script)
+# Only SKILL.md flags are part of the skill contract; the guide also shows
+# external command flags (git/pip/rustup) that must not be checked here.
+documented_flags = set(re.findall(r"--[a-z0-9-]+", text))
+documented_flags -= {"--config"}  # OpenViking server flag in the acceptance example
+missing_flags = sorted(flag for flag in documented_flags if flag not in script_text)
+doc_flags_checked = len(documented_flags)
+doc_flags_missing = len(missing_flags)
+if missing_flags:
+    fail("documented flags not found in scripts: {}".format(", ".join(missing_flags)))
+
 # ---- report ----
 RESULT = {
     "skill": SKILL_DIR.name,
-    "success": not failures,
+    "success": not failures and not behavior_failures,
     "failures": len(failures),
     "failure_details": failures,
     "links_checked": links_checked,
@@ -334,6 +567,13 @@ RESULT = {
     "evals_checked": evals_checked,
     "sensitive_findings": len(sensitive_findings),
     "sensitive_details": sensitive_findings,
+    "behavior_checks": len(behavior_results),
+    "behavior_failures": len(behavior_failures),
+    "behavior_failure_details": behavior_failures,
+    "behavior_details": behavior_results,
+    "doc_flags_checked": doc_flags_checked,
+    "doc_flags_missing": doc_flags_missing,
+    "doc_flags_missing_details": missing_flags,
 }
 RESULTS.parent.mkdir(parents=True, exist_ok=True)
 RESULTS.write_text(
@@ -344,6 +584,11 @@ print(json.dumps(RESULT, ensure_ascii=False, indent=2))
 if failures:
     print("FAILED: {} issue(s)".format(len(failures)), file=sys.stderr)
     for item in failures:
+        print("  - {}".format(item), file=sys.stderr)
+    sys.exit(1)
+if behavior_failures:
+    print("FAILED behavior: {} issue(s)".format(len(behavior_failures)), file=sys.stderr)
+    for item in behavior_failures:
         print("  - {}".format(item), file=sys.stderr)
     sys.exit(1)
 print("skill-integrity: all checks passed")

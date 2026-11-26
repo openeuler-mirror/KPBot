@@ -4,10 +4,10 @@
     {
       "id": 1,
       "prompt": "在一台 openEuler 24.03 服务器上部署 OpenViking 服务端，没有指定版本，机器能上外网，模型准备用火山引擎的 Embedding 和 VLM。请给出部署步骤。",
-      "expected_output": "识别为 OpenViking 环境部署任务；先运行 preflight_check.sh 做只读检查；未指定版本时使用默认 master 分支（https://github.com/volcengine/OpenViking.git），并记录实际 commit；安装系统依赖与 Rust 工具链；在 root 私有构建目录源码构建，创建 release venv 并安装；向用户确认 Embedding/VLM 模型名、API Base、workspace 与 API key 交付方式后再生成 ov.conf；systemd 托管；doctor 通过后验证 /health 与 /ready；给出 deploy.env 关键字段。",
+      "expected_output": "识别为 OpenViking 环境部署任务；先运行 preflight_check.sh 做只读检查；未指定版本时使用上游默认分支（当前 main；master 为历史别名，https://github.com/volcengine/OpenViking.git），并记录实际 commit；安装系统依赖与 Rust 工具链；在 root 私有构建目录源码构建，创建 release venv 并安装；向用户确认 Embedding/VLM 模型名、API Base、workspace 与 API key 交付方式后再生成 ov.conf；systemd 托管；doctor 通过后验证 /health 与 /ready；给出 deploy.env 关键字段。",
       "files": [],
       "expectations": [
-        "明确采用默认 master，并记录 OPENVIKING_COMMIT 与实际包版本",
+        "明确采用默认 main（master 为历史别名），并记录 OPENVIKING_COMMIT 与实际包版本",
         "先做只读前置检查，再安装系统依赖与工具链",
         "源码构建使用 root 私有构建目录，不直接用普通用户目录",
         "生成配置前向用户确认模型名、API Base、workspace 与 key 交付方式",
@@ -57,11 +57,11 @@
     {
       "id": 5,
       "prompt": "把 OpenViking 源码放在 /data/dev/OpenViking（普通用户目录），用 root 执行安装，构建目录想用 /tmp/ov-build。直接给命令。",
-      "expected_output": "拒绝普通用户拥有的源码目录与 /tmp 下可被他人预先创建的构建目录；指出 --source-dir 要求 root 属主且组/其他不可写，--build-root 要求 root:root 0700 且父目录不可被普通用户控制；建议把源码移到 root 私有目录并修正权限，构建根使用默认 /var/cache/openviking-deploy 或安全的 root 私有路径；不给出绕过安全检查的命令。",
+      "expected_output": "拒绝普通用户拥有的源码目录；指出 --source-dir 要求 root 属主且组/其他不可写，并校验父目录链，--build-root 要求 root:root 0700 且父目录不可被普通用户控制（sticky 的 /tmp 本身不是拒绝理由，但最终构建目录必须 root 私有）；建议把源码移到 root 私有目录并修正权限，构建根使用默认 /var/cache/openviking-deploy 或安全的 root 私有路径；不给出绕过安全检查的命令。",
       "files": [],
       "expectations": [
         "拒绝普通用户目录作为 root 构建的源码目录",
-        "拒绝 /tmp 下可被他人控制的构建目录",
+        "说明源码目录与 wheel 的父目录链也会被校验",
         "说明构建根要求 root:root 0700，父目录不得被普通用户控制",
         "建议使用默认 /var/cache/openviking-deploy 或安全的 root 私有路径",
         "没有直接给出绕过安全检查的命令"

@@ -3,7 +3,7 @@
 # install_openviking.sh — OpenViking 服务端安装部署
 #
 # 默认行为:
-#   - 版本 master（https://github.com/volcengine/OpenViking.git）
+#   - 版本 main（https://github.com/volcengine/OpenViking.git；master 为历史别名）
 #   - 系统依赖 + Rust 工具链（需 --install-rust 或已预装）
 #   - 独立 release venv 中构建并安装 OpenViking
 #   - 生成/接管 /etc/openviking/ov.conf
@@ -12,8 +12,8 @@
 #   - 写 deploy.env；旧 release 保留用于回滚
 #
 # 版本策略:
-#   - 未指定 --version 时固定 master，并记录实际 commit
-#   - 指定 tag/分支/commit 时按 ref checkout
+#   - 未指定 --version 时安装上游默认分支 main（master 为历史别名），并记录实际 commit
+#   - 指定 tag/分支/commit 时按 ref checkout；可选 --verify-signature 做 GPG 校验
 #
 # 安全:
 #   - 构建目录 root:root 0700，父目录属主/sticky 校验
@@ -29,7 +29,7 @@ SKILL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/common.sh
 source "$SKILL_ROOT/scripts/lib/common.sh"
 
-OPENVIKING_VERSION=master
+OPENVIKING_VERSION=main
 GIT_URL=https://github.com/volcengine/OpenViking.git
 SOURCE_DIR=""
 WHEEL=""
@@ -60,6 +60,9 @@ SKIP_DEPS=0
 NO_SYSTEMD=0
 PIP_INDEX_URL=""
 READY_TIMEOUT=180
+VERIFY_SIGNATURE=0
+HOST_SET=0
+PORT_SET=0
 DRY_RUN=0
 
 usage() {
@@ -67,8 +70,9 @@ usage() {
 用法: install_openviking.sh [options]
 
 版本与源码:
-  --version REF            版本/分支/commit（默认 master）
-  --git-url URL            源码仓库，仅支持 http(s)://（默认官方仓库）；
+  --version REF            版本/分支/commit（默认 main；master 为历史别名）
+  --verify-signature       对 tag/commit 做 GPG 签名校验（需已导入公钥）
+  --git-url URL            源码仓库，仅支持 http(s):// 且不得含 userinfo（默认官方仓库）；
                            本地源码请用 --source-dir，预编译包用 --wheel
   --source-dir DIR         离线/本地源码目录（要求 root 属主、组/其他不可写）
   --wheel FILE             预编译 wheel（跳过源码构建）
@@ -113,6 +117,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) OPENVIKING_VERSION=${2:?--version 缺少参数}; shift 2 ;;
+    --verify-signature) VERIFY_SIGNATURE=1; shift ;;
     --git-url) GIT_URL=${2:?--git-url 缺少参数}; shift 2 ;;
     --source-dir) SOURCE_DIR=${2:?--source-dir 缺少参数}; shift 2 ;;
     --wheel) WHEEL=${2:?--wheel 缺少参数}; shift 2 ;;
@@ -134,8 +139,8 @@ while [[ $# -gt 0 ]]; do
     --api-key-file) API_KEY_FILE=${2:?--api-key-file 缺少参数}; shift 2 ;;
     --root-api-key-file) ROOT_API_KEY_FILE=${2:?--root-api-key-file 缺少参数}; shift 2 ;;
     --workspace) WORKSPACE=${2:?--workspace 缺少参数}; shift 2 ;;
-    --host) HOST=${2:?--host 缺少参数}; shift 2 ;;
-    --port) PORT=${2:?--port 缺少参数}; shift 2 ;;
+    --host) HOST=${2:?--host 缺少参数}; HOST_SET=1; shift 2 ;;
+    --port) PORT=${2:?--port 缺少参数}; PORT_SET=1; shift 2 ;;
     --with-studio) WITH_STUDIO=1; shift ;;
     --skip-studio) SKIP_STUDIO=1; shift ;;
     --install-rust) INSTALL_RUST=1; shift ;;
@@ -150,6 +155,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------- 参数校验 ----------
+if [[ "$OPENVIKING_VERSION" == "master" ]]; then
+  log_warn "上游已无 master 分支，按 main（历史别名）处理"
+  OPENVIKING_VERSION=main
+fi
 [[ "$OPENVIKING_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
   || die "版本/ref 非法: $OPENVIKING_VERSION"
 [[ "$OPENVIKING_VERSION" != *".."* && "$OPENVIKING_VERSION" != *"//"* && "$OPENVIKING_VERSION" != */ ]] \
@@ -164,15 +173,19 @@ SERVICE_NAME=${SERVICE_NAME%.service}
 [[ "$READY_TIMEOUT" =~ ^[0-9]+$ ]] && ((READY_TIMEOUT >= 10)) || die "ready-timeout 非法: $READY_TIMEOUT"
 [[ "$DIMENSION" =~ ^[0-9]*$ ]] || die "dimension 非法: $DIMENSION"
 if [[ "$GIT_URL" != http://* && "$GIT_URL" != https://* ]]; then
-  die "git-url 仅支持 http(s):// URL；本地源码请使用 --source-dir: $GIT_URL"
+  die "git-url 仅支持 http(s):// URL；本地源码请使用 --source-dir"
 fi
+url_has_userinfo "$GIT_URL" \
+  && die "git-url 不得携带用户名/密码（userinfo）；请改用 SSH remote 或凭据助手"
+[[ "$GIT_URL" == *"?"* || "$GIT_URL" == *"#"* ]] \
+  && die "git-url 不得包含查询串或片段（避免令牌进入日志）；请改用 SSH remote 或凭据助手"
 if [[ -n "$PIP_INDEX_URL" ]]; then
   [[ "$PIP_INDEX_URL" == http://* || "$PIP_INDEX_URL" == https://* ]] \
     || die "pip-index-url 仅支持 http(s)://"
-  [[ "$PIP_INDEX_URL" == *"@"* ]] && die "pip-index-url 不得携带用户名/密码"
+  url_has_userinfo "$PIP_INDEX_URL" && die "pip-index-url 不得携带用户名/密码"
 fi
-if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" != "master" ]]; then
-  die "--source-dir 使用目录自带版本，不能再指定 --version $OPENVIKING_VERSION（默认 master 即可）"
+if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" != "main" ]]; then
+  die "--source-dir 使用目录自带版本，不能再指定 --version $OPENVIKING_VERSION（默认 main 即可）"
 fi
 if [[ -n "$SOURCE_DIR" && -n "$WHEEL" ]]; then
   die "--source-dir 与 --wheel 不能同时使用"
@@ -227,6 +240,30 @@ if [[ -n "$OV_CONF" ]]; then
   command -v python3 >/dev/null 2>&1 || die "缺少 python3，无法校验 ov.conf"
   python3 "$SKILL_ROOT/scripts/gen_ov_conf.py" --check "$OV_CONF" >/dev/null \
     || die "ov.conf 校验失败: $OV_CONF"
+  conf_info=$(python3 - "$OV_CONF" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    doc = json.load(fh)
+server = doc.get("server") or {}
+print(server.get("host") or "127.0.0.1", server.get("port") or 1933,
+      1 if server.get("root_api_key") else 0)
+PY
+  )
+  read -r conf_host conf_port conf_has_root <<<"$conf_info"
+  if [[ "$HOST_SET" == "1" && "$HOST" != "$conf_host" ]]; then
+    log_warn "--host 与 ov.conf server.host 不一致，探测以配置为准: $conf_host"
+  fi
+  if [[ "$PORT_SET" == "1" && "$PORT" != "$conf_port" ]]; then
+    log_warn "--port 与 ov.conf server.port 不一致，探测以配置为准: $conf_port"
+  fi
+  HOST=$conf_host
+  PORT=$conf_port
+  [[ "$HOST" =~ ^[A-Za-z0-9.:-]+$ ]] || die "ov.conf server.host 非法: $HOST"
+  [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT >= 1 && PORT <= 65535)) \
+    || die "ov.conf server.port 非法: $PORT"
+  if [[ "$HOST" != "127.0.0.1" && "$HOST" != "localhost" && "$HOST" != "::1" && "$conf_has_root" != "1" ]]; then
+    die "ov.conf 监听 $HOST 不是回环地址，但未配置 server.root_api_key"
+  fi
 else
   [[ -n "$PROVIDER" ]] || die "未提供 --ov-conf，必须提供 --provider/--embedding-model/--vlm-model（先与用户确认，不要猜测）"
   [[ -n "$EMBEDDING_MODEL" ]] || die "缺少 --embedding-model"
@@ -266,7 +303,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   结果目录      : ${RESULT_DIR:-/var/log/openviking-deploy/<run_id>}
 执行顺序:
   1) install_deps.sh（可 --skip-deps / --install-rust / --with-studio）
-  2) 获取源码（git master/tag 或 --source-dir）或使用 --wheel
+  2) 获取源码（git main/tag 或 --source-dir）或使用 --wheel
   3) 创建 release venv → 构建 wheel → pip 安装
   4) 生成/接管 ov.conf（0640 root:<运行组>）
   5) 安装 systemd 服务（或后台进程）→ doctor
@@ -287,21 +324,35 @@ WHEEL_PATH=""
 OPENVIKING_COMMIT=""
 OPENVIKING_BRANCH=""
 OPENVIKING_PACKAGE_VERSION=""
+SIGNATURE_VERIFIED=0
 CONF_FILE="$CONF_DIR/ov.conf"
 RUN_GROUP=""
 PROBE_HOST="$HOST"
 CURRENT_PHASE=validate
 
+set_deploy_failed() {
+  local rc=$1
+  local tmp
+  tmp=$(mktemp) || return 0
+  awk '!/^DEPLOY_STATUS=/' "$DEPLOY_ENV" >"$tmp" 2>/dev/null || true
+  {
+    printf 'DEPLOY_STATUS=failed\n'
+    cat "$tmp"
+    printf 'FAILED_PHASE=%s\n' "$CURRENT_PHASE"
+    printf 'FAILED_EXIT_CODE=%s\n' "$rc"
+    printf 'FAILED_LOG=%s\n' "$MAIN_LOG"
+  } >"$DEPLOY_ENV" 2>/dev/null || true
+  rm -f "$tmp"
+}
+
 on_exit() {
   local rc=$?
   if ((rc != 0)); then
     if [[ -n "${DEPLOY_ENV:-}" && -f "$DEPLOY_ENV" ]]; then
-      {
-        printf 'DEPLOY_STATUS=failed\n'
-        printf 'FAILED_PHASE=%s\n' "$CURRENT_PHASE"
-        printf 'FAILED_EXIT_CODE=%s\n' "$rc"
-        printf 'FAILED_LOG=%s\n' "$MAIN_LOG"
-      } >>"$DEPLOY_ENV" 2>/dev/null || true
+      set_deploy_failed "$rc"
+    fi
+    if [[ -n "${RESULT_DIR:-}" && -d "$RESULT_DIR" ]]; then
+      chmod -R u=rwX,g=rX,o= "$RESULT_DIR/logs" "$RESULT_DIR/env" 2>/dev/null || true
     fi
     if [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]]; then
       log_warn "构建目录保留供排查: $WORK_DIR"
@@ -313,12 +364,21 @@ trap on_exit EXIT
 
 require_root
 mkdir -p "$RESULT_DIR/logs" "$RESULT_DIR/env"
+chmod 0750 "$RESULT_DIR/logs" "$RESULT_DIR/env" 2>/dev/null || true
+for f in deps.log pip-build-deps.log build.log pip-install.log doctor.log health.json ready.json; do
+  [[ -f "$RESULT_DIR/logs/$f" ]] || install -m 0640 /dev/null "$RESULT_DIR/logs/$f"
+  chmod 0640 "$RESULT_DIR/logs/$f" 2>/dev/null || true
+done
+[[ -f "$MAIN_LOG" ]] || install -m 0640 /dev/null "$MAIN_LOG"
+chmod 0640 "$MAIN_LOG" 2>/dev/null || true
 exec > >(tee -a "$MAIN_LOG") 2>&1
 
 if [[ -f "$DEPLOY_ENV" ]]; then
   mv "$DEPLOY_ENV" "$DEPLOY_ENV.previous.$run_id"
   log_info "旧 deploy.env 已备份: $DEPLOY_ENV.previous.$run_id"
 fi
+[[ -f "$DEPLOY_ENV" ]] || install -m 0640 /dev/null "$DEPLOY_ENV"
+chmod 0640 "$DEPLOY_ENV" 2>/dev/null || true
 printf 'DEPLOY_STATUS=running\nDEPLOY_RUN_ID=%s\n' "$run_id" >"$DEPLOY_ENV"
 
 export PATH="/usr/local/cargo/bin:$PATH"
@@ -391,11 +451,11 @@ else
   if ! git clone --quiet "$GIT_URL" "$SRC_DIR"; then
     die "git clone 失败: $GIT_URL"
   fi
-  if [[ "$OPENVIKING_VERSION" == "master" ]]; then
-    if git -C "$SRC_DIR" show-ref --verify --quiet refs/heads/master; then
-      git -C "$SRC_DIR" checkout --quiet master
+  if [[ "$OPENVIKING_VERSION" == "main" ]]; then
+    if git -C "$SRC_DIR" show-ref --verify --quiet refs/heads/main; then
+      git -C "$SRC_DIR" checkout --quiet main
     else
-      log_info "仓库默认分支不是 master（可能是 main）；按默认分支安装并记录实际 commit"
+      log_info "仓库本地无 main 分支；按克隆后的默认分支安装并记录实际 commit"
     fi
   elif ! git -C "$SRC_DIR" checkout --quiet "$OPENVIKING_VERSION" 2>/dev/null; then
     if git -C "$SRC_DIR" fetch --quiet origin "$OPENVIKING_VERSION" 2>/dev/null; then
@@ -421,6 +481,17 @@ if [[ -z "$WHEEL" ]]; then
   fi
 fi
 [[ -n "$OPENVIKING_BRANCH" ]] || OPENVIKING_BRANCH=wheel
+
+if [[ "$VERIFY_SIGNATURE" == "1" ]]; then
+  [[ -z "$WHEEL" ]] || die "--verify-signature 不适用于 --wheel（请在源码部署时校验 tag/commit）"
+  log_info "校验源码签名（ref: $OPENVIKING_VERSION）"
+  if [[ "$OPENVIKING_VERSION" =~ ^v?[0-9] ]]; then
+    git -C "$SRC_DIR" verify-tag "$OPENVIKING_VERSION" || die "tag 签名校验失败: $OPENVIKING_VERSION"
+  else
+    git -C "$SRC_DIR" verify-commit HEAD || die "commit 签名校验失败: $OPENVIKING_VERSION"
+  fi
+  SIGNATURE_VERIFIED=1
+fi
 
 if [[ "$OPENVIKING_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   release_id=${OPENVIKING_COMMIT:0:12}
@@ -657,6 +728,7 @@ log_info "阶段 7/7: 健康验收"
 case "$HOST" in
   0.0.0.0) PROBE_HOST=127.0.0.1 ;;
   ::|::1) PROBE_HOST='[::1]' ;;
+  *:*) PROBE_HOST="[$HOST]" ;;
   *) PROBE_HOST="$HOST" ;;
 esac
 BASE_URL="http://$PROBE_HOST:$PORT"
@@ -743,10 +815,10 @@ then
 fi
 
 CURRENT_PHASE=finalize
-if [[ -n "$WHEEL" && "$OPENVIKING_VERSION" == "master" ]]; then
+if [[ -n "$WHEEL" && "$OPENVIKING_VERSION" == "main" ]]; then
   OPENVIKING_VERSION=wheel
 fi
-if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" == "master" ]]; then
+if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" == "main" ]]; then
   OPENVIKING_VERSION=source-dir
 fi
 {
@@ -755,6 +827,7 @@ fi
   printf 'OPENVIKING_VERSION=%s\n' "$OPENVIKING_VERSION"
   printf 'OPENVIKING_BRANCH=%s\n' "$OPENVIKING_BRANCH"
   printf 'OPENVIKING_COMMIT=%s\n' "$OPENVIKING_COMMIT"
+  printf 'OPENVIKING_SIGNATURE_VERIFIED=%s\n' "$SIGNATURE_VERIFIED"
   printf 'OPENVIKING_PACKAGE_VERSION=%s\n' "${OPENVIKING_PACKAGE_VERSION:-unknown}"
   printf 'OPENVIKING_SOURCE=%s\n' "${SOURCE_DIR:-${WHEEL:-$GIT_URL}}"
   printf 'OPENVIKING_WORK_DIR=%s\n' "$WORK_DIR"
@@ -778,6 +851,8 @@ fi
   printf 'OPENVIKING_API_KEY_SET=%s\n' "$API_KEY_SET"
   printf 'DEPLOY_TIME=%s\n' "$(date -Is)"
 } >"$DEPLOY_ENV"
+chmod 0640 "$DEPLOY_ENV" 2>/dev/null || true
+chmod -R u=rwX,g=rX,o= "$RESULT_DIR/logs" "$RESULT_DIR/env" 2>/dev/null || true
 
 log_ok "OpenViking 环境部署完成"
 log_info "版本: $OPENVIKING_VERSION（commit: $OPENVIKING_COMMIT, package: ${OPENVIKING_PACKAGE_VERSION:-unknown}）"

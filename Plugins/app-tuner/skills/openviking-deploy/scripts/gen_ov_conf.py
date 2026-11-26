@@ -11,18 +11,19 @@ import os
 import stat
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 PROVIDER_DEFAULTS = {
     "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
     "openai": "https://api.openai.com/v1",
-    "ollama": "http://127.0.0.1:11434",
+    "ollama": "http://127.0.0.1:11434/v1",
     "azure": "",
 }
 
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
-def fail(message):
+def fail(message: str) -> NoReturn:
     print("[FAIL] " + message, file=sys.stderr)
     sys.exit(2)
 
@@ -40,6 +41,13 @@ def read_secret(path):
     return value[0].strip()
 
 
+def has_credentials(section):
+    creds = section.get("credentials")
+    if not isinstance(creds, list) or not creds:
+        return False
+    return all(isinstance(item, dict) and item.get("provider") for item in creds)
+
+
 def validate(doc):
     problems = []
     if not isinstance(doc, dict):
@@ -52,8 +60,12 @@ def validate(doc):
         for field in ("provider", "model"):
             if not dense.get(field):
                 problems.append("embedding.dense.{} 缺失".format(field))
-        if not dense.get("api_key") and dense.get("provider") != "ollama":
-            problems.append("embedding.dense.api_key 缺失（ollama 可为空）")
+        if (
+            not dense.get("api_key")
+            and dense.get("provider") != "ollama"
+            and not has_credentials(dense)
+        ):
+            problems.append("embedding.dense.api_key 缺失（ollama/credentials 可为空）")
     vlm = doc.get("vlm")
     if not isinstance(vlm, dict):
         problems.append("缺少 vlm")
@@ -61,8 +73,12 @@ def validate(doc):
         for field in ("provider", "model"):
             if not vlm.get(field):
                 problems.append("vlm.{} 缺失".format(field))
-        if not vlm.get("api_key") and vlm.get("provider") not in ("ollama", "openai-codex"):
-            problems.append("vlm.api_key 缺失（ollama/openai-codex 可为空）")
+        if (
+            not vlm.get("api_key")
+            and vlm.get("provider") not in ("ollama", "openai-codex")
+            and not has_credentials(vlm)
+        ):
+            problems.append("vlm.api_key 缺失（ollama/openai-codex/credentials 可为空）")
     storage = doc.get("storage")
     if not isinstance(storage, dict) or not storage.get("workspace"):
         problems.append("缺少 storage.workspace")

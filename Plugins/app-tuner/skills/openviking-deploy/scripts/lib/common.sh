@@ -76,9 +76,8 @@ secure_path() {
   printf -v "$name" '%s' "$p"
 }
 
-check_trusted_parents() {
-  local label=$1
-  local dir=$2
+untrusted_parent_reason() {
+  local dir=$1
   local parent perm owner bits
   parent=$(dirname "$dir")
   while [[ "$parent" != "/" && "$parent" != "." ]]; do
@@ -86,17 +85,38 @@ check_trusted_parents() {
       owner=$(stat -c '%u' "$parent")
       perm=$(stat -c '%a' "$parent")
       bits=$((8#$perm))
-      [[ "$owner" == "0" ]] || die "$label 的父目录不属于 root: $parent（请改用 root 私有路径）"
+      if [[ "$owner" != "0" ]]; then
+        printf '%s 不属于 root' "$parent"
+        return 1
+      fi
       if (((bits & 0022) != 0 && (bits & 01000) == 0)); then
-        die "$label 的父目录可被组/其他用户写入且无 sticky 位: $parent（权限 $perm）"
+        printf '%s 可被组/其他用户写入且无 sticky 位（权限 %s）' "$parent" "$perm"
+        return 1
       fi
     fi
     parent=$(dirname "$parent")
   done
+  return 0
+}
+
+check_trusted_parents() {
+  local label=$1
+  local reason
+  if ! reason=$(untrusted_parent_reason "$2"); then
+    die "$label 的父目录不可信: $reason（请改用 root 私有路径）"
+  fi
 }
 
 check_build_parents() {
   check_trusted_parents "构建根目录" "$1"
+}
+
+url_has_userinfo() {
+  local url=$1
+  local rest authority
+  rest=${url#*://}
+  authority=${rest%%/*}
+  [[ "$authority" == *"@"* ]]
 }
 
 prepare_private_dir() {

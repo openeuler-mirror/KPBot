@@ -1,22 +1,25 @@
 # 用例：tier A — openviking-deploy skill 的完整性契约
 #
 # 覆盖（checks.py）：
-#   1. SKILL.md frontmatter：name 与目录一致、description 非空、无 XML 标签
+#   1. SKILL.md frontmatter：name 与目录一致、description 非空且 <=200 字符、无 XML 标签
 #   2. SKILL.md / references 中引用的 references/*.md、scripts/*、assets/* 均存在
-#   3. 默认版本固定 master、官方仓库 URL、构建根固定 /var/cache/openviking-deploy；
+#   3. 默认版本固定 main（master 为历史别名）、官方仓库 URL、构建根固定 /var/cache/openviking-deploy；
 #      安装脚本保留路径归一化、mktemp、源码目录校验、doctor、/health、/ready、
 #      systemd、root_api_key、maturin、sha256 等安全与功能标记
 #   4. 关键锚点仍在语料中：
-#      默认 master、deploy.env、doctor、/health、/ready、0640、root_api_key、
+#      默认 main/master 别名、deploy.env、doctor、/health、/ready、0640、root_api_key、
 #      Rust 1.91.1、--source-dir、release/current、0700、路径 .. 拒绝
 #   5. evals/evals.json 结构完整且至少 5 条用例
 #   6. 敏感内容扫描（私网 IP、凭据字面量、个人 home 路径）
+#   7. 离线行为断言：bash -n、非回环鉴权、密钥权限、ollama 无 key、--check 缺字段、
+#      不可信源码目录、git URL userinfo 拒绝
+#   8. SKILL/refs 中提到的脚本参数必须能在脚本中找到（防文档漂移）
 #
 # 运行（在 skill 根目录下）：
 #   bash cases/skill-integrity/run.sh
 #   # 产物 cases/skill-integrity/results/result.json；退出码 0 = 全部通过
 #
-# 说明：tier A，仅依赖 python3 标准库；不需要真实 OpenViking/Rust 环境。
+# 说明：tier A，仅依赖 python3 标准库与 bash；不触网、不改主机。
 
 name: skill-integrity
 skill: openviking-deploy
@@ -63,4 +66,22 @@ assert:
   - type: json_field
     file: results/result.json
     field: sensitive_findings
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: behavior_checks
+    op: gte
+    expect: 8
+  - type: json_field
+    file: results/result.json
+    field: behavior_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: doc_flags_checked
+    op: gte
+    expect: 8
+  - type: json_field
+    file: results/result.json
+    field: doc_flags_missing
     expect: 0

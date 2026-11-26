@@ -37,15 +37,17 @@
 
 ## 2. 版本策略
 
-- **未指定版本时使用 `master`**，不自动选择 release tag。上游默认分支若已改名为 `main`，
-  则按克隆后的默认分支安装，避免因为分支名不一致导致 checkout 失败。
-- `master`/默认分支是移动分支：部署完成后必须把 `git rev-parse HEAD` 写入 `deploy.env` 的
+- **未指定版本时使用上游默认分支 `main`**（`master` 已不存在，仅作为历史别名映射到 main），
+  不自动选择 release tag。克隆后若本地无 main，则按克隆后的默认分支安装并记录实际分支。
+- 默认分支是移动分支：部署完成后必须把 `git rev-parse HEAD` 写入 `deploy.env` 的
   `OPENVIKING_COMMIT`，同时记录 `OPENVIKING_BRANCH` 与 `OPENVIKING_PACKAGE_VERSION`。
 - 指定 tag（如 `v0.3.22`）、分支或 commit 时按 ref checkout；tag 与 commit 更适合可复现环境。
-- 离线部署用 `--source-dir`，使用目录当前内容；目录自带版本，不能再指定非 master 的 `--version`。
-- 已有预编译 wheel 时用 `--wheel`；wheel 的哈希会写入 release 标识，不与 master 版本声明混用。
+  需要 GPG 校验时加 `--verify-signature`，脚本对 tag 执行 `git verify-tag`，对分支/commit
+  执行 `git verify-commit`，结果写入 `OPENVIKING_SIGNATURE_VERIFIED`。
+- 离线部署用 `--source-dir`，使用目录当前内容；目录自带版本，不能再指定非 main 的 `--version`。
+- 已有预编译 wheel 时用 `--wheel`；wheel 的哈希会写入 release 标识，不与源码版本声明混用。
 - 上游推荐的普通用户路径是 `uv tool install openviking --upgrade`；本技能按部署需求默认源码构建，
-  不把预编译包当作 master。
+  不把预编译包当作默认分支。
 
 ## 3. 源码与构建路径
 
@@ -55,13 +57,15 @@
 
 ```bash
 git clone https://github.com/volcengine/OpenViking.git <build>/src
-# 默认分支为 master 时 checkout master；否则保留克隆后的默认分支（上游当前为 main）
+# 默认分支为 main 时 checkout main；否则保留克隆后的默认分支
 git -C <build>/src rev-parse --abbrev-ref HEAD
 git -C <build>/src rev-parse HEAD
 ```
 
 指定 tag/分支/commit 时 checkout 对应 ref；commit 不在默认分支时脚本会追加一次 `git fetch`。
-克隆与构建都在 root 私有的 `/var/cache/openviking-deploy` 下进行，完成后保留现场供排查。
+`--git-url` 不得携带 `user:token@` 形式的 userinfo；需要私有仓库认证时使用 SSH remote 或
+凭据助手，日志与 `deploy.env` 只记录不含凭据的仓库地址。克隆与构建都在 root 私有的
+`/var/cache/openviking-deploy` 下进行，完成后保留现场供排查。
 
 ### 3.2 工具链检查
 
@@ -155,7 +159,7 @@ provider 默认 API Base：
 |----------|---------------|
 | volcengine | `https://ark.cn-beijing.volces.com/api/v3` |
 | openai | `https://api.openai.com/v1` |
-| ollama | `http://127.0.0.1:11434` |
+| ollama | `http://127.0.0.1:11434/v1` |
 | azure | 必须显式 `--api-base` |
 
 Ollama 可省略 API key；其他 provider 没有 key 时脚本直接失败，不写入占位 key。
@@ -168,8 +172,10 @@ Ollama 可省略 API key；其他 provider 没有 key 时脚本直接失败，�
 bash scripts/install_openviking.sh --ov-conf /root/ov.conf
 ```
 
-脚本会校验 JSON、`embedding.dense`、`vlm`、`storage.workspace`，备份旧配置后安装到
-`/etc/openviking/ov.conf`。混合 provider（如 volcengine Embedding + Codex/Kimi/GLM VLM）
+脚本会调用 `gen_ov_conf.py --check` 校验 JSON、`embedding.dense`、`vlm`、`storage.workspace`
+及模型/凭据字段，备份旧配置后安装到 `/etc/openviking/ov.conf`。探测监听地址时以配置内
+`server.host`/`server.port` 为准，而不是命令行默认值；配置监听非回环地址时必须包含
+`server.root_api_key`。混合 provider（如 volcengine Embedding + Codex/Kimi/GLM VLM）
 应使用这种方式，不要用共享参数强行生成。
 
 ### 4.3 交互式向导
@@ -185,8 +191,9 @@ bash scripts/install_openviking.sh --ov-conf /root/ov.conf
 
 ### 4.4 非回环监听与鉴权
 
-默认监听 `127.0.0.1`。监听 `0.0.0.0` 或其他网卡地址时必须提供 `--root-api-key-file`，
-脚本会写入 `server.root_api_key`；否则服务会因开发模式限制拒绝启动。
+默认监听 `127.0.0.1`。生成配置时，监听 `0.0.0.0` 或其他网卡地址必须提供
+`--root-api-key-file`，脚本会写入 `server.root_api_key`；`--ov-conf` 模式则以配置内
+`server.root_api_key` 为准。缺少鉴权时服务会因开发模式限制拒绝启动，部署前会直接失败。
 
 ## 5. systemd 与运行用户
 
@@ -253,9 +260,11 @@ curl -fsS http://127.0.0.1:1933/ready
 
 - API key 只从 600 文件或用户配置读取，不进入 argv、日志、`deploy.env`。
 - 生成的 `/etc/openviking/ov.conf` 为 `0640 root:<运行组>`；不要把权限放宽到 0644。
+- 结果目录 `logs/`、`env/` 为 0750，日志与 `deploy.env` 为 0640，避免本地用户读取残留。
 - 构建根 `root:root 0700`，父目录不得被普通用户控制；源码目录复制后再次校验属主与写权限。
 - 路径必须是绝对路径，拒绝 `.`、`..`、`//`；归一化后拒绝系统级目录。
-- Git URL 仅支持 http(s)://；本地源码必须走 `--source-dir`，禁止 `file://`。
+- Git URL 仅支持 http(s)://，拒绝内嵌 userinfo 凭据以及查询串/片段；本地源码必须走
+  `--source-dir`，禁止 `file://`。
 - Rust 安装使用官方 `.sha256` 校验，禁止关闭 TLS 校验。
 - 不自动改防火墙、SELinux、内核参数；需要对外开放时另行评估反向代理与鉴权。
 

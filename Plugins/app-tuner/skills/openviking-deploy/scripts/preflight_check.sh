@@ -26,7 +26,7 @@ SKILL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/common.sh
 source "$SKILL_ROOT/scripts/lib/common.sh"
 
-OPENVIKING_VERSION=master
+OPENVIKING_VERSION=main
 GIT_URL=https://github.com/volcengine/OpenViking.git
 SOURCE_DIR=""
 WHEEL=""
@@ -53,7 +53,7 @@ usage() {
 
 只读检查 OpenViking 部署前置条件，不修改任何配置，不连接模型 API。
 
-  --version REF           版本/分支/commit（默认 master）
+  --version REF           版本/分支/commit（默认 main；master 为历史别名）
   --git-url URL           源码仓库（仅支持 http(s)://；本地源码用 --source-dir）
   --source-dir DIR        离线/本地源码目录
   --wheel FILE            预编译 wheel（跳过源码构建）
@@ -104,11 +104,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$GIT_URL" != http://* && "$GIT_URL" != https://* ]]; then
-  die "git-url 仅支持 http(s):// URL；本地源码请使用 --source-dir: $GIT_URL"
+if [[ "$OPENVIKING_VERSION" == "master" ]]; then
+  OPENVIKING_VERSION=main
 fi
-if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" != "master" ]]; then
-  die "--source-dir 使用目录自带版本，不能再指定 --version $OPENVIKING_VERSION（默认 master 即可）"
+if [[ "$GIT_URL" != http://* && "$GIT_URL" != https://* ]]; then
+  die "git-url 仅支持 http(s):// URL；本地源码请使用 --source-dir"
+fi
+url_has_userinfo "$GIT_URL" \
+  && die "git-url 不得携带用户名/密码（userinfo）；请改用 SSH remote 或凭据助手"
+[[ "$GIT_URL" == *"?"* || "$GIT_URL" == *"#"* ]] \
+  && die "git-url 不得包含查询串或片段（避免令牌进入日志）；请改用 SSH remote 或凭据助手"
+if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" != "main" ]]; then
+  die "--source-dir 使用目录自带版本，不能再指定 --version $OPENVIKING_VERSION（默认 main 即可）"
 fi
 if [[ -n "$SOURCE_DIR" && -n "$WHEEL" ]]; then
   die "--source-dir 与 --wheel 不能同时使用"
@@ -261,7 +268,9 @@ fi
 # ---------- 5. 源码 / 网络 ----------
 sect "5. 源码与下载源"
 if [[ -n "$WHEEL" ]]; then
-  if [[ -f "$WHEEL" ]]; then
+  if ! valid_abs_path "$WHEEL"; then
+    fail "wheel 必须是绝对路径且不含 .、..、// 段: $WHEEL"
+  elif [[ -f "$WHEEL" ]]; then
     owner=$(stat -c '%u' "$WHEEL" 2>/dev/null || echo unknown)
     mode=$(stat -c '%a' "$WHEEL" 2>/dev/null || echo unknown)
     if [[ "$owner" == "0" ]] && [[ "$mode" =~ ^[0-9]+$ ]] && (( (8#$mode & 0022) == 0 )); then
@@ -269,17 +278,29 @@ if [[ -n "$WHEEL" ]]; then
     else
       fail "wheel 必须属于 root 且组/其他不可写（owner=$owner mode=$mode）: $WHEEL"
     fi
+    if ! reason=$(untrusted_parent_reason "$WHEEL"); then
+      fail "wheel 的父目录不可信: $reason"
+    else
+      pass "wheel 的父目录属 root 且不可被普通用户控制"
+    fi
   else
     fail "wheel 不存在: $WHEEL"
   fi
 elif [[ -n "$SOURCE_DIR" ]]; then
-  if [[ ! -d "$SOURCE_DIR" ]]; then
+  if ! valid_abs_path "$SOURCE_DIR"; then
+    fail "源码目录必须是绝对路径且不含 .、..、// 段: $SOURCE_DIR"
+  elif [[ ! -d "$SOURCE_DIR" ]]; then
     fail "源码目录不存在: $SOURCE_DIR"
   else
     owner=$(stat -c '%u' "$SOURCE_DIR")
     mode=$(stat -c '%a' "$SOURCE_DIR")
     [[ "$owner" == "0" ]] && pass "源码目录属于 root" || fail "源码目录必须属于 root（当前 uid=$owner）: $SOURCE_DIR"
     (( (8#$mode & 0022) == 0 )) && pass "源码目录组/其他不可写（$mode）" || fail "源码目录组/其他可写（$mode）: $SOURCE_DIR"
+    if ! reason=$(untrusted_parent_reason "$SOURCE_DIR"); then
+      fail "源码目录的父目录不可信: $reason"
+    else
+      pass "源码目录的父目录属 root 且不可被普通用户控制"
+    fi
     if [[ -f "$SOURCE_DIR/pyproject.toml" && -f "$SOURCE_DIR/setup.py" ]]; then
       pass "源码目录包含 pyproject.toml 与 setup.py"
     else
@@ -352,18 +373,28 @@ fi
 sect "8. 配置与模型参数"
 if [[ -n "$OV_CONF" ]]; then
   if [[ -f "$OV_CONF" ]]; then
-    if "$PYTHON_BIN" - "$OV_CONF" <<'PY' >/dev/null 2>&1
+    conf_out=$("${PYTHON_BIN:-python3}" "$SKILL_ROOT/scripts/gen_ov_conf.py" --check "$OV_CONF" 2>&1)
+    conf_rc=$?
+    if [[ "$conf_rc" -eq 0 ]]; then
+      pass "ov.conf 通过 gen_ov_conf.py --check（字段与安装器一致）"
+    else
+      fail "ov.conf 校验失败: $(printf '%s' "$conf_out" | tr '\n' '; ')"
+    fi
+    if [[ "$conf_rc" -eq 0 ]]; then
+      conf_info=$("${PYTHON_BIN:-python3}" - "$OV_CONF" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     doc = json.load(fh)
-assert doc.get("embedding", {}).get("dense"), "embedding.dense"
-assert doc.get("vlm"), "vlm"
-assert doc.get("storage", {}).get("workspace"), "storage.workspace"
+server = doc.get("server") or {}
+print(server.get("host") or "127.0.0.1", server.get("port") or 1933,
+      1 if server.get("root_api_key") else 0)
 PY
-    then
-      pass "ov.conf 是合法 JSON，且包含 embedding.dense / vlm / storage.workspace"
-    else
-      fail "ov.conf 不是合法 JSON 或缺少 embedding.dense / vlm / storage.workspace: $OV_CONF"
+      )
+      read -r conf_host conf_port conf_has_root <<<"$conf_info"
+      info "ov.conf 监听: $conf_host:$conf_port（root_api_key=${conf_has_root}）"
+      if [[ "$conf_host" != "127.0.0.1" && "$conf_host" != "localhost" && "$conf_host" != "::1" && "$conf_has_root" != "1" ]]; then
+        fail "ov.conf 监听 $conf_host 不是回环地址，但未配置 server.root_api_key"
+      fi
     fi
     mode=$(stat -c '%a' "$OV_CONF" 2>/dev/null || echo unknown)
     if [[ "$mode" =~ ^[0-9]+$ ]] && (( (8#$mode & 0077) == 0 )); then
@@ -450,7 +481,7 @@ if [[ "$WITH_STUDIO" == "1" ]]; then
 else
   info "未请求 --with-studio；部署时默认跳过 Web Studio（/studio 不可用）"
 fi
-info "默认版本: master（部署后记录实际 commit）"
+info "默认版本: main（master 为历史别名；部署后记录实际 commit）"
 
 # ---------- 汇总 ----------
 printf '\n===== 汇总 =====\n'
