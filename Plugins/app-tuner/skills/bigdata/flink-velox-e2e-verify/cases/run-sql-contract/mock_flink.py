@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """mock_flink.py — a file-backed fake Flink REST server plus state helpers.
 
-The server serves GET /jobs/overview, /jobs/<jid>, /jobs/<jid>/plan and
-/jobs/<jid>/exceptions from a JSON state file that every handler re-reads
-per request, so tests (or the mock sql-client) can flip job states by
-editing the file. Plans mimic the real REST shape (as captured from a live
-cluster): gluten jobs carry "Gluten cal operator" in node descriptions and
-a "GlutenHASH" ship strategy; native jobs carry none.
+The server serves GET /jobs/overview, /jobs/<jid>, /jobs/<jid>/plan,
+/jobs/<jid>/exceptions and /taskmanagers from a JSON state file that every
+handler re-reads per request, so tests (or the mock sql-client) can flip
+job states or the TaskManager list by editing the file. Plans mimic the
+real REST shape (as captured from a live cluster): a gluten node carries
+its engine marker in engine-generated fields — an operator name and the
+"GlutenHASH" ship strategy — while "description" embeds user SQL text
+(the clean-plan source even reads from a table named gluten_orders), which
+gluten detection must never rely on; native jobs carry no engine marker at
+all.
 
 CLI (used by the mock sql-client.sh):
   mock_flink.py add-job <state.json> <job-name> <job-state> <gluten-nodes> [exception]
@@ -14,7 +18,7 @@ CLI (used by the mock sql-client.sh):
   mock_flink.py poison <state.json>
       sets the poison flag: /jobs/overview then answers with a bare JSON
       list (valid JSON, broken shape) — for tool-abort tests
-(set_state is import-only — tests call it directly.)
+(set_state / set_taskmanagers are import-only — tests call them directly.)
 """
 import argparse
 import json
@@ -41,7 +45,12 @@ def save_state(path, state):
 
 
 def empty_state():
-    return {"overview": [], "details": {}, "plans": {}, "exceptions": {}}
+    # one local TaskManager: a live cluster has at least one, so the
+    # single-node guard exercises its pass path on every mocked run
+    return {"overview": [], "details": {}, "plans": {}, "exceptions": {},
+            "taskmanagers": [
+                {"id": "tm-1",
+                 "path": "akka://flink@localhost:4317/user/taskmanager_0"}]}
 
 
 def make_plan_nodes(gluten_nodes):
@@ -49,22 +58,26 @@ def make_plan_nodes(gluten_nodes):
     for i in range(max(gluten_nodes, 1)):
         if i < gluten_nodes:
             nodes.append({
+                # user-visible text only — matching must not rely on it
                 "description": "Source: datagen[1]<br/>+- Gluten cal operator",
                 "id": str(i + 1),
                 "inputs": ([{"id": "0", "ship_strategy": "GlutenHASH",
                              "exchange": "pipelined_bounded"}] if i else []),
-                "operator": "",
-                "operator_strategy": "",
+                "operator": "Gluten cal" if i == 0 else "n/a",
+                "operator_strategy": "n/a",
                 "parallelism": 1,
             })
         else:
             nodes.append({
-                "description": "Sink: print<br/>+- GroupAggregate(...)",
+                # a table named gluten_orders and a column mention — user
+                # SQL text that must never mark this node as a gluten node
+                "description": "Source: gluten_orders[1]<br/>+- GroupAggregate"
+                               "(key: [gluten_bid])",
                 "id": str(i + 1),
                 "inputs": [{"id": str(i), "ship_strategy": "HASH",
                             "exchange": "pipelined_bounded"}],
-                "operator": "",
-                "operator_strategy": "",
+                "operator": "n/a",
+                "operator_strategy": "n/a",
                 "parallelism": 1,
             })
     return nodes
@@ -94,6 +107,12 @@ def set_state(path, jid, state):
     save_state(path, st)
 
 
+def set_taskmanagers(path, entries):
+    st = load_state(path)
+    st["taskmanagers"] = entries
+    save_state(path, st)
+
+
 def set_poison(path):
     st = load_state(path)
     st["poison"] = True
@@ -115,6 +134,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json([])
                 return
             self._send_json({"jobs": state["overview"]})
+            return
+        if path == "/taskmanagers":
+            self._send_json(
+                {"taskmanagers": state.get("taskmanagers", [])})
             return
         m = re.match(r"^/jobs/([0-9a-f]+)$", path)
         if m and m.group(1) in state["details"]:

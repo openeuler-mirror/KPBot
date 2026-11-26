@@ -72,6 +72,7 @@ INSERT INTO sink SELECT <受测表达式或查询> FROM src;
 - sink 永远是 `print`。有界输入结束作业；作业只有到 FINISHED 才算成功。
 - 一条用例 = 一个 SQL 文件。用例命名 `NNN_<intent>.sql`，落**项目根** `e2e/sql/` 下，数据落 `e2e/data/NNN_<intent>/`。
 - 用例应产出**非空**结果集：空捕获在本协议里是失败而非"空结果也一致"（见四道门禁之四）。
+- **数据域约束**：用例数据的 STRING 字段值不得含逗号（`,`）、竖线（`|`）等会破坏 print 行字段边界的字符。print 输出不转义，`('a, b', 'c')` 与 `('a', 'b, c')` 会印成同一行 `+I[a, b, c]`，从行文本无法还原字段边界（协议层限制，见 changelog-semantics.md）；需要边界敏感语义时改用不含边界字符的字符串值或非字符串类型承载。
 
 ## 证据树：`e2e/` 在项目根，不按任务收纳
 
@@ -103,7 +104,9 @@ e2e/
 | 3 | 栈校验：作业 plan 内 gluten 节点与模式一致（gfv ≥1、native 0） | "删/加了 jar 但没重启集群"（planner 类仍驻留）；gfv 侧整条 SQL 回退原生算子 | `RUN_SQL_SKIP_PLAN_CHECK=1` |
 | 4 | 捕获非空：零行捕获即失败 | 失败作业/漏捕获被当成"空结果也一致"通过 | 无 |
 
-退出码：0 该侧完成；1 作业失败 / 栈失配 / 空捕获 / 提交失败；2 REST 不可达；3 超时未 FINISHED。**非 0 即该侧未完成：修复后重跑该侧，绝不带着失败的一侧切栈。**
+退出码：0 该侧完成；1 作业失败 / 栈失配 / 空捕获 / 提交失败；2 REST 不可达、覆盖护栏拒绝、**远端 TM 拒绝**（分布式集群）；3 超时未 FINISHED。**非 0 即该侧未完成：修复后重跑该侧，绝不带着失败的一侧切栈。**
+
+提交前守卫（单机校验）：print 捕获只读本机 TaskManager 日志，`run-sql.sh` 在提交前经 REST `/taskmanagers` 确认全部 TM 都在本机（localhost / 127.0.0.1 / 本机 hostname，host 从 `host` 字段或 akka path 解析——Flink 1.19 REST 无 host 字段）；分布式集群上远端分区的输出不在本机日志里，捕获必然不完整、可能造成假阳性 MATCH，故直接拒绝（退出 2，不提交）。按作业收齐远端 sink 输出超出 print 捕获协议范围，本协议不假装覆盖，只如实拒绝。
 
 ## 执行步骤
 
@@ -137,7 +140,7 @@ e2e/
 bash <skill_dir>/scripts/run-sql.sh native e2e/sql/NNN_<intent>.sql e2e/out/NNN_<intent>.native.out
 ```
 
-脚本依次执行：lib 门 → REST 快照 → 提交 → REST 跟踪到 FINISHED → plan 栈校验 → 捕获（快照差集：只取提交后新增行，剥离子任务前缀 `3> `）→ 非空检查。旁车落 `*.submit.log` 与 `*.job.json`（作业状态、时长、gluten 节点数、异常栈）。
+脚本依次执行：sql client 前置校验（`$FLINK_HOME/bin/sql-client.sh` 缺失或不可执行 → 明确报错退出 1，不进 REST 检查与等待）→ lib 门 → REST 快照 → 单机守卫（远端 TM 拒绝）→ 提交 → REST 跟踪到 FINISHED → plan 栈校验 → 捕获（快照差集：只取提交后新增行，剥离子任务前缀 `3> `）→ 非空检查。旁车落 `*.submit.log` 与 `*.job.json`（作业状态、时长、gluten 节点数、异常栈）。提交失败的信息区分两种形态：**客户端未启动**（退出 126/127：命令缺失/不可执行/重定向问题）与**客户端启动了但退出非零**（其它码，看 `*.submit.log`），不再一律记成 sql client 失败。
 
 ### 步骤 3：切栈（确认后再重启）
 
@@ -161,12 +164,22 @@ gfv 侧的栈校验若报"无 gluten 节点"，看 `*.job.json` 里的 `tm_velox
 ### 步骤 5：折叠对比
 
 ```bash
+mkdir -p e2e/verify
 python3 <skill_dir>/scripts/changelog_diff.py \
   e2e/out/NNN_<intent>.native.out e2e/out/NNN_<intent>.gfv.out \
   > e2e/verify/NNN_<intent>.diff.txt
 ```
 
 多重集折叠：`+I`/`+U` 加入载荷行、`-U`/`-D` 移除载荷行（回撤携带完整旧值），行序不参与比较；折叠错误（回撤不存在的行）与任一侧空捕获均判 MISMATCH。
+
+`changelog_diff.py` 退出码（工具错误与捕获错误都不是裁决，退出码 1 只属于 MISMATCH）：
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | MATCH（精确一致） |
+| 1 | MISMATCH（结果集差异 / 折叠错误 / 任一侧空捕获） |
+| 2 | 工具错误：输入缺失或不可读——stderr 单行报错，不是裁决 |
+| 3 | 捕获错误：以 changelog 标志开头却无法完整解析的行（截断/损坏）——报告行号与原文，裁决为 CAPTURE ERROR，不算 MATCH |
 
 ### 步骤 6：汇总与输出
 
@@ -176,9 +189,10 @@ python3 <skill_dir>/scripts/changelog_diff.py \
 
 - Flink 安装位置取值顺序：环境变量 `FLINK_HOME` → 工作区档案 `.gfvbot/env.json` 的 `stack.flink.path`（GlutenFlink 工作区，自**当前工作目录**向上逐级查找）。两者都缺则 fail-fast。
 - 覆盖护栏：`run-sql.sh <out-file>` 与 `flink_job.py wait --out` 对已存在文件默认拒绝（退出 2），重跑覆盖须显式带 `--overwrite`；所有写落路径必须在项目目录内且不得是 symlink，旁车 `.submit.log`/`.job.json` 随新一轮原地刷新。
-- REST 端点取值顺序：`FLINK_REST_URL` → `$FLINK_HOME/conf`（`config.yaml` 的 `rest:` 块或 `flink-conf.yaml` 的 `rest.address`/`rest.port`）→ `http://localhost:8081`。sql client 按 conf 提交，故 conf 可解析时**不要**设 `FLINK_REST_URL`——两者不一致会让跟踪器"看不到新作业"而失败。
+- REST 端点取值顺序：`FLINK_REST_URL` → `$FLINK_HOME/conf`（`config.yaml` 的 `rest:` 块或 `flink-conf.yaml` 的 `rest.address`/`rest.port`）→ `http://localhost:8081`。sql client 按 conf 提交，故 conf 可解析时**不要**设 `FLINK_REST_URL`——两者不一致会让跟踪器"看不到新作业"而失败。REST 调用**无视环境代理**（无代理直连 opener）：设了 `http_proxy` 时默认 opener 会把 localhost/内网集群地址交给代理，预提交快照误判 REST 不可达——与 `flink-velox-env` cluster_check.py 同政策。
 - `FLINK_JOB_TIMEOUT`（秒，默认 600）限制等 FINISHED 的时长；`FLINK_JOB_POLL`（秒，默认 1）轮询间隔。
 - **集群运行哪个构建由调用方负责**：构建与集群重启不在本 skill 范围内；`run-sql.sh` 的门禁只做失配拦截，不做自动切栈。
+- **集群必须单机**：print 捕获只读本机 `$FLINK_HOME/log`，全部 TaskManager 必须在本机（提交前守卫校验，见上）；多机集群直接拒绝。
 - 双跑期间集群上同一时刻只跑一个受测作业（作业以"REST 快照差集"识别，并发作业会被误认）。
 - 临时产物一律落项目目录内，绝不写 `/tmp`。
 

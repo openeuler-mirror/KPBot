@@ -8,8 +8,20 @@ cluster. Pins:
 
   - the four per-side gates: lib build gate, REST FINISHED wait, plan stack
     check (gfv needs gluten nodes, native needs none), non-empty capture
+  - the plan stack check's gluten detection: only engine-generated fields
+    count (operator, operator_strategy, inputs[].ship_strategy/exchange);
+    "description" embeds user SQL text (the mock's clean plan even reads
+    from a table named gluten_orders) and must never mark a node — while
+    an operator name carrying gluten still counts
+  - the pre-submit single-node guard: every TaskManager REST entry must be
+    on this machine (localhost / 127.0.0.1 / this hostname); a remote TM
+    refuses the run (exit 2) before anything is submitted
   - the exit-code contract: 0 side complete / 1 job, plan, rows or
-    submission failure / 2 REST unreachable / 3 timeout
+    submission failure / 2 REST unreachable, out-file or capture-directory
+    refusal, remote-TaskManager refusal / 3 timeout
+  - the capture directory is created up front (a missing e2e/out must not
+    masquerade as a client failure) and its scratch file is exclusively
+    created (mktemp): a pre-existing $out.tmp is never truncated or moved
   - the "nothing gets submitted past a failed gate" and "side complete is
     the only switch signal" messages
   - the capture model: snapshot diff excludes pre-existing rows, new .out
@@ -24,11 +36,22 @@ cluster. Pins:
     still writes the same top-level key set (observation slots empty,
     error_message "tool aborted: ...", a next_step fix hint), and run-sql.sh
     reports the side as not complete
+  - REST calls bypass environment proxies (no-proxy opener): with
+    http_proxy set, the pre-submit snapshot and the whole run-sql.sh path
+    still reach the cluster directly — a localhost REST address is never
+    handed to a proxy
+  - the sql client is validated up front: a missing or non-executable
+    $FLINK_HOME/bin/sql-client.sh fails fast (exit 1, nothing submitted,
+    no submit-log redirect, no wait), and a submit failure distinguishes
+    "client did not start" (126/127) from "client started but exited
+    non-zero"
 
 Writes results/result.json; exit 0 iff all tests pass.
 """
+import importlib.util
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -48,6 +71,10 @@ SCRATCH = RESULTS / "scratch"
 
 sys.path.insert(0, str(CASE_DIR))
 import mock_flink  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("flink_job", FLINK_JOB)
+flink_job = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(flink_job)
 
 SQL_LINES = [
     "CREATE TABLE src (a STRING, b STRING) WITH ("
@@ -153,12 +180,13 @@ class RunSqlTestBase(unittest.TestCase):
                 [mode, str(sql), str(out)])
         return argv, out
 
-    def run_side(self, mode, home=None, overwrite=False, **extra):
-        cmd, out = self.side_cmd(mode, overwrite=overwrite)
+    def run_side(self, mode, home=None, overwrite=False, out_name=None,
+                 **extra):
+        cmd, out = self.side_cmd(mode, out_name=out_name, overwrite=overwrite)
         proc = subprocess.run(cmd, capture_output=True, text=True,
-                              check=False, timeout=120,
-                              env=self.side_env(home, **extra),
-                              cwd=str(self.workdir))
+                               check=False, timeout=120,
+                               env=self.side_env(home, **extra),
+                               cwd=str(self.workdir))
         return proc, out
 
     def rows_file(self, lines):
@@ -386,7 +414,7 @@ class SideGateTests(RunSqlTestBase):
                                FLINK_JOB_TIMEOUT=1)
         self.assertEqual(proc.returncode, 1)
         self.assertIn("no new job appeared", self.combined(proc))
-        self.assertIn("sql client exited 1", self.combined(proc))
+        self.assertIn("sql client started but exited 1", self.combined(proc))
         self.assertIn("side NOT complete", self.combined(proc))
 
 
@@ -432,6 +460,218 @@ class CaptureModelTests(RunSqlTestBase):
         self.assertEqual(proc.returncode, 0, self.combined(proc))
         # duplicates are preserved: the fold compares multisets
         self.assertEqual(out.read_text(), "+I[x]\n+I[x]\n")
+
+
+class GlutenMentionTests(unittest.TestCase):
+    """flink_job.gluten_mention: only engine-generated fields count. The
+    "description" field embeds user SQL text — a table named gluten_orders
+    must not mark a node; operator/strategy/input markers must."""
+
+    def test_user_sql_text_in_description_is_not_gluten(self):
+        node = {
+            "description": "Source: gluten_orders[1]<br/>+- GroupAggregate"
+                           "(key: [gluten_bid])",
+            "operator": "n/a", "operator_strategy": "n/a",
+            "inputs": [{"id": "0", "ship_strategy": "HASH",
+                        "exchange": "pipelined_bounded"}],
+        }
+        self.assertFalse(flink_job.gluten_mention(node))
+
+    def test_operator_name_with_gluten_marks(self):
+        self.assertTrue(flink_job.gluten_mention(
+            {"operator": "Gluten cal", "operator_strategy": "n/a",
+             "description": "Source: datagen[1]"}))
+
+    def test_operator_strategy_with_gluten_marks_case_insensitive(self):
+        self.assertTrue(flink_job.gluten_mention(
+            {"operator": "n/a", "operator_strategy": "glutenhash"}))
+
+    def test_input_ship_strategy_and_exchange_mark(self):
+        self.assertTrue(flink_job.gluten_mention(
+            {"operator": "n/a",
+             "inputs": [{"id": "0", "ship_strategy": "GlutenHASH",
+                         "exchange": "pipelined_bounded"}]}))
+        self.assertTrue(flink_job.gluten_mention(
+            {"operator": "n/a",
+             "inputs": [{"id": "0", "ship_strategy": "HASH",
+                         "exchange": "gluten-local"}]}))
+
+    def test_na_placeholder_fields_are_not_gluten(self):
+        # "n/a" is what empty engine fields render as — placeholders, not
+        # engine markers, and must not crash or match
+        node = {"description": "n/a", "operator": "n/a",
+                "operator_strategy": "n/a", "id": "1",
+                "inputs": [{"id": "0", "ship_strategy": "n/a",
+                            "exchange": "n/a"}]}
+        self.assertFalse(flink_job.gluten_mention(node))
+
+    def test_non_dict_and_missing_inputs_are_safe(self):
+        self.assertFalse(flink_job.gluten_mention("n/a"))
+        self.assertFalse(flink_job.gluten_mention(None))
+        self.assertFalse(flink_job.gluten_mention(
+            {"operator": "n/a", "inputs": None}))
+
+
+class PlanDescriptionTests(RunSqlTestBase):
+    """End to end: user SQL identifiers in node descriptions (the mock's
+    clean plan reads from a table named gluten_orders) must not mark nodes
+    as gluten — the native side passes, a fallen-back gfv side still
+    fails."""
+
+    def test_native_side_passes_with_user_sql_in_description(self):
+        self.flink_home = self.make_flink_home(gluten_jars=False)
+        tm1 = self.flink_home / "log" / "flink-root-taskexecutor-1-host.out"
+        proc, out = self.run_side(
+            "native",
+            MOCK_ROWS_FILE=self.rows_file(["+I[a]"]),
+            MOCK_TM_OUT=tm1,
+            MOCK_GLUTEN=0,
+        )
+        self.assertEqual(proc.returncode, 0, self.combined(proc))
+        report = self.job_json(out)
+        self.assertEqual(report["jobs"][0]["gluten_nodes"], 0)
+        # non-vacuous: the plan really does carry the user identifier in
+        # the node description
+        st = mock_flink.load_state(str(self.state_path))
+        jid = report["jobs"][0]["jid"]
+        descs = " ".join(n.get("description", "")
+                         for n in st["plans"][jid]["nodes"])
+        self.assertIn("gluten_orders", descs)
+
+    def test_gfv_fallback_with_user_sql_in_description_still_fails(self):
+        # same identifier-rich description, gfv mode, no engine markers:
+        # the stack check must still refuse (no gluten nodes), not pass
+        # on the user table name
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        tm1 = self.flink_home / "log" / "flink-root-taskexecutor-1-host.out"
+        proc, out = self.run_side(
+            "gfv",
+            MOCK_ROWS_FILE=self.rows_file(["+I[a]"]),
+            MOCK_TM_OUT=tm1,
+            MOCK_GLUTEN=0,
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("no gluten nodes", self.combined(proc))
+        self.assertEqual(self.job_json(out)["jobs"][0]["gluten_nodes"], 0)
+
+
+class TmGuardTests(RunSqlTestBase):
+    """The pre-submit single-node guard: remote TaskManagers refuse the run
+    before anything is submitted; all-local clusters (including this
+    hostname) run as usual."""
+
+    def tm_entries(self, hosts):
+        return [{"id": f"tm-{i}", "path": f"akka://flink@{h}:1234/user/"
+                                         f"taskmanager_{i}"}
+                for i, h in enumerate(hosts)]
+
+    def test_remote_taskmanager_refuses_before_submit(self):
+        mock_flink.set_taskmanagers(
+            str(self.state_path),
+            self.tm_entries(["localhost", "worker-9.example.org"]))
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        proc, _ = self.run_side("gfv")
+        self.assertEqual(proc.returncode, 2, self.combined(proc))
+        self.assertIn("TaskManager", self.combined(proc))
+        self.assertIn("worker-9.example.org", self.combined(proc))
+        self.assertIn("nothing was submitted", self.combined(proc))
+        self.assertFalse(self.marker.exists())
+
+    def test_all_local_taskmanagers_pass_including_hostname(self):
+        mock_flink.set_taskmanagers(
+            str(self.state_path),
+            self.tm_entries(["localhost", "127.0.0.1",
+                             socket.gethostname()]))
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        tm1 = self.flink_home / "log" / "flink-root-taskexecutor-1-host.out"
+        proc, out = self.run_side(
+            "gfv",
+            MOCK_ROWS_FILE=self.rows_file(["+I[a]"]),
+            MOCK_TM_OUT=tm1,
+            MOCK_GLUTEN=1,
+        )
+        self.assertEqual(proc.returncode, 0, self.combined(proc))
+        self.assertEqual(out.read_text(), "+I[a]\n")
+
+    def test_taskmanager_with_unknown_host_refuses(self):
+        # an entry whose host cannot be determined may be remote — the
+        # guard refuses (fail-safe) rather than guess
+        mock_flink.set_taskmanagers(
+            str(self.state_path),
+            [{"id": "tm-odd"}])
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        proc, _ = self.run_side("gfv")
+        self.assertEqual(proc.returncode, 2, self.combined(proc))
+        self.assertIn("cannot be determined", self.combined(proc))
+        self.assertFalse(self.marker.exists())
+
+    def test_tms_local_subcommand_prints_local_hosts(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        proc = subprocess.run(
+            [sys.executable, str(FLINK_JOB), "tms-local",
+             "--rest", f"http://127.0.0.1:{self.port}"],
+            capture_output=True, text=True, check=False, timeout=30,
+            cwd=str(self.workdir))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("all 1 TaskManagers are on this machine", proc.stdout)
+        self.assertIn("localhost", proc.stdout)
+
+
+class CaptureDirTests(RunSqlTestBase):
+    """The capture directory is created up front: a missing e2e/out must
+    not masquerade as a client failure; an uncreatable path refuses
+    before submitting."""
+
+    def test_out_dir_created_when_missing(self):
+        # e2e/out does not exist yet (fresh project): the script creates
+        # it before the submit-log redirect runs — a path problem must not
+        # masquerade as a client failure
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        tm1 = self.flink_home / "log" / "flink-root-taskexecutor-1-host.out"
+        proc, out = self.run_side(
+            "gfv", out_name="e2e/out/case.gfv.out",
+            MOCK_ROWS_FILE=self.rows_file(["+I[a]"]),
+            MOCK_TM_OUT=tm1,
+            MOCK_GLUTEN=1,
+        )
+        self.assertEqual(proc.returncode, 0, self.combined(proc))
+        self.assertEqual(out.read_text(), "+I[a]\n")
+        self.assertTrue((self.workdir / "e2e" / "out").is_dir())
+
+    def test_uncreatable_out_dir_refused_before_submit(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        blocker = self.workdir / "blocker"
+        blocker.write_text("a file where the capture dir would be\n")
+        cmd, _ = self.side_cmd("gfv", out_name="blocker/case.gfv.out")
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              check=False, timeout=60,
+                              env=self.side_env(), cwd=str(self.workdir))
+        self.assertEqual(proc.returncode, 2, self.combined(proc))
+        self.assertIn("cannot create the capture directory",
+                      self.combined(proc))
+        self.assertFalse(self.marker.exists())
+
+    def test_prestaged_tmp_file_is_never_touched(self):
+        # a file at the old fixed scratch name ($out.tmp) must survive a
+        # full successful run untouched: the filter scratch is created
+        # exclusively by mktemp and only the file this run created is
+        # moved or cleaned up
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        tm1 = self.flink_home / "log" / "flink-root-taskexecutor-1-host.out"
+        sentinel = self.workdir / "case.gfv.out.tmp"
+        sentinel.write_text("precious pre-existing file\n", encoding="utf-8")
+        proc, out = self.run_side(
+            "gfv",
+            MOCK_ROWS_FILE=self.rows_file(["+I[a]"]),
+            MOCK_TM_OUT=tm1,
+            MOCK_GLUTEN=1,
+        )
+        self.assertEqual(proc.returncode, 0, self.combined(proc))
+        self.assertEqual(out.read_text(), "+I[a]\n")
+        self.assertEqual(sentinel.read_text(),
+                         "precious pre-existing file\n")
+        leftovers = list(self.workdir.glob("case.gfv.out.??????"))
+        self.assertEqual(leftovers, [])
 
 
 class OutFileGuardTests(RunSqlTestBase):
@@ -620,6 +860,111 @@ class ToolAbortTests(RunSqlTestBase):
         self.assertTrue(report["next_step"])
 
 
+DEAD_PROXY = "http://127.0.0.1:9"  # nothing listens there: routing through it fails fast
+
+
+class ProxyBypassTests(RunSqlTestBase):
+    """REST calls ignore environment proxies: with http_proxy pointing at a
+    dead local port, the pre-submit snapshot and the whole run-sql.sh path
+    still reach the mock cluster directly (a set no_proxy would quietly
+    re-enable the direct route and make the test vacuous, so it is
+    neutralized on purpose)."""
+
+    def proxy_overlay(self, env):
+        for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+            env[k] = DEAD_PROXY
+        env["no_proxy"] = ""
+        env["NO_PROXY"] = ""
+        return env
+
+    def test_snapshot_ignores_env_proxies(self):
+        # the exact pre-submit call run-sql.sh makes: with the default
+        # opener this routes through the dead proxy and fails (exit 2)
+        env = dict(os.environ)
+        env.pop("FLINK_REST_URL", None)
+        proc = subprocess.run(
+            [sys.executable, str(FLINK_JOB), "snapshot",
+             "--rest", f"http://127.0.0.1:{self.port}"],
+            capture_output=True, text=True, check=False, timeout=30,
+            env=self.proxy_overlay(env), cwd=str(self.workdir))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_run_sql_pre_submit_path_ignores_env_proxies(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        tm1 = self.flink_home / "log" / "flink-root-taskexecutor-1-host.out"
+        cmd, out = self.side_cmd("gfv")
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, timeout=120,
+            env=self.proxy_overlay(self.side_env(
+                MOCK_ROWS_FILE=self.rows_file(["+I[a]"]),
+                MOCK_TM_OUT=tm1, MOCK_GLUTEN=1)),
+            cwd=str(self.workdir))
+        self.assertEqual(proc.returncode, 0, self.combined(proc))
+        self.assertEqual(out.read_text(), "+I[a]\n")
+
+
+class SqlClientGuardTests(RunSqlTestBase):
+    """The sql client is validated up front: a missing or non-executable
+    $FLINK_HOME/bin/sql-client.sh fails fast (exit 1, nothing submitted —
+    no submit-log redirect, no job.json, no wait) instead of surfacing as
+    a bare client exit 126/127 deep in the wait phase."""
+
+    def assert_client_refused(self):
+        proc, out = self.run_side("gfv")
+        self.assertEqual(proc.returncode, 1, self.combined(proc))
+        self.assertIn("sql client not found or not executable",
+                      self.combined(proc))
+        self.assertIn("nothing was submitted", self.combined(proc))
+        self.assertFalse(self.marker.exists())
+        stem = out.name[:-len(".out")]
+        self.assertFalse((out.parent / f"{stem}.submit.log").exists())
+        self.assertFalse((out.parent / f"{stem}.job.json").exists())
+
+    def test_missing_sql_client_refused_before_submit(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        (self.flink_home / "bin" / "sql-client.sh").unlink()
+        self.assert_client_refused()
+
+    def test_non_executable_sql_client_refused_before_submit(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        (self.flink_home / "bin" / "sql-client.sh").chmod(0o644)
+        self.assert_client_refused()
+
+
+class SubmitFailureWordingTests(RunSqlTestBase):
+    """A submit failure distinguishes "client did not start" (exit 126/127
+    — command missing/not executable or a redirect problem) from "client
+    started but exited non-zero": same exit code 1, different detail."""
+
+    def test_client_not_started_127_is_reported_as_not_started(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        proc, _ = self.run_side("gfv", MOCK_ADD_JOB=0, MOCK_RC=127,
+                                FLINK_JOB_TIMEOUT=1)
+        self.assertEqual(proc.returncode, 1, self.combined(proc))
+        self.assertIn("sql client did not start", self.combined(proc))
+        self.assertIn("127", self.combined(proc))
+        self.assertNotIn("started but exited", self.combined(proc))
+        self.assertIn("side NOT complete", self.combined(proc))
+
+    def test_client_not_started_126_is_reported_as_not_started(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        proc, _ = self.run_side("gfv", MOCK_ADD_JOB=0, MOCK_RC=126,
+                                FLINK_JOB_TIMEOUT=1)
+        self.assertEqual(proc.returncode, 1, self.combined(proc))
+        self.assertIn("sql client did not start", self.combined(proc))
+        self.assertIn("126", self.combined(proc))
+        self.assertNotIn("started but exited", self.combined(proc))
+
+    def test_client_started_but_nonzero_exit_is_reported_as_such(self):
+        self.flink_home = self.make_flink_home(gluten_jars=True)
+        proc, _ = self.run_side("gfv", MOCK_ADD_JOB=0, MOCK_RC=2,
+                                FLINK_JOB_TIMEOUT=1)
+        self.assertEqual(proc.returncode, 1, self.combined(proc))
+        self.assertIn("sql client started but exited 2", self.combined(proc))
+        self.assertNotIn("did not start", self.combined(proc))
+        self.assertIn("side NOT complete", self.combined(proc))
+
+
 class RestUrlResolutionTests(unittest.TestCase):
     """flink_job.py rest-url: flag > env > conf (both layouts) > default."""
 
@@ -688,8 +1033,11 @@ class RestUrlResolutionTests(unittest.TestCase):
 
 def main():
     RESULTS.mkdir(parents=True, exist_ok=True)
-    suite = unittest.defaultTestLoader.loadTestsFromModule(
-        sys.modules[__name__])
+    module = sys.modules[__name__]
+    loader = unittest.defaultTestLoader
+    names = sys.argv[1:]
+    suite = (loader.loadTestsFromNames(names, module) if names
+             else loader.loadTestsFromModule(module))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     report = {
         "case": "run-sql-contract",

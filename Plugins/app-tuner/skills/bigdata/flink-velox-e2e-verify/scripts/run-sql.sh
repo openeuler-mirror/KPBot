@@ -24,6 +24,12 @@
 # from. Restarts wipe the Flink log dir; the evidence is already on disk in
 # the capture file by then.
 #
+# Pre-submit guard (single node): the print-sink capture reads only this
+# machine's TaskManager logs. flink_job.py tms-local refuses the run
+# (exit 2, nothing submitted) when any registered TaskManager is not on
+# this machine — on a distributed cluster the remote partitions' rows
+# would be invisible and a false MATCH could pass.
+#
 # Flink location: $FLINK_HOME if set; otherwise fall back to the GlutenFlink
 # workspace archive .gfvbot/env.json (field stack.flink.path), searched by
 # walking upward from the CURRENT directory. Missing both -> fail fast.
@@ -31,6 +37,13 @@
 # (rest.address/rest.port) — the address sql-client.sh submits to.
 # FLINK_JOB_TIMEOUT (seconds, default 600) bounds waiting for FINISHED;
 # FLINK_JOB_POLL (seconds, default 1) is the poll interval.
+#
+# The sql client ($FLINK_HOME/bin/sql-client.sh) is validated up front:
+# missing or not executable fails fast (exit 1, nothing submitted) instead
+# of surfacing later as a bare "client exited 127" deep in the wait phase.
+# A submit failure that does run distinguishes "client did not start"
+# (126/127: redirect or executability problem) from "client started but
+# exited non-zero" in its message.
 #
 # Capture model: snapshot every TaskManager .out file's line count before
 # submission, then keep only the lines appended after it (new .out files are
@@ -46,10 +59,16 @@
 # and its sidecars must be regular paths inside the project directory (the
 # working directory), not symlinks; an existing capture is only replaced
 # with --overwrite, and an existing non-regular file (fifo, directory) is
-# never written. The sidecars refresh in place with the capture.
+# never written. The sidecars refresh in place with the capture. The
+# capture directory itself is created up front (before the submit-log
+# redirect runs) and must be writable; the filter scratch is created
+# exclusively via mktemp next to the capture — never a fixed name a
+# pre-existing file could occupy, and only the file this run created is
+# ever moved or cleaned up.
 #
 # Exit codes: 0 side complete; 1 failed job / plan mismatch / empty capture /
-# submission error; 2 REST unreachable or out-file guard refusal; 3 job did
+# submission error; 2 REST unreachable, out-file or capture-directory
+# refusal, or remote-TaskManager refusal (distributed cluster); 3 job did
 # not finish in time.
 set -euo pipefail
 
@@ -78,7 +97,7 @@ inside_project() {  # <path>: realpath inside the working directory, not the roo
     *) return 1 ;;
   esac
 }
-for p in "$out" "$out.tmp" "$submit_log" "$job_json"; do
+for p in "$out" "$submit_log" "$job_json"; do
   [ -L "$p" ] && out_refuse "the out file must be a regular path inside the project directory (the working directory), not a symlink or a path outside it: $p"
   inside_project "$p" || out_refuse "the out file must be a regular path inside the project directory (the working directory), not a symlink or a path outside it: $p"
   if [ -e "$p" ]; then
@@ -88,6 +107,17 @@ done
 if [ -e "$out" ]; then
   [ "$OVERWRITE" = 1 ] || out_refuse "the out file already exists, pass --overwrite to replace it: $out"
 fi
+
+# Create the capture directory up front: the submit-log redirect below
+# happens before the sql client runs, and a missing parent would turn a
+# path problem into a bogus "client failed" plus a long wait for a job
+# that was never submitted.
+out_dir="$(dirname "$out")"
+if ! mkdir -p "$out_dir" 2>/dev/null; then
+  out_refuse "cannot create the capture directory: $out_dir"
+fi
+[ -d "$out_dir" ] && [ -w "$out_dir" ] || \
+  out_refuse "capture directory not writable: $out_dir"
 
 # Resolve FLINK_HOME: env var first, then .gfvbot/env.json walked up from CWD.
 FLINK_HOME="${FLINK_HOME:-}"
@@ -120,6 +150,13 @@ fi
 }
 [ -d "$FLINK_HOME" ] || { echo "FLINK_HOME is not a directory: $FLINK_HOME" >&2; exit 1; }
 
+sql_client="$FLINK_HOME/bin/sql-client.sh"
+if [ ! -f "$sql_client" ] || [ ! -x "$sql_client" ]; then
+  echo "sql client not found or not executable: $sql_client" >&2
+  echo "  check the Flink installation under \$FLINK_HOME (bin/sql-client.sh); nothing was submitted" >&2
+  exit 1
+fi
+
 skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 job_tool="$skill_dir/scripts/flink_job.py"
 
@@ -146,6 +183,14 @@ if ! jobs_before="$(python3 "$job_tool" snapshot --rest "$rest_url")"; then
   exit 2
 fi
 
+# Single-node guard: a distributed cluster's remote TaskManagers would put
+# rows outside this machine's TM logs — the capture (and therefore the
+# comparison) would be silently incomplete. Refused before submitting.
+if ! python3 "$job_tool" tms-local --rest "$rest_url"; then
+  echo "[$mode] side NOT complete: refusing to submit — TaskManagers are off this machine (distributed cluster); nothing was submitted" >&2
+  exit 2
+fi
+
 # Capture snapshot: "<path>:<linecount>" for existing .out files.
 log_dir="$FLINK_HOME/log"
 mkdir -p "$log_dir"
@@ -153,7 +198,7 @@ snapshot() { for f in "$log_dir"/*.out; do [ -f "$f" ] && printf '%s:%s\n' "$f" 
 before="$(snapshot)"
 
 submit_rc=0
-"$FLINK_HOME/bin/sql-client.sh" -f "$sql" >"$submit_log" 2>&1 || submit_rc=$?
+"$sql_client" -f "$sql" >"$submit_log" 2>&1 || submit_rc=$?
 
 # Checks 2 and 3 — follow the submitted job(s) to a terminal state and
 # compare the plan against the mode. The sql client may return before the
@@ -183,8 +228,12 @@ if [ "$wait_rc" -eq 3 ]; then
   echo "  cancel it or keep waiting, then RERUN this side; do not restart the cluster over a running job" >&2
   exit 3
 fi
+if [ "$submit_rc" -eq 126 ] || [ "$submit_rc" -eq 127 ]; then
+  echo "[$mode] side NOT complete: sql client did not start (exit $submit_rc — command missing or not executable, or a submit-log redirect problem); see $sql_client and $submit_log" >&2
+  exit 1
+fi
 if [ "$submit_rc" -ne 0 ]; then
-  echo "[$mode] side NOT complete: sql client exited $submit_rc — see $submit_log" >&2
+  echo "[$mode] side NOT complete: sql client started but exited $submit_rc — see $submit_log" >&2
   exit 1
 fi
 if [ "$wait_rc" -ne 0 ]; then
@@ -208,10 +257,17 @@ done 2>/dev/null || true
 # keep only changelog rows, in arrival order; strip any subtask-id prefix
 # ("3> +I[...]") so the fold downstream sees pure FLAG[payload] rows.
 # -a keeps grep honest if the native stack ever writes non-text bytes into
-# the .out logs. Scratch stays next to the capture — never in /tmp.
-tmp="$out.tmp"
+# the .out logs. The scratch is created EXCLUSIVELY (mktemp) next to the
+# capture — never a fixed name that a pre-existing file could occupy, and
+# the trap cleans only the file this run created.
+tmp="$(mktemp "$out.XXXXXX")" || {
+  echo "cannot create the filter scratch next to $out" >&2
+  exit 2
+}
+trap 'rm -f "$tmp"' EXIT
 grep -a -E '^([0-9]+> )?[-+][IUD]\[' "$out" | sed -E 's/^[0-9]+> //' >"$tmp" || true
 mv "$tmp" "$out"
+trap - EXIT
 
 # Check 4 — a FINISHED side that captured zero rows is NOT an equivalence
 # pass: it is almost always a failed capture or a job that produced nothing.
