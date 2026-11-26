@@ -1,0 +1,49 @@
+{
+  "skill_name": "kptools-mooncake-log-trace",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "generate-deploy-rollback",
+      "prompt": "帮我写一个把编译好的带打点 .so 部署到容器里的脚本，要能备份、能回滚、能校验 md5，防止我把容器搞坏。别连远端，脚本我自己拿去跑。",
+      "expected_output": "产出与 scripts/deploy_mooncake_so.sh 同口径的脚本：CRLF 自检、部署前对每个新 .so strings 检查 MKT 打点串（不满足拒绝部署）、按文件名自动匹配容器内目标（多匹配/零匹配即停并提示 --pairs 显式指定）、mktemp 私有备份目录 + MANIFEST（备份文件↔容器路径↔原 md5）+ 备份回读校验、docker cp 替换 + 容器内 md5 回读比对、--rollback 模式按 MANIFEST 恢复并回读校验、不自动重启只打印重启指引与 smoke 验证方法（grep MKT_TTF/MKT_FINE）。",
+      "files": [],
+      "assertions": [
+        "脚本在部署前对每个新 .so 做 MKT 打点串校验（strings/grep MKT_TTF 或 MKT_FINE），不满足即拒绝部署",
+        "脚本含备份步骤：私有备份目录（mktemp 或等价排他机制）+ MANIFEST 记录（备份文件↔容器路径↔原 md5）",
+        "脚本替换后有容器内 md5 回读校验，不符即报错停止",
+        "脚本含回滚模式，且回滚时按 MANIFEST 校验备份完整性后再恢复",
+        "脚本含 CRLF 自检或等价处理（tr -d '\\r' 或 exit 提示）",
+        "脚本不自动重启容器/引擎，只打印重启指引与 smoke 验证方法",
+        "脚本对容器内同名多匹配或零匹配目标有停止保护（--pairs 显式指定或等价机制）"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "troubleshoot-silent-mkt",
+      "prompt": "我把带打点的 .so 替换进容器了，也重启了引擎，发了几条请求，但引擎日志里一条 [MKT_TTF] 都没有。帮我排查下原因。",
+      "expected_output": "按 SKILL.md 第 6 节给出排查路径：(1) 进程是否真加载了新库——/proc/<新pid>/maps grep mooncake 并 md5 比对，仍加载旧库说明替换路径不对或存在多副本 .so；(2) glog 级别——MKT 走 LOG(INFO)，被 GLOG_minloglevel/mooncake 日志配置吞掉则无输出；(3) Ray 日志去重——worker 侧 C++ 输出需 RAY_DEDUP_LOGS=0；(4) 流量没走到——请求是否真触发 KV 传输（全 miss 批次无日志），smoke 要发真实请求；(5) 产物本身没打点（strings 复核）。",
+      "files": [],
+      "assertions": [
+        "排查包含核对进程实际加载的库：/proc/<pid>/maps grep mooncake 并与预期 md5 比对（识别多副本/软链/路径错）",
+        "指出 glog INFO 级可能被日志级别配置吞掉（GLOG_minloglevel 或 mooncake 日志配置为 WARNING+）",
+        "指出 Ray 日志去重或 worker 日志位置问题（RAY_DEDUP_LOGS=0、worker-*.out 所在位置）",
+        "指出流量未触发的可能（批次全 miss 无 KV 传输则无日志，smoke 需发真实请求）",
+        "排查步骤带具体可执行命令，不只是概念性描述"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "multi-container-deploy",
+      "prompt": "带打点的 mooncake .so 已经在一个容器里编译好并拷到宿主机 /data/mkt_out/ 了（附 md5 清单），D 侧还有两个引擎容器 vllm-d-0 和 vllm-d-1 要换上。帮我规划部署并校验生效，我确认后自己执行。",
+      "expected_output": "方案复用同一份产物逐容器部署（不重新编译）：每容器独立运行部署脚本（备份/MANIFEST/替换/md5 回读独立），部署前对 /data/mkt_out/ 产物做 MKT 串预检，目标定位说明以 /proc/<pid>/maps 为准与同名自动匹配的兜底，多匹配/零匹配用 --pairs；不自动重启，给出重启顺序与逐容器 smoke（发真实请求 grep MKT 成对输出）；说明回滚按各容器自己的备份目录独立执行。",
+      "files": [],
+      "assertions": [
+        "方案对两个容器逐一部署，每容器独立备份/MANIFEST/回读校验",
+        "明确不重新编译，直接复用已就绪产物（一次编译多处部署）",
+        "部署前对产物做 MKT 串预检（strings grep MKT_TTF/MKT_FINE）",
+        "不自动重启，提示用户重启后逐容器 smoke（grep MKT 成对输出）",
+        "回滚说明按容器独立执行（各自的备份目录/MANIFEST）"
+      ]
+    }
+  ]
+}
