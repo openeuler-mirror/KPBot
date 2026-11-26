@@ -58,15 +58,15 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-在源树提交 `fa446e21ba2b3ca4f9c77ce7d8c5a8cb6a74b2cd` 的安装验证中：
+在 `d6379ba6` 加入 `kpbot-training-inference-host-insights` 后，安装结果如下。
 
 | 口径 | 数量 |
 | --- | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 155 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 180 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 193 |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 303 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 347 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 409 |
 
-上述测量包含合并的上游 `c6e6b8f`。递归文档数只证明文件已安装，不代表真实 Codex CLI
+递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
 未绑定可复现的树状态，不应用作当前版本的验证结论。
 计数快照保存在 `tests/fixtures/codex-skill-counts.json`，仓库安装回归精确断言三种数量。
