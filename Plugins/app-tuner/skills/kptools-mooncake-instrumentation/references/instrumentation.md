@@ -11,7 +11,7 @@
 
 glog INFO 级，输出到引擎进程 stdout（Ray 汇总到 head 日志）。
 
-**get 链（实测样例）：**
+**get 链（实测样例；行号出自含打点补丁的内部构建，非 v0.3.14 原始行号）：**
 
 ```
 I20261118 10:58:41.143564 719011 client_service.cpp:1219] [MKT_FINE] keys=49 open_ms=0.03536 build_ms=0.082311 alloc_ms=0.01996 submit_ms=2.24474 wait_ms=64.6071
@@ -27,7 +27,7 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 
 ## 2. MKT_TTF 字段契约（get 链批次摘要，real_client.cpp）
 
-挂在 `RealClient::BatchGet(keys, buffers, sizes)`（对外批量 get）的收尾处，一次调用打一行：
+挂在 `RealClient::batch_get_into_multi_buffers(keys, buffers, sizes)`（vLLM connector D 侧实际调用入口，与 put 链「按 connector 实际入口」同口径；v0.3.14：public real_client.cpp:8454 → internal :8516）的收尾处，一次调用打一行：
 
 | 字段 | 类型/单位 | 语义 |
 |---|---|---|
@@ -119,11 +119,12 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 **get 链**（以 v0.3.14 结构核对，源码 `mooncake-store/src/`）：
 
 ```
-RealClient::BatchGet(keys, buffers, sizes)          ← MKT_TTF 挂点
-  ├─ client_->BatchQuery(keys)                       ← query_ms
-  ├─ for each key: SelectBestReplica(...) + 组装      ← select_ms（循环整体计时）
+RealClient::batch_get_into_multi_buffers(keys, buffers, sizes)   ← MKT_TTF 挂点
+  （v0.3.14 public :8454 → internal :8516；vLLM connector D 侧实际入口）
+  ├─ client_->BatchQuery(keys)                       ← query_ms（:8545）
+  ├─ for each key: SelectBestReplica(...) + 组装      ← select_ms（:8606，循环整体计时）
   │    按 replica 类型分流计数 mem/locdisk/disk
-  ├─ client_->BatchGet(batch_keys, qrs, slices)     ← getmem_ms（内存/NOF 路径）
+  ├─ client_->BatchGet(batch_keys, qrs, slices)     ← getmem_ms（:8702，内存/NOF 路径）
   │    └─ ClientService 批量传输                     ← MKT_FINE 挂点
   │         open → build → alloc → submit → wait     ← 五相计时
   ├─ LOCAL_DISK offload RPC 路径                      ← offload_ms
@@ -165,7 +166,7 @@ RealClient::batch_put_from(_multi_buffers)          ← MKT_PUT 挂点（按实�
 
 | 项 | 值 | 状态 |
 |---|---|---|
-| 参考核对版本 | v0.3.14（gitee tag，调用链已核对） | ✅ get 链已核对 |
+| 参考核对版本 | v0.3.14：get 链锚 `RealClient::batch_get_into_multi_buffers`（public :8454 → internal :8516；BatchQuery :8545 / SelectBestReplica :8606 / client_->BatchGet :8702），D 侧 connector 实际调用 `store.batch_get_into_multi_buffers`（仓内 payload 佐证） | ✅ get 链已核对 |
 | 参考核对版本 | v0.3.14（`Client::BatchPut` 3669-3715 已核对） | ✅ put 链已核对 |
 | 集群现役版本 | 每次运行时由 probe_mooncake.sh 现场锚定 | 🔄 运行时锚定 |
 | put 链实测样例 | 首次部署后采集回填第 1 节 | ⏳ 待实测 |

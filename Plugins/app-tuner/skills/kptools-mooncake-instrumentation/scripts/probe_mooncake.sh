@@ -16,9 +16,11 @@ for mod in mooncake.store mooncake.engine mooncake; do
     || echo "$mod: import failed"
 done
 
-section "3. mooncake 相关 .so 文件"
-find / -name "*mooncake*.so*" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null
-find / -name "libstore_c*.so*" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null
+section "3. mooncake 相关 .so 文件（含软链指向）"
+# -printf '%p -> %l'：软链输出 "路径 -> 目标"，普通文件经 sed 去掉尾部 " -> "；
+# 现役 .so 常见多级软链形态（libmooncake-store.so -> libmooncake-store.so.1.2.3），
+# 缺指向信息会削弱版本锚定的 md5/路径核对（需要真实文件而非链接本身）
+find / \( -name "*mooncake*.so*" -o -name "libstore_c*.so*" \) -not -path "/proc/*" -not -path "/sys/*" -printf '%p -> %l\n' 2>/dev/null | sed 's/ -> $//'
 
 section "4. 引擎进程实际 mmap 的 mooncake 库 (最权威)"
 # 找 vLLM 引擎进程: EngineCore / vllm / ray
@@ -63,7 +65,7 @@ env 2>/dev/null | grep -iE "GLOG|MOONCAKE|RAY_DEDUP" || echo "无相关环境变
 
 # ---- JSON 摘要 ----
 PY_PKGS=$(pip list 2>/dev/null | grep -i mooncake | tr '\n' ';' | sed 's/;*$//')
-SO_LIST=$(find / -name "*mooncake*.so*" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | sort -u | head -20 | tr '\n' ';')
+SO_LIST=$(find / \( -name "*mooncake*.so*" -o -name "libstore_c*.so*" \) -not -path "/proc/*" -not -path "/sys/*" -printf '%p -> %l\n' 2>/dev/null | sed 's/ -> $//' | sort -u | head -20 | tr '\n' ';')
 MAP_SO=""
 # 按 pid 循环累积（不能把多 pid 拼进单个 /proc 路径：$ENG_PIDS 展开为
 # "/proc/<pid1> <pid2>/maps" 会让 grep 收到非法路径、字段恒为空）

@@ -48,7 +48,7 @@ metadata:
   → 按版本拉取源码（kvcache-ai/Mooncake 匹配 tag/commit）
   → 应用 MKT 打点（按 references/instrumentation.md，函数级挂点）
   → 容器内编译成 .so（references/build.md）
-  → 产物校验（strings 验 MKT 串 ≥2 + sha256 清单）
+  → 产物校验（四 tag MKT_TTF/MKT_FINE/MKT_PUT/MKT_PFINE 各 ≥1 + sha256 清单）
   → 交接：产物 + sha256 清单交给 kptools-mooncake-log-trace（配套 PR #404）部署
 ```
 
@@ -61,20 +61,20 @@ metadata:
 - 运行中引擎进程实际 mmap 的 mooncake 库（`/proc/<pid>/maps`，最权威）
 - .so 内嵌版本串、git 残留信息
 - 构建工具链（git/cmake/g++）与 RDMA 依赖是否齐备
-- 容器内是否残留 mooncake 源码/构建目录（有则优先复用，版本必然匹配）
+- 容器内是否残留 mooncake 源码/构建目录（有则优先复用，但**复用前必须核对残留源码版本与 §2 锚定的现役 .so 版本一致**——升级 wheel 后旧源码目录残留是常见形态，git 状态干净≠版本一致；不一致按 §3 第 3 条问用户要源码来源）
 
 **版本锚定规则**：以运行中进程 mmap 的 .so 为准（文件名、sha256、路径）；pip 元数据仅作参考。探测拿不到确定版本（无版本串、无源码残留）即停下问用户，禁止按猜测版本编译。两处版本线索矛盾（如 pip 一个版本、.so 串另一个版本）说明可能内部 fork 或 .so 被覆盖过——停下向用户要源码来源，不硬猜。
 
 ## 3. 源码准备
 
 1. 按探测版本拉取 `kvcache-ai/Mooncake`（GitHub 优先，连接重置时切 Gitee 镜像 `gitee.com/kvcache-ai/Mooncake`），checkout 到对应 tag/commit。
-2. 容器内残留源码且 git 状态干净 → 直接复用（跳过网络拉取）。
+2. 容器内残留源码且 git 状态干净 → 复用前先核对源码版本（git describe / 内嵌版本串）与 §2 锚定的现役 .so 版本**一致**，一致才直接复用（跳过网络拉取）；不一致按第 3 条处理。
 3. 版本对不上（tag 缺失、内部 fork）→ 列出差异问用户要源码来源，不硬猜。
 
 ## 4. 打点（skill 核心资产）
 
 按 [打点规格](references/instrumentation.md) 修改四处源码（`mooncake-store/src/`）：
-- `real_client.cpp`：`RealClient::BatchGet` 收尾挂 **MKT_TTF**（get 链批次摘要：query/select/getmem/offload/checksum/diskio 六相）；批量 put 入口（`batch_put_from` / `batch_put_from_multi_buffers`，按实际入口，可双挂）挂 **MKT_PUT**（put 链批次摘要）
+- `real_client.cpp`：`RealClient::batch_get_into_multi_buffers`（vLLM connector D 侧实际调用入口，与 put 链同口径）收尾挂 **MKT_TTF**（get 链批次摘要：query/select/getmem/offload/checksum/diskio 六相）；批量 put 入口（`batch_put_from` / `batch_put_from_multi_buffers`，按实际入口，可双挂）挂 **MKT_PUT**（put 链批次摘要）
 - `client_service.cpp`：内存路径批量传输函数挂 **MKT_FINE**（getmem 内部五相 open/build/alloc/submit/wait）；`Client::BatchPut`（put 单一收束点）挂 **MKT_PFINE**（含 StartBatchPut 的 master 副本分配等 put 特有相）
 
 规格包含字段契约（字段名、单位、顺序必须与既有日志逐字段一致，下游 kptools-tpsplit-log-analysis 按此 grep）和函数级挂点定位方法（按调用链定位而非行号，行号随版本漂移）。put 链当前为设计格式串（v0.3.14 源码已核对调用链），首次部署后采集实测样例回填校准。
@@ -82,7 +82,7 @@ metadata:
 ## 5. 编译与产物校验
 
 - **编译**：在目标容器内按 [编译指南](references/build.md) 用 CMake 构建。**禁止在容器外/异版本环境编译后直塞**——ABI 与依赖必须与容器运行环境一致，否则替换后 Python 侧 import 或运行时崩溃。
-- **产物校验**：`strings <目标.so> | grep -c "MKT_TTF\|MKT_FINE"` 应 ≥2；为 0 = 打点没编进目标库，**禁止交付**。全量记录产物 sha256 清单（sha256sum 逐文件，见 references/build.md）。
+- **产物校验**：四个 MKT tag **分别计数各 ≥1**——`strings <目标.so> | grep -c MKT_TTF`、`... MKT_FINE`、`... MKT_PUT`、`... MKT_PFINE`（get/put 两链都必须编进目标库；任一为 0 = 对应链打点没编进，**禁止交付**）。全量记录产物 sha256 清单（sha256sum 逐文件，见 references/build.md）。
 - **禁止携带未编译验证的改动**：清单内每个文件的打点内容必须是容器内实际编译通过并过 strings 校验的版本；新改动必须先过"编译 + 校验"再进交付清单。
 
 ## 6. 交接（产物契约）
@@ -91,9 +91,9 @@ metadata:
 
 1. 打点 .so 集合（文件名与容器现役 .so 一致）
 2. sha256 清单（逐文件，sha256sum 输出格式）
-3. strings MKT 串校验通过的确认（≥2）
+3. strings MKT 串校验通过的确认（四 tag MKT_TTF / MKT_FINE / MKT_PUT / MKT_PFINE 各 ≥1）
 
-交接时说明：.so 替换对运行中进程无效（已 mmap 旧库），部署方会提示用户重启；smoke 需发真实请求并 grep `[MKT_TTF]`/`[MKT_FINE]` 成对输出；MKT 走 `LOG(INFO)`，worker 侧输出需 `RAY_DEDUP_LOGS=0` 且确认 glog 级别（详见 kptools-mooncake-log-trace 的部署文档，配套 PR #404）。
+交接时说明：.so 替换对运行中进程无效（已 mmap 旧库），部署方会提示用户重启；smoke 需发真实请求并核 D 侧 grep `[MKT_TTF]`/`[MKT_FINE]`、P 侧 grep `[MKT_PUT]`/`[MKT_PFINE]` 成对输出；MKT 走 `LOG(INFO)`，worker 侧输出需 `RAY_DEDUP_LOGS=0` 且确认 glog 级别（详见 kptools-mooncake-log-trace 的部署文档，配套 PR #404）。
 
 ## 7. 使用边界与踩坑
 
