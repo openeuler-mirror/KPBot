@@ -220,15 +220,47 @@ def late_filter_checks():
         after, projection, 0, "values", complete, build_complete=True
     )
     check(channel == 1 and reason == "installed-values", "complete filter missed its scan column")
-    check(late == after[1:] and late_apps == len(after), "late batch did not filter key 99")
+    check(late == after[1:] and late_apps == len(after), "exact value filter did not exclude key 99")
 
     expected = Counter(join(before + after, complete))
     actual = Counter(join(early + late, complete))
     check(actual == expected and actual[(1, "May 2")] == 2, "late build lost an early match")
+
+    # At four-byte encoding, 165 and 99 occupy the same slot. The build
+    # contains 165, so 99 must pass this particular Bloom and reach the join.
+    bloom_dates = {**complete, 165: ("collision witness",)}
+    compatible = [Projection(1, 32, 32)]
+    early_bloom, channel, early_bloom_apps, reason = filter_scan(
+        before, compatible, 0, "bloom", Bloom.build(partial, 4), build_complete=False
+    )
+    check(reason == "incomplete-build" and channel is None and early_bloom_apps == 0
+          and early_bloom == before, "partial Bloom filtered the early batch")
+
+    # Key 98 misses all occupied slots, making a bypass visible even if its
+    # application counter still increments. Neither 98 nor 99 matches the join.
+    bloom_probe = [*after, (6, 98)]
+    bloom = Bloom.build(bloom_dates, 4)
+    check(99 not in bloom_dates and bloom.allows(99) and not bloom.allows(98),
+          "fixture requires a Bloom false positive and a definite negative")
+    late_bloom, channel, late_bloom_apps, reason = filter_scan(
+        bloom_probe, compatible, 0, "bloom", bloom, build_complete=True
+    )
+    check(reason == "installed-bloom" and channel == 1 and late_bloom_apps == len(bloom_probe),
+          "complete Bloom was not applied to the probe key")
+    check(late_bloom == after, "scan must pass the collision and prune the definite negative")
+    bloom_result = Counter(join(early_bloom + late_bloom, bloom_dates))
+    check(bloom_result == Counter(join(before + bloom_probe, bloom_dates)),
+          "late Bloom changed the full inner join result")
+    check(bloom_result[(1, "May 2")] == bloom_result[(5, "May 2")] == 2,
+          "late Bloom lost a duplicate match for key 102")
     return {
         "partial_build_filter_applications": early_apps,
         "complete_build_filter_applications": late_apps,
         "early_match_multiplicity": actual[(1, "May 2")],
+        "partial_bloom_applications": early_bloom_apps,
+        "complete_bloom_applications": late_bloom_apps,
+        "bloom_false_positive_rows": sum(key == 99 for _, key in late_bloom),
+        "bloom_late_match_multiplicity": bloom_result[(5, "May 2")],
     }
 
 

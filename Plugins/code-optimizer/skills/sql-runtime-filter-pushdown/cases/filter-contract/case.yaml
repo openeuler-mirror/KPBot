@@ -73,3 +73,19 @@ assert:
     file: results/result.json
     field: early_match_multiplicity
     expect: 2
+  - type: json_field
+    file: results/result.json
+    field: partial_bloom_applications
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: complete_bloom_applications
+    expect: 4
+  - type: json_field
+    file: results/result.json
+    field: bloom_false_positive_rows
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: bloom_late_match_multiplicity
+    expect: 2

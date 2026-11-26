@@ -39,6 +39,14 @@ assert:
     expect: 35
   - type: json_field
     file: results/result.json
+    field: variable_overlap_cases
+    expect: 6
+  - type: json_field
+    file: results/result.json
+    field: short_overlap_rejections
+    expect: 2
+  - type: json_field
+    file: results/result.json
     field: outside_regions_unchanged
     expect: true
   - type: json_field

@@ -107,8 +107,42 @@ def main():
                         + before[target_offset + size:])
             check(bytes(buffer) == expected, "shared-buffer-copy", length=size, shift=shift)
             shared_buffer_cases += 1
+
+    # Move consecutive variable-length fields within the same backing storage.
+    # target_at is the write position in the backing buffer. The destination
+    # view starts two bytes earlier so its local write offset is nonzero.
+    buffer = bytearray(range(80))
+    expected = bytes(buffer)
+    variable_overlap_cases = 0
+    for source_at, length, target_at, capacity in (
+        (20, 17, 25, 26), (27, 23, 12, 29), (13, 31, 26, 35),
+        (29, 15, 21, 22), (14, 33, 24, 40), (26, 32, 15, 36),
+    ):
+        source = memoryview(buffer)[source_at:source_at + length]
+        target = memoryview(buffer)[target_at - 2:target_at + capacity]
+        payload = expected[source_at:source_at + length]
+        expected = expected[:target_at] + payload + expected[target_at + length:]
+        write_string(target, 2, source)
+        check(bytes(buffer) == expected, "variable-overlap-copy", source=source_at,
+              length=length, target=target_at, capacity=capacity)
+        variable_overlap_cases += 1
+
+    # The backing storage has room in both directions, but each destination
+    # view ends one byte short. A rejected write must leave every byte intact.
+    short_overlap_rejections = 0
+    for source_at, target_at, length in ((20, 25, 17), (27, 12, 23)):
+        source = memoryview(buffer)[source_at:source_at + length]
+        target = memoryview(buffer)[target_at:target_at + length - 1]
+        try:
+            write_string(target, 0, source)
+        except ValueError:
+            short_overlap_rejections += 1
+        check(bytes(buffer) == expected, "short-overlap-unchanged", target=target_at)
+    check(short_overlap_rejections == 2, "short-overlap-rejections")
     result = {"success":not failures,"tested_lengths":tested_lengths,
               "shared_buffer_cases":shared_buffer_cases,
+              "variable_overlap_cases":variable_overlap_cases,
+              "short_overlap_rejections":short_overlap_rejections,
               "fixed_copy_lengths":fixed_copy_lengths,"rejected_writes":rejected_writes,
               "boundary_cases":boundary_cases,"exact_capacity_cases":exact_capacity_cases,
               "nonzero_offset_cases":nonzero_offset_cases,"outside_regions_unchanged":outside_unchanged,
