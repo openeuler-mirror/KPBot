@@ -23,7 +23,7 @@
     {
       "id": 1,
       "eval_name": "expect-req-gate-and-stage",
-      "prompt": "同样把 evals/fixtures 的 5 份按子目录布局（同上一题：p102/log/prefill.log、p103/log/prefill.log、d103/log/decode.log、proxy/load_balance.log、bench/manual_synth_dumpjsonl.json）放到 /tmp/opencode/fakeroot2 并执行 fetch_logs.sh：这次用 --expect-req 100 做完整性门槛，并用 --stage /tmp/opencode/stage2 暂存。跑完告诉我门槛是否通过、暂存目录里文件是否齐全且多 P 同名 prefill.log 不会互相覆盖。",
+      "prompt": "先清理上次运行残留（rm -rf /tmp/opencode/fakeroot2 /tmp/opencode/stage2，保证可重复执行），然后把 evals/fixtures 的 5 份按子目录布局（同上一题：p102/log/prefill.log、p103/log/prefill.log、d103/log/decode.log、proxy/load_balance.log、bench/manual_synth_dumpjsonl.json）放到 /tmp/opencode/fakeroot2 并执行 fetch_logs.sh：这次用 --expect-req 100 做完整性门槛，并用 --stage /tmp/opencode/stage2 暂存。跑完告诉我门槛是否通过、暂存目录里文件是否齐全且多 P 同名 prefill.log 不会互相覆盖。",
       "expected_output": "P 侧 BREAKDOWN 合计 8 < 100 → 输出「P 侧 BREAKDOWN 总行数 8 < --expect-req 100」，退出码 1（暂存仍完成）；暂存目录 5 个文件，文件名为来源完整路径把 / 与 : 替换成 __（两份 prefill.log 来源路径不同、不重名不覆盖）。",
       "files": [
         "evals/fixtures/P102_prefill.log",

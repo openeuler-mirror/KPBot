@@ -60,7 +60,9 @@ count_marker() {  # count_marker FILE MARKER → 标记出现次数（grep -oF �
                    # 单行多记录（如单行 JSON 数组）也数对；不存在输出 -1）
   if [ -f "$1" ]; then
     local n
-    n=$(grep -oF -- "$2" "$1" 2>/dev/null | wc -l)
+    # tr -d '[:space:]'：BSD/macOS 的 wc -l 输出右填充空格（如 "       0"），
+    # 不剥掉会让 [ "$ns" != "0" ] 字符串比较失效、误打印 0 值标记行
+    n=$(grep -oF -- "$2" "$1" 2>/dev/null | wc -l | tr -d '[:space:]')
     echo "${n:-0}"
   else
     echo -1
