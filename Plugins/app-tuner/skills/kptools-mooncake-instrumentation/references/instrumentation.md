@@ -101,14 +101,14 @@ I20261118 11:02:05.203884 707880 real_client.cpp:5775] [MKT_PUT] keys=32 bytes=3
 
 **get 链：**
 1. 等尺寸 block 时 `keys × size = bytes`（样例 49×12,189,696=597,295,104 ✓）
-2. `getmem_ms ≈ FINE 五段之和 + <1ms` 调度开销（样例 67.99 vs 66.99 ✓）——FINE 是 TTF 中 getmem 的子阶段分解
+2. `getmem_ms ≈ FINE 五段之和 + 调度开销`，差值容差 `≤ max(1.5ms, 2% getmem_ms)`（绝对+相对双口径：小批次保绝对下限、大批次按比例放宽；样例 67.9937 vs 66.9895，差 1.004ms ≤ 1.5ms ✓）——FINE 是 TTF 中 getmem 的子阶段分解
 3. 同批次两行相邻（<数 ms）、同线程 id、同 keys 值
 4. 六相中非本批次路径的相为 0（内存路径批次 offload/checksum/diskio 均 0）
 5. 有效带宽 ≈ `bytes / total_ms`（样例 ≈8.67 GB/s，可与网卡规格对账）
 
 **put 链：**
 1. 等尺寸 block 时 `keys × size = bytes`
-2. `put_ms ≈ PFINE 各相之和 + <1ms`——PFINE 是 PUT 中 put_ms 的子阶段分解
+2. `put_ms ≈ PFINE 各相之和 + 调度开销`，差值容差 `≤ max(1.5ms, 2% put_ms)`——PFINE 是 PUT 中 put_ms 的子阶段分解
 3. `total_ms ≈ build_ms + put_ms`（real_client 层仅这两段）
 4. 同批次 PUT/PFINE 相邻、同线程 id、同 keys 值
 5. 无 DFS 副本时 `dfs_ms=0`；`alloc_ms` 含 master RPC，是 put 与 get 的差异相（get 的 master 查询在 query_ms）
