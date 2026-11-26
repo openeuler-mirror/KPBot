@@ -13,7 +13,7 @@ metadata:
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
 
-把推理集群从旧 TP 拓扑（典型：跨机 TP32 + Ray 托管）迁移到新 TP 拓扑（典型：单机 TP8 闭环 + 显式 DP 组网 + Mooncake 对齐）。新 TP size 来自用户输入，或来自 TP 可行性分析报告（常见由上游 tpsplit-check 分析工具产出，本仓库未随附其实现，以报告文件路径交接）。产出：已拉起并验证的新集群 + 一份部署指南 `.md`。
+把推理集群从旧 TP 拓扑（典型：跨机 TP32 + Ray 托管）迁移到新 TP 拓扑（典型：单机 TP8 闭环 + 显式 DP 组网 + Mooncake 对齐）。新 TP size 来自用户输入，或来自 TP 可行性分析报告（由仓内 `Plugins/app-tuner/skills/kptools-tpsplit-check/` 的 `analyze_feasibility.py` 产出，样例报告见其 `examples/glm52_report.*`，以报告文件路径交接）。产出：已拉起并验证的新集群 + 一份部署指南 `.md`。
 
 核心原则（原理详见 `references/tp-topology-principles.md`，动手前先读）：
 
@@ -41,7 +41,7 @@ metadata:
 
 - **用户直接输入**：确认目标 TP size。追问只改 P 侧还是 D 侧也动——默认 **P 侧 Prefill TP 变更**（D 侧通常 tp=1 不动，但 KV_TRANSFER_CONFIG prefill 段必须同步改）
 - **用户没给 TP size**：按卡数推导默认值再求证一轮（16 卡机 → TP8×2；8 卡机 → TP8×1；4 卡机 → TP4×1），不要空手反问"你要多大 TP"
-- **TP 可行性分析报告**（常见来源：上游 tpsplit-check 分析工具，本仓库未随附，以其报告文件交接）：同目录 `.json`/`.md` 同在时**优先解析 `.json`**，`.md` 用于向用户复述。关键字段：`recommended.tp` / `current.*` / `candidates[]`（含 `dp_per_group`、`cluster_dp`、`verdict`）。**两层 DP 映射固定**：`cluster_dp`（集群DP）→ Mooncake `dp_size`（全局实例总数）；`dp_per_group`（组内DP = ep_group÷tp）→ vLLM `--data-parallel-size`（每组大小）。⚠️ 报告"建议启动参数 diff"里的 `--data-parallel-size` 是"单 serve 拉起"形态的集群级值，显式 DP 组网**取 `dp_per_group`，不得照抄**——照抄会把每组配成集群规模，组网直接失败。字段结构不符时按字段名尽力解析，**缺失或解析不出即向用户确认，绝不按缺省值硬写 dp/dp_size**。**提取后必须复述确认**（"报告推荐 TP8、组内 DP 4、集群 DP 20，按这个部署吗？"），报告没写的（主机清单、路径、Proxy 类型）继续问用户；结论与用户口头说法冲突以用户为准并提醒差异
+- **TP 可行性分析报告**（来源：仓内 `Plugins/app-tuner/skills/kptools-tpsplit-check/` 的 `analyze_feasibility.py`，样例见其 `examples/glm52_report.*`）：同目录 `.json`/`.md` 同在时**优先解析 `.json`**，`.md` 用于向用户复述。关键字段：`recommended.tp` / `current.*` / `candidates[]`（含 `dp_per_group`、`cluster_dp`、`verdict`）。**两层 DP 映射固定**：`dp_per_group`（组内DP）→ vLLM `--data-parallel-size`（每组大小）；`cluster_dp`（集群DP）是**容量口径**（集群总卡数 ÷ (TP×PP)，即集群可容纳的组内副本总数）——写 Mooncake `dp_size` 前必须与 2.1 布局表实际实例总数交叉核对，不一致即向用户澄清，不得把容量口径值直接当全局实例总数使用。⚠️ 报告"建议启动参数 diff"里的 `--data-parallel-size` **分两种情形**：EP 启用时上游输出的是**组内 DP**（注释为「组内 DP = ep_group ÷ TP（单组启动命令）」并附集群布局行），**可直接采用**、与 `dp_per_group` 一致；仅**非 EP 的"单 serve 拉起"形态** diff 才是集群级值（注释为「卡数 / (TP×PP)」），显式 DP 组网时取 `dp_per_group`、不得照抄。字段结构不符时按字段名尽力解析，**缺失或解析不出即向用户确认，绝不按缺省值硬写 dp/dp_size**。**提取后必须复述确认**（"报告推荐 TP8、组内 DP 4、集群 DP 20，按这个部署吗？"），报告没写的（主机清单、路径、Proxy 类型）继续问用户；结论与用户口头说法冲突以用户为准并提醒差异
 
 ### 1.2 必须收集的拓扑信息
 

@@ -305,9 +305,190 @@ def legacy_expect(baseline_path: str):
         return None, '--legacy-baseline KV 结构不完整: %s' % e
 
 
+# ---------------- selftest（cases/skill-contract 的被测入口） ----------------
+
+_ST_SCRIPT = """#!/bin/bash
+source ./inst.env
+export ASCEND_RT_VISIBLE_DEVICES=$DEVICES
+vllm serve /models/glm \\
+  --tensor-parallel-size %(tp)d \\
+  --data-parallel-size $DP_SIZE \\
+  --data-parallel-rank $RANK \\
+  --data-parallel-address $DP_MASTER \\
+  --data-parallel-rpc-port 16600 \\
+  --port $HTTP_PORT \\
+  --kv-transfer-config "$KV_TRANSFER_CONFIG"
+"""
+
+_ST_DRIVER = """#!/bin/bash
+launch_instance group1 rank0 "0,1,2,3,4,5,6,7" 9000 10.0.0.1 x
+vllm serve /models/glm \\
+  --tensor-parallel-size %(tp)d \\
+  --kv-transfer-config '{"engine_id": "eg-st", "kv_connector_extra_config": {"connectors": [{"kv_connector": "MooncakeConnectorV1", "kv_port": 30000, "kv_connector_extra_config": {"prefill": {"dp_size": %(gdp)d, "tp_size": %(tp)d}, "decode": {"dp_size": 2, "tp_size": 1}}}, {"kv_connector": "AscendStoreConnector", "kv_connector_extra_config": {"lookup_rpc_port": 10001}}]}}'
+"""
+
+
+def _st_kv_json(gdp, tp, ascend=True):
+    conns = [{"kv_connector": "MooncakeConnectorV1", "kv_port": 30000,
+              "kv_connector_extra_config": {"prefill": {"dp_size": gdp, "tp_size": tp},
+                                            "decode": {"dp_size": 2, "tp_size": 1}}}]
+    if ascend:
+        conns.append({"kv_connector": "AscendStoreConnector",
+                      "kv_connector_extra_config": {"lookup_rpc_port": 10001}})
+    import json as _json
+    return _json.dumps({"engine_id": "eg-st", "kv_connector_extra_config": {"connectors": conns}})
+
+
+def _st_write(path, content):
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+
+
+def _st_layout(root, gdp=8, tp=8, group_size=4, hosts=4, per_host=2,
+               dup_rank=False, drop_last=False, no_ascend_host=None, no_env=False,
+               single_dir=False, legacy_dir=None):
+    """生成 fixture：hostN 子目录各 per_host 个实例（或单目录），参数从每实例独立的
+    inst-*.env 进。dup_rank：同组重复 rank；drop_last：删除最后一个实例（漏分发）；
+    no_ascend_host：该主机的 KV 误删 AscendStoreConnector；no_env：env 文件改名
+    （未解析形态）。legacy 基线写 legacy_dir（必须在扫描目录之外，防止被当实例统计）。"""
+    import os
+    import shutil
+    shutil.rmtree(root, ignore_errors=True)
+    masters = ['10.0.0.1', '10.0.0.2']
+    idx = 0
+    plan = []  # (hostdir, rank, port, dev, master, k)
+    for h in range(hosts):
+        grp = h * per_host // (per_host * 2) if hosts > 1 else 0
+        for k in range(per_host):
+            rank = (1 if idx == 3 else idx % group_size) if dup_rank else idx % group_size
+            plan.append(('host%d' % (h + 1) if not single_dir else '.',
+                         rank, 9000 + (idx % 2),
+                         '0,1,2,3,4,5,6,7' if idx % 2 == 0 else '8,9,10,11,12,13,14,15',
+                         masters[grp % 2], k))
+            idx += 1
+    if drop_last:
+        plan = plan[:-1]
+    for hdir, rank, port, dev, master, k in plan:
+        # 每实例一个独立子目录（hostN/ik/）：inst.env 名字统一（instance-diff 遮蔽后一致），
+        # 又不会像同目录共享 env 那样互相覆盖
+        d = os.path.join(root, hdir, 'i%d' % k) if not single_dir else os.path.join(root, 'i%d' % k)
+        os.makedirs(d, exist_ok=True)
+        name = 'inst-g%d-r%d.sh' % (1 if master == masters[0] else 2, rank)
+        _st_write(os.path.join(d, name), _ST_SCRIPT % {'tp': tp})
+        _st_write(os.path.join(d, 'inst.env' if not no_env else 'inst.env.missing'),
+                  'RANK=%d\nHTTP_PORT=%d\nDEVICES=%s\nDP_MASTER=%s\nDP_SIZE=%d\n'
+                  "KV_TRANSFER_CONFIG='%s'\n"
+                  % (rank, port, dev, master, group_size,
+                     _st_kv_json(gdp, tp, ascend=(hdir != no_ascend_host))))
+    # legacy 基线：必须放在扫描目录之外（在目录内会被当实例统计，污染 dp 集合与实例数）
+    lb_dir = legacy_dir if legacy_dir else os.path.dirname(root.rstrip('/\\'))
+    os.makedirs(lb_dir, exist_ok=True)
+    lb = os.path.join(lb_dir, 'legacy-%s.sh' % os.path.basename(root))
+    _st_write(lb, "vllm serve /models/glm --tensor-parallel-size 32 "
+                  "--kv-transfer-config '%s'\n" % _st_kv_json(32, 32))
+    return lb
+
+
+def selftest() -> int:
+    """契约自测：生成四种形态 fixture（模板自包含 / env 传参 / env 缺失未解析 / 驱动形态），
+    断言 PASS/SKIP/FAIL 语义与退出码——特别是未解析变量必须 SKIP 不 FAIL、按主机口径
+    不比较本机实例数、--expect-dp 缺实例必须 FAIL、SKIP 项不计失败。
+    报告只打印到 stdout（fixture 写临时目录，不弄脏工作区）。"""
+    import subprocess
+    import tempfile
+    me = os.path.abspath(__file__)
+    tmp = tempfile.mkdtemp(prefix='l0_selftest_')
+    results = []
+
+    def check(name, ok, detail=''):
+        results.append(ok)
+        print('%s  %s%s' % ('[ok]' if ok else '[FAIL]', name,
+                            (' — %s' % detail) if detail and not ok else ''))
+
+    def run_l0(d, *extra):
+        p = subprocess.run([sys.executable, me, d] + [str(x) for x in extra],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace')
+        return p.returncode, p.stdout + p.stderr
+
+    # S1: 完整布局 + env 传参形态 + legacy 基线 → exit 0，KV 从 env 追溯解析成功
+    d1 = os.path.join(tmp, 's1')
+    lb = _st_layout(d1)
+    rc, out = run_l0(d1, '--expect-dp', 8, '--tp', 8, '--legacy-baseline', lb)
+    check('S1a 完整布局全 PASS（exit 0）', rc == 0, 'rc=%d' % rc)
+    check('S1b env 传参形态 KV 可解析（不误报 no KV config parsed）',
+          'no KV config parsed' not in out)
+    check('S1c 实例数对照布局表 PASS', 'instance-count==8(布局表)' in out and
+          'PASS' in [ln.split()[0] for ln in out.splitlines() if 'instance-count==8' in ln])
+    check('S1d 组内 rank 齐全 PASS', 'dp-rank-range-unique-complete' in out and
+          '组内 rank 齐全' in out)
+
+    # S2: 同组重复 rank → 组级唯一性 FAIL
+    d2 = os.path.join(tmp, 's2')
+    _st_layout(d2, dup_rank=True)
+    rc, out = run_l0(d2, '--expect-dp', 8, '--tp', 8)
+    dup = [ln for ln in out.splitlines() if ln.startswith('FAIL') and 'dp-rank-range-unique-complete' in ln]
+    check('S2 同组重复 rank 被 FAIL 拦截', rc != 0 and len(dup) == 1 and
+          "ranks=['0', '1', '1', '2']" in dup[0])
+
+    # S3: 漏发 1 实例（7/8）→ 实例数 FAIL + 组不齐 FAIL
+    d3 = os.path.join(tmp, 's3')
+    _st_layout(d3, drop_last=True)
+    rc, out = run_l0(d3, '--expect-dp', 8, '--tp', 8)
+    check('S3 漏发实例 FAIL（缺 1 个 + 组不齐）', rc != 0 and '缺 1 个' in out
+          and '组内 rank 不齐' in out)
+
+    # S4: 误删 AscendStoreConnector → kv-legacy-fields FAIL（先比存在性再比端口）
+    d4 = os.path.join(tmp, 's4')
+    lb4 = _st_layout(d4, no_ascend_host='host1')
+    rc, out = run_l0(d4, '--expect-dp', 8, '--tp', 8, '--legacy-baseline', lb4)
+    fails = [ln for ln in out.splitlines() if ln.startswith('FAIL') and 'kv-legacy-fields' in ln]
+    check('S4 误删 connector FAIL（ascend=missing）',
+          rc != 0 and len(fails) == 2 and all('ascend=missing' in ln for ln in fails))
+
+    # S5: env 文件缺失（未解析形态）→ 全部降级 SKIP、无假 FAIL
+    d5 = os.path.join(tmp, 's5')
+    _st_layout(d5, no_env=True)
+    rc, out = run_l0(d5, '--expect-dp', 8, '--tp', 8)
+    check('S5a 未解析不误报 no KV config parsed', 'no KV config parsed' not in out)
+    check('S5b 卡互斥未解析降级 SKIP（记录为 PASS+SKIP 证据，不 FAIL）',
+          any(ln.startswith('PASS') and 'cards-disjoint' in ln and 'SKIP' in ln
+              for ln in out.splitlines()))
+    check('S5c 端口未解析降级 SKIP（记录为 PASS+SKIP 证据，不 FAIL）',
+          any(ln.startswith('PASS') and 'http-port-distinct' in ln and 'SKIP' in ln
+              for ln in out.splitlines()))
+    check('S5d 无假 FAIL（未解析形态不产出 cards/port/dp-flags/kv-json FAIL）',
+          not any(ln.startswith('FAIL') and any(k in ln for k in
+                  ('cards-disjoint', 'http-port-distinct', 'dp-flags', 'kv-json'))
+                  for ln in out.splitlines()))
+
+    # S6: 按主机分目录（无 --expect-dp）→ 只核一致、不与本机实例数比较
+    d6 = os.path.join(tmp, 's6', 'onlyhost')
+    _st_layout(d6, hosts=1, per_host=2)
+    rc, out = run_l0(d6, '--tp', 8)
+    check('S6a 按主机口径不比较本机实例数（kv-dp-consistent PASS）',
+          any(ln.startswith('PASS') and 'kv-dp-consistent' in ln for ln in out.splitlines()))
+    check('S6b exit 0（SKIP/一致性通过即通过）', rc == 0, 'rc=%d' % rc)
+
+    # S7: 驱动形态（launch_instance 调用）→ 不异常、正常产出检查
+    d7 = os.path.join(tmp, 's7')
+    os.makedirs(d7, exist_ok=True)
+    _st_write(os.path.join(d7, 'driver.sh'), _ST_DRIVER % {'tp': 8, 'gdp': 8})
+    rc, out = run_l0(d7, '--tp', 8)
+    check('S7 驱动形态可解析（无 script-check 异常）',
+          not any('exception' in ln for ln in out.splitlines()))
+
+    ran, passed = len(results), sum(results)
+    print('---')
+    print('%d/%d passed' % (passed, ran))
+    return 0 if passed == ran else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument('dir', help='部署脚本目录（递归扫描）')
+    ap.add_argument('dir', nargs='?', help='部署脚本目录（递归扫描）')
+    ap.add_argument('--selftest', action='store_true',
+                    help='跑内置契约自测（生成临时 fixture 断言 PASS/SKIP/FAIL 语义与退出码；'
+                         '产物只写临时目录，不弄脏工作区）')
     ap.add_argument('--expect-dp', type=int, default=None,
                     help='期望的 Mooncake prefill dp_size（全局实例总数）：全量目录执行时核对'
                          '全局守恒；按主机分目录执行时不要给，缺省只核各实例 dp_size 一致')
@@ -330,6 +511,10 @@ def main() -> int:
     ap.add_argument('--hosts', default=None,
                     help='显式主机分组，如 "h1=2,h2=2"（按自然排序顺序分配，支持混合布局）')
     args = ap.parse_args()
+    if args.selftest:
+        return selftest()
+    if not args.dir:
+        ap.error('需要 <dir> 参数（或使用 --selftest）')
     allowed_sizes = {int(x) for x in str(args.group_size).split(',')}
 
     outdir = os.path.abspath(args.dir)
@@ -583,17 +768,32 @@ def main() -> int:
                % tp_set)
 
     # 同机卡互斥 / 端口错开
+    # 未解析降级 SKIP 契约（与 dp 旗标/KV 项同口径）：dev/port 仍是 $VAR / <ARG:..> 占位
+    # （env 文件未随脚本提供——典型如 /etc/machine-llm/topology.env 只在远端）时记 SKIP
+    # 而不是 FAIL；仅当取值已解析才判定——两个实例端口同为未解析占位是「不可判定」，
+    # 与「两个实例端口相同」（真冲突）必须区分。
+    def _unparsed(x):
+        return x is not None and ('$' in str(x) or '<ARG:' in str(x))
+
     for h, inst in sorted(per_host.items()):
         for i in range(len(inst)):
             for j in range(i + 1, len(inst)):
-                d0, d1 = expand_devices(inst[i]['dev']), expand_devices(inst[j]['dev'])
-                ok = (d0 is not None and d1 is not None and not (d0 & d1))
-                record('%s[%s/%s]' % (h, inst[i]['file'], inst[j]['file']),
-                       'cards-disjoint', ok, '%r vs %r' % (inst[i]['dev'], inst[j]['dev']))
-                pok = (inst[i]['port'] and inst[j]['port']
-                       and inst[i]['port'] != inst[j]['port'])
-                record('%s[%s/%s]' % (h, inst[i]['file'], inst[j]['file']),
-                       'http-port-distinct', bool(pok), '%r vs %r' % (inst[i]['port'], inst[j]['port']))
+                key = '%s[%s/%s]' % (h, inst[i]['file'], inst[j]['file'])
+                di, dj = inst[i]['dev'], inst[j]['dev']
+                if _unparsed(di) or _unparsed(dj):
+                    record(key, 'cards-disjoint', True,
+                           'SKIP: 卡变量未解析（%r/%r，请补 env 文件到脚本同目录或用 --env-file 指定）' % (di, dj))
+                else:
+                    d0, d1 = expand_devices(di), expand_devices(dj)
+                    ok = (d0 is not None and d1 is not None and not (d0 & d1))
+                    record(key, 'cards-disjoint', ok, '%r vs %r' % (di, dj))
+                pi, pj = inst[i]['port'], inst[j]['port']
+                if _unparsed(pi) or _unparsed(pj):
+                    record(key, 'http-port-distinct', True,
+                           'SKIP: 端口变量未解析（%r/%r，请补 env 文件到脚本同目录或用 --env-file 指定）' % (pi, pj))
+                else:
+                    pok = (pi and pj and pi != pj)
+                    record(key, 'http-port-distinct', bool(pok), '%r vs %r' % (pi, pj))
 
     # 实例间 diff：遮蔽三处差异后应一致（仅独立脚本形态；函数/驱动形态结构不同则跳过）
     uniq = set(masked_bodies)

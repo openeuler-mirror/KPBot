@@ -10,10 +10,10 @@
     {
       "id": 2,
       "prompt": "上游 kptools-tpsplit-check 的可行性报告出来了（.md 和 .json 都在），结论推荐 TP8，按报告部署新集群。Prefill 现在是 10 台 16 卡机器，Decode 64 实例 TP1。",
-      "expected_output": "优先解析 .json 版本（.md 用于向用户复述）；按可行性报告结构提取：结论（推荐 TP8、DP 扩容倍数）、候选 TP 试算表（组内DP / 集群DP）、建议启动参数 diff；两层 DP 正确映射：集群DP 20 → Mooncake dp_size，组内DP 4 → vLLM --data-parallel-size；不照抄报告 diff 里的集群级 --data-parallel-size（显式 DP 组网形态按组内 DP 取值）；报告字段缺失或结构不符时向用户确认，不按缺省值硬写 dp/dp_size；提取后向用户复述确认；报告没写的信息（主机/路径/Proxy）继续问用户；后续流程同直接输入场景（调用链梳理→布局推演→生成→分层测试）。",
+      "expected_output": "优先解析 .json 版本（.md 用于向用户复述）；按可行性报告结构提取：结论（推荐 TP8、DP 扩容倍数）、候选 TP 试算表（组内DP / 集群DP）、建议启动参数 diff；两层 DP 正确映射：dp_per_group 4 → vLLM --data-parallel-size，cluster_dp 20 是容量口径（集群总卡数 ÷ TP×PP），写 Mooncake dp_size 前与布局表实际实例总数交叉核对、不一致即澄清；diff 里的 --data-parallel-size 分情形：EP 启用时已是组内值（注释「组内 DP = ep_group ÷ TP（单组启动命令）」）可直接采用，仅非 EP 单 serve 形态的集群级值（注释「卡数 / (TP×PP)」）不照抄、按 dp_per_group 取值；报告字段缺失或结构不符时向用户确认，不按缺省值硬写 dp/dp_size；提取后向用户复述确认；报告没写的信息（主机/路径/Proxy）继续问用户；后续流程同直接输入场景（调用链梳理→布局推演→生成→分层测试）。",
       "files": [
-        "evals/fixtures/glm52_report.json",
-        "evals/fixtures/glm52_report.md"
+        "../kptools-tpsplit-check/examples/glm52_report.json",
+        "../kptools-tpsplit-check/examples/glm52_report.md"
       ]
     },
     {
