@@ -1,0 +1,65 @@
+{
+  "skill_name": "ceph-parameter-tuning",
+  "evals": [
+    {
+      "id": "CPT-E01",
+      "prompt": "Ceph 集群 12 个 OSD、3 副本，PG 数量怎么设？balancer 要不要开？",
+      "expected_output": "按公式 (12×100)/3=400 向上取整到最近的 2 的整数次幂得 512，pgp_num 与 pg_num 相同；balancer 模式设为 upmap 并开启，开启后每 60 秒自动调整少量 PG，用 balancer eval 与 pg dump 观察收敛，分布不再变化即达最佳；每个 OSD 承载的 PG 数应相同或非常接近",
+      "files": [],
+      "expectations": [
+        "给出公式 (OSD 总数×100)/副本数=400，向上取整到最近的 2 的整数次幂得 512",
+        "pgp_num 与 pg_num 相同",
+        "balancer 模式设为 upmap 并开启，说明每 60 秒自动调整少量 PG",
+        "给出 balancer eval 与 pg dump 的收敛观察方法，并提示主 PG 也应尽量均匀分布"
+      ]
+    },
+    {
+      "id": "CPT-E02",
+      "prompt": "ceph.conf 里 debug_rados = 20，throttler_perf_counter 也是默认开的，要关吗？osd_max_write_size 和 bluestore cache 比例要不要调？",
+      "expected_output": "全量 debug_* 建议 0/0（关闭 debug 减少日志打印开销）、throttler_perf_counter 建议 False（tracker 影响性能，性能调到最佳后关闭）；osd_max_write_size 建议 256，bluestore_cache_meta_ratio 建议 0.8、bluestore_cache_kv_ratio 建议 0.2；bluestore cache 比例调整有前置：bluestore_cache_autotune 自 v15.2 起默认 true，开启时仅改比例不生效，须先置 false（关闭后 cache 不再随 osd_memory_target 自动伸缩，需自行管理 bluestore_cache_size）；ceph.conf 修改前备份，逐节点统一应用后 systemctl restart ceph.target 生效（需重启窗口授权），逐参数回读复核并保留回退",
+      "files": [],
+      "expectations": [
+        "全量 debug_* 建议 0/0，throttler_perf_counter 建议 False（tracker 影响性能）",
+        "osd_max_write_size 建议 256，bluestore cache 比例建议 meta 0.8、kv 0.2，且声明 bluestore_cache_autotune=false 前置（autotune 默认开启时仅改比例不生效）",
+        "ceph.conf 修改前备份并逐节点统一应用，systemctl restart ceph.target 需重启窗口授权",
+        "给出逐参数回读复核方法并保留回退预案"
+      ]
+    },
+    {
+      "id": "CPT-E03",
+      "prompt": "OSD 进程和网卡软中断挤在同一个 NUMA 节点，网络压力大时 CPU 打满，怎么处理？",
+      "expected_output": "先只读确认网卡所属 NUMA 节点；通过 ceph.conf [osd.n] 节段配置 osd_numa_node，把 OSD 绑到网卡软中断所在节点之外的空闲 NUMA 节点；修改前备份，逐节点应用，systemctl restart ceph.target 生效（需重启窗口授权），回读复核并保留回退",
+      "files": [],
+      "expectations": [
+        "先用只读命令确认网卡所属 NUMA 节点",
+        "osd_numa_node 绑到网卡软中断所在节点之外的空闲 NUMA 节点，sysfs 绑核属性只读禁写",
+        "ceph.conf 修改前备份并逐节点应用，systemctl restart ceph.target 需重启窗口授权",
+        "生效后逐参数回读复核并保留回退预案"
+      ]
+    },
+    {
+      "id": "CPT-E04",
+      "prompt": "OSD 数据盘是 SATA HDD 和 NVMe 混布，read_ahead 和 IO 调度器怎么配？",
+      "expected_output": "独立使用本 skill 时 OS 系统层参数属本 skill 调优范围：read_ahead 建议值 8192KB（所有数据盘逐盘配置）、IO 调度器 HDD 用 deadline、SSD/NVMe 用 none、nr_requests 建议 HDD 为 512、SSD/NVMe 为 1023；只读体检先行、变更前记录原值，sysctl 类持久化统一 /etc/sysctl.d/99-os-optimization.conf，sysfs/blockdev 类变更附持久化方案并标注负载适用性（随机读为主时大预读可能负收益）；作为编排器 subskill 双轨使用时沿用 ceph-optimization 边界，仅输出 os_tuning_findings 证据移交 os-optimization",
+      "files": [],
+      "expectations": [
+        "给出 read_ahead 建议值 8192KB（所有数据盘逐盘配置）",
+        "给出 IO 调度器建议 HDD 用 deadline、SSD/NVMe 用 none，nr_requests 建议 HDD 为 512、SSD/NVMe 为 1023",
+        "声明独立使用时 OS 层参数属本 skill 调优范围，持久化统一 99-os-optimization.conf，并标注负载适用性与负收益风险",
+        "声明编排器双轨时 OS 层证据移交 os-optimization 的边界"
+      ]
+    },
+    {
+      "id": "CPT-E05",
+      "prompt": "给我们的 Ceph 集群做一次参数层面的全量体检，看看哪些参数和建议值不一致",
+      "expected_output": "体检全部只读先行（ceph -s、ceph osd tree、ceph daemon osd.N config show、sysctl -n、blockdev --getra 等只读命令），范围覆盖 OS 系统层、ceph.conf 全量参数（global/client/osd）、PG 分布与 balancer、OSD 绑核；逐项读取现场现状与建议值比对形成 gap 清单；结论三态 recommended/already_tuned/blocked；候选动作附备份、逐节点应用、重启窗口标注、持久化与回退；收益预期恒不标 measured，由 A/B 验证回写",
+      "files": [],
+      "expectations": [
+        "声明体检全部只读先行，先出 gap 清单再谈变更",
+        "体检范围覆盖 OS 系统层、ceph.conf 全量参数、PG 分布与 balancer、OSD 绑核",
+        "结论三态 recommended、already_tuned、blocked，候选动作附备份与逐节点应用与重启窗口与回退",
+        "收益预期不标 measured，由 A/B 验证回写"
+      ]
+    }
+  ]
+}
