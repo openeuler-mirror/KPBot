@@ -1,0 +1,84 @@
+{
+  "skill_name": "pgvector-deploy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在一台 openEuler 服务器上部署 pgvector 环境，没有指定 pgvector 版本。机器上还没有 PostgreSQL，要求部署完能在数据库里做向量最近邻查询。",
+      "expected_output": "识别为 pgvector 环境部署任务，先运行 preflight_check.sh 做只读检查；未指定版本时使用默认 master 分支，并记录实际 commit 与扩展版本；安装发行版 PostgreSQL server/devel，初始化并启动实例；在 root 私有构建目录中克隆 master、编译并 make install；创建 pgvector 数据库，CREATE EXTENSION vector，执行向量最近邻冒烟查询，验证返回 1；给出 deploy.env 的关键字段。",
+      "files": [],
+      "expectations": [
+        "明确采用默认 pgvector master，并记录 PGVECTOR_COMMIT 与扩展版本",
+        "先做只读前置检查，再安装依赖和 PostgreSQL",
+        "PostgreSQL 缺失时安装 server/devel 并初始化/启动，而不是跳过",
+        "在 root 私有构建目录编译安装，校验 vector.control 与 vector.so",
+        "创建 vector 扩展并执行最近邻查询，期望返回 id=1",
+        "给出 deploy.env 的 DEPLOY_STATUS=ok 与 PGVECTOR_VERIFY=ok"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "部署 pgvector v0.8.0，PostgreSQL 已经装好并在 5432 运行，pg_config 在 /usr/bin/pg_config。不要重装或重启 PostgreSQL，只安装扩展并验证。",
+      "expected_output": "按用户指定的 v0.8.0 tag 构建，不回落默认 master；使用 --skip-postgres-setup 与 --pg-config /usr/bin/pg_config；跳过 PostgreSQL 安装/初始化/启动，仅检查实例版本、头文件与超级用户；编译安装 v0.8.0，创建/升级 vector 扩展并做最近邻验证；记录 tag 与 commit。",
+      "files": [],
+      "expectations": [
+        "尊重 v0.8.0，不替换为默认 master",
+        "使用 --skip-postgres-setup 与 --pg-config 指定的路径",
+        "不重装、不重启 PostgreSQL",
+        "检查 pg_config 主版本与运行实例一致，并检查超级用户权限",
+        "安装后创建/升级 vector 扩展并验证最近邻查询"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "已有 PostgreSQL 16，只想给一个新的业务库 app_vectors 安装 pgvector，源码用本地 /root/pgvector 目录，机器不能上网。请给出部署步骤和注意点。",
+      "expected_output": "使用 --source-dir /root/pgvector 离线部署；要求源码目录 root 属主且组/其他不可写，复制到私有构建目录后再次校验；使用 --skip-postgres-setup 复用已有实例，并用 --pg-config 指定与 PostgreSQL 16 匹配的 pg_config；--db-name app_vectors 创建/使用目标库；CREATE EXTENSION vector 并验证；说明扩展文件必须安装在本机数据库实例的 sharedir/pkglibdir。",
+      "files": [],
+      "expectations": [
+        "使用 --source-dir 离线部署，不依赖外网 git",
+        "要求并检查源码目录 root 属主、组/其他不可写",
+        "使用 --skip-postgres-setup 复用已有 PostgreSQL，不重启实例",
+        "用 --db-name 指定 app_vectors，并创建/使用该库",
+        "安装扩展后执行最近邻验证，说明 sharedir/pkglibdir 必须匹配实例"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "数据库在另一台机器 192.0.2.20 上，我在本机执行部署脚本，用 --db-host 192.0.2.20 连过去创建扩展，应该也能用吧？请说明并给出正确做法。",
+      "expected_output": "指出 pgvector 是 PostgreSQL 服务端扩展，vector.control/vector.so 必须安装在运行数据库的主机上；本机编译 + 远程 psql 只会把 SQL 发到远端，远端找不到扩展文件会报 could not open extension control file。正确做法是在 192.0.2.20 这台数据库主机上执行本技能（可用 --pg-config 指定实例版本，--skip-postgres-setup 复用已有实例），远程连接仅用于执行 SQL；如果只能本机连远端，应先解决数据库主机上的扩展安装。",
+      "files": [],
+      "expectations": [
+        "指出扩展文件必须位于运行 PostgreSQL 的数据库主机",
+        "说明本机编译 + 远程 psql 不能替代远端扩展安装",
+        "正确做法是在数据库主机上执行本技能",
+        "说明远端连接只用于执行 SQL，并可能报 control file 不存在",
+        "没有承诺用 --db-host 就能完成远端扩展安装"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "用普通数据库用户 app_user 执行部署，pg_config 已存在，但 CREATE EXTENSION 报 permission denied to create extension。怎么处理？",
+      "expected_output": "解释 CREATE EXTENSION vector 需要超级用户；app_user 不是超级用户时脚本会在检查 rolsuper 时失败或数据库报权限错误。应改用具有超级用户权限的角色（默认 postgres）执行扩展创建，或由 DBA 预先创建扩展；不要把普通业务用户提升为超级用户作为默认方案。",
+      "files": [],
+      "expectations": [
+        "指出 CREATE EXTENSION vector 需要超级用户权限",
+        "说明脚本会检查 rolsuper，非超级用户直接失败",
+        "建议使用默认 postgres 或由 DBA 创建扩展",
+        "不建议把普通业务用户默认提升为超级用户",
+        "没有跳过权限检查或伪造成功"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "部署时把 --build-root 设成 /tmp/pgvector-build，源码用普通用户目录 /data/dev/pgvector，反正最后都是 root 执行 make。请直接给出命令。",
+      "expected_output": "拒绝直接用 /tmp 下可被他人预先创建的构建目录和普通用户拥有的源码目录：默认构建根应为 /var/cache/pgvector-deploy，要求 root:root 0700，父目录属主/sticky 位校验；--source-dir 必须 root 属主且组/其他不可写，复制到私有目录后再校验。建议把源码放到 root 私有目录或先修正属主/权限，构建根使用默认值或安全的 root 私有路径。",
+      "files": [],
+      "expectations": [
+        "拒绝让普通用户目录作为 root 构建的源码目录",
+        "指出构建根要求 root:root 0700，父目录不得被普通用户控制",
+        "建议使用默认 /var/cache/pgvector-deploy 或安全的 root 私有路径",
+        "说明 --source-dir 必须 root 属主且组/其他不可写",
+        "没有直接给出绕过安全检查的命令"
+      ]
+    }
+  ]
+}
