@@ -335,9 +335,10 @@ class EnvironmentTests(unittest.TestCase):
         self.assertNotIn("ray", sys.modules)
         self.assertNotIn("environ", result)
 
-    def test_snapshot_cli_and_no_overwrite(self):
+    def test_snapshot_cli_creates_parent_and_no_overwrite(self):
         with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / "environment.json"
+            output = Path(temporary) / "fresh-install/results/environment.json"
+            self.assertFalse(output.parent.exists())
             command = [
                 sys.executable,
                 str(SKILL / "scripts/inspect_environment.py"),

@@ -1,0 +1,18 @@
+# tier A —— 队列寻优决策链契约（max_combined 解析 / 饱和首发 ADD·REDUCE / 收敛 / 最优恢复）
+# 含 find_optimal_queues.sh stdout/stderr 通道分离回归（P0 修复看护：决策通道污染会导致一轮即停 + combined 0）
+# 运行（技能根目录）: bash cases/queue-search-contract/run.sh
+name: queue-search-contract
+skill: network-optimization
+tier: A
+entrypoint: ["bash", "cases/queue-search-contract/run.sh"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_failures
+    expect: 0

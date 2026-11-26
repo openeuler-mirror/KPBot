@@ -18,7 +18,7 @@ ab:
   uplift: with 触发 / without 不触发（skill 未接入时不可能触发）
 
 build:
-  context: ../../..
+  context: ../../../..
   dockerfile: skills/kptools-node-profiler/cases/agent-node-trigger/Dockerfile
 
 entrypoint: ["/workspace/entrypoint.sh"]

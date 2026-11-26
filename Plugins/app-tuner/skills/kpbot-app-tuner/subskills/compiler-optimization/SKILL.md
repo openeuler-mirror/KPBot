@@ -69,6 +69,7 @@ description: 根据热点函数、topdown/PMU、构建日志、二进制反汇�
 - `scripts/perf_hotspot.sh <pid> [duration] [output_dir]` — 采集 ARM64 热点函数（top 50 + 火焰图数据），用于编译选项推荐。仅只读采集，不修改环境。
   - 用法详见 `references/compiler-option-playbook.md` 阶段 3。
 - `scripts/brbe_env_check.sh [--container <name>] [--workdir <dir>] [--json-only]` — BRBE/CSSPGO 收益验证前置门控（只读）：鲲鹏 CPU/昇腾 NPU(/dev/davinci*)/CANN/毕昇/llvm-profgen/BRBE 硬件（**真实分支栈校验，非 perf 退出码**）、当前 torch 栈编译器身份（readelf .comment）、磁盘。逐项 PASS/FAIL + JSON 总结（`ready|blocked` + blocked_reasons + next_steps）。
+  - **NPU 检出语义（KPBOT_SOURCE_CANN 环境变量）**：默认 `0`——npu-smi 判定仅认 `/dev/davinci*` 设备节点或已在 PATH 中的 npu-smi，**不会** source CANN `set_env.sh` 深度探测（保证检测及其 UT 在任何宿主上结果一致）。CANN 已安装但未 source 的宿主（如未初始化的登录 shell）且无 `/dev/davinci*` 的容器场景，需显式 `KPBOT_SOURCE_CANN=1` 启用深度探测；`--container` 模式下该开关经 `docker exec -e` 传入容器内生效。
 - `scripts/brbe_ab_benchmark.sh` — A/B 收益验证 harness：`--mode run --label <baseline|gen|use> --cmd "<压测命令>" [--rounds 5] [--metric-regex 'tok/s']` 多轮压测+指标提取+均值/CV 统计；`--mode compare` 增益判定（accept / reject(gain<=noise) / reject(below_min_gain) / regression→rollback），对应候选动作 `rejection_criteria`。
   - 目标节点完整验证序列（门控→基线→gen→collect→use→compare）见 `references/csspgo-brbe-playbook.md`。
 

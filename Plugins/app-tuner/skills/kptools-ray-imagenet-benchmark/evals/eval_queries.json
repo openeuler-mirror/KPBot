@@ -1,0 +1,15 @@
+{
+  "skill_name": "kptools-ray-imagenet-benchmark",
+  "queries": [
+    {"id": "RB-Q01", "prompt": "跑真实 Ray + torchvision 的合成 JPEG 预处理 smoke，给我三轮吞吐", "should_trigger": true, "note": "核心触发"},
+    {"id": "RB-Q02", "prompt": "预热一轮再测四轮 Ray Data ResNet18 transforms，保留原生 stats", "should_trigger": true, "note": "有界轮次与指标"},
+    {"id": "RB-Q03", "prompt": "基准失败或 digest 不对时也保留 rows 和日志", "should_trigger": true, "note": "失败证据"},
+    {"id": "RB-Q04", "prompt": "在安全认证的已有 Ray 集群跑小图像 benchmark，结束不要停集群", "should_trigger": true, "note": "已有服务"},
+    {"id": "RB-Q05", "prompt": "输出目录已经存在，重新压测但不要覆盖旧证据", "should_trigger": true, "note": "独占输出"},
+    {"id": "RB-Q06", "prompt": "这个 synthetic smoke 能不能算完整 ImageNet top-1？", "should_trigger": true, "note": "边界澄清"},
+    {"id": "RB-N01", "prompt": "只检查环境，不要启动任何 Ray 工作负载", "should_trigger": false, "note": "只读检查而非基准"},
+    {"id": "RB-N02", "prompt": "从空机器安装 Ray、torch 和 torchvision", "should_trigger": false, "note": "不安装依赖"},
+    {"id": "RB-N03", "prompt": "下载 ImageNet 和预训练权重评估完整模型精度", "should_trigger": false, "note": "数据下载与精度不在范围"},
+    {"id": "RB-N04", "prompt": "对生产集群无限时压测直到我手动停止", "should_trigger": false, "note": "拒绝无界负载"}
+  ]
+}

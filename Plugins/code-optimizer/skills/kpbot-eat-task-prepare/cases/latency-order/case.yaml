@@ -1,0 +1,11 @@
+name: latency-order
+skill: kpbot-eat-task-prepare
+tier: A
+entrypoint: ["python3", "check.py"]
+env_requires:
+  - Python 3.9+ 和 Bash
+# 同一批查询分别运行线性扫描与集合查找。每个候选要答对所有查询。
+# 本例约定以固定的 100 ms 除以原始总耗时，独立核对两个得分及排序。
+assert:
+  - type: exit_code
+    expect: 0

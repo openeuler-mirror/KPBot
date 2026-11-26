@@ -1,0 +1,25 @@
+{
+  "skill_name": "kptools-clickhouse-environment-check",
+  "evals": [
+    {
+      "id": "CHENV-E01",
+      "query": "基准前只读检查现有 ClickHouse 的客户端、认证和 SQL 前提",
+      "expected_output": "调用 check_environment.py，使用新输出目录；解释逐项 ready/blocked/unknown 和证据，不修改服务，不把端口连通当作 ready。"
+    },
+    {
+      "id": "CHENV-E02",
+      "query": "检查非默认 TLS 端点和已有单二进制 clickhouse 能否跑 SELECT 基准",
+      "expected_output": "使用 --single-binary、实际 host/port 与 --secure；密码仅经环境变量，只有提供实际存在的私有配置时才使用 --config；版本来自全局 --version，不调用 benchmark --version。"
+    },
+    {
+      "id": "CHENV-E03",
+      "query": "认证失败或客户端超时时给我结构化原因，不要自动修环境",
+      "expected_output": "保留 result.json 和脱敏日志，分别报告 auth 或 timeout；相关后续探针为 dependency_failed，不执行安装、重启或配置修改。"
+    },
+    {
+      "id": "CHENV-E04",
+      "query": "客户端能返回版本但 numbers 聚合结果不对，可以判定环境就绪吗",
+      "expected_output": "不可以。exact_query 必须为 499500；结果不匹配即 blocked/correctness，即使进程返回零也不 ready。"
+    }
+  ]
+}

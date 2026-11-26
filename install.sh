@@ -5,6 +5,13 @@
 
 set -e
 
+case "${1:-}:${2:-}" in
+    codex:*|project:codex|global:codex)
+        _codex_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        exec bash "$_codex_root/bin/_codex.sh" install "$@"
+        ;;
+esac
+
 # DSH is the first argument, or follows an explicit installation level.
 # Later arguments may be legacy install paths named "dsh".
 case "${1:-}:${2:-}" in
@@ -36,6 +43,14 @@ for _cand in python3 python; do
         break
     fi
 done
+
+python_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -am "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
 
 # Safe install config file with backup and conflict handling.
 # $1 = generated temp file path
@@ -127,7 +142,7 @@ Usage: install.sh [level] [tool] [install_path]
 
 Arguments:
   level        - Installation level: "project" (default) or "global"
-  tool         - Target tool: "claude" (default), "opencode", or "dsh"
+  tool         - Target tool: "claude" (default), "opencode", "codex", or "dsh"
   install_path - Project-level installation directory (default: current working directory)
 
 Options:
@@ -139,6 +154,8 @@ Examples:
   install.sh global claude                # Global-level, Claude Code
   install.sh project opencode             # Project-level, OpenCode
   install.sh global opencode              # Global-level, OpenCode
+  install.sh project codex "/my project" # Codex project skills
+  install.sh global codex                 # Codex user skills
   install.sh project claude /path/to/proj # Project-level, Claude Code, custom path
   install.sh project dsh "/my project"    # DSH project root (spaces supported)
   install.sh global dsh                    # DSH_HOME or ~/.dsh
@@ -151,10 +168,12 @@ Installation paths:
             ~/.config/opencode/ + AGENTS.md (global)
   DSH:      .dsh/skills/ (project)
             DSH_HOME/skills/ or ~/.dsh/skills/ (global; explicit path overrides DSH home)
+  Codex:    .agents/skills/ (project), ~/.agents/skills/ (global)
 
 After installation, launch directly:
   Claude:   claude
   OpenCode: opencode
+  Codex:    codex
 EOF
 }
 
@@ -163,7 +182,7 @@ TOOL="claude"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$SCRIPT_DIR"
-VERSION=$("${PYTHON_BIN}" -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "unknown")
+VERSION=$("${PYTHON_BIN}" -c 'import json,sys; sys.stdout.buffer.write(str(json.load(open(sys.argv[1], encoding="utf-8"))["version"]).encode("utf-8"))' "$(python_path "$PLUGIN_ROOT/package.json")" 2>/dev/null || echo "unknown")
 # Plugins: iterate all plugin skill directories dynamically
 PLUGINS_DIR="$PLUGIN_ROOT/Plugins"
 
@@ -173,10 +192,10 @@ plugin_supports_tool() {
     local plugin_dir="$1"
     local pjson="$plugin_dir/.claude-plugin/plugin.json"
     [ -f "$pjson" ] || return 0   # legacy plugin without metadata: install everywhere
-    "${PYTHON_BIN}" - "$pjson" "$TOOL" <<'PY'
+    "${PYTHON_BIN}" - "$(python_path "$pjson")" "$TOOL" <<'PY'
 import json, sys
 try:
-    d = json.load(open(sys.argv[1]))
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
     platforms = d.get("platforms")
 except Exception:
     platforms = None
@@ -192,10 +211,10 @@ plugin_skill_excludes() {
     local plugin_dir="$1"
     local pjson="$plugin_dir/.claude-plugin/plugin.json"
     [ -f "$pjson" ] || return 0
-    "${PYTHON_BIN}" - "$pjson" "$TOOL" <<'PY' | tr -d '\r'
+    "${PYTHON_BIN}" - "$(python_path "$pjson")" "$TOOL" <<'PY' | tr -d '\r'
 import json, sys
 try:
-    d = json.load(open(sys.argv[1]))
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
     excludes = (d.get("opencode") or {}).get("exclude")
 except Exception:
     excludes = None
@@ -204,8 +223,7 @@ if not excludes:
 # Current tool is not opencode: no per-skill exclusions apply.
 if sys.argv[2] != "opencode":
     sys.exit(0)
-for name in excludes:
-    print(name)
+sys.stdout.buffer.write(("\n".join(excludes) + "\n").encode("utf-8"))
 PY
 }
 
@@ -404,11 +422,38 @@ mkdir -p "$CONFIG_ROOT/skills"
 # 2) 上次安装清单 kpbot-manifest.json 中记录的 skill（覆盖已改名/下线的无主残留）
 CLEAN_LIST="$SKILLS_TO_INSTALL"
 if [ -f "$CONFIG_ROOT/kpbot-manifest.json" ]; then
-    manifest_skills=$("${PYTHON_BIN}" -c "
-import json
-m = json.load(open('$CONFIG_ROOT/kpbot-manifest.json'))
-for s in m.get('installed_skills', []):
-    print(s)" 2>/dev/null || true)
+    manifest_skills=$("${PYTHON_BIN}" - "$(python_path "$CONFIG_ROOT/kpbot-manifest.json")" "$TOOL" <<'PY'
+import json, re, sys
+
+def fail(reason, legacy=False):
+    message = "KPBot manifest validation failed: " + reason + "\nManifest: " + sys.argv[1]
+    if legacy:
+        message += ("\nA legacy manifest may have recorded user-created skill directories."
+                    "\nBack up the installation directory and manifest, then remove only the manifest file: "
+                    + sys.argv[1] + "\nRetry the command after checking the backed-up skill directories.")
+    else:
+        message += "\nNo managed skills were removed. Restore a valid manifest from backup before retrying."
+    sys.stderr.buffer.write((message + "\n").encode("utf-8"))
+    raise SystemExit(1)
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        manifest = json.load(stream)
+except (OSError, ValueError) as error:
+    fail("Cannot read manifest: " + str(error))
+if not isinstance(manifest, dict) or manifest.get("brand") != "KPBot" or manifest.get("tool") != sys.argv[2]:
+    fail("Invalid KPBot installation manifest")
+names = manifest.get("installed_skills")
+if not isinstance(names, list):
+    fail("Invalid installed_skills: expected an array")
+for name in names:
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
+        fail("Invalid installed_skills entry: " + repr(name), legacy=True)
+if len(names) != len(set(names)):
+    fail("Invalid duplicate installed_skills in KPBot manifest")
+sys.stdout.buffer.write(("\n".join(names) + "\n").encode("utf-8"))
+PY
+    )
     for ms in $manifest_skills; do
         case " $CLEAN_LIST " in
             *" $ms "*) ;;
@@ -550,6 +595,8 @@ done
 
 # Ensure helper scripts (e.g. print_logo.sh) are executable
 chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*.sh 2>/dev/null || true
+# Also cover nested helper scripts (e.g. skills/<name>/scripts/tools/*.sh)
+chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*"/"*.sh 2>/dev/null || true
 
 # Final count (after overlays, skips, and discovery links)
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
@@ -664,9 +711,11 @@ MANIFEST="$CONFIG_ROOT/kpbot-manifest.json"
 
 SKILLS_JSON="[]"
 if [ -d "$CONFIG_ROOT/skills" ]; then
-  SKILLS_JSON=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | while read d; do
-    basename "$d"
-  done | "${PYTHON_BIN}" -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))" 2>/dev/null || echo "[]")
+  SKILLS_JSON=$(for name in $SKILLS_TO_INSTALL; do
+    if [ -d "$CONFIG_ROOT/skills/$name" ]; then
+      printf '%s\n' "$name"
+    fi
+  done | "${PYTHON_BIN}" -c 'import sys,json; names = list(dict.fromkeys(sys.stdin.read().splitlines())); sys.stdout.buffer.write(json.dumps(names).encode("utf-8"))')
 fi
 
 cat > "$MANIFEST" << MANIFEST_EOF

@@ -1,0 +1,40 @@
+{
+  "skill_name": "kptools-dplb-optimization",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "full-deploy-vllm-pd",
+      "prompt": "我在 192.168.1.10 上要给 vLLM 集群做负载均衡：prefill 侧一个实例开了两个 DP endpoint（192.168.1.11 的 9900 和 9901），decode 侧是两个实例（192.168.1.12:9162 和 192.168.1.13:9163，各一个 endpoint），模型是 glm53。帮我在这台机器上部署 MindIE Motor，配置生成到 /opt/mindie-motor。注意：这台是内网机器，你先规划好完整的部署方案和要生成的配置文件内容（不用真的连接）。请把最终会生成的 user_config.json、register.sh、start_motor.sh 三个文件的内容和部署说明文档写出来。",
+      "expected_output": "按 skill 五阶段流程产出：部署方案（含独立部署说明：Motor 不管实例拉起）、正确的三件套（user_config.json 用 v2.0 模板结构且含 mgmt_api_key_config、register.sh 用一个 --prefill 逗号连接 9900/9901 同一实例的两个 DP endpoint、两个 --decode 各传单地址实例、--model-name glm53、start_motor.sh 只设 USER_CONFIG_PATH 且带 kill -0 存活校验）、部署指南 .md。内网机器场景应主动提出外网连通性问题并给出方式 A/上游附录 A 离线依赖等替代方案。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "eval_name": "config-only-mindie",
+      "prompt": "远端 10.0.0.5 已经 pip 装好 MindIE Motor 了，你只要帮我生成 user_config.json、register.sh、start_motor.sh 和一份说明文档。后端是 3 个 MindIE Service 实例：10.0.0.11:1025、10.0.0.12:1025、10.0.0.13:1025，模型 deepseek-r1，没有做 PD 分离，全部当 decode 用。配置文件放到 /opt/mindie-motor 下。",
+      "expected_output": "跳过阶段 1-3 的安装部分，直接生成三件套：register.sh 中 3 个实例用 3 个 --decode 各传单地址、--model-name deepseek-r1、mgmt 端口 7201 与 user_config.json 一致；user_config.json 保持 v2.0 模板结构与默认端口/策略；说明文档含启动顺序（先 start_motor.sh 后 register.sh）、log 目录创建、部署形态说明。不询问多余的安装相关问题。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "eval_name": "vague-trigger",
+      "prompt": "我们推理集群最近各实例的 QPS 差得有点多，有些卡特别闲有些特别忙，想加个负载均衡层，怎么弄？",
+      "expected_output": "识别出这是负载均衡部署/优化场景，介绍 MindIE Motor 方案（独立 coordinator、不管理实例拉起、动态注册），并主动追问关键信息：后端实例列表与拓扑（是否 PD 分离、每实例的 DP endpoint 分布）、模型名、部署机器、安装方式（自备 whl 还是源码编译）、目标机器网络情况。不应在信息不全时直接编造配置文件内容。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "eval_name": "user-provided-whl",
+      "prompt": "我有编译好的 mindie_motor-1.0.0-py3-none-any.whl 在我本地 D:\\downloads\\ 下，帮我装到远端 172.16.0.20 上并配好负载均衡。后端 4 个 vLLM 实例都在 172.16.0.21 上：端口 8000-8003，每个端口是一个独立实例，没有 PD 分离，模型 qwen3-235b。配置放 /opt/mindie-motor。",
+      "expected_output": "走方式 A：不克隆源码、不要求 git/gcc/cmake/cargo/grpcio-tools，流程为上传 whl -> 运行依赖预检（requirements.txt 全量口径，探 fastapi/pydantic/zmq/msgspec 等硬 import；whl 无依赖声明需按 requirements.txt 补装）-> 安装前原生库断言（防 pip wheel 空壳包；glob 用 *motor*.whl 兼容 mindie_motor-* 前缀并防空列表 IndexError）-> pip3 install --no-deps --force-reinstall -> 源码目录外验证 import motor -> 生成三件套（register.sh 用 4 个 --decode 各传单地址实例、无 PD 分离的处理方式清晰）-> 部署指南。应提示 whl 架构匹配问题与部署形态说明。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "eval_name": "source-build-offline",
+      "prompt": "内网容器（无外网、无 cargo、无 libzmq 开发包）要从源码编译安装 MindIE Motor 做负载均衡，源码包我已经放到 /tmp/mm-src 了，Python 3.11 环境是好的。后端 2 个 vLLM 实例 10.1.1.10:8000 和 10.1.1.11:8000，模型 glm53。怎么编译安装？",
+      "expected_output": "按方式 B 离线路径回答：严禁 pip3 wheel .（空壳 whl 根因）；走 bash build.sh，先 chmod +x；编译前 pip3 install -r requirements.txt（构建与运行都依赖，离线按上游 standalone.md 附录 A）；再装与运行时 grpcio 版本一致的 grpcio-tools；SKIP_RUST_INSTALL=1 先探测（缺 cargo 会明确报 refusing to emit whl）；无 cargo 的离线解法（本机下载 Rust 离线包分片上传安装、vendor libc、SKIP_KV_CONDUCTOR_BUILD=1 跳过可选组件）或 WORKLOAD_SHM_PREBUILT 预编译直通；安装前断言 whl 含 libmindie_workload_shm.so；pip3 install --no-deps --force-reinstall 后在源码目录外 import motor 验证。不应建议 pip wheel 或在线 pip/curl 命令。",
+      "files": []
+    }
+  ]
+}

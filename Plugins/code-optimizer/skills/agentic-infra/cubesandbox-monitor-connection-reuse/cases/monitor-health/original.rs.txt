@@ -1,0 +1,72 @@
+// Copyright (c) 2024 Tencent Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+    async fn monitor_vm(
+        &self,
+        check_agent: bool,
+    ) -> CResult<(Sender<()>, tokio::task::JoinHandle<()>)> {
+        let mut arc_ch: Option<Arc<Mutex<CH::CubeHypervisor>>> = self.ch.clone();
+        if arc_ch.is_none() {
+            panic!("BUG: ch is None");
+        }
+        let (tx, mut rx) = channel::<()>(1);
+        let arc_conainers = self.containers.clone();
+        let arc_state = self.state.clone();
+        let conn = AsyncUtils::connect_agent(&self.id).await?;
+        let client = health_ttrpc::HealthClient::new(conn);
+        let log = self.log.clone();
+        let handle = tokio::spawn(async move {
+            let ctx = context::with_timeout(1000 * 1000 * 1000 * 5);
+            let mut aborted = false;
+            let interval = 60;
+            let mut counter = 0;
+            loop {
+                {
+                    counter += 1;
+                    let ch = arc_ch.as_mut().unwrap().lock().await;
+                    let req = health::CheckRequest {
+                        ..Default::default()
+                    };
+
+                    if let Ok(ev) = ch.try_wait_notify() {
+                        if ev != CH::NotifyEvent::VmShutdown {
+                            warnf!(log, "recv event:{:?}", ev);
+                        } else {
+                            aborted = true;
+                        }
+                    }
+
+                    //no event from ch and it's time to ping agent.
+                    if check_agent && counter > interval && !aborted {
+                        counter = 0;
+
+                        if let Err(e) = client.check(ctx.clone(), &req).await {
+                            infof!(log, "check agent failed:{}", e);
+                            aborted = true;
+                        }
+                    }
+
+                    if aborted {
+                        {
+                            let mut state = arc_state.lock().await;
+                            *state = SandBoxState::Exited;
+                        }
+
+                        let containers = arc_conainers.lock().await;
+                        for (_, container) in containers.iter() {
+                            container.notify_vm_shutdown().await;
+                        }
+                        break;
+                    }
+                }
+                if let Ok(_) = rx.try_recv() {
+                    return;
+                }
+                sleep(Duration::from_millis(1000)).await;
+            }
+        });
+
+        Ok((tx, handle))
+    }
+
+    pub async fn watch_oom(&self) -> CResult<(Sender<()>, tokio::task::JoinHandle<()>)> {

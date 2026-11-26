@@ -112,7 +112,18 @@ async function* skillDirectories(directory, excludes, depth = 1) {
       continue;
     }
     const marker = await lstatOptional(path.join(resourceDir, 'DOMAIN.md'));
-    if (!marker?.isFile()) throw new Error(`Missing SKILL.md: ${resourceDir}`);
+    if (!marker?.isFile()) {
+      // Legacy one-level groups do not require DOMAIN.md; keep their resource
+      // boundary and validation while marked domains support deeper recursion.
+      let members = 0;
+      for (const nested of await fs.readdir(resourceDir, { withFileTypes: true })) {
+        const nestedRoot = path.join(resourceDir, nested.name);
+        if (nested.isSymbolicLink()) throw new Error(`Symlink not allowed: ${nestedRoot}`);
+        if (!nested.isDirectory() || !(await lstatOptional(path.join(nestedRoot, 'SKILL.md')))) continue;
+        members++;
+      }
+      if (!members) throw new Error(`Missing SKILL.md: ${resourceDir}`);
+    }
     if (depth < 4) yield* skillDirectories(resourceDir, excludes, depth + 1);
   }
 }

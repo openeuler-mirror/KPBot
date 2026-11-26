@@ -1,0 +1,40 @@
+# 用例：tier A —— kptools-tpsplit-optimization L0 门禁脚本契约用例
+#
+# 覆盖（对应 mxj1314 评审要求：四形态 fixture + PASS/SKIP/FAIL 语义与退出码断言）：
+#   --selftest 契约   退出码 0；14/14 检查全绿；失败数为 0
+#   四种形态          模板自包含（驱动形态）/ env 文件 source 形态 / env 缺失的未解析
+#                     形态 / 全量目录与按主机分目录两种执行口径
+#   语义断言          未解析变量必须 SKIP 不 FAIL（卡互斥/端口/dp 旗标/KV）、
+#                     按主机口径不比较本机实例数、--expect-dp 缺实例必须 FAIL、
+#                     SKIP 项不计失败、重复 rank FAIL、误删 connector FAIL
+#   产物卫生          selftest fixture 写临时目录，不弄脏工作区
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/kptools-tpsplit-optimization/cases/skill-contract/run.sh
+#   产物 results/result.json；退出码 0 = 全部通过
+#   （results/ 已被本目录 .gitignore 覆盖，运行产物不入库）
+
+name: skill-contract
+skill: kptools-tpsplit-optimization
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 14
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: workspace_clean
+    expect: true

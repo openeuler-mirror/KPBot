@@ -1,0 +1,30 @@
+{
+  "skill_name": "benchmark-domain",
+  "evals": [
+    {
+      "id": "BM-E01",
+      "query": "LOCOMO benchmark 多 runner 并发压测，想按 NUMA 拓扑把 mem0/runner 分片绑到不同节点",
+      "expected": "触发 benchmark-multirunner-topology：MEM0/RUNNER 倍数关系、共享/独占形态、strict/floating/none、内存节点回退、MOCK 分流"
+    },
+    {
+      "id": "BM-E02",
+      "query": "benchmark 的 ingestion 和 qa 两个相位墙钟重叠了，结果不可比，怎么切成干净窗口",
+      "expected": "触发 benchmark-phase-isolation：用 barrier/phase 开关把 mixed 模式重叠相位切成干净窗口，以 phase_windows 定界"
+    },
+    {
+      "id": "BM-E03",
+      "query": "想让多轮 benchmark 的底库数据池逐字节一致，复用轮跳过 seed",
+      "expected": "触发 benchmark-golden-volume-replay：build 轮 finalize+seal 固化 Milvus 卷，复用轮 probe→clone→跳过 seed"
+    },
+    {
+      "id": "BM-E04",
+      "query": "seed 阶段 index-ready 超时，报 MilvusException code=106，seed 时间忽高忽低",
+      "expected": "触发 benchmark-seed-stability：关 auto compaction、seed 资源 boost、index-ready 超时与 search-recovery 等待"
+    },
+    {
+      "id": "BM-E05",
+      "query": "多轮 benchmark 结果怎么算组内/组间 CV，排除组间系统性偏移再下结论",
+      "expected": "触发 benchmark-statistical-design：组内/组间 CV、数据池一致、黄金卷前缀隔离、方案 C（存档轮 + clone 数据点）"
+    }
+  ]
+}

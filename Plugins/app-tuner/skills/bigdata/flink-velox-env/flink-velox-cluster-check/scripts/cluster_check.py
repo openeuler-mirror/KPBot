@@ -4,7 +4,7 @@
 Answers: are the daemons of THIS installation running (attributed by the
 flink-dist jar on their classpath, read from /proc), which build did they load
 (the gluten/velox jars on that classpath), does lib/ still match what they
-loaded (the GFV jars on disk vs loaded; any jar replaced after the earliest
+loaded (the GlutenFlink jars on disk vs loaded; any jar replaced after the earliest
 daemon started), and what does REST say (overview only; environment proxies are
 ignored so a localhost address is never rerouted). Structural problems fail: not
 running, a JobManager without TaskManagers (or the reverse), daemons that

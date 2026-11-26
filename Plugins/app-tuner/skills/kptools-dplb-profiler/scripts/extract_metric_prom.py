@@ -16,6 +16,9 @@
     Grafana 密码来源优先级 --password > --password-file > 环境变量 GRAFANA_PASSWORD，推荐后两种
     （--password 会进入 ps 输出 / shell history / agent 执行轨迹）；向 http:// 的 Grafana 发送
     Basic 凭证需显式 --allow-insecure-http。
+    CSV 的 timestamp 为 query_range 的查询求值时刻（按 --step 对齐，取该时刻前最近一次抓取的
+    样本；步长小于抓取间隔时同一底层样本会复现相邻多行）——不是现场轮询时刻，也不是底层
+    抓取事件时间，勿与现场日志精确对齐；语义详见 SKILL.md「采集产物契约」与 csv_format.md。
 """
 import argparse
 import csv
@@ -193,6 +196,8 @@ class Client(object):
         raise SystemExit("查询失败（重试 3 次）: %s%s -> %s" % (endpoint, path, last_err))
 
     def query_range(self, promql, start, end, step):
+        # 按 --step 求值：每个 t 是查询求值时刻，取该时刻前最近一次抓取的样本；
+        # step 小于抓取间隔时，同一底层样本会出现在相邻多个求值点（多行复现）
         npts = int((end - start) // step) + 1
         series = {}
         if npts <= SEGMENT_MAX_POINTS:
@@ -422,7 +427,11 @@ def build_rows(engines, times, tz_off=8 * 3600, corrected=None):
     rows = []
     order = sorted(engines.keys())
     for t in times:
-        # 落地为人类可读时间（--tz 口径），与现场采集脚本一致；报告端同时兼容 epoch 与可读时间
+        # 时间戳语义（复核修订）：t 是 query_range 的**查询求值时刻**（按 --step 对齐，
+        # 取该时刻前最近一次抓取的样本；步长小于抓取间隔时同一底层样本会复现在相邻多行，
+        # 不得视为独立抓取事件、不得与现场日志精确对齐）——与现场轮询脚本取 ROUND_TS
+        # （轮询发起时刻）的语义不同。落地为人类可读时间（--tz 口径），格式与现场一致，
+        # 报告端同时兼容 epoch 与可读时间。
         ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(t + tz_off))
         for tag in order:
             cols = engines[tag]

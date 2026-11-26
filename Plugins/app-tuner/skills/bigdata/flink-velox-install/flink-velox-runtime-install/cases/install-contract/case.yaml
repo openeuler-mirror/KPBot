@@ -1,0 +1,11 @@
+name: install-contract
+skill: flink-velox-runtime-install
+tier: A
+entrypoint: ["python3", "cases/install-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true

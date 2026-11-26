@@ -1,0 +1,1 @@
+{"case":"profile-rb-c1-n2","concurrency":1,"rounds":2,"dirty_mb":0,"bench_exit":0,"successful":2,"errors":0,"success_rate":1,"total_time_s":0.14,"throughput_rps":14.2857,"wall_ms":{"min":60,"avg":70,"p50":60,"p95":80,"max":80},"per_rollback_ms":{"min":60,"avg":70,"p50":60,"p95":80,"max":80}}

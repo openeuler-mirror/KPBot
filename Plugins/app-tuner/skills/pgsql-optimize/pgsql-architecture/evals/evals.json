@@ -1,0 +1,69 @@
+{
+  "skill_name": "pgsql-architecture",
+  "version": "1.0.0",
+  "notes": "机制问答类评估；期望输出不执行任何数据库变更。",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我在火焰图里看到 BufTableLookup 和 BufMappingPartitionLock，PG 里这两个函数是干什么的？为什么 HNSW 检索会在这里有竞争？不要执行命令。",
+      "expected_output": "解释 ReadBuffer→PinBufferForBlock→BufferAlloc 的完整链路：BufTableHashCode 计算哈希后按 hash % NUM_BUFFER_PARTITIONS 取 BufMappingLock 分区，LWLockAcquire(SHARED) 后 BufTableLookup 在共享 dynahash（HTAB→Directory→Segment→桶链）里查 BufferTag→BufferDesc，命中后 PinBuffer 用 CAS 增加 refcount/usagecount，再释放分区锁。HNSW 每访问一个图节点至少 2 次 ReadBuffer（邻居页+向量页），一次搜索数百到上千次，预热后全走 found 路径——多个 backend 的页面哈希落同分区就争用共享分区锁，叠加同页 CAS 重试。指出验证手段是等待事件 LWLock/BufferMapping 采样，on-CPU 火焰图看不到锁等待。",
+      "files": [
+        "references/buffer-manager-and-locks.md"
+      ],
+      "expectations": [
+        "给出 BufferAlloc 的函数链与每步职责（哈希/分区锁/查找/CAS pin）",
+        "解释 dynahash 的 HTAB/Directory/Segment 结构与 BufTableLookup 的关系",
+        "说明 HNSW 场景每次访问至少 2 次 ReadBuffer、竞争来自分区哈希碰撞",
+        "指出 NUM_BUFFER_PARTITIONS 是编译期常量、修改需重编",
+        "给出等待事件（BufferMapping）作为直接证据来源",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "PostgreSQL 是多进程的，MyProc 和 LockMethodLocalHash 都是 static 的，各进程怎么不互相干扰？共享内存到底是什么时候创建的？fork 会把共享内存复制一份吗？不要执行命令。",
+      "expected_output": "解释 fork 语义：postmaster 启动时经 PGSharedMemoryCreate 创建共享段，fork 出的 backend 继承的是映射关系而非复制内容（写时复制只发生在匿名私有内存）。static 变量（MyProc 指针、LockMethodLocalHash 表头）每个进程私有各一份，但 MyProc 指向共享段 ProcGlobal 数组的槽位——指针值不同、数据在共享内存，锁等待链经它串起来；LockMethodLocalHash 是进程私有的本地锁记录表配 fastpath 使用，跨进程的 LOCK/PROCLOCK 条目在共享 Lock Hash Table。没有进程级线程共享堆，跨进程协作全靠共享内存+LWLock。",
+      "files": [
+        "references/overview-and-process-model.md"
+      ],
+      "expectations": [
+        "区分 static 变量本体（私有）与指向的数据（是否在共享段）",
+        "说明共享段由 postmaster 创建、fork 继承映射不复制内容",
+        "指出 MyProc 指向 ProcGlobal 共享槽位、各进程指针值不同",
+        "指出 LockMethodLocalHash 是私有表、重量级锁条目在共享 Lock Hash Table",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我们的写负载火焰图里 WaitXLogInsertionsToFinish、LWLockWaitListLock、XLogFlush 都很高，这三个是什么关系？为什么提交这么贵？不要执行命令。",
+      "expected_output": "解释提交链路：CommitTransactionCommand 里 XLogFlush 等刷盘，而 WaitXLogInsertionsToFinish 是提交者自旋等待所有先前插入者把 WAL 记录拷完 WAL buffer（XLogInsertRecord 负责组装+经 WALInsertLock 分片插入）。LWLockWaitListLock 是另一层：每个进程在 WALInsertLock/WALWriteLock 上排队睡眠或被唤醒都要先抢目标锁的等待队列自旋锁——高并发短事务下这行共享缓存字跨核乒乓成为第一大热点。给出对应 GUC（synchronous_commit、commit_delay/commit_siblings、wal_buffers）的影响面但不当场改参数，注明处置归性能优化侧。",
+      "files": [
+        "references/wal-mvcc-and-commit.md",
+        "references/buffer-manager-and-locks.md"
+      ],
+      "expectations": [
+        "说清 XLogInsertRecord（组装插入）/XLogFlush（刷盘）/WaitXLogInsertionsToFinish（自旋等前序插入）三者的链路关系",
+        "解释 LWLockWaitListLock 是等待队列自旋锁、排队与唤醒都要抢它",
+        "说明等待是自旋+睡眠混合（帧内原子检查在 CPU 上、长等待走信号量睡眠），与 IPC/Retiring 坍塌对应",
+        "列出相关真实 GUC 及各自影响位置，但不执行变更",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "GetCachedPlan 命中了为什么火焰图里还有 standard_planner？计划缓存不是缓存了就不用再优化了吗？不要执行命令。",
+      "expected_output": "纠正误解：GetCachedPlan 命中语句后仍要在 generic plan 与 custom plan 之间选择——generic 复用旧计划树，custom 每次走 BuildCachedPlan→standard_planner 重新优化（代入参数字面量）。触发 custom 的原因包括计划失效、探索期、plan_cache_mode=force_custom_plan、以及代价比较认为字面量影响大。给出判别方法（plan_cache_mode=force_custom_plan/force_generic_plan + EXPLAIN EXECUTE 对照、pg_stat_statements 的 plans/calls 比（track_planning 需显式开启）），并提醒实测口径里读负载 GetCachedPlan 约九成调用落入重建路径而写负载 planner≈0，同库不同负载行为可能完全相反。",
+      "files": [
+        "references/sql-engine-and-execution.md"
+      ],
+      "expectations": [
+        "解释 generic/custom plan 的区别与 GetCachedPlan 的真实行为",
+        "列出走 custom plan 的常见触发条件",
+        "给出不猜配置的取证方法（force_custom_plan/force_generic_plan + EXPLAIN EXECUTE 对照/plans-calls 比率）",
+        "指出读/写负载的实测对照差异",
+        "没有执行命令"
+      ]
+    }
+  ]
+}

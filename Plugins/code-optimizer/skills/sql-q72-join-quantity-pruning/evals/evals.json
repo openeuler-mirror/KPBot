@@ -1,0 +1,94 @@
+{
+  "skill_name": "sql-q72-join-quantity-pruning",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "strict-boundary",
+      "prompt": "销售建表侧最大销售量 10，库存量分别为 9、10、11。什么时候可跳过探测？",
+      "expected_output": "严格条件是库存量小于销售量。10 和 11 可以剔除，9 仍需按商品探测并执行原条件。",
+      "files": [],
+      "assertions": [
+        "保留严格比较的等值边界",
+        "9 仍执行原探测和剩余条件"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "partial-spill",
+      "prompt": "已加载的建表分区上限是 10，后面仍会恢复别的 spill 分区。用 10 预筛库存量 12 可以吗？",
+      "expected_output": "必须回退。未恢复分区可能含销售量 20；等建表结果完整并确认当前分区与状态后再评估。",
+      "files": [],
+      "assertions": [
+        "识别部分建表上界不安全",
+        "回退并核对状态生命周期"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "duplicate-pairs",
+      "prompt": "一个库存行通过上界预筛，商品在建表侧有两条满足条件的销售行。可以只保留一条配对吗？",
+      "expected_output": "两条原始配对均保留。预筛只淘汰不可能命中者，保留原探测和逐对谓词。",
+      "files": [],
+      "assertions": [
+        "保留重复键重数",
+        "区分预筛和匹配"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "weak-pruning",
+      "prompt": "预筛样本中很少有大于等于上界的值。代码存在就可以按每批都命中计算收益吗？",
+      "expected_output": "不能推断命中。记录建表重复度、抽样门槛、实际删除行和回退次数，按真实负载验证，同时计入取上界成本。",
+      "files": [],
+      "assertions": [
+        "区分成本门槛与正确性",
+        "用实际探测数据估计收益"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "null-join-keys",
+      "prompt": "建表和探测的商品键都是 NULL、数量分别为 10 和 1，预筛后可以按 Python None==None 输出配对吗？",
+      "expected_output": "普通 SQL 等值连接中 NULL 键不匹配。参考结果与候选都应保留 SQL 三值逻辑，并用独立 SQL JOIN 验证完整配对。",
+      "files": [],
+      "assertions": [
+        "拒绝将 None 相等当 SQL 相等",
+        "用独立 SQL 参考核对键/重数"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "new-hash-table-bound",
+      "prompt": "同一探测实例先收到最大数量 20 的完整表，之后换成最大数量 5 的新表，可以复用 20 吗？",
+      "expected_output": "重置旧上界并按新完整哈希表重新计算。旧上界会使分派/工作量不正确；未恢复 spill 或绑定失效时回退，核对两次配对与实际探测数。",
+      "files": [],
+      "assertions": [
+        "上界跟随哈希表实例重算",
+        "验证实际筛选及完整配对"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "already-evaluated-filter",
+      "prompt": "过滤布尔位图已有，热点是逐个搬运行号，应该再加数量预筛吗？",
+      "expected_output": "直接评估 sql-q72-join-filter-bitmask 的双映射压缩；不把后处理问题改成另一阶段预筛。",
+      "files": [],
+      "assertions": [
+        "识别当前阶段与相邻技能分工",
+        "保留已授权的单项范围和安全回退"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "pre-filter-count-is-work",
+      "prompt": "同一商品销售量和库存量均为 10，原路径候选 1、预筛后候选 0，是不是结果不一致？",
+      "expected_output": "过滤前候选数是可减少的工作量，不要求相等；严格小于谓词后的通过配对两者都为 0，按该阶段的顺序和重数精确对照。单对示例不绕过生产成本门槛。",
+      "files": [],
+      "assertions": [
+        "区分过滤前候选和谓词后通过配对",
+        "正确性核对谓词后结果",
+        "独立记录工作量下降"
+      ]
+    }
+  ]
+}

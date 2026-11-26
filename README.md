@@ -3,35 +3,11 @@
 [![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](LICENSE)
 [![Scenarios: 18](https://img.shields.io/badge/Scenarios-18-brightgreen.svg)](#optimization-scenarios)
 
-面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code 和 OpenCode 提供专业的性能分析与优化插件。
+面向鲲鹏/ARM 生态的性能优化Agent，为 Claude Code、OpenCode、Codex 和 DSH 提供专业的性能分析与优化插件。
 
-## 📰 最新动态
 
-<!-- 按主线合入时间倒排；同一场景的多个 PR 合并展示，日期取最近一次相关合入。 -->
 
-- **2026/11/23** — **app-tuner** 新增 `flink-velox-env` 检查子域（`skills/bigdata/flink-velox-env/`，DOMAIN.md 含准入判据与成员表）及首批 3 个具体项检查 SKILL：`flink-velox-toolchain-check`（git/cmake/gcc/g++/mvn 编译工具链）、`flink-velox-build-tools-check`（ninja/ccache/autoconf/automake/libtool/flex/bison/python3/patchelf 构建辅助工具）、`flink-velox-cpp-deps-check`（13 个包管理器级 C++ 库按头文件探测 + 解析 velox checkout 自带 setup 脚本得到的源码级库清单按 /usr/local 探测）；每个 skill 独立 Python 标准库脚本、逐项 ok/fail + openEuler 包名 fix + 唯一 next_step，只扫不改；统筹 skill 与其余 6 个具体项检查分后续 PR 提交。附各自 tier-A 契约用例（11 / 11 / 16 测试，假机器不触真机）与触发评估集。（[!268](https://gitcode.com/openeuler/KPBot/pull/268)）
-- **2026/11/24** — **code-optimizer** 新增 `libco` 领域及 `libco-aarch64-context-switch` SKILL，覆盖 libco/派生版 AArch64 上下文切换、32 槽布局、16B 栈对齐、首次启动和整数/SP 检查；附领域 DOMAIN、共享 references、eval 与 skill-contract。
-- **2026/11/19** — **code-optimizer** 新增 `generic-timer-optimization` SKILL，覆盖 aarch64 热路径时钟读取优化：把自旋等待/轮询/超时判定循环内每轮的 `Clock::now()`/`clock_gettime` vDSO 读取替换为直接读 ARM 通用定时器（`mrs cntvct_el0` + 循环外一次 `cntfrq_el0`），含锚点保域、tick 域比较、分步换算防溢出三类模板与溢出边界/`asm volatile` 防 CSE 不变量，附 `mrs` 编译验证契约与微基准/语义/端到端验证步骤，源自 folly Spin.h 真实优化案例，附 tier-A 契约用例。
-- **2026/11/17** — **code-optimizer** 新增 `parallel-accumulator` SKILL，覆盖归约循环的串行累加器并行化：识别单累加器延迟绑定（低 IPC + 低 cache miss），用多个独立累加器重叠依赖链隐藏浮点延迟，附三级改写模板（纯 C 多累加器 / NEON 单累加器 / NEON 多累加器）、`accumulator_plan.py` 累加器数量脚本、tier-A 契约用例、agent 端到端 A/B 用例，对标 Intel performance-patterns 的 parallel-accumulator。
-- **2026/11/16** — **app-tuner** 新增 `kptools-jvmjit` SKILL，覆盖 JVM 进程 perf 采样符号化分析（libperf-jvmti + perf inject --jit）：方法级热点、JIT 代码指令级注解导出（源码+汇编+逐指令周期占比）、容器内采集（权限检测 + 宿主机 perf 工具注入），含 dump 刷盘语义与 [JIT] 残留处理纪律，与外部工具 arthas（免重启方法级交互）/ kptools-devkit java-perf（火焰图全景）分层互补。（[!143](https://gitcode.com/openeuler/KPBot/pull/143)）
-- **2026/11/16** — **app-tuner** 新增 `model-precision-analysis` SKILL，覆盖模型优化后的精度回归验证：读取精度评测工具 `opendatas/output` 合并结果，按数值/选项字母/文本归一化抽取答案（单位、千分位、`\text{}`、截断识别），输出准确率对比、“对→错”回归题定位与达标判定，存在回归即以退出码 1 作为精度门禁（`--fail-on-regression` 为兼容别名），并接入加速卡/应用配置 skill 的 `validation_plan`。
-- **2026/11/06** — **code-optimizer** 新增 `dpdk-optimization` SKILL，覆盖 DPDK 数据面热路径代码优化：worker 核 PMU 瓶颈建模（compute/访存延迟/带宽/同步四类判定）与分层代码杠杆库（热路径纪律、双循环预取、per-lcore 布局、查表解析、无锁统计、mbuf 复用），接入统一流水线场景路由，配套 app-tuner 的配置层调优。
-- **2026/11/06** — **app-tuner** 新增 `kptools-dpdk-tuning` SKILL，覆盖 DPDK 应用性能调优：现象驱动的分层诊断（PPS/时延/丢包/启动内存排查树）与硬件+场景驱动的分层配置建议（BIOS/内核/EAL/mbuf 内存池/PMD 网卡/功耗低时延），面向鲲鹏 920 + hns3/Hi1822 主场景，不修改业务源码。
-- **2026/11/05** — **app-tuner** 新增 `nginx-optimization` SKILL，覆盖鲲鹏平台 nginx 场景的 L1 环境层（IRQ 绑核/多队列）、L2 配置层（http/https × 长/短连接四场景模板）、L3 加速层（KAL OpenSSL/KAE/tcmalloc）分层调优，含火焰图热点对策与压测验证纪律。
-- **2026/11/05** — **code-optimizer** 新增 `allocation-path-optimization` SKILL：优化分配路径（分配下限与尺寸类通胀审计、仅元数据对象精确申请、短生命周期对象抖动合并、成对释放、分配器与内核回收成本归因），以实测每操作字节/次数与峰值活字节取证、要求所有权与生命周期不变量，附 tier-A 审计契约用例、tier-B 字节口径夹具，以及只应用本 SKILL 补丁的真实 libevent 端到端用例（申请字节按结构下降、drain 达到门槛）。
-- **2026/11/05** — **code-optimizer** 新增 `hot-path-overhead-elimination` SKILL：消除热点路径上与算法无关的机制开销（主导结果内联、叶子入口拆分、常量宽度拷贝替代通用例程调用、按实测值频率重排分派、无消费者记账跳过、拷贝后别名重载消除），以实测分布与反汇编取证、要求 guard 完备性与 fallback 保留，并附 tier-A 脚本契约用例、tier-B 三接口夹具 A/B 用例，以及只应用本 SKILL 补丁的真实 libevent 端到端用例（需外部源码树，未提供时 SKIP；提供后回归组通过、补丁不含分配路径改动；实测记录见用例 README）。
-- **2026/10/12** — **code-optimizer** 扩展 5 个知识型 SKILL 的 Rust 支持，覆盖 Rust 热点代码的操作融合、精度变换、特例快路径与性能分析等优化需求。（[!72](https://gitcode.com/openeuler/KPBot/pull/72)）
-- **2026/10/12** — **app-tuner** 新增昇腾 NPU 状态与 HCCN 网络采集 SKILL，并整合鲲鹏 + 昇腾场景的绑核、Host 内存分配、编译打包和应用配置经验，覆盖 vLLM 推理与 torchtitan-npu 训练调优。（[!68](https://gitcode.com/openeuler/KPBot/pull/68)、[!58](https://gitcode.com/openeuler/KPBot/pull/58)、[!56](https://gitcode.com/openeuler/KPBot/pull/56)、[!47](https://gitcode.com/openeuler/KPBot/pull/47)、[!27](https://gitcode.com/openeuler/KPBot/pull/27)）
-- **2026/10/12** — **app-tuner** 新增 nmon、进程与网络采集 SKILL，并扩展 DevKit Java 性能分析，覆盖服务器应用的 CPU、内存、I/O、网络及 Java 热点诊断。（[!60](https://gitcode.com/openeuler/KPBot/pull/60)、[!34](https://gitcode.com/openeuler/KPBot/pull/34)）
-- **2026/09/15** — **code-optimizer** 新增 `sra-dag-tuning` SKILL，覆盖鲲鹏搜索推荐链路中召回、排序、特征处理与 DAG 调度的全栈优化。（[!57](https://gitcode.com/openeuler/KPBot/pull/57)）
-- **2026/09/11** — **code-optimizer** 新增 `parallel-unique-pytorch` SKILL，覆盖 PyTorch Embedding lookup 的 Host 侧并行去重与支持 `torch.compile` 的自定义算子集成。（[!52](https://gitcode.com/openeuler/KPBot/pull/52)）
-- **2026/09/11** — **code-optimizer** 新增 ORT/KDNN Attention 与 TensorFlow 推理优化 SKILL，并整合 TF 专项工作流，覆盖 CPU 推理的子图融合、内核接入、线程调度与性能验证。（[!51](https://gitcode.com/openeuler/KPBot/pull/51)、[!41](https://gitcode.com/openeuler/KPBot/pull/41)、[!31](https://gitcode.com/openeuler/KPBot/pull/31)）
-- **2026/09/11** — **code-optimizer** 新增 `kunpeng-llama-cpp-tuning` SKILL，覆盖鲲鹏 CPU 上 llama.cpp Embedding 推理的 ggml 后端、权重转换缓存与点积热点优化。（[!55](https://gitcode.com/openeuler/KPBot/pull/55)）
-- **2026/09/11** — **code-optimizer** 新增 `brgemm-optimization` SKILL，覆盖 GEMM 在 oneDNN、ONNX Runtime 等框架集成中的权重预打包、内存布局、线程与缓存优化。（[!53](https://gitcode.com/openeuler/KPBot/pull/53)）
-- **2026/09/08** — **code-optimizer** 新增 `vsag-rabitq-optimization` SKILL，覆盖 ARM/SVE 上 VSAG HGraph RaBitQ 向量检索的并发查询组批、后端迁移与计算优化。（[!48](https://gitcode.com/openeuler/KPBot/pull/48)）
-- **2026/09/07** — **code-optimizer** 新增 `hashmap-optimization` SKILL，覆盖特征查表与 KV 查询中哈希表的计算、带宽和访问延迟瓶颈优化。（[!46](https://gitcode.com/openeuler/KPBot/pull/46)）
 
-<a id="optimization-scenarios"></a>
 
 ## 🎯 优化场景
 
@@ -97,6 +73,8 @@ npm install -g @kunpengbot/kpbot
 
 # 安装 skills 到目标工具
 kpbot install global opencode      # 全局安装到 OpenCode
+kpbot install project codex        # 项目级安装到 Codex
+kpbot install global codex         # 全局安装到 Codex
 kpbot install project claude       # 项目级安装到 Claude Code
 kpbot install project opencode /path/to/project  # 指定路径
 ```
@@ -114,7 +92,7 @@ kpbot uninstall global opencode
 
 ### 方式二：git clone（开发者，获取最新 HEAD）
 
-从源码安装时，Linux 和 macOS 使用 `install.sh`，Windows 使用 `install.ps1`。两个入口均支持 Claude Code、OpenCode 和 DSH。
+从源码安装时，Linux 和 macOS 使用 `install.sh`，支持 Claude Code、OpenCode、Codex 和 DSH；Windows 原生 `install.ps1` 支持 Claude Code、OpenCode 和 DSH。Codex 的安装、卸载与 Windows 使用方式见 [Codex 指南](docs/codex.md)。
 
 ### 前置条件
 
@@ -132,7 +110,7 @@ install.sh [level] [tool] [install_path]
 | 参数 | 可选值 | 默认值 | 说明 |
 |------|--------|--------|------|
 | `level` | `project` / `global` | `project` | 安装级别：项目级或全局级 |
-| `tool` | `claude` / `opencode` / `dsh` | `claude` | 目标 AI 编码工具 |
+| `tool` | `claude` / `opencode` / `codex` / `dsh` | `claude` | 目标 AI 编码工具（Codex 使用 Bash/Python 入口） |
 | `install_path` | 任意路径 | 当前目录（项目级） | 项目根目录，或全局 DSH 安装目录 |
 
 ### 安装示例
@@ -175,6 +153,7 @@ Claude Code 和 OpenCode 的技能目录使用 Win32 扩展路径复制和清理
 |------|--------|------|
 | Claude Code | `.claude/skills/` + `CLAUDE.md` | `~/.claude/skills/` + `~/.claude/CLAUDE.md` |
 | OpenCode | `.opencode/skills/` + `AGENTS.md` | `~/.config/opencode/skills/` + `AGENTS.md` |
+| Codex | `.agents/skills/` | `~/.agents/skills/` |
 | DSH | `.dsh/skills/` | `$env:DSH_HOME/skills/` 或 `~/.dsh/skills/` |
 
 PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能装到该目录下的 `opencode/skills/`。
@@ -187,6 +166,12 @@ PowerShell 入口在设置了 `XDG_CONFIG_HOME` 时，将 OpenCode 全局技能�
 2. **配置文件** — 当仓库根目录存在 `CLAUDE.md` 时生成 `CLAUDE.md`（Claude Code）或 `AGENTS.md`（OpenCode）；不存在则跳过
 3. **冲突处理** — 已有文件时支持覆盖/合并/跳过（全局模式交互选择）
 4. **健康检查** — 验证安装完整性并生成 `kpbot-manifest.json`
+
+Claude/OpenCode 安装的用户技能保留范围：新版生成的清单只记录 KPBot 管理的技能。
+旧版曾把用户自建目录一并写入清单，缺少归属信息；首次升级安装或卸载时，旧清单中名称合规的用户技能
+仍会按清单清理。升级前请备份安装目录并核对旧清单；如包含误记的用户技能，备份后移除
+`<配置目录>/kpbot-manifest.json` 再重装。名称含空格、中文等不合规条目会停止操作并给出具体恢复提示，
+不会自动删除清单。与当前 KPBot 技能同名的目录仍会被重装替换。
 
 ### 验证安装
 
@@ -220,7 +205,7 @@ powershell.exe -NoProfile -NonInteractive -File .\tests\test_install_platform.ps
 
 ### 快速上手：一句话优化
 
-安装后直接在 Claude Code 或 OpenCode 中用自然语言描述你的优化需求：
+安装后直接在 Claude Code、OpenCode 或 Codex 中用自然语言描述你的优化需求：
 
 ```
 帮我优化 matrix_multiply 函数，目标平台是 Kunpeng-0xd01

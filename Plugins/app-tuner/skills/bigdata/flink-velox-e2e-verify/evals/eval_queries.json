@@ -1,0 +1,55 @@
+{
+  "skill_name": "flink-velox-e2e-verify",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-pushdown-verify",
+      "prompt": "验证 Flink velox 下推优化前后结果一致性",
+      "should_trigger": true,
+      "note": "场景入口类触发词：下推验证、加速前后结果一致性"
+    },
+    {
+      "id": "q-dual-run",
+      "prompt": "同一 SQL 在原生 Flink 和 GlutenFlink 双跑对比输出",
+      "should_trigger": true,
+      "note": "双跑一致性、GlutenFlink 输出对比"
+    },
+    {
+      "id": "q-changelog-fold",
+      "prompt": "把 print sink 捕获的 changelog 回撤流折叠成最终结果集再精确对比",
+      "should_trigger": true,
+      "note": "验证协议类触发词：changelog 对比、回撤流折叠、SQL 等价性门禁"
+    },
+    {
+      "id": "q-speedup",
+      "prompt": "双跑计时对比两栈耗时，算一下加速比",
+      "should_trigger": false,
+      "note": "吞吐/耗时基准与加速比统计 → 标准基准套件口径（nexmark 等），本 skill 只做等价性验证、不计时"
+    },
+    {
+      "id": "q-nexmark",
+      "prompt": "跑 nexmark 基准测 GlutenFlink 吞吐时延",
+      "should_trigger": false,
+      "note": "标准吞吐基准套件（nexmark/TPC-DS 查询集+规模因子）→ bigdata 域专用基准 skill"
+    },
+    {
+      "id": "q-profiling",
+      "prompt": "GlutenFlink 作业慢在哪，定位热点算子",
+      "should_trigger": false,
+      "note": "瓶颈定位/profiling → profiling 类 skill"
+    },
+    {
+      "id": "q-tm-tuning",
+      "prompt": "Flink TaskManager 内存与并行度配置调优",
+      "should_trigger": false,
+      "note": "配置参数调优 → bigdata 域调优 skill"
+    },
+    {
+      "id": "q-build",
+      "prompt": "velox4j 编译失败排查",
+      "should_trigger": false,
+      "note": "GlutenFlink 栈构建 → 构建侧工作流"
+    }
+  ]
+}

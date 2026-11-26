@@ -22,6 +22,10 @@ metadata:
 
 编译 velox4j 与 gluten-flink 得先有 git、cmake、gcc、g++、mvn 五件套。缺任何一件，症状都只是一句 `xxx: command not found` 或 cmake 找不到编译器，看不出其余几件在不在。本 skill 只做一件事：**把这五件逐个在 PATH 上找一遍、取版本，缺的说清该装哪个包**。它是 `flink-velox-env` 检查家族里"编译工具链"这一具体项：只读、不改动机器、不装包。探测表与判据细节在 [probe-table.md](references/probe-table.md)。
 
+## 术语
+
+这套栈的官方叫法是 GlutenFlink；项目名 GFVBot（本 skill 的包名映射解析自其安装器的工具探测清单）按原名保留，`GFV` 与 GlutenFlink 指同一生态。
+
 ## 使用场景
 
 ### 适用（应使用本 skill）

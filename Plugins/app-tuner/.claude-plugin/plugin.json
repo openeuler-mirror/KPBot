@@ -22,6 +22,11 @@
     "load-balancing",
     "dp",
     "llm-serving",
+    "mindie",
+    "motor",
+    "coordinator",
+    "lb",
+    "deployment",
     "profiling",
     "report",
     "precision",
@@ -34,6 +39,7 @@
   ],
   "platforms": [
     "claude",
-    "opencode"
+    "opencode",
+    "codex"
   ]
 }

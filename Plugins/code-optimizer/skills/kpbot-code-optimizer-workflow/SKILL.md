@@ -33,7 +33,8 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 | 12 | protobuf 序列化库优化 | `protobuf-optimization` | protobuf、proto 反序列化、消息合并、MapMergeFrom、MiniParse、arena 分配 | `src/google/protobuf/` 源码树；`libprotobuf`；`TcParser`/`MapMergeFrom` 符号 |
 | 13 | Agent 记忆系统优化（技能族入口） | `agent-memory-optimize` | Agent 记忆、长期记忆、记忆后端、记忆系统、记忆检索、memory agent、memory backend、知识图谱数据库、图数据库、Graphiti、Zep、Mem0、Letta/MemGPT、MemoRAG、Cognee、Neo4j、Bolt、Cypher、pgvector、Qdrant、Chroma、LanceDB | `graphiti_core/` 或 `graphiti/` 源码树；memory service 入口（add_episode/retrieve_memory 类）；`neo4j`/Bolt 驱动依赖；`pgvector`/`qdrant`/`chroma`/`lancedb` 后端依赖；Cypher 查询模板 |
 | 14 | UTF-8 校验优化 | `utf8-validation-neon` | utf8 校验、utf8_range、UTF-8 validation、字符串校验热点、SSE4.1 门控 | `third_party/utf8_range/` 源码树；`utf8_range.c` 与 `range-neon.c` 共存；`__SSE4_1__` 独占 SIMD 门控 |
-| 15 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
+| 15 | Go protobuf 定长切片批量编解码优化 | `go-protobuf-fixed-slice-bulk-copy` | go protobuf 优化、repeated float 优化、packed 解码慢、AppendFixed32 热点、ConsumeFixed32 热点、codec_gen、Float32bits、小端批量拷贝、Go 序列化热点 | Go 服务（尤其 protobuf-go / `google.golang.org/protobuf`）中 repeated float/double/fixed32/sfixed32/fixed64/sfixed64 的序列化或反序列化热点：生成式 codec（`codec_gen.go`）或手写 wire 编解码对 4/8 字节定长切片逐元素转换；小端平台 |
+| 16 | 性能库开发（默认主流水线） | 本流水线（不外派） | —（始终可选） | — |
 
 ### 路由流程
 
@@ -43,8 +44,8 @@ description: 鲲鹏性能优化流水线（Workflow 版）— 与 kpbot-code-opt
 
 ```bash
 ls; ls -d */ 2>/dev/null
-grep -i -l -E '<场景指纹关键词>' CMakeLists.txt Makefile README* */CMakeLists.txt 2>/dev/null
-rg -i -l --max-depth 2 -g '*.h' -g '*.hpp' -g '*.c' -g '*.cc' -g '*.cpp' -g '*.py' -e '<场景指纹关键词>' . | head -20
+grep -i -l -E '<场景指纹关键词>' CMakeLists.txt Makefile README* go.mod */CMakeLists.txt */go.mod 2>/dev/null
+rg -i -l --max-depth 2 -g '*.h' -g '*.hpp' -g '*.c' -g '*.cc' -g '*.cpp' -g '*.py' -g '*.go' -e '<场景指纹关键词>' . | head -20
 ```
 
 命中的场景加入候选集，记录命中文件路径作为证据。

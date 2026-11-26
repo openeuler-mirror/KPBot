@@ -1,0 +1,59 @@
+{
+  "skill_name": "kptools-clickhouse-benchmark",
+  "queries": [
+    {
+      "id": "CHBENCH-PQ-01",
+      "prompt": "对已有 ClickHouse 跑三轮合成 SELECT 性能测试并保留原始日志",
+      "should_trigger": true,
+      "note": "core benchmark scenario"
+    },
+    {
+      "id": "CHBENCH-PQ-02",
+      "prompt": "测一下 numbers 查询的 QPS 和 p95，预热不要算进结果",
+      "should_trigger": true,
+      "note": "native metrics and warmup exclusion"
+    },
+    {
+      "id": "CHBENCH-PQ-03",
+      "prompt": "用现有 clickhouse 单二进制做有限查询基准，每轮验证结果",
+      "should_trigger": true,
+      "note": "single binary and exact correctness"
+    },
+    {
+      "id": "CHBENCH-PQ-04",
+      "prompt": "ClickHouse 压测第二轮失败也要保留失败 JSON 和日志",
+      "should_trigger": true,
+      "note": "failure evidence"
+    },
+    {
+      "id": "CHBENCH-PQ-05",
+      "prompt": "检查 ClickHouse 26.8 的原生 benchmark 输出能否解析",
+      "should_trigger": true,
+      "note": "actual native output compatibility"
+    },
+    {
+      "id": "CHBENCH-NQ-01",
+      "prompt": "只读检查 ClickHouse 认证和版本，先不要执行压测",
+      "should_trigger": false,
+      "note": "routes to environment check"
+    },
+    {
+      "id": "CHBENCH-NQ-02",
+      "prompt": "部署 ClickHouse 并创建生产表",
+      "should_trigger": false,
+      "note": "deployment and writes are out of scope"
+    },
+    {
+      "id": "CHBENCH-NQ-03",
+      "prompt": "运行完整 TPC-H SF100 并生成业务容量报告",
+      "should_trigger": false,
+      "note": "not a TPC-H or capacity skill"
+    },
+    {
+      "id": "CHBENCH-NQ-04",
+      "prompt": "启动一个本地 Ray 集群做 ImageNet 推理",
+      "should_trigger": false,
+      "note": "unrelated Ray workload"
+    }
+  ]
+}

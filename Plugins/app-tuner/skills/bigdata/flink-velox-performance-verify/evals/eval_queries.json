@@ -1,0 +1,55 @@
+{
+  "skill_name": "flink-velox-performance-verify",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-run-nexmark-benchmark",
+      "prompt": "在这台机器的 Flink 上跑一轮 nexmark 吞吐基准",
+      "should_trigger": true,
+      "note": "场景入口类触发词：跑基准、nexmark、吞吐"
+    },
+    {
+      "id": "q-native-baseline",
+      "prompt": " GlutenFlink 优化之前，先把原生 Flink 的吞吐基线测出来",
+      "should_trigger": true,
+      "note": "原生侧基线：原生 Flink、基线、对比分母"
+    },
+    {
+      "id": "q-calibre",
+      "prompt": "按 1 亿 events、blackhole、p=1/4/8/16 的口径把 nexmark 基准测试跑一遍",
+      "should_trigger": true,
+      "note": "口径细节类触发词：1 亿 events、blackhole、并行度档位"
+    },
+    {
+      "id": "q-pick-queries",
+      "prompt": "只跑 q0 和 q17 这两个查询的吞吐",
+      "should_trigger": true,
+      "note": "--queries 显式选型：q0 吞吐基线 + 指定查询"
+    },
+    {
+      "id": "q-not-correctness",
+      "prompt": "对比 GlutenFlink 侧和原生侧 nexmark 查询的结果集是否一致",
+      "should_trigger": false,
+      "note": "正确性校验 → nexmark 正确性校验 skill（规划中），不是吞吐基准"
+    },
+    {
+      "id": "q-not-gfv-side",
+      "prompt": "在 GlutenFlink 侧跑 nexmark 吞吐，跟原生侧比加速比",
+      "should_trigger": false,
+      "note": "GlutenFlink 侧与两侧比值是本 skill 后续版本；当前版本只跑原生侧"
+    },
+    {
+      "id": "q-not-install",
+      "prompt": "把 nexmark 的 jar 构建出来、可运行树铺好",
+      "should_trigger": false,
+      "note": "安装 → flink-velox-runtime-install"
+    },
+    {
+      "id": "q-not-env-check",
+      "prompt": "看看这台机器环境齐不齐，能不能跑 nexmark",
+      "should_trigger": false,
+      "note": "环境裁决 → 规划中的统筹检查 skill（未合入）"
+    }
+  ]
+}

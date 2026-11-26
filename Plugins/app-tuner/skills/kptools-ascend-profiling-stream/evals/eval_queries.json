@@ -1,0 +1,83 @@
+{
+  "skill_name": "kptools-ascend-profiling-stream",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "帮我看看这份 NPU trace 里有几条 stream、每条流忙不忙",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "分析一下 stream 维度的忙碌占比和并发度时间线",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "这段 trace 的流间并发度有多高，峰值同时跑几个 kernel",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "有没有 Event Record 到 Wait 的跨流依赖，配一下对",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "对比优化前后两份 trace 的 stream 数量和流拓扑变化",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "每步的平均并发度是多少，逐 step 列出来",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "stream id 是从 tid 取还是从 args.streamId 取，这份能区分吗",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "只给 trace_view.json，画一下 stream 并发度阶梯图",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "帮我定位设备上的空闲气泡窗口和时长",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）-bubble"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "两份 profiling 整体对比，步耗时和 Free 占比变化多少",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "分析单份无栈 trace 的 P1/P2/P3 阶段划分",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis-nostack"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "统计算子种类、调用次数和 shape 分布",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-opstats（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-13",
+      "prompt": "分析 H2D/D2H 拷贝次数、带宽和与计算的重叠率",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-h2d-d2h（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-14",
+      "prompt": "我想一次出总报告，不知道该用哪个对比能力",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-hub（同批 PR 交付）"
+    }
+  ]
+}

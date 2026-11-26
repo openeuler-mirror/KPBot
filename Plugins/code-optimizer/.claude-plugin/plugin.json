@@ -104,8 +104,24 @@
   "platforms": [
     "claude",
     "opencode",
+    "codex",
     "dsh"
   ],
+  "codex": {
+    "exclude": [
+      "drive-claude-optimize-pipeline",
+      "batch-drive-optimize-pipeline",
+      "kpbot-code-optimizer-workflow",
+      "multimedia-code-optimizer",
+      "tf-inference-optimizer",
+      "tf-env-verify",
+      "tf-profile-collector",
+      "tf-graph-optimize",
+      "tf-kernel-optimize",
+      "tf-result-verify",
+      "tf-benchmark"
+    ]
+  },
   "dsh": {
     "exclude": [
       "drive-claude-optimize-pipeline",

@@ -58,6 +58,10 @@ test('native provider lists the real package and loads DSH instructions with can
       assert.equal(entries.some(entry => entry.name === excluded), false, excluded);
     }
     assert.equal(new Set(entries.map(entry => entry.name)).size, entries.length);
+    const grouped = entries.find(entry => entry.name === 'cubesandbox-create-optimize');
+    assert.ok(grouped);
+    assert.equal((await provider.get(grouped)).name, grouped.name);
+    assert.ok((await fs.stat(path.join(grouped.resourceBase.path, 'references/workflow.md'))).isFile());
   } finally { dispose(); }
 });
 

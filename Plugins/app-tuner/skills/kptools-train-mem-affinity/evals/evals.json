@@ -1,0 +1,23 @@
+{
+  "skill_name": "kptools-train-mem-affinity",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "训练的每个 rank 内存都分布在哪个 NUMA 节点上？帮我分析一下内存亲和性。",
+      "expected_output": "先 discover.sh，再 collect_rank_mem.py 快照（确认 warmup 后稳态时段）；输出每 rank 的 node×{anon,file} 分布表、覆盖率、anon 主 node 与判据 hints；按 references/methodology.md 的 C1-C6 核对证据与反例后给出结论与处置路由；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "怀疑 rank 进程的内存跨 NUMA 了，远程访存导致训练慢，怎么确认？",
+      "expected_output": "快照后核对 C1（anon 主 node vs Cpus_allowed/线程落点）与 C5（numa_balancing 状态）；必要时 --affinity-dir 联合 thread-affinity 出联合表；结论必须带覆盖率校验和反例排除（numa_balancing=1 时注明污染）；引用真实输出，不编造。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我用 numactl --membind 启动了训练，怎么验证内存真的绑上去了？",
+      "expected_output": "在稳态采快照，看各 rank 的 anon 驻留是否集中在 membind 目标 node（覆盖率校验通过为前提）；注意 numa_maps 行的 policy 字段（bind:N）与 numa_balancing=1 的干扰（methodology C5）；--diff 二采确认趋势稳定；引用真实输出，不编造。",
+      "files": []
+    }
+  ]
+}

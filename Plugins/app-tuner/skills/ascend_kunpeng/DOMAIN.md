@@ -15,6 +15,7 @@ NUMA 绑核与 NPU/HCCS 亲和、Host 侧预处理与 tokenizer 并行、RoCE �
 | Skill | 职责 |
 |---|---|
 | [`kptools-ascend-pd-env`](kptools-ascend-pd-env/SKILL.md) | 采集并对比 vLLM-Ascend P/D 容器环境：内核、cgroup 配额、CPU/NUMA 拓扑、CANN 与驱动版本、npu-smi 快照、进程命令行与环境变量、Python 包清单。单容器出单环境报告，多容器或搭配已有采集包则自动对比并标差异——用于排查 P/D 两侧环境不一致、CANN/驱动/torch_npu/vLLM 版本漂移、HCCL/ASCEND 变量不同、cpuset/cgroup 配额不同 |
+| [`kptools-shell-format-quality-checker`](../kptools-shell-format-quality-checker/SKILL.md) | 只读检查 Linux 部署 Shell 脚本的 CRLF/BOM、续行、解释器语法和 ShellCheck 告警；不执行脚本或验证 P/D 拓扑 |
 | [`kptools-ascend-profiling-analysis`](kptools-ascend-profiling-analysis/SKILL.md) | 昇腾 NPU profiling trace 的深度分析：`build_index` / `query` 工作流解析 chrome trace，拆 step、算子级耗时、AI Core / AICPU / HCCL 占比与空泡，配合 `calltree` 与 HTML 报告定位 P/D 两侧的算子与通信瓶颈；自带 vLLM-Ascend trace 的解析知识与 agent 级 A/B 用例 |
 
 ## 域内路由

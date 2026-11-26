@@ -1,0 +1,24 @@
+{"Timestamp":"2026-01-01T00:00:00.000Z","InstanceId":"sb-rb-001","LogContent":"rollback req start"}
+{"Timestamp":"2026-01-01T00:00:00.005Z","InstanceId":"sb-rb-001","LogContent":"delete vm start"}
+{"Timestamp":"2026-01-01T00:00:00.013Z","InstanceId":"sb-rb-001","LogContent":"delete vm finish"}
+{"Timestamp":"2026-01-01T00:00:00.015Z","InstanceId":"sb-rb-001","LogContent":"restore start"}
+{"Timestamp":"2026-01-01T00:00:00.035Z","InstanceId":"sb-rb-001","LogContent":"restore finish"}
+{"Timestamp":"2026-01-01T00:00:00.035Z","InstanceId":"sb-rb-001","LogContent":"memory restore finish at:18"}
+{"Timestamp":"2026-01-01T00:00:00.045Z","InstanceId":"sb-rb-001","LogContent":"agent is ready"}
+{"Timestamp":"2026-01-01T00:00:00.050Z","InstanceId":"sb-rb-001","LogContent":"rollback req finish"}
+{"Timestamp":"2026-01-01T00:00:01.000Z","InstanceId":"sb-rb-002","LogContent":"rollback req start"}
+{"Timestamp":"2026-01-01T00:00:01.006Z","InstanceId":"sb-rb-002","LogContent":"delete vm start"}
+{"Timestamp":"2026-01-01T00:00:01.016Z","InstanceId":"sb-rb-002","LogContent":"delete vm finish"}
+{"Timestamp":"2026-01-01T00:00:01.018Z","InstanceId":"sb-rb-002","LogContent":"restore start"}
+{"Timestamp":"2026-01-01T00:00:01.044Z","InstanceId":"sb-rb-002","LogContent":"restore finish"}
+{"Timestamp":"2026-01-01T00:00:01.044Z","InstanceId":"sb-rb-002","LogContent":"memory restore finish at:22"}
+{"Timestamp":"2026-01-01T00:00:01.054Z","InstanceId":"sb-rb-002","LogContent":"agent is ready"}
+{"Timestamp":"2026-01-01T00:00:01.060Z","InstanceId":"sb-rb-002","LogContent":"rollback req finish"}
+{"Timestamp":"2026-01-01T00:00:02.000Z","InstanceId":"sb-rb-001","LogContent":"rollback req start"}
+{"Timestamp":"2026-01-01T00:00:02.005Z","InstanceId":"sb-rb-001","LogContent":"delete vm start"}
+{"Timestamp":"2026-01-01T00:00:02.014Z","InstanceId":"sb-rb-001","LogContent":"delete vm finish"}
+{"Timestamp":"2026-01-01T00:00:02.016Z","InstanceId":"sb-rb-001","LogContent":"restore start"}
+{"Timestamp":"2026-01-01T00:00:02.042Z","InstanceId":"sb-rb-001","LogContent":"memory restore finish at:24"}
+{"Timestamp":"2026-01-01T00:00:02.042Z","InstanceId":"sb-rb-001","LogContent":"restore finish"}
+{"Timestamp":"2026-01-01T00:00:02.049Z","InstanceId":"sb-rb-001","LogContent":"agent is ready"}
+{"Timestamp":"2026-01-01T00:00:02.055Z","InstanceId":"sb-rb-001","LogContent":"rollback req finish"}

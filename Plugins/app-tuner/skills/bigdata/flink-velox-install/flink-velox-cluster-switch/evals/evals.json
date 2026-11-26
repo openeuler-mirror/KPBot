@@ -1,0 +1,35 @@
+{
+  "skill_name": "flink-velox-cluster-switch",
+  "evals": [
+    {
+      "id": "make-new-build-effective",
+      "query": "jar 已经部署进 lib 了，重启集群让新构建生效",
+      "expected": "触发本 skill：先 plan（列出停起命令与在跑作业），用户同意后 apply --yes --to gfv；有作业在跑则拒绝"
+    },
+    {
+      "id": "switch-to-native",
+      "query": "要跑原生 Flink 侧做对照，把 gluten 的 jar 切出去再重启",
+      "expected": "触发本 skill --to native：把 lib 里 gluten/velox jar 挪到 lib.gfv-backup/（不删）后重启集群；跑完 --to gfv 切回"
+    },
+    {
+      "id": "lib-vs-cluster-stale",
+      "query": "cluster-check 说 lib 改了但集群还在跑旧的，重启一下",
+      "expected": "触发本 skill：这正是 lib-vs-cluster 不一致的修复动作；重启后 verify"
+    },
+    {
+      "id": "not-check-only",
+      "query": "集群现在加载的是哪套 jar，和 lib 一致吗（不要重启）",
+      "expected": "不触发：只读检查属 flink-velox-cluster-check"
+    },
+    {
+      "id": "not-stack-build",
+      "query": "重新编译 gluten-flink 并部署进 lib",
+      "expected": "不触发：编译部署属 flink-velox-stack-build；本 skill 只挪 jar 与重启"
+    },
+    {
+      "id": "not-with-jobs",
+      "query": "有作业在跑也先重启，没事",
+      "expected": "触发本 skill 但拒绝：jobs-running > 0 是硬拒绝，没有强制开关；等作业结束或由用户停掉后再来"
+    }
+  ]
+}

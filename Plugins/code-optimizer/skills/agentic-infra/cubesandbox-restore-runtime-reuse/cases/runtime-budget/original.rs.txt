@@ -1,0 +1,64 @@
+// Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+//
+// Portions Copyright 2017 The Chromium OS Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE-BSD-3-Clause file.
+//
+// Copyright © 2019 Intel Corporation
+//
+// SPDX-License-Identifier: Apache-2.0 AND BSD-3-Clause
+//
+
+    pub fn restore_device_node(
+        &mut self,
+        device_groups: (Vec<DeviceNode>, Vec<DeviceNode>),
+        snapshot: Snapshot,
+    ) -> std::result::Result<(), MigratableError> {
+        let total_nodes = device_groups.0.len() + device_groups.1.len();
+        let work_thread_num = if total_nodes > MAX_WORKER_THREADS {
+            MAX_WORKER_THREADS
+        } else {
+            total_nodes
+        };
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(work_thread_num)
+            .enable_all()
+            .build()
+            .unwrap();
+
+        rt.block_on(async move {
+            // Process device groups in order to ensure correct restoration sequence
+            let groups = [device_groups.0, device_groups.1];
+            for nodes in groups {
+                let mut thread_pool: Vec<JoinHandle<Result<(), MigratableError>>> = vec![];
+
+                for node in nodes {
+                    if let Some(migratable) = node.migratable {
+                        debug!("Restoring {} from DeviceManager", node.id);
+                        if let Some(snapshot) = snapshot.snapshots.get(&node.id).cloned() {
+                            thread_pool.push(tokio::spawn(async move {
+                                let mut guard = migratable.lock().unwrap();
+                                guard.pause()?;
+                                guard.restore(*snapshot)?;
+                                Ok(())
+                            }));
+                        } else {
+                            return Err(MigratableError::Restore(anyhow!(
+                                "Missing device {}",
+                                node.id
+                            )));
+                        }
+                    }
+                }
+
+                // Wait for all devices in current group to complete before processing next group
+                for t in thread_pool {
+                    t.await.unwrap()?;
+                }
+            }
+            Ok(())
+        })
+    }
+
+    pub fn restore_devices(

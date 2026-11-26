@@ -1,0 +1,37 @@
+{
+  "skill_name": "kptools-ray-imagenet-environment-check",
+  "evals": [
+    {
+      "id": "RE-E01",
+      "eval_name": "check-existing-local-runtime",
+      "prompt": "准备跑 Ray ImageNet 预处理 smoke，先只读检查当前 Python、Ray、torchvision 和资源，不要安装或启动任何东西。",
+      "expected_output": "运行随包 check_environment.py，交付新 JSON；逐项判断版本、真实 API 和资源，只有 mandatory 全通过才 ready。",
+      "files": [],
+      "assertions": ["没有安装/启动/停止操作", "报告含逐探针 evidence/status", "限制不冒充生产健康"]
+    },
+    {
+      "id": "RE-E02",
+      "eval_name": "secure-nondefault-ray-endpoint",
+      "prompt": "检查一个非默认 Ray 客户端端点，认证信息已在安全环境配置里，不能打印令牌。",
+      "expected_output": "要求用户提供不含 userinfo 的实际端点并显式 --address；复用安全配置，微型任务验证版本/执行/CPU。",
+      "files": [],
+      "assertions": ["不索取或回显密码", "不以 socket-open 判 ready", "不停止现有集群"]
+    },
+    {
+      "id": "RE-E03",
+      "eval_name": "wrong-version-or-missing-package",
+      "prompt": "Ray 版本不对，另一个机器还缺 Pillow；能否都算作环境 ready？",
+      "expected_output": "分别给 wrong_version 与 absent，总体 blocked；说明 wrong_version 是超出已验证配置而非宽泛上游不兼容声明。",
+      "files": [],
+      "assertions": ["退出码非零", "保留结构化证据", "不因部分包可导入而 ready"]
+    },
+    {
+      "id": "RE-E04",
+      "eval_name": "timeout-auth-and-output-collision",
+      "prompt": "探针可能超时或认证失败，而且输出文件已经存在，应该怎么处理？",
+      "expected_output": "有限超时并清理自有进程组；认证错误标 auth；已有输出返回 2 且不覆盖，换用新路径。",
+      "files": [],
+      "assertions": ["区分 timeout/auth/error", "不覆盖旧文件", "保留可诊断 JSON（输出可创建时）"]
+    }
+  ]
+}

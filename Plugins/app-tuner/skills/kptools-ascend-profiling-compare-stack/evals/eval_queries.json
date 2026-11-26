@@ -1,0 +1,67 @@
+{
+  "skill_name": "kptools-ascend-profiling-compare-stack",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "对比这两份带 python_function 的 trace 的调用栈差异",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "优化前后哪些 Python 函数新增了、哪些消失了",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "两份有栈 trace 里 self 时间变多和变少的函数 Top 10",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "调用树的 self 时间差，函数名带行号漂移也要能对上",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "对比两个版本 host 侧 python frame 的关键调用路径变化",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "这两份 trace 都开了 with_stack，帮我做调用栈 diff",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "分析单份带 python_function 的 trace 的调用树热点",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis"
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "统计两份 trace 的算子种类、调用次数和 shape 变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）-opstats"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "两份 profiling 整体对比，步耗时和 Free 占比变化多少",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare（同批 PR 交付）"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "分析单份无栈 trace 的 P1/P2/P3 阶段划分",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis-nostack"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "我不知道该用哪个对比能力，想一次出总报告",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-hub（同批 PR 交付）"
+    }
+  ]
+}

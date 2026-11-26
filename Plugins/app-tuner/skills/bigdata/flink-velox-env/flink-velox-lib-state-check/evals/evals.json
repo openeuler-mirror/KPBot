@@ -8,7 +8,7 @@
     },
     {
       "id": "which-build",
-      "query": "现在 lib 里是 native 构建还是 GFV 构建",
+      "query": "现在 lib 里是 native 构建还是 GlutenFlink 构建",
       "expected": "触发本 skill：lib_state.build（native / gfv / partial）与 gfv_jars 作答；多版本时转述 duplicates warn"
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "id": "not-overall",
-      "query": "这台机器现在能不能编译并运行 GFV 栈",
+      "query": "这台机器现在能不能编译并运行 GlutenFlink 栈",
       "expected": "不触发：总裁决属统筹 flink-velox-env-check"
     },
     {
