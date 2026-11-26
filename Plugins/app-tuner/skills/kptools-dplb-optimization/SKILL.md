@@ -75,10 +75,19 @@ curl -m 3 -s -o /dev/null http://127.0.0.1:7200/ && echo PORT_7200_ANSWERED
 ```
 pip3 show motor            # 包名是 motor（3.x）；早期 1.x whl 包名是 mindie_motor
 python3 -c "import motor; print(motor.__file__)"   # 必须在源码目录之外执行（在源码目录内会命中源码而非 site-packages）
-python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn" 2>/dev/null && echo DEPS_OK || echo DEPS_MISSING
+python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn" 2>/dev/null && echo DEPS_PROBE_OK || echo DEPS_MISSING
+# 原生库检查（import motor 通过 ≠ 可启动——空壳 whl 缺 libmindie_workload_shm.so 也能过顶层 import，
+# 到启动 coordinator 才失败）：用启动时的解释器核对已安装包内的原生库
+python3 -c "
+import motor, os, glob
+pkg_dir = os.path.dirname(motor.__file__)
+hits = glob.glob(os.path.join(pkg_dir, '**', 'libmindie_workload_shm.so'), recursive=True)
+assert hits, f'原生库缺失：{pkg_dir} 下无 libmindie_workload_shm.so——空壳 whl，转 install 重装'
+print('native lib OK:', hits[0])
+"
 ```
 
-- **pip3 show 查不到 / import 失败 / DEPS_MISSING** → 转 `kptools-dplb-optimization-install（配套 PR #440 交付）`（运行依赖按上游 requirements.txt 全量补装、方式 A whl / 方式 B 源码编译、cargo 离线手册都在该 skill），装好后回本 skill 阶段 4；**不要在本 skill 里直接 pip install**
+- **pip3 show 查不到 / import 失败 / 原生库缺失（libmindie_workload_shm.so）/ DEPS_MISSING** → 转 `kptools-dplb-optimization-install（配套 PR #440 交付）`（运行依赖按上游 requirements.txt 全量补装、方式 A whl / 方式 B 源码编译、cargo 离线手册都在该 skill），装好后回本 skill 阶段 4；**不要在本 skill 里直接 pip install**——**原生库缺失的空壳 whl 是 install skill ISS-09 已知问题**，本 skill 的原生库检查门禁兜底拦截，转 install 用 `bash build.sh` 重新编译安装
 - **已有旧版本要升级/重装** → 同样转 install（其内置「重装前停旧 coordinator」停服纪律：核对 PID 文件对应进程身份后 kill、等退出再重装）；重装完成后回本 skill，**必须重新走阶段 4/5 并重新执行 register.sh**（注册表是内存态，重启即清空）
 - **解释器一致性**：pip3 装进哪个 Python（系统 / venv / 容器内自编译解释器），start_motor.sh 里的 `python3` 就必须解析到**同一个**——部署前 `which python3` 与 `pip3 show motor`（Location 字段）核对两者指向一致
 - **严禁用 `--help` 做验证**：`python3 -m motor.coordinator.main --help` 不打印帮助，而是直接启动 Coordinator Daemon，占用内置默认端口 1025（推理）/ 1026（管理）/ 1027（观测）；误启动的清理方法见阶段 5 常见问题
