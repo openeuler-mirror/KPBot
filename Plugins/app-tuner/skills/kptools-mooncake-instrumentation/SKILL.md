@@ -2,13 +2,14 @@
 name: kptools-mooncake-instrumentation
 description: >
   给 Mooncake KV 传输层（mooncake-store 客户端 C++ 源码）打点并在目标容器内编译成 .so：
-  探测容器现役版本 → 按版本拉取源码 → 应用 [MKT_TTF]/[MKT_FINE] 传输耗时打点 → 容器内编译 →
+  探测容器现役版本 → 按版本拉取源码 → 应用 [MKT_TTF]/[MKT_FINE]（get 链）与
+  [MKT_PUT]/[MKT_PFINE]（put 链）传输耗时打点 → 容器内编译 →
   产物校验（strings 验 MKT 串 + md5 清单）。当用户提到以下场景时必须使用此技能：
-  mooncake 打点、MKT_TTF、MKT_FINE、mooncake 源码插桩/埋点、给 mooncake 加日志、
-  编译 mooncake .so、mooncake 版本探测/锚定、KV 传输耗时要看 C++ 层细分、
-  mooncake instrumentation。即使用户只说"给 mooncake 加个打点"或"编个带日志的
-  mooncake"，也应使用此技能。只做打点+编译，产物交付给 kptools-mooncake-log-trace
-  部署；.so 替换部署与日志解析出表不归本 skill。
+  mooncake 打点、MKT_TTF、MKT_FINE、MKT_PUT、MKT_PFINE、mooncake 源码插桩/埋点、
+  给 mooncake 加日志、编译 mooncake .so、mooncake 版本探测/锚定、KV 传输耗时要看
+  C++ 层细分（put 存 KV 或 get 拉 KV）、mooncake instrumentation。即使用户只说
+  "给 mooncake 加个打点"或"编个带日志的 mooncake"，也应使用此技能。只做打点+编译，
+  产物交付给 kptools-mooncake-log-trace 部署；.so 替换部署与日志解析出表不归本 skill。
 license: Proprietary
 compatibility: 本地 Windows（写出的 .sh 需去 CR）；SSH 访问目标宿主机（使用调用方已授权的目标连接，认证失败即停止）；目标容器内需 git/cmake/g++ 与 mooncake 构建依赖（由探测步骤确认）；源码从 kvcache-ai/Mooncake（GitHub 失败切 Gitee 镜像）按现役版本拉取
 metadata:
@@ -20,7 +21,9 @@ metadata:
 
 # kptools-mooncake-instrumentation：Mooncake 源码打点 + 编译（C++ 插桩 → .so）
 
-把 Mooncake 客户端 C++ 源码插入 `[MKT_TTF]` / `[MKT_FINE]` 传输耗时打点，在目标容器内编译成 .so 并校验产物。**只做打点+编译两件事，不部署**——产物（已验证打点 .so + md5 清单）交给 `kptools-mooncake-log-trace` 执行容器内替换。
+把 Mooncake 客户端 C++ 源码插入 MKT 传输耗时打点，在目标容器内编译成 .so 并校验产物。**只做打点+编译两件事，不部署**——产物（已验证打点 .so + md5 清单）交给 `kptools-mooncake-log-trace` 执行容器内替换。
+
+打点覆盖两条链：**get 链（D 侧拉 KV）** `[MKT_TTF]` 批次摘要 + `[MKT_FINE]` getmem 内部五相；**put 链（P 侧存 KV）** `[MKT_PUT]` 批次摘要 + `[MKT_PFINE]` BatchPut 内部相（含 master 副本分配等 put 特有阶段）。
 
 与姊妹技能的分工：
 - `kptools-mooncake-log-trace`：接收本 skill 产物，做 .so 备份/替换/md5 回读/重启指引/smoke/回滚
@@ -69,7 +72,11 @@ metadata:
 
 ## 4. 打点（skill 核心资产）
 
-按 [打点规格](references/instrumentation.md) 修改 `mooncake-store/src/real_client.cpp`（MKT_TTF，批次级六相：query/select/getmem/offload/checksum/diskio）与 `mooncake-store/src/client_service.cpp`（MKT_FINE，getmem 内部五相：open/build/alloc/submit/wait）。规格包含字段契约（字段名、单位、顺序必须与既有日志逐字段一致，下游 kptools-tpsplit-log-analysis 按此 grep）和函数级挂点定位方法（按调用链定位而非行号，行号随版本漂移）。
+按 [打点规格](references/instrumentation.md) 修改四处源码（`mooncake-store/src/`）：
+- `real_client.cpp`：`RealClient::BatchGet` 收尾挂 **MKT_TTF**（get 链批次摘要：query/select/getmem/offload/checksum/diskio 六相）；批量 put 入口（`batch_put_from` / `batch_put_from_multi_buffers`，按实际入口，可双挂）挂 **MKT_PUT**（put 链批次摘要）
+- `client_service.cpp`：内存路径批量传输函数挂 **MKT_FINE**（getmem 内部五相 open/build/alloc/submit/wait）；`Client::BatchPut`（put 单一收束点）挂 **MKT_PFINE**（含 StartBatchPut 的 master 副本分配等 put 特有相）
+
+规格包含字段契约（字段名、单位、顺序必须与既有日志逐字段一致，下游 kptools-tpsplit-log-analysis 按此 grep）和函数级挂点定位方法（按调用链定位而非行号，行号随版本漂移）。put 链当前为设计格式串（v0.3.14 源码已核对调用链），首次部署后采集实测样例回填校准。
 
 ## 5. 编译与产物校验
 
@@ -91,6 +98,6 @@ metadata:
 
 - **日志格式是硬契约**：字段名、顺序、单位逐字段对齐 [打点规格](references/instrumentation.md) 中的样例，下游 kptools-tpsplit-log-analysis 的 MKT 解析按此实现，改字段必须双方同步。
 - **版本错配 = 运行时崩**：源码版本与现役 .so 不一致时，编译产物可能 import 失败或运行中崩溃；版本锚定拿不准即停。
-- **打点计时纪律**：单调时钟（steady_clock）、各相只计自身区间、异常提前返回也要打出已耗相位（或标 partial）、`LOG(INFO)` + 固定前缀，详见打点规格第 5 节。
+- **打点计时纪律**：单调时钟（steady_clock）、各相只计自身区间、异常提前返回也要打出已耗相位（或标 partial）、`LOG(INFO)` + 固定前缀，详见打点规格第 7 节。
 - **Windows 写出的 .sh 带 CR**：远端先 `tr -d '\r' < f > f2` 再执行。
 - 多 .so 产物：mooncake 可能拆多个动态库（client + transfer engine 依赖），打点涉及的全量交付，md5 全登记。
