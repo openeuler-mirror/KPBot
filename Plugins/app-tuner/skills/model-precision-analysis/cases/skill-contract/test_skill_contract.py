@@ -20,7 +20,7 @@ SKILL_DIR = CASE_DIR.parents[1]
 REPO = SKILL_DIR.parents[3]
 
 SCAN_FILES = ("SKILL.md", "scripts/analyze_precision.py",
-              "evals/evals.json", "evals/trigger_eval.json")
+              "evals/evals.json", "evals/eval_queries.json")
 PERSONAL_PATH = re.compile(r"/home/[A-Za-z0-9_.-]+|/data/l\d{8}")
 EMPLOYEE_ID = re.compile(r"\b[lw]\d{8}\b")
 
@@ -82,15 +82,20 @@ class TestResources(unittest.TestCase):
             self.assertTrue(e.get("assertions"), "eval %s 缺 assertions" % e["id"])
             self.assertNotIn("expectations", e, "eval %s 仍用旧字段 expectations" % e["id"])
 
-    def test_trigger_eval(self):
-        data = json.loads(read(SKILL_DIR / "evals" / "trigger_eval.json"))
-        self.assertIsInstance(data, list)
-        pos = [q for q in data if q["should_trigger"]]
-        neg = [q for q in data if not q["should_trigger"]]
+    def test_eval_queries(self):
+        data = json.loads(read(SKILL_DIR / "evals" / "eval_queries.json"))
+        self.assertEqual(data.get("skill_name"), SKILL_DIR.name)
+        qs = data["queries"]
+        pos = [q for q in qs if q["should_trigger"]]
+        neg = [q for q in qs if not q["should_trigger"]]
         self.assertGreaterEqual(len(pos), 8)
         self.assertGreaterEqual(len(neg), 8)
-        for q in data:
-            self.assertTrue(q.get("query"))
+        desc = frontmatter()["description"]
+        keys = [k for k in ("精度", "准确率", "回归", "对比", "答案") if k in desc]
+        self.assertTrue(keys, "description 缺少可校验的触发词")
+        for q in pos:
+            self.assertTrue(any(k in q["prompt"] for k in keys),
+                            "正例与 description 触发词无交叉: %r" % q["prompt"])
 
 
 class TestHygiene(unittest.TestCase):
