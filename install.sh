@@ -595,6 +595,8 @@ done
 
 # Ensure helper scripts (e.g. print_logo.sh) are executable
 chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*.sh 2>/dev/null || true
+# Also cover nested helper scripts (e.g. skills/<name>/scripts/tools/*.sh)
+chmod +x "$CONFIG_ROOT/skills/"*"/scripts/"*"/"*.sh 2>/dev/null || true
 
 # Final count (after overlays, skips, and discovery links)
 skill_count=$(ls -d "$CONFIG_ROOT/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')
