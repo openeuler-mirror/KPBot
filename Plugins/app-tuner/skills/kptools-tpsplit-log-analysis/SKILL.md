@@ -42,8 +42,9 @@ metadata:
 （配套 PR，建议同批合入——单独部署本版本期间不具备远端日志采集能力，用户自行
 回传日志亦可）。拆分前后过渡期的行为由两侧 SKILL.md 的交接路径定义：本 skill 收到
 「日志还在远端」的请求时指引采集侧，不代做采集；两 PR 改动不相交，任意先后合入
-无冲突。采集产物契约（一套 4 份的命名/同轮对齐/标记计数口径）以 collector 侧的
-`references/log-set-contract.md` 为权威；本文件的日志格式节与
+无冲突。采集产物契约（一套 4 份的命名/同轮对齐/标记计数口径）以配套 collector
+skill 的 `Plugins/app-tuner/skills/kptools-tpsplit-log-collector/references/log-set-contract.md`
+（PR #398 交付）为权威；本文件的日志格式节与
 `references/ttft_table_contract.md` 仍是解析列语义/守恒式/回填口径的仓内权威。
 
 ## 0. 脚本清单（全部已打包在 skill 内）
