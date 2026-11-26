@@ -8,7 +8,7 @@ metadata:
   domain: vllm_moe_eplb
   activation_mode: active
   side_effect_free: "false"
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # EPLB 优化（vLLM MoE 专家负载均衡）
@@ -34,7 +34,7 @@ EPLB 只在"专家负载确实倾斜、且这个倾斜就是瓶颈"时才有收�
 
 | 分析结论 | 本技能动作 |
 |---|---|
-| `imbalanced` + `action=optimize_dynamic/optimize_with_cap` 且 `handoff.redundant_experts` 非空 | 用 `handoff` 的 `redundant_experts / window_size / step_interval` 执行 `--mode dynamic` |
+| `imbalanced` + `action=optimize_dynamic/optimize_with_cap` 且 `handoff.redundant_experts` 非空 | **先交参数分析**（`vllm-eplb-parameter-analysis`）做整除/显存收敛，拿到 `eplb_parameter_plan.json` 的 N/W/S 后再执行 `--mode dynamic`；方案缺失时停在分析交接，**不要直接写入 handoff 的 N/W/S** |
 | `imbalanced` + `action=free_memory_first`，或 `redundant_experts=null` | 先释放/测量显存，不要开 dynamic |
 | `borderline` | 执行 `--mode force` 做上限探针，测完 `--mode off` 还原 |
 | `balanced` / `inconclusive` | 不动模板，回到分析继续收证据 |
@@ -151,8 +151,9 @@ physical_per_rank= (num_logical_experts + num_redundant_experts) / ep_size
 
 定值顺序：
 
-1. 优先用 `vllm-eplb-analysis` 的 `handoff.redundant_experts`——它按失衡强度给 16/32，并已按显存余量
-   做过 cap；
+1. 把 `vllm-eplb-analysis` 的 `handoff.redundant_experts` 当作**起点而非最终值**：它按失衡强度给
+   16/32，只做过粗粒度 cap；EP=32 时建议 16 直接写入会违反整除约束，必须先用参数分析
+   （`vllm-eplb-parameter-analysis`，产出 `eplb_parameter_plan.json`）或下面的脚本收敛；
 2. 用脚本校验整除、比例和显存是否真的放得下：
    ```bash
    python3 <skill>/scripts/recommend_redundancy.py --logical-experts 384 --ep-size 16 \
