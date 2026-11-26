@@ -27,5 +27,5 @@
 ## 验收矩阵（移植类改动）
 
 - 语义正确性：`DebugString()` 全量比对（**绝不能用 `SerializeAsString()`**——map entry 顺序未指定，不同构造路径合法输出本就不同）
-- A/B：5 轮交替协议（见 `scripts/alternating_ab.sh`），方向一致性 5/5
+- A/B：5 轮交替协议（见 `alternating-ab-protocol` skill 的 scripts/alternating_ab.sh），方向一致性 N/N
 - 形态记录：记录本次负载的形态特征（分配器/尺寸/深度），负结果连同形态入档（见 `negative-results.md`）——同一优化换个形态可能翻正

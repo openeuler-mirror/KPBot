@@ -89,7 +89,9 @@ if sensitive_findings:
     fail(f"sensitive content found ({len(sensitive_findings)} hits)")
 
 # ---- 5. referenced scripts exist ----
-for target in re.findall(r"`?(scripts/[A-Za-z0-9_.-]+\.(?:sh|py))`?", text):
+# 左边界 (?<![\w./-])：跳过 `../<skill>/scripts/...` 等跨 skill 路径的尾段——
+# 它们不是本目录的本地脚本引用（拆分类 PR 在 SKILL.md 写跨 skill 命令时不应误判缺失）
+for target in re.findall(r"(?<![\w./-])(scripts/[A-Za-z0-9_.-]+\.(?:sh|py))", text):
     if not (SKILL_DIR / target).is_file():
         fail(f"script referenced in SKILL.md but missing on disk: {target}")
 

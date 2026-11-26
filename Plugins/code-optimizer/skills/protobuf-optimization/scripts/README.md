@@ -1,16 +1,8 @@
 # scripts/ — protobuf-optimization 配套脚本
 
-三个脚本分别落地 SKILL.md 流程中的验证环节（步骤 4 交替协议 / 步骤 6 SPE 确证 / 交付产物指纹），与构建系统无关，知识出处见 SKILL.md 对应步骤。
+两个脚本分别落地 SKILL.md 流程中的验证环节（步骤 6 SPE 确证 / 交付产物指纹），与构建系统无关，知识出处见 SKILL.md 对应步骤。
 
-## alternating_ab.sh
-
-单变量 A/B 5 轮交替协议（SKILL.md 步骤 4）。
-
-```bash
-bash scripts/alternating_ab.sh -b "taskset -c 288-295 ./bench_base" -o "taskset -c 288-295 ./bench_opt" -r 5
-```
-
-base→opt 交替执行（绝不分组跑），自动输出逐轮 ns、比值序列、轮内方差，并做三级健康度判定（同向性 + 漂移报警）。fail-closed：任一侧命令异常退出（含 warmup）、无可解析的正时间值（ns/us/ms/s 自动换算为 ns）均报错退出并打印原始输出尾部。退出码：0=可下结论，1=噪声区或测量失败，2=参数错误。
+> 交替 A/B 协议（原 alternating_ab.sh，步骤 4）已拆分至 `alternating-ab-protocol` skill（microservice 域），用法与退出码契约见该 skill 的 scripts/README.md。
 
 ## spe_aggr.sh
 
@@ -38,5 +30,4 @@ bash scripts/verify_pb_patch.sh /path/to/二进制 /path/to/pb源码根  # 无 -
 ## 通用纪律
 
 - 只读产物/只跑命令，不修改被测对象；无 third-party 依赖（binutils + awk）
-- 失败语义明确：exit 2 = 参数错误；verify 的 exit N = N 项 FAIL；alternating 的 exit 1 = 噪声区或测量失败（fail-closed）
-- 输出中文，代表值 = 5 轮算术平均，原始值始终随附
+- 失败语义明确：exit 2 = 参数错误；verify 的 exit N = N 项 FAIL
