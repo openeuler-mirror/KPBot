@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-build",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "Ceph 14.2.8 在 openEuler 22.03 上源码编译，rpmbuild 步骤和补丁怎么打",
+      "should_trigger": true,
+      "note": "openEuler 22.03 编译路径（isa-l 升级与补丁）"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "CentOS 7.6 上编译 Ceph 的依赖环境怎么配，cmake3 和 devtoolset 怎么装",
+      "should_trigger": true,
+      "note": "CentOS 7.6 编译路径依赖"
+    },
+    {
+      "id": "CQ-03",
+      "prompt": "Ceph 编译出来的 RPM 产物怎么配置成本地源装回本机验证",
+      "should_trigger": true,
+      "note": "编译产物本地源安装与 ceph -v 验证"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "openEuler 22.03 上直接 yum 装 Ceph 16.2.7，repo 源怎么配置",
+      "should_trigger": false,
+      "note": "routes to 暂无对应 skill（当前仓库无 repo 安装 skill，规划中），不触发本 skill"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "编译完 Ceph 之后用 ceph-ansible 部署一套集群，hosts 和 group_vars 怎么配",
+      "should_trigger": false,
+      "note": "routes to 暂无对应 skill（当前仓库无部署 skill，规划中），不触发本 skill"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "Ceph 集群 OSD 绑核和数据盘 read_ahead 参数怎么调",
+      "should_trigger": false,
+      "note": "routes to ceph-parameter-tuning（集群运行期参数调优）"
+    }
+  ]
+}
