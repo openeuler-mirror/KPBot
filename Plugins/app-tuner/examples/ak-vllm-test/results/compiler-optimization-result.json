@@ -1,0 +1,186 @@
+{
+  "subskill_name": "compiler-optimization",
+  "current_run_id": "ak-vllm-qwen25-20260115",
+  "current_evidence_status": "current",
+  "status": "ok",
+  "confidence": "high",
+  "analysis_timestamp": "2026-01-20T10:00:00+08:00",
+  "subagent_id": "subagent-compiler-optimization-001",
+  "result_path": "output/candidate-skill-results/compiler-optimization-result.json",
+  "evidence_sources": [
+    "optimizations/ak-vllm-qwen25/baseline/benchmark_log.csv",
+    "optimizations/ak-vllm-qwen25/c6_python_ltopgo/benchmark_log.csv",
+    "optimizations/ak-vllm-qwen25/c7_full_chain/benchmark_log.csv",
+    "optimizations/ak-vllm-qwen25/lto_only_control/benchmark_log.csv",
+    "optimizations/ak-vllm-qwen25/profile_collection/profdata_stats.txt",
+    "optimizations/ak-vllm-qwen25/abi_chain_check/"
+  ],
+  "required_evidence": [],
+  "fallback_notes": [
+    "arch_flags：本轮未注入（-mcpu/-march 用默认 ISA），评估结论=非本案例瓶颈路径，留待基线归因显示热点在 dispatch 层后再议",
+    "毕昇安装/Python 构建/源码下载的耗时未单独归档（当时未计时），本档案仅记录已实测的 PGO2 阶段耗时"
+  ],
+
+  "findings": {
+    "provenance": "取材自 SKILL.md 归档的 Ascend910 + vLLM qwen2.5-1.5b 实战案例，全部数值为真实测量记录，非构造数据",
+    "scenario": "vLLM 推理服务（qwen2.5-1.5b），Ascend 910 NPU + 鲲鹏 CPU，核心指标 tok/s；对照实验：纯 ThinLTO vs ThinLTO+PGO vs gcc 预编译基线",
+    "compiler_profile_mode": "thinlto_pgo_full_chain",
+    "recommended_compiler": "BiSheng Enterprise 5.2.0 (clang 19.1.7 + LLD)",
+    "recommended_arch_flags": null,
+    "arch_flag_gap": "未注入 arch flags；收益主要来自 LTO 跨模块内联与 PGO 分支/布局信息，dispatch 路径为甜点",
+
+    "optimization_process": [
+      {
+        "step": 1,
+        "name": "毕昇编译器安装",
+        "detail": "OBS 钉死直链下载 + sha256 校验，写 /etc/profile.d/bisheng.sh"
+      },
+      {
+        "step": 2,
+        "name": "源码下载",
+        "detail": "Python 3.11 / PyTorch / torch_npu 三组件；三级镜像收敛（gitee→gitcode→github）+ 35 个子模块 pinned-SHA 校验（HEAD==gitlink）"
+      },
+      {
+        "step": 3,
+        "name": "Python LTO+PGO 编译（C6）",
+        "detail": "--with-lto --enable-optimizations（CPython 自带基准做 PGO 训练，不依赖业务负载）→ 产出 BiSheng Python → vLLM 基准实测 64.63 → 110.92 tok/s",
+        "measured": {"tok_s": 110.92, "staged_gain_pct": 71.6, "baseline_ref": "gcc 预编译栈"}
+      },
+      {
+        "step": 4,
+        "name": "PyTorch PGO1（插桩构建）",
+        "detail": "-flto=thin -fprofile-generate=<dir>，安装到运行环境（pip --force-reinstall --no-deps）",
+        "verification": "readelf -SW libtorch_cpu.so | grep -c __llvm_prf > 0"
+      },
+      {
+        "step": 5,
+        "name": "torch_npu PGO1（插桩构建）",
+        "detail": "ci/build.sh --python=<ver> --enable_lto --enable_pgo=1；前置门禁：CANN 在位、build.sh 旗标能力探测、PyTorch 必须为毕昇版（.comment 标识复核）",
+        "verification": "插桩段 > 0"
+      },
+      {
+        "step": 6,
+        "name": "真实负载采集（跑负载）",
+        "detail": "vLLM v1 多进程 + qwen2.5-1.5b 真实请求负载：LLVM_PROFILE_FILE=/tmp/profile/default_%m_%p.profraw + OMP_PROC_BIND=false；vLLM v1 需 sitecustomize.py 注入（CANN 子进程会重建环境变量丢失）+ 全进程一次性 SIGINT 刷盘（勿 SIGTERM/SIGKILL）；覆盖 prefill/decode/kv-cache/sampling 全路径",
+        "measured": {"profdata_size_mb": 97, "covered_functions": 242610, "coverage_verdict": "函数覆盖率达标（>30% 阈值），热点函数命中"}
+      },
+      {
+        "step": 7,
+        "name": "PGO2（profile-use 构建）",
+        "detail": "PyTorch: -flto=thin -fprofile-use=<profdata>（502s，libtorch_cpu.so 218MB）；torch_npu: --enable_lto --enable_pgo=2（850s，libtorch_npu.so 108MB）",
+        "verification": "插桩段清零（最终态不应含 __llvm_prf）"
+      },
+      {
+        "step": 8,
+        "name": "一致性与等价校验",
+        "detail": "ABI 三链一致（vLLM-Ascend/PyTorch/torch_npu 均 ABI=1；readelf -p .comment | grep bisheng + torch._C._GLIBCXX_USE_CXX11_ABI）；new_qtensor 导出复核（nm -D，防 ThinLTO internalization）；记录基线/优化产物 hash、构建选项、启动参数"
+      },
+      {
+        "step": 9,
+        "name": "性能验证（A/B）",
+        "detail": "同规格同负载多轮 tok/s 对比：基线 64.63 / C6 110.92 / C7 125.71；对照组 torch_npu 纯 ThinLTO（无 PGO）86.18",
+        "measured": {"baseline_tok_s": 64.63, "c6_tok_s": 110.92, "c7_tok_s": 125.71, "lto_only_control_tok_s": 86.18}
+      }
+    ],
+
+    "gain_chain": [
+      {"stage": "C6 Python LTO+PGO", "baseline_ref": "gcc 预编译基线 (64.63 tok/s)", "tok_s": 110.92, "staged_gain_pct": 71.6, "cumulative_gain_pct": 71.6},
+      {"stage": "C7 +PyTorch/torch_npu ThinLTO+PGO + BiSheng tcmalloc", "baseline_ref": "C6 保留态 (110.92 tok/s)", "tok_s": 125.71, "staged_gain_pct": 13.3, "cumulative_gain_pct": 94.5}
+    ],
+
+    "benchmark_results": {
+      "methodology": "同环境同负载 tok/s 多轮对比；对照组隔离验证 PGO 必要性",
+      "rows": [
+        {"config": "gcc 预编译版（基线）", "tok_s": 64.63, "vs_baseline": "0%"},
+        {"config": "C6: BiSheng Python LTO+PGO", "tok_s": 110.92, "vs_baseline": "+71.6%"},
+        {"config": "C7: 全链 ThinLTO+PGO + tcmalloc", "tok_s": 125.71, "vs_baseline": "+94.5%"},
+        {"config": "对照: torch_npu 纯 ThinLTO（无 PGO）", "tok_s": 86.18, "vs_baseline": "-22.4%（vs PGO 版 125.71）"}
+      ],
+      "profile_match_ab": {"generic_profile_tok_s_gain": "基准", "qwen_real_load_profile_gain": "+1.33%", "conclusion": "profile 与目标负载匹配度直接影响 PGO2 收益"}
+    },
+
+    "pgo_vs_lto_only": {
+      "torch_npu_thinlto_only_tok_s": 86.18,
+      "torch_npu_thinlto_pgo_tok_s": 125.71,
+      "verdict": "NPU 适配层纯 ThinLTO 为负收益（-22.4%）——device launch 路径无 profile 引导时跨模块内联劣于原版；torch_npu 的 PGO 是保命项不是增益项"
+    },
+
+    "abi_chain_check": {
+      "required": "vLLM-Ascend / PyTorch / torch_npu 三者一致（ABI=1）",
+      "method": "readelf -p .comment <so> | grep -i bisheng；python3 -c 'import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)'",
+      "pitfall": "变量名差异坑：PyTorch 读 GLIBCXX_USE_CXX11_ABI（无下划线），torch_npu setup.py 读 _GLIBCXX_USE_CXX11_ABI（有下划线）——显式设置须双变量名同值"
+    },
+
+    "compile_artifacts": [
+      {"component": "PyTorch PGO2", "build_seconds": 502, "artifact": "libtorch_cpu.so", "size_mb": 218},
+      {"component": "torch_npu PGO2", "build_seconds": 850, "artifact": "libtorch_npu.so", "size_mb": 108}
+    ]
+  },
+
+  "candidate_actions": [
+    {
+      "action_id": "AK-01",
+      "title": "BiSheng Python LTO+PGO（全链第一步）",
+      "category": "compiler_upgrade",
+      "priority": "high",
+      "change_mode": "rebuild_required",
+      "requires_root": true,
+      "risk": "low",
+      "mutually_exclusive_with": [],
+      "implementation_plan": ["下载 BiSheng（sha256 校验）", "Python 源码 --with-lto --enable-optimizations（自带基准训练，不依赖业务负载）"],
+      "validation_plan": ["解释器 .comment 毕昇标识", "vLLM tok/s A/B vs gcc 基线"],
+      "rollback": ["恢复原 PATH/python 解释器，pip 栈保全"],
+      "expected_effect": "解释器调度路径（vLLM 调度核心）加速",
+      "expected_gain_metric": "tok/s",
+      "rejection_criteria": ["tok/s 增益 <= 噪声", "功能回归"],
+      "evidence_refs": ["optimizations/ak-vllm-qwen25/c6_python_ltopgo/"],
+      "verification": {"verdict": "verified_gain", "staged_gain_pct": 71.6, "tok_s_before": 64.63, "tok_s_after": 110.92}
+    },
+    {
+      "action_id": "AK-02",
+      "title": "PyTorch + torch_npu ThinLTO+PGO（依赖 AK-01 完成后执行）",
+      "category": "pgo",
+      "priority": "high",
+      "change_mode": "rebuild_required",
+      "requires_root": true,
+      "risk": "medium",
+      "mutually_exclusive_with": ["AK-03"],
+      "implementation_plan": [
+        "PGO1: PyTorch -fprofile-generate / torch_npu --enable_pgo=1，安装插桩版",
+        "vLLM 真实负载采集（sitecustomize.py 注入 + 一次性 SIGINT 全进程刷盘）",
+        "PGO2: -fprofile-use / --enable_pgo=2，profdata 覆盖 242610 函数（97MB）"
+      ],
+      "validation_plan": ["插桩段 PGO1>0 / PGO2=0", "ABI 三链一致", "new_qtensor nm 导出复核", "tok/s A/B（vs C6 保留态）"],
+      "rollback": ["pip 安装回基线 wheels（基线 whl 保全）"],
+      "expected_effect": "host 侧 dispatch 路径（op 转译/launch）加速",
+      "expected_gain_metric": "tok/s",
+      "rejection_criteria": ["vs C6 增益 <= 噪声", "ABI 错配 import 失败", "插桩段异常"],
+      "evidence_refs": ["optimizations/ak-vllm-qwen25/c7_full_chain/", "optimizations/ak-vllm-qwen25/profile_collection/"],
+      "verification": {"verdict": "verified_gain", "staged_gain_pct": 13.3, "tok_s_before": 110.92, "tok_s_after": 125.71}
+    },
+    {
+      "action_id": "AK-03",
+      "title": "torch_npu 纯 ThinLTO（无 PGO）",
+      "category": "lto",
+      "priority": "low",
+      "change_mode": "rebuild_required",
+      "requires_root": true,
+      "risk": "high",
+      "mutually_exclusive_with": ["AK-02"],
+      "implementation_plan": ["--enable_lto 不带 --enable_pgo"],
+      "validation_plan": ["tok/s A/B 对照"],
+      "rollback": ["回装 PGO1 前版本"],
+      "expected_effect": "理论预期正收益——实际证伪",
+      "expected_gain_metric": "tok/s",
+      "rejection_criteria": ["增益 <= 噪声或劣化即拒绝"],
+      "evidence_refs": ["optimizations/ak-vllm-qwen25/lto_only_control/"],
+      "verification": {"verdict": "verified_regression", "tok_s": 86.18, "note": "比 PGO 版低 22.4%——NPU 适配层无 profile 引导的内联为负优化，该对照确立「torch_npu PGO 不可省」结论"}
+    }
+  ],
+
+  "timing": {
+    "pytorch_pgo2_build_seconds": 502,
+    "torch_npu_pgo2_build_seconds": 850,
+    "note": "其余阶段耗时未单独归档"
+  }
+}

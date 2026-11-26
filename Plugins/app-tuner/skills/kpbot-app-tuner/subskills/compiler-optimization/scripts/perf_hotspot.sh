@@ -1,6 +1,7 @@
 #!/bin/bash
 # ARM64应用函数热点分析脚本
-# 用法: perf_hotspot.sh <pid> [duration] [output_dir]
+# 用法: perf_hotspot.sh <pid> [duration] [output_dir] [-k]
+#   -k  保留 perf.data（供火焰图/二次分析；默认仅输出 top50 flat 文本后删除）
 
 set -euo pipefail
 
@@ -10,23 +11,38 @@ if [ "$ARCH" != "aarch64" ]; then
     exit 1
 fi
 
-PID="${1:-}"
-DURATION=${2:-5}
-OUTPUT_DIR=${3:-.}
+KEEP_DATA=false
+ARGS=()
+for a in "$@"; do
+    if [ "$a" = "-k" ]; then
+        KEEP_DATA=true
+    else
+        ARGS+=("$a")
+    fi
+done
+
+PID="${ARGS[0]:-}"
+DURATION=${ARGS[1]:-5}
+OUTPUT_DIR=${ARGS[2]:-.}
 OUTPUT_FILE="${OUTPUT_DIR}/perf_hotspot_${PID}.txt"
 PERF_DATA="${OUTPUT_DIR}/perf_${PID}.data"
 
 cleanup() {
-    rm -f "$PERF_DATA"
-    echo "Interrupted, cleaned up perf data."
+    if [ "$KEEP_DATA" = true ]; then
+        echo "Interrupted. perf data kept: $PERF_DATA"
+    else
+        rm -f "$PERF_DATA"
+        echo "Interrupted, cleaned up perf data."
+    fi
 }
 trap cleanup SIGINT SIGTERM
 
 if [ -z "$PID" ]; then
-    echo "Usage: $0 <pid> [duration] [output_dir]"
+    echo "Usage: $0 <pid> [duration] [output_dir] [-k]"
     echo "  pid       - 目标进程PID"
     echo "  duration  - 采集时长(秒), 默认5"
     echo "  output_dir - 输出目录, 默认当前目录"
+    echo "  -k        - 保留 perf.data（火焰图/二次分析）"
     exit 1
 fi
 
@@ -64,4 +80,8 @@ fi
 
 LINE_COUNT=$(wc -l < "$OUTPUT_FILE")
 echo "Hotspot profile saved to $OUTPUT_FILE ($LINE_COUNT functions)"
-rm -f "$PERF_DATA"
+if [ "$KEEP_DATA" = true ]; then
+    echo "perf.data kept for flame graph / offline analysis: $PERF_DATA"
+else
+    rm -f "$PERF_DATA"
+fi

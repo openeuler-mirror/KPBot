@@ -1166,6 +1166,12 @@ class DynamicWorkflowManager {
         'serialization', 'sql_acceleration', 'network', 'kv_storage',
         'ascend_runtime',
       ],
+      // compiler-optimization 手段类别（源自 subskill references/compiler-playbook.md
+      // 的 category 枚举；steps_covered 声明须覆盖，verify-skill-completeness 校验）
+      'compiler-optimization': [
+        'build_fact_check', 'arch_flags', 'pgo', 'lto', 'compiler_upgrade',
+        'source_patch',
+      ],
     };
     return CATEGORY_MAP[subskillName] || [];
   }

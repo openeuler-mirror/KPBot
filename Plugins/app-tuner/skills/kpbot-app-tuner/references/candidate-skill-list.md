@@ -162,6 +162,7 @@ Step 0 产出的物理拓扑:
 4. **执行顺序硬约束**：`candidate_skill_list` 的执行顺序是硬约束，不允许在 cpu-affinity-optimization 完成前跳到后续 skill。主 agent 必须在每次进入迭代轮次前校验当前 skill 是否为 `candidate_skill_list` 中第一个未完成的 skill，且 cpu-affinity-optimization 必须是第一个被执行的 skill。
 5. **性能库先于 OS 顺序规则**：当 `performance-library-selection` 与 `os-optimization` 同时进入候选列表（evidence_candidate 或 coverage 任一阶段）时，`performance-library-selection` 必须排在 `os-optimization` 之前。原因：tcmalloc/jemalloc 等库替换会改变 malloc 路径并影响 OS 侧大页/GLIBC_TUNABLES 调优的有效性；os-playbook 中 tcmalloc-hugepage 动作的 `precondition_skill=performance-library-selection` 已声明该依赖。主 agent 在生成 `candidate_skill_list` 时必须调整两者相对顺序，并在 `reason` 中注明"performance-library 先于 os"。`dynamic_workflow_manager.js` 的 `set-candidates` 会自动归一化该顺序。
 6. **编译优化排最后规则**：当 `compiler-optimization` 进入候选列表（evidence_candidate 或 coverage 任一阶段）时，它**必须排在候选列表最末位**，晚于其他所有证据候选与覆盖 skill。原因：编译级改造（PGO/LTO、重编译、融合策略调整）通常在应用配置、性能库、加速卡、OS 等运行时手段验证完毕后仍需要继续压测才能完成收益隔离，且重编译动作会重建二进制，干扰其他 skill 的现场 A/B 归因。主 agent 生成或调整 `candidate_skill_list` 时必须把 `compiler-optimization` 移动到列表尾部，并在 `reason` 中注明"compiler 排最后"。即使用户显式指定候选顺序，也按"compiler 最后"原则归一化（用户明确推翻该默认时以用户指令为准并在 trace 记录）。
+   **排最后 ≠ 低价值 ≠ 可跳过**：编译优化在 A+K hostbound 场景历史实测是**单 skill 最大收益来源**（Python LTO+PGO +71.6%，全链 +94.5%）；排最后仅是归因方法学要求。禁止把排最后解读为优先级低/可跳过/可直接拒绝——正收益证据的编译候选必须完整分析并保留（见 `subskills/compiler-optimization/SKILL.md`「候选排除纪律」），高成本候选上浮用户裁决。
 
 主优化 skill 覆盖集合：
 
