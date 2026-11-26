@@ -1,0 +1,67 @@
+{
+  "skill_name": "repo-view-skills",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "RV-01",
+      "prompt": "画一下这个仓库的架构图",
+      "should_trigger": false,
+      "note": "指明图型 → routes to repo-analysis-arch（门面只接笼统请求）"
+    },
+    {
+      "id": "RV-02",
+      "prompt": "分析一下这个代码仓库",
+      "should_trigger": true,
+      "note": "笼统请求 → 门面路由（歧义确认后分派）"
+    },
+    {
+      "id": "RV-03",
+      "prompt": "给我一张图看看这个项目",
+      "should_trigger": true,
+      "note": "笼统请求 → 门面路由"
+    },
+    {
+      "id": "RV-04",
+      "prompt": "这个仓库的整体结构是什么样的",
+      "should_trigger": true,
+      "note": "笼统 → 门面路由 → 大概率 arch"
+    },
+    {
+      "id": "RV-05",
+      "prompt": "画个时序图",
+      "should_trigger": false,
+      "note": "指明图型 → routes to repo-analysis-sequence"
+    },
+    {
+      "id": "RV-06",
+      "prompt": "仓库分几层/几个模块",
+      "should_trigger": false,
+      "note": "指明图型 → routes to repo-analysis-tree"
+    },
+    {
+      "id": "RV-07",
+      "prompt": "数据从哪来到哪去",
+      "should_trigger": false,
+      "note": "指明图型 → routes to repo-analysis-dataflow"
+    },
+    {
+      "id": "RV-08",
+      "prompt": "有哪些进程线程怎么通信",
+      "should_trigger": false,
+      "note": "指明图型 → routes to repo-analysis-process"
+    },
+    {
+      "id": "RV-09",
+      "prompt": "类继承关系",
+      "should_trigger": false,
+      "note": "指明图型 → routes to repo-analysis-class"
+    },
+    {
+      "id": "RV-10",
+      "prompt": "采集进程的线程绑核情况",
+      "should_trigger": false,
+      "note": "routes to kptools-thread-affinity-collector"
+    }
+  ]
+}
