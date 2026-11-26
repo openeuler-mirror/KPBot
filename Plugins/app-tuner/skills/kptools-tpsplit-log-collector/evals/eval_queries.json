@@ -1,5 +1,5 @@
 {
-  "skill_name": "kpbot-tpsplit-log-collector",
+  "skill_name": "kptools-tpsplit-log-collector",
   "queries": [
     {"id": "AQ-01", "prompt": "帮我把远端的 prefill/decode/load_balance 日志采集下载下来", "should_trigger": true, "note": "核心场景：采集日志"},
     {"id": "AQ-02", "prompt": "这轮压测结束了，把 105/106/107 三台机器 /data 下的打点日志拉回本地，注意两台 P 都有 prefill.log 别互相覆盖", "should_trigger": true, "note": "多 P 同名防覆盖"},

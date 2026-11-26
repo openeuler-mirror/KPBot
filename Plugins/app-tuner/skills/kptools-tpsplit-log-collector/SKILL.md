@@ -1,5 +1,5 @@
 ---
-name: kpbot-tpsplit-log-collector
+name: kptools-tpsplit-log-collector
 description: >
   从远端 P/D/proxy/压测端宿主机定位、校验、暂存并回传 TTFT 打点日志（一次压测一套
   4 份：P prefill.log（多 P 每台一份）/ D decode.log / proxy load_balance.log /
@@ -27,7 +27,7 @@ metadata:
   version: "0.1.0"
 ---
 
-# kpbot-tpsplit-log-collector：TTFT 打点日志采集（定位/校验/回传）
+# kptools-tpsplit-log-collector：TTFT 打点日志采集（定位/校验/回传）
 
 打点已部署且跑过压测时，本 skill 只做一件事：**把一次压测的一套 4 份日志从远端
 宿主机定位、校验、暂存并回传到本地同一目录**，交 kptools-tpsplit-log-analysis
