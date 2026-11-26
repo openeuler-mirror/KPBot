@@ -1,0 +1,40 @@
+{
+  "skill_name": "kptools-pypto-monitor",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "PM-01",
+      "prompt": "给 PyPTO P 节点加耗时打点",
+      "should_trigger": true
+    },
+    {
+      "id": "PM-02",
+      "prompt": "PD_DIAG 日志怎么开",
+      "should_trigger": true
+    },
+    {
+      "id": "PM-03",
+      "prompt": "分析 prefill 各阶段耗时",
+      "should_trigger": true
+    },
+    {
+      "id": "PM-04",
+      "prompt": "在 Ascend 上部署 PyPTO",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-deploy"
+    },
+    {
+      "id": "PM-05",
+      "prompt": "从 PD 日志渲染 HTML",
+      "should_trigger": false,
+      "note": "routes to kptools-pypto-monitor-viz"
+    },
+    {
+      "id": "PM-06",
+      "prompt": "看线程绑核",
+      "should_trigger": false,
+      "note": "routes to kptools-thread-affinity-collector"
+    }
+  ]
+}
