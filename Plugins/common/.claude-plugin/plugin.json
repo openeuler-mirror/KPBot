@@ -1,0 +1,8 @@
+{
+  "name": "common",
+  "version": "1.0.0",
+  "description": "KPBot 公共技能",
+  "author": {"name": "Kunpeng Acceleration Team"},
+  "license": "MulanPSL-2.0",
+  "platforms": ["codex"]
+}

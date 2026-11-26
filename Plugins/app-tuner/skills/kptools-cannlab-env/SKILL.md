@@ -9,6 +9,8 @@ description: >
   6/7/8/10）、rsync --delete 同步纪律与文件生命周期、长任务 nohup 轮询模式、
   NPU 环境配方（set_env/构建 python/pyfix312 禁令）、以及引号被吞/pyfix312
   边界/pip 陷阱/rsync 受害模式/共享内存与 AICPU 目录缺失等实战踩坑。
+  用户指定 Chrome 标签页、CANNLab「我的环境」或 CodeArts WebIDE 时，使用 kpbot-cannlab-webide。
+  仅提到 CANNLab/NPU 且入口不明时，先确认连接方式。选用 SSH、scp 或 remote_tool.sh 后，
   当用户需要在 cannlab/分设环境上远程执行代码、调试代码、同步/上传文件、
   上板、真机验证、拉回结果、NPU Pod 开机关机、排查远程连接或同步问题、
   问 remote_tool.sh 怎么用、NPU 上跑测试或构建、CPU 容器上查文件时触发。

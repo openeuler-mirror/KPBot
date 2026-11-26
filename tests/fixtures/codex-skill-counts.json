@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "de731ebc plus kpbot-pr-maintainer",
-  "upstream_commit": "de731ebc",
-  "manifest_skills": 345,
-  "installed_skill_documents": 391,
-  "source_skill_documents_before_exclusions": 454
+  "measured_source_commit": "e2a0de84 plus kpbot-cannlab-webide (Plugins tree 27e5ab95)",
+  "upstream_commit": "e2a0de84",
+  "manifest_skills": 354,
+  "installed_skill_documents": 400,
+  "source_skill_documents_before_exclusions": 463
 }
