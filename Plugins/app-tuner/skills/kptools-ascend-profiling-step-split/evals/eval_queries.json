@@ -1,0 +1,72 @@
+{
+  "skill_name": "kptools-ascend-profiling-step-split",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "EQ-01",
+      "prompt": "这份 trace 没有 ProfilerStep，也没有 STEP_TIME，帮我切出 step 边界",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-02",
+      "prompt": "现有 detect_steps 切得不准，用深度切分再算一遍，告诉我每段的可信度",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-03",
+      "prompt": "只有 trace_view.json，按 decode 迭代粒度重新切 step",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-04",
+      "prompt": "用 STEP_TIME 当基准，标定一下无标识切分算法的 F1 和误差",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-05",
+      "prompt": "这条 trace 的 step 边界总是切错，帮我用多信号投票重切并给置信度",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-06",
+      "prompt": "trace 里没有任何 step 标记，只有设备 kernel 和 sync，能切吗",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-07",
+      "prompt": "把 profiler 粗 step 换成迭代粒度，看看一条 trace 里有多少个 decode 迭代",
+      "should_trigger": true
+    },
+    {
+      "id": "EQ-08",
+      "prompt": "分析这份无栈 trace 的 P1/P2/P3 和 Free 去向",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis-nostack"
+    },
+    {
+      "id": "EQ-09",
+      "prompt": "分析这份带 python_function 的有栈 trace",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-analysis"
+    },
+    {
+      "id": "EQ-10",
+      "prompt": "对比优化前后两份 profiling 的步耗时和瓶颈变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-compare-hub"
+    },
+    {
+      "id": "EQ-11",
+      "prompt": "这两份 trace 的 stream 并发结构有什么变化",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-stream"
+    },
+    {
+      "id": "EQ-12",
+      "prompt": "帮我判断这份 trace 里哪些 step 是 prefill、哪些是 decode",
+      "should_trigger": false,
+      "note": "routes to kptools-ascend-profiling-prefill-decode（同批 PR 交付）"
+    }
+  ]
+}
