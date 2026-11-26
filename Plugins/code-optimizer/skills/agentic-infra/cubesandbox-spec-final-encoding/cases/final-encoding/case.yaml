@@ -1,0 +1,23 @@
+name: spec-final-encoding
+skill: cubesandbox-spec-final-encoding
+tier: A
+entrypoint: ["python3", "run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: matched_records
+    expect: 4
+  - type: json_field
+    file: results/result.json
+    field: baseline_payload_encodes
+    expect: 6
+  - type: json_field
+    file: results/result.json
+    field: candidate_payload_encodes
+    expect: 4
