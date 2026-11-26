@@ -110,7 +110,7 @@ EPLB 的收益来自冗余专家副本，而副本占的是 **KV cache 的空间
   "kv_cache_usage_pct": 88.0,
   "preemptions_delta": 0,
   "free_mem_gib": 3.0,
-  "bytes_per_expert_gib": 2.4,
+  "bytes_per_extra_expert_per_rank_gib": 2.4,
   "ep_size": 16
 }
 ```

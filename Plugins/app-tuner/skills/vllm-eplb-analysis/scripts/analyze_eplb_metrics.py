@@ -200,25 +200,52 @@ def memory_block(evidence, prom, prom_prev=None):
             delta = sum(cur.values()) - sum(prev.values())
 
     free_gib = evidence.get("free_mem_gib")
-    per_expert = evidence.get("bytes_per_expert_gib")
+    # per-slot cost = cost of one extra expert slot on EVERY EP rank (DeepSeekV3 ~2.4 GiB).
+    # Accept the legacy name but the value is per-slot, NOT one expert's weight.
+    per_slot = evidence.get("bytes_per_extra_expert_per_rank_gib")
+    legacy_name = False
+    if per_slot is None:
+        per_slot = evidence.get("bytes_per_expert_gib")
+        legacy_name = per_slot is not None
     ep = evidence.get("ep_size")
+    # A single expert weight is ~44 MB; a per-rank slot is ~2.4 GiB. A value this small
+    # almost certainly means the caller passed per-expert bytes, which would inflate
+    # `affordable` by ~ep_size**2 -> OOM. Refuse to trust it.
+    suspicious = per_slot is not None and 0 < per_slot < 0.2
     affordable = None
-    if free_gib is not None and per_expert and per_expert > 0:
-        per_rank = int(free_gib // per_expert)
+    if free_gib is not None and per_slot and per_slot > 0 and not suspicious:
+        per_rank = int(free_gib // per_slot)
         affordable = per_rank * int(ep) if ep else per_rank
+
+    notes = []
+    if legacy_name:
+        notes.append("使用了旧字段 bytes_per_expert_gib（按 per-slot 语义解析）；"
+                     "建议改用 bytes_per_extra_expert_per_rank_gib")
+    if suspicious:
+        notes.append("bytes_per_...=%r 看起来像单个专家权重（~44MB），不是每 rank 槽位成本"
+                     "（DeepSeekV3 ~2.4GiB）；已忽略该值，请确认 per-slot 成本" % per_slot)
 
     block = {
         "kv_cache_usage_pct": round(max(kv), 1) if kv else None,
         "preemptions_delta": delta,
         "preemptions_total": total,
         "free_mem_gib": free_gib,
-        "bytes_per_expert_gib": per_expert,
+        "bytes_per_extra_expert_per_rank_gib": per_slot,
         "affordable_redundant": affordable,
-        "note": None,
+        "note": "；".join(notes) if notes else None,
     }
     if delta is None and total not in (None, 0):
         block["note"] = ("只拿到累计换出次数（%d），无法判断当前是否仍在换出；"
                          "请用两份 /metrics 快照（--prometheus 与 --prometheus-prev）做差分" % int(total))
+
+    if suspicious:
+        # Trust only definite headroom failures; otherwise the budget is unknown.
+        if ((kv and max(kv) >= 95) or (delta is not None and delta > 0) or
+                (free_gib is not None and free_gib <= 0.5)):
+            block["verdict"] = "no_headroom"
+        else:
+            block["verdict"] = "unknown"
+        return block
 
     if not kv and delta is None and free_gib is None:
         block["verdict"] = "unknown"
@@ -464,7 +491,7 @@ def recommend(action, indicators, evidence):
         notes.append("按显存余量把冗余专家从 %d 压到 %d；每减少一个副本都会削弱削峰能力，"
                      "若收益不足，优先释放显存而不是继续加副本。" % (suggested, extra))
     if pending_memory:
-        notes.append("显存余量偏紧但缺少数值证据：先测 free_mem_gib 与 bytes_per_expert_gib，"
+        notes.append("显存余量偏紧但缺少数值证据：先测 free_mem_gib 与 bytes_per_extra_expert_per_rank_gib，"
                      "按 affordable_redundant 确定冗余专家数（必须是 ep_size 的整数倍），不要直接套用 16/32。")
     if mem.get("verdict") in ("unknown", None):
         notes.append("当前没有显存证据：上线前必须先确认 KV 占用与剩余显存，否则可能 OOM 或频繁换出。")

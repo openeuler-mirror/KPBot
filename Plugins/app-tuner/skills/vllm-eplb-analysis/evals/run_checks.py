@@ -175,6 +175,20 @@ def main():
               "显存" in d["recommendation"]["next"],
               d["recommendation"]["next"][-60:])
 
+        # --- P2: per-slot memory field name / suspicious magnitude ---
+        ev = {"balancedness": [0.78, 0.80, 0.79, 0.77], "rank_waiting": [20, 3, 4, 3, 3, 4, 3, 3],
+              "rank_running": [8] * 8, "rank_ttft_ms": [2200, 900, 920, 890, 910, 900, 905, 915],
+              "kv_cache_usage_pct": 43.0, "free_mem_gib": 6, "ep_size": 16,
+              "bytes_per_extra_expert_per_rank_gib": 0.043}
+        p = os.path.join(tmp, "tiny_perslot.json")
+        json.dump(ev, open(p, "w"))
+        r, d = analyse(["--evidence", p])
+        mem = d["indicators"]["memory"]
+        check("per-slot 成本量级可疑 -> unknown 且忽略（防 OOM 误判）",
+              mem["verdict"] == "unknown" and mem["affordable_redundant"] is None
+              and "槽位" in (mem.get("note") or ""),
+              json.dumps(mem, ensure_ascii=False)[:160])
+
         # --- P1: handoff is self-contained (no external skill/script) ---
         r, d = analyse(["--evidence", os.path.join(FIX, "imbalanced.json")])
         ho = d["recommendation"]["handoff"]
