@@ -26,15 +26,15 @@ metadata:
 
 # kptools-dplb-optimization-install：MindIE Motor 安装（whl 直装 / 源码编译）
 
-安装 MindIE Motor 软件本体：方式 A（用户自备 whl 直装）或方式 B（拉源码用官方入口 `bash build.sh` 编译再安装），含运行依赖全量补装、空壳 whl 拦截、cargo 离线安装与重装停服纪律。**本 skill 的交付终点 = 源码目录之外 `import motor` 成功 + `pip3 show motor` 可查**；配置三件套、启动/注册、LB 策略调整由 `kptools-dplb-optimization（配套 PR #443 交付）` 承接（装好后转它续接，或由 deploy 主流程在安装前置确认后调用本 skill）。
+安装 MindIE Motor 软件本体：方式 A（用户自备 whl 直装）或方式 B（拉源码用官方入口 `bash build.sh` 编译再安装），含运行依赖全量补装、空壳 whl 拦截、cargo 离线安装与重装停服纪律。**本 skill 的交付终点 = 源码目录之外 `import motor` 成功 + `pip3 show motor` 可查**；配置三件套、启动/注册、LB 策略调整由 `kptools-dplb-optimization`（配套 PR #443 交付） 承接（装好后转它续接，或由 deploy 主流程在安装前置确认后调用本 skill）。
 
 ## 快速决策
 
 1. 用户给了 whl 包 → 走方式 A（直装 + 空壳拦截）
 2. 用户要源码编译 / 内网无外网 → 走方式 B（bash build.sh，严禁 `pip3 wheel .`），无 cargo 时按 cargo 离线手册或预编译产物直通
-3. 升级/重装 → **先停旧 coordinator**（停服纪律见下）再装；装好后提醒用户：必须回 `kptools-dplb-optimization（配套 PR #443 交付）` 重新生成配置并重新执行 register.sh（注册表是内存态，重启即清空）
-4. 用户要的是配置三件套 / 启动 / 注册 / 改 LB 策略 → 转 `kptools-dplb-optimization（配套 PR #443 交付）`（其阶段 3 做安装前置确认，本 skill 只管软件本体）
-5. 用户只描述负载不均衡现象 → 先确认意图：要部署负载均衡组件走 `kptools-dplb-optimization（配套 PR #443 交付）`（主入口，未装时它转本 skill），只要采集/分析转 `kptools-dplb-profiler`
+3. 升级/重装 → **先停旧 coordinator**（停服纪律见下）再装；装好后提醒用户：必须回 `kptools-dplb-optimization`（配套 PR #443 交付） 重新生成配置并重新执行 register.sh（注册表是内存态，重启即清空）
+4. 用户要的是配置三件套 / 启动 / 注册 / 改 LB 策略 → 转 `kptools-dplb-optimization`（配套 PR #443 交付）（其阶段 3 做安装前置确认，本 skill 只管软件本体）
+5. 用户只描述负载不均衡现象 → 先确认意图：要部署负载均衡组件走 `kptools-dplb-optimization`（配套 PR #443 交付）（主入口，未装时它转本 skill），只要采集/分析转 `kptools-dplb-profiler`
 
 ## 阶段 1：环境检查（SSH 连通后先做，再动手装）
 
@@ -67,7 +67,7 @@ curl -m 5 -sI https://gitcode.com >/dev/null && echo OK || echo UNREACHABLE   # 
 
 ## 阶段 2：安装（按用户选择的方式二选一）
 
-> **部署形态说明（务必让用户知晓）**：MindIE Motor 采用**独立部署 coordinator** 的方式——它只做负载均衡（请求分发），**不管理 vLLM/MindIE 实例的拉起与生命周期**。后端实例由用户原有方式启动和运维，Motor 通过 register.sh 动态注册感知它们。用户如果以为装了 Motor 会帮忙拉起推理实例，要主动纠正这个预期（配置与注册流程见 `kptools-dplb-optimization（配套 PR #443 交付）`）。
+> **部署形态说明（务必让用户知晓）**：MindIE Motor 采用**独立部署 coordinator** 的方式——它只做负载均衡（请求分发），**不管理 vLLM/MindIE 实例的拉起与生命周期**。后端实例由用户原有方式启动和运维，Motor 通过 register.sh 动态注册感知它们。用户如果以为装了 Motor 会帮忙拉起推理实例，要主动纠正这个预期（配置与注册流程见 `kptools-dplb-optimization`（配套 PR #443 交付））。
 
 ### 依赖清单（分级）
 
@@ -181,21 +181,21 @@ pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requir
 - **流程中任何一步因无法访问外网而失败**（clone 超时、pip 下载依赖失败等），都要立即反馈用户并说明是网络原因，附上错误日志关键行，然后让用户决定后续方案（换内网源/上传离线包/换机器），不要静默重试或自作主张改方案
 - 源码编译出的 whl 同样**不带依赖声明**（`install_requires=[]`），依赖按源码树自带的 `requirements.txt` 安装：**编译前先 `pip3 install -r requirements.txt`**（proto 生成等构建步骤与运行时都依赖它；离线按上游 standalone.md 附录 A 全量下载后上传安装），安装后按方式 A 第 2、5 步的探测/验证命令复核
 - **升级/重装前先停旧 coordinator（先核对进程身份，匹配才 kill，等退出再重装）**：PID 文件 `./log/motor_coordinator.pid` 里的 PID 可能已退出并被系统复用，直接 `kill "$(cat ./log/motor_coordinator.pid)"` 会误停无关服务。正确顺序：① 读出 PID 后核对 `ps -p <PID> -o args=`，命令行确为 `python3 -m motor.coordinator.main`（且归属本部署实例）才 `kill <PID>`；不匹配则不要 kill，改用 `ps -ef | grep motor.coordinator.main` 找到真实进程再处理；② kill 后等待该进程真正退出再继续重装（`while kill -0 <PID> 2>/dev/null; do sleep 1; done`，长时间不退则人工介入）。`--force-reinstall` 只覆盖磁盘文件，**不会重启已运行的进程**：旧代码继续服务、端口仍被占用，装完再启动会报端口冲突，用户看到的"升级没生效"多半是旧进程没停
-- **coordinator 重启后已注册实例清空**（注册表是内存态）：每次 start_motor.sh 之后都要重新执行 register.sh，否则推理请求报 `No instance available`——重启不是幂等的，"注册"必须跟在每次启动后面（配置与注册流程见 `kptools-dplb-optimization（配套 PR #443 交付）`）
+- **coordinator 重启后已注册实例清空**（注册表是内存态）：每次 start_motor.sh 之后都要重新执行 register.sh，否则推理请求报 `No instance available`——重启不是幂等的，"注册"必须跟在每次启动后面（配置与注册流程见 `kptools-dplb-optimization`（配套 PR #443 交付））
 - **解释器一致性**：pip3 装进哪个 Python（系统 / venv / 容器内自编译解释器），start_motor.sh 里的 `python3` 就必须解析到**同一个**——venv 安装 + 系统 python3 启动会 `ModuleNotFoundError: motor`；安装后 `which python3` 与 `pip3 show motor`（Location 字段）核对两者指向一致
 
-> **严禁用 `--help` 做验证**：`python3 -m motor.coordinator.main --help` 不会打印帮助，而是打印 banner 后**直接启动 Coordinator Daemon**，占用内置默认端口 1025（推理）/ 1026（管理）/ 1027（观测）。验证安装只允许 `pip3 show motor` + `python3 -c "import motor; print(motor.__file__)"`；验证服务可用要等 `kptools-dplb-optimization（配套 PR #443 交付）` 生成 `user_config.json` 并启动后，探活管理端口的 `/liveness`、`/readiness`。若已误启动：`ps -ef | grep motor.coordinator.main` 找到 PID 后 `kill <PID>` 清理，**不要用 `pkill -f motor.coordinator.main`**（会误杀命令行中含该模式的当前 shell）
+> **严禁用 `--help` 做验证**：`python3 -m motor.coordinator.main --help` 不会打印帮助，而是打印 banner 后**直接启动 Coordinator Daemon**，占用内置默认端口 1025（推理）/ 1026（管理）/ 1027（观测）。验证安装只允许 `pip3 show motor` + `python3 -c "import motor; print(motor.__file__)"`；验证服务可用要等 `kptools-dplb-optimization`（配套 PR #443 交付） 生成 `user_config.json` 并启动后，探活管理端口的 `/liveness`、`/readiness`。若已误启动：`ps -ef | grep motor.coordinator.main` 找到 PID 后 `kill <PID>` 清理，**不要用 `pkill -f motor.coordinator.main`**（会误杀命令行中含该模式的当前 shell）
 
 ## 阶段 3：安装记录与交接
 
 1. 产出《安装记录 `.md`》（用户指定目录或安装路径），内容：机器、安装方式 A/B、motor 版本（`pip3 show motor` 输出）、安装路径（site-packages Location）、依赖补装清单（requirements.txt 是否全量过）、验证结果（import motor 路径 + DEPS 探测）、容器化部署标注易失性（容器重建即丢，持久化要么固化进镜像，要么保留离线安装包与本手册随时重建）
-2. **交接**：装好后转 `kptools-dplb-optimization（配套 PR #443 交付）` 续接（配置三件套 → 启动 → 注册 → 部署指南）；若本 skill 是被 deploy 主流程调用（deploy 阶段 3 移交），则直接返回其阶段 4 继续。升级/重装场景提醒：必须重新执行 register.sh（注册表是内存态）
+2. **交接**：装好后转 `kptools-dplb-optimization`（配套 PR #443 交付） 续接（配置三件套 → 启动 → 注册 → 部署指南）；若本 skill 是被 deploy 主流程调用（deploy 阶段 3 移交），则直接返回其阶段 4 继续。升级/重装场景提醒：必须重新执行 register.sh（注册表是内存态）
 
 ## 边界与配套拆分说明
 
-- **本 skill 只做软件安装交付面**（whl 直装/源码编译/依赖补装/空壳拦截/cargo 离线/重装停服纪律）；`kptools-dplb-optimization（配套 PR #443 交付）` 是部署主入口，在其阶段 3 做安装前置确认后移交本 skill，装好后回其阶段 4。两 PR 建议同批合入，避免过渡期安装触发面悬空。
-- 本 skill 由原 `kptools-dplb-optimization（配套 PR #443 交付）` v1.0.0 的「安装+部署一体」形态拆分而来：阶段 3 安装（依赖清单、方式 A/B、cargo 离线手册）随拆分迁入本 skill；安装后的配置/启动/注册/策略调整仍在原 skill（其名不变）。
-- 相邻边界：负载不均衡现象的量化评估归 `kptools-dplb-profiler` + `kptools-dplb-report`；端到端「部署负载均衡」诉求以 `kptools-dplb-optimization（配套 PR #443 交付）` 为主入口（它转本 skill 做安装），纯安装/编译/升级诉求直接进本 skill。
+- **本 skill 只做软件安装交付面**（whl 直装/源码编译/依赖补装/空壳拦截/cargo 离线/重装停服纪律）；`kptools-dplb-optimization`（配套 PR #443 交付） 是部署主入口，在其阶段 3 做安装前置确认后移交本 skill，装好后回其阶段 4。两 PR 建议同批合入，避免过渡期安装触发面悬空。
+- 本 skill 由原 `kptools-dplb-optimization`（配套 PR #443 交付） v1.0.0 的「安装+部署一体」形态拆分而来：阶段 3 安装（依赖清单、方式 A/B、cargo 离线手册）随拆分迁入本 skill；安装后的配置/启动/注册/策略调整仍在原 skill（其名不变）。
+- 相邻边界：负载不均衡现象的量化评估归 `kptools-dplb-profiler` + `kptools-dplb-report`；端到端「部署负载均衡」诉求以 `kptools-dplb-optimization`（配套 PR #443 交付） 为主入口（它转本 skill 做安装），纯安装/编译/升级诉求直接进本 skill。
 
 ## 文件
 
