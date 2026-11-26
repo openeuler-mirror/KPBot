@@ -1,0 +1,65 @@
+{
+ "skill_name": "mariadb-architecture",
+ "version": "1.0.0",
+ "notes": "架构知识库评估；不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "MariaDB 的一条 SELECT 从收到网络包到返回结果经过哪些层？和 MySQL 的分层有什么本质区别？不要执行命令。",
+   "expected_output": "连接层（线程模型：one-thread-per-connection 或 pool-of-threads）接收包 → Server 层解析（解析器/预处理）→ 优化器（基于成本）→ 执行器 → 存储引擎 handler 接口 → InnoDB（buffer pool → 行返回）。与 MySQL 的核心区别在 Server 层实现与存储引擎组合（Aria、ColumnStore、MyRocks 等自带引擎）、部分新特性/参数名差异；handler 抽象与 MySQL 同源但各自演进。",
+   "files": [
+    "references/query-execution-flow.md",
+    "references/overview-and-source-map.md"
+   ],
+   "expectations": [
+    "列出连接→解析→优化→执行→handler→引擎的分层链路",
+    "说明线程模型两种形态",
+    "指出与 MySQL 的同源与差异",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "InnoDB 的 redo 和 binlog 是怎么保证一致的？组提交什么时候起作用？不要执行命令。",
+   "expected_output": "两阶段提交：事务提交时先写 redo prepare，再写 binlog，最后 redo commit——binlog 与 redo 以内部 XA 绑定，崩溃恢复按两阶段状态决定提交/回滚。组提交在多个事务并发提交时合并 fsync（binlog group commit / innodb_flush_log_at_trx_commit 与 sync_binlog 的配合），一次刷盘落多个事务，降低提交延迟；fsync 次数是写场景的关键瓶颈项。",
+   "files": [
+    "references/innodb-storage-internals.md"
+   ],
+   "expectations": [
+    "说明 redo/binlog 两阶段提交流程",
+    "解释崩溃恢复如何判定",
+    "说明组提交机制与参数",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "buffer pool 满了会怎样？脏页什么时候刷？读写各走什么路径？不要执行命令。",
+   "expected_output": "读：先查 buffer pool（page hash），未命中走读盘（同步/预读）加载；写：修改 buffer pool 页并标脏（redo 保证持久性，页本身延迟刷盘）。脏页由后台刷脏（page cleaner 线程、自适应刷脏按 redo 增速/脏页比）与 checkpoint 推进淘汰；buffer pool 不足时 GetFree 也会触发刷脏换页。脏页积压时写入会被拖慢（innodb_max_dirty_pages_pct、io_capacity 系列参数）。",
+   "files": [
+    "references/innodb-storage-internals.md"
+   ],
+   "expectations": [
+    "区分读路径（命中/未命中）与写路径（标脏+redo）",
+    "说明后台刷脏与淘汰触发",
+    "点名关键参数",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "MariaDB 的行锁和表级 MDL 锁分别在哪实现？rw_lock 和 lock_sys 是什么角色？不要执行命令。",
+   "expected_output": "行锁在 InnoDB 层（记录锁/间隙锁/插入意向锁， trx/lock 目录的 lock_sys 统一管理；10.11 不再有 10.3 的 lock_word 位图字段）；表级 MDL（metadata lock）在 Server 层保护表结构一致性。rw_lock 是 InnoDB 读写锁原语（10.11 已重写为 std::atomic 实现），srw_lock/sux_lock 是 InnoDB 的轻量 latch（futex 封装；Server 层另有 pthread mutex/THR_LOCK 等原语）。等待高时对应不同的证据形态（lock_sys 锁、MDL 等待、futex）。",
+   "files": [
+    "references/innodb-storage-internals.md",
+    "references/process-threads-and-config-map.md"
+   ],
+   "expectations": [
+    "区分 InnoDB 行锁与 Server 层 MDL",
+    "说明 lock_sys 的统一管理角色",
+    "指出 10.11 rw_lock 的 atomic 重写",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
