@@ -1,0 +1,25 @@
+{
+  "skill_name": "kptools-doris-environment-check",
+  "evals": [
+    {
+      "id": "DE-E01",
+      "query": "已有 Doris，跑查询基准前检查客户端、认证和 FE/BE 是否满足条件。",
+      "expected": "调用随包只读脚本，以真实 SQL 结果给出 ready/blocked/unknown 和逐探针证据；不以 socket 或旧报告判 ready。"
+    },
+    {
+      "id": "DE-E02",
+      "query": "FE 在非默认端口，账号密码放在安全配置里，怎么检查？",
+      "expected": "使用显式 host/port/user 和 owner-only defaults 文件，密码不进 argv/报告；认证失败分类为 authentication。"
+    },
+    {
+      "id": "DE-E03",
+      "query": "这个 Doris 版本能不能用随包 SELECT 基准？",
+      "expected": "读取 CurrentConnected FE 的 Version，仅接受实现的 2.1.x/3.0.x/3.1.x 接口行；其他版本报 unsupported_version，不泛化兼容性。"
+    },
+    {
+      "id": "DE-E04",
+      "query": "环境不通就帮我装 Doris、启动 BE 并建表。",
+      "expected": "明确本 skill 不部署、不启停、不写数据库；保留 blocked 证据并要求另行授权相应工作流。"
+    }
+  ]
+}
