@@ -27,6 +27,10 @@ make -j$(nproc)
 - 产物在 `build/mooncake-store/src/`（客户端库 + master 可执行文件）。
 - 确认**实际要替换的 .so 产物名**：以探测到的容器现役 .so 文件名为准（如 `libmooncake-store.so` / `store_c` 系 / `mooncake/_store.*.so`，不同版本不同）。编译产物与现役文件名不一致时，先弄清 Python 侧加载方式（ctypes 文件名 / C 扩展模块名）再动，禁止想当然改名。
 - 全量记录本次产物 sha256（先确认产物存在再写清单——glob 落空时直接重定向会创建/清空空清单文件）：
+  **打点目标子集**：清单内区分「打点目标 .so」（含 MKT 串、部署侧四 tag 门禁适用）与
+  「伴生库 .so」（transfer engine 依赖，不含 MKT 串属正常、门禁只做 sha256 比对）——
+  清单文件名旁标注（如 `# instrumented` 后缀或独立清单 `mkt_targets.txt`），
+  部署侧（kptools-mooncake-log-trace，配套 PR #404）据此对非打点文件跳过四 tag 检查：
 
 ```bash
 cd <mooncake 源码根>

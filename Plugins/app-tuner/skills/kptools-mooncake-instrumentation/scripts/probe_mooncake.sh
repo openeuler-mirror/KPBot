@@ -19,11 +19,12 @@ for mod in mooncake.store mooncake.engine mooncake; do
     || echo "$mod: import failed"
 done
 
+# **一次 find 全根扫描、缓存结果复用**（原 4 趟 find 每趟 10-60s，无缓存则总耗 1-4min，
+# 且容器 IO 慢时可能挂起；合并为一次并加 30s 超时兜底）
+ALL_SO_CACHE=$(timeout 30 find / \( -name "*mooncake*.so*" -o -name "libstore_c*.so*" \) -not -path "/proc/*" -not -path "/sys/*" -printf '%p -> %l\n' 2>/dev/null | sed 's/ -> $//' || echo "FIND_TIMEOUT_OR_ERROR")
+
 section "3. mooncake 相关 .so 文件（含软链指向）"
-# -printf '%p -> %l'：软链输出 "路径 -> 目标"，普通文件经 sed 去掉尾部 " -> "；
-# 现役 .so 常见多级软链形态（libmooncake-store.so -> libmooncake-store.so.1.2.3），
-# 缺指向信息会削弱版本锚定的 md5/路径核对（需要真实文件而非链接本身）
-find / \( -name "*mooncake*.so*" -o -name "libstore_c*.so*" \) -not -path "/proc/*" -not -path "/sys/*" -printf '%p -> %l\n' 2>/dev/null | sed 's/ -> $//'
+echo "$ALL_SO_CACHE" | head -30
 
 section "4. 引擎进程实际 mmap 的 mooncake 库 (最权威)"
 # 找 vLLM 引擎进程: EngineCore / vllm / ray
@@ -61,7 +62,8 @@ ldconfig -p 2>/dev/null | grep -E "ibverbs|rdmacm|mooncake" | head -10 || echo "
 
 section "8. 容器内源码/构建残留"
 ls -d /workspace/*mooncake* /root/*mooncake* /opt/*mooncake* /data/*mooncake* /usr/local/src/*mooncake* 2>/dev/null || echo "无源码目录"
-find / -name "real_client.cpp" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -5
+SRC_CPP_CACHE=$(timeout 30 find / -name "real_client.cpp" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null || echo "")
+echo "$SRC_CPP_CACHE" | head -5
 
 section "9. glog / 日志级别相关环境（白名单变量）"
 # 白名单逐变量读取，不做整行 env grep——MOONCAKE_API_TOKEN 之类的凭据变量
@@ -79,7 +81,9 @@ done
 
 # ---- JSON 摘要 ----
 PY_PKGS=$(pip list 2>/dev/null | grep -i mooncake | tr '\n' ';' | sed 's/;*$//')
-SO_LIST=$(find / \( -name "*mooncake*.so*" -o -name "libstore_c*.so*" \) -not -path "/proc/*" -not -path "/sys/*" -printf '%p -> %l\n' 2>/dev/null | sed 's/ -> $//' | sort -u | head -20 | tr '\n' ';')
+SO_LIST=$(echo "$ALL_SO_CACHE" | sort -u | head -20 | tr '\n' ';')
+SO_TRUNCATED=false
+[ "$(echo "$ALL_SO_CACHE" | grep -c .)" -gt 20 ] && SO_TRUNCATED=true
 MAP_SO=""
 # 按 pid 循环累积（不能把多 pid 拼进单个 /proc 路径：$ENG_PIDS 展开为
 # "/proc/<pid1> <pid2>/maps" 会让 grep 收到非法路径、字段恒为空）
@@ -90,23 +94,24 @@ if [ -n "$ENG_PIDS" ]; then
 fi
 CMAKE_OK=$(command -v cmake >/dev/null 2>&1 && echo true || echo false)
 GPP_OK=$(command -v g++ >/dev/null 2>&1 && echo true || echo false)
-SRC_RES=$(find / -name "real_client.cpp" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -1)
+SRC_RES=$(echo "$SRC_CPP_CACHE" | head -1)
 
 echo
 echo "PROBE_JSON_BEGIN"
 # JSON 摘要由 python3 json.dumps 生成：手工 heredoc 拼接时 .so 路径含
 # 双引号/反斜杠会使整个摘要不可解析——序列化器保证任意路径值合法
 if command -v python3 >/dev/null 2>&1 && python3 -c "pass" >/dev/null 2>&1; then
-  python3 - "$PY_PKGS" "$SO_LIST" "$MAP_SO" "$ENGINE_PIDS_TRUNCATED" "$CMAKE_OK" "$GPP_OK" "$SRC_RES" <<'PYEOF2'
+  python3 - "$PY_PKGS" "$SO_LIST" "$MAP_SO" "$ENGINE_PIDS_TRUNCATED" "$SO_TRUNCATED" "$CMAKE_OK" "$GPP_OK" "$SRC_RES" <<'PYEOF2'
 import json, sys
 obj = {
     "pip_packages": sys.argv[1],
     "so_files": sys.argv[2],
     "engine_mapped_so": sys.argv[3],
     "engine_pids_truncated": sys.argv[4] == "true",
-    "cmake": sys.argv[5] == "true",
-    "gpp": sys.argv[6] == "true",
-    "source_residue": sys.argv[7],
+    "so_files_truncated": sys.argv[5] == "true",
+    "cmake": sys.argv[6] == "true",
+    "gpp": sys.argv[7] == "true",
+    "source_residue": sys.argv[8],
 }
 print(json.dumps(obj, ensure_ascii=False))
 PYEOF2
