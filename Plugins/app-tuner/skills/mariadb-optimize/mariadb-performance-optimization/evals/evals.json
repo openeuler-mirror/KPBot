@@ -1,0 +1,67 @@
+{
+ "skill_name": "mariadb-performance-optimization",
+ "version": "1.0.0",
+ "notes": "优化决策类评估；不实际执行变更。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "写负载想提升，优先调哪些参数？innodb_flush_log_at_trx_commit 改 2 安全吗？不要执行命令。",
+   "expected_output": "先取证再调：Innodb_log_waits 高→先查 innodb_log_buffer_size 与日志刷出速率，再按 checkpoint 压力决定是否调大 innodb_log_file_size；刷脏滞后→io_capacity 系列/盘能力；提交延迟→组提交与 innodb_flush_log_at_trx_commit/sync_binlog。改 2 的含义：每秒刷 redo 而非每提交——崩溃丢最多 1 秒事务（mysqld 崩不丢，OS 崩丢最近 1 秒），换提交吞吐；必须与业务确认持久性容忍度后单变量 A/B，并记录回滚。",
+   "files": [
+    "references/config-tuning.md"
+   ],
+   "expectations": [
+    "按证据选参数（log_waits 先查 log buffer/刷脏/提交延迟）",
+    "说明改 2 的崩溃语义与风险",
+    "单变量 A/B 与回滚纪律",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "LSE 开了收益多少？一定有效吗？怎么验证二进制确实带 LSE？不要执行命令。",
+   "expected_output": "LSE（-march=armv8.2-a+lse）在原子操作密集负载可减少总线开销，但收益负载相关、非必得（实测口径见编译章）；验证统一用 verify_build_opts.sh 只读核：objdump 助记符列匹配 cas/ldadd/swp（覆盖 casal/ldaddal/swpl 等内存序后缀），且区分扫描失败与扫描成功后的零命中，并结合构建记录。A/B 才能确认收益，负收益回滚。",
+   "files": [
+    "references/compiler-thirdparty-and-source.md",
+    "scripts/verify_build_opts.sh"
+   ],
+   "expectations": [
+    "收益负载相关需 A/B",
+    "只读核验按助记符列+后缀，失败与零命中分开",
+    "负收益回滚",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "同事说在 10.3 上验证过的 lock_word 拆分补丁直接搬到 10.11 就行，对吗？不要执行命令。",
+   "expected_output": "不对：版本差异明确标注——10.11 的 rw_lock 已重写为 std::atomic、锁/同步目录结构变化，10.3 的顺序锁/lock_word/s_lock_word 补丁不可直接套用；移植前必须重新采样（perf/热点形态）、按 10.11 源码核对补丁上下文，适配后走干净重编+mtr 相关套件+A/B。",
+   "files": [
+    "references/compiler-thirdparty-and-source.md",
+    "references/decision-and-negative-results.md"
+   ],
+   "expectations": [
+    "指出 10.3→10.11 不可直接套用",
+    "说明锁实现重写与目录变化",
+    "移植流程：重采样/核对/重编/mtr/A-B",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "大页、NUMA interleave、伪共享修正在 MariaDB 上都是稳赚的吗？不要执行命令。",
+   "expected_output": "都不是稳赚：THP 对 InnoDB 有预读放大与碎片风险（通常关）、大页需评估 buffer pool 尺寸与分配方式；NUMA interleave mask 在特定分配/访问模式下有收益但非普适；伪共享修正需先有 cacheline 证据（perf c2c/MPKI）再改。负结果台账保留已证伪项——决策先查台账，环境变化才复验。",
+   "files": [
+    "references/decision-and-negative-results.md",
+    "references/os-and-deployment-tuning.md"
+   ],
+   "expectations": [
+    "逐项说明非普适的原因",
+    "THP 风险与大页条件",
+    "伪共享先取证再改",
+    "负结果台账决策",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
