@@ -1077,6 +1077,15 @@ def main(argv=None):
     _finalize_step_other(rows)
     apply_lb_backfill(rows, lb_rows, report)
 
+    # ---- 同轮对齐软告警（承接采集侧 kptools-tpsplit-log-collector 的口径：
+    #      P 侧请求数 vs 压测记录数不一致 → 四份日志可能不是同一次压测，
+    #      对账与守恒口径将失真；软告警不改变退出码，核对请回采集侧）
+    if bench_rows and rows and len(rows) != len(bench_rows):
+        print(f"[warn] 同轮对齐告警：P 侧解析出 {len(rows)} 条请求 vs 压测记录 "
+              f"{len(bench_rows)} 条（差 {abs(len(rows) - len(bench_rows))}）——"
+              f"四份日志可能不是同一次压测，对账结果无意义；请回采集侧核对",
+              file=sys.stderr)
+
     # ---- 对账
     recon, joined_n = ([], 0)
     if lb_rows and bench_rows:
