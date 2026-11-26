@@ -1,0 +1,4 @@
+# 本目录脚本须保持 LF 行尾：bash/python 在 Linux 上直接执行
+# （仓库 core.autocrlf=true 会把工作副本写成 CRLF，跨平台拉取后脚本损坏）
+* text=auto eol=lf
+*.png binary

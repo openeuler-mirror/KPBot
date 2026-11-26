@@ -1,0 +1,22 @@
+{
+  "skill_name": "kptools-train-mem-affinity",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "MQ-01", "prompt": "看看每个 rank 的内存分布在哪些 NUMA 节点上", "should_trigger": true },
+    { "id": "MQ-02", "prompt": "训练进程的内存亲和性怎么样，有没有跨 NUMA 远程访存", "should_trigger": true },
+    { "id": "MQ-03", "prompt": "验证 numactl --membind 绑内存是否生效", "should_trigger": true },
+    { "id": "MQ-04", "prompt": "排查 HCCL 通信缓冲在哪个 node，跟 NPU 卡对齐吗", "should_trigger": true },
+    { "id": "MQ-05", "prompt": "容器的 mems_allowed 是不是限制了训练内存分配", "should_trigger": true },
+    { "id": "MQ-06", "prompt": "帮我解读一下 numa_maps 输出", "should_trigger": true },
+    { "id": "MQ-07", "prompt": "做个训练内存亲和性分析", "should_trigger": true },
+    { "id": "MQ-08", "prompt": "训练内存会不会被 numa_balancing 自动迁移破坏了绑定", "should_trigger": true },
+    { "id": "MQ-09", "prompt": "对同一个进程采集一次 numa_maps 原始数据", "should_trigger": false, "note": "routes to kptools-proc-collector --numa (单进程原始快照)" },
+    { "id": "MQ-10", "prompt": "帮我把训练进程的内存绑到 NPU 所在的 node 上", "should_trigger": false, "note": "routes to cpu-affinity-optimization (本 skill 只观测)" },
+    { "id": "MQ-11", "prompt": "分析线程绑在哪个 CPU 核上运行", "should_trigger": false, "note": "routes to kptools-thread-affinity-collector (线程侧)" },
+    { "id": "MQ-12", "prompt": "关闭系统的 numa_balancing", "should_trigger": false, "note": "routes to os-optimization" },
+    { "id": "MQ-13", "prompt": "训练 OOM 了看是哪个进程内存涨太快", "should_trigger": false, "note": "routes to kptools-proc-collector / nmon (系统资源侧)" },
+    { "id": "MQ-14", "prompt": "推理服务的内存分布分析", "should_trigger": false, "note": "本 skill 限训练场景 (environ 无 RANK 类变量)" },
+    { "id": "MQ-15", "prompt": "看看 NPU 的 HBM 显存占用", "should_trigger": false, "note": "设备侧显存归 kptools-ascend-smi (本 skill 只管主机侧内存)" }
+  ]
+}
