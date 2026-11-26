@@ -1,0 +1,62 @@
+# 用例：tier A — kunpeng-precision-optimization 的完整性契约
+#
+# 覆盖（checks.py）：
+#   1. SKILL.md frontmatter：name 与目录一致、description 有实质长度、license 存在
+#   2. SKILL.md 索引的 references/* 与 references/ 实际文件双向一致（不漏不冗）
+#   3. 关键内容锚点仍在（-ffp-compatibility / FTZ / Allreduce / RMSE / L0 / ICC）
+#   4. evals/evals.json 结构完整（skill_name / id 唯一 / prompt / expected_output / expectations>=3）
+#   5. evals/eval_queries.json 触发路由矩阵（eval_type=trigger_rate，id 唯一，should_trigger 为布尔，正负例各 >=3）
+#   6. 敏感内容扫描（私网 IPv4、个人 home 路径；命中串脱敏回显）
+#
+# 运行（在 skill 根目录 kunpeng-precision-optimization/ 下）：
+#   bash cases/skill-integrity/run.sh
+#   # 产物 cases/skill-integrity/results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A，仅依赖 python3 标准库；不需要 Kunpeng 机器，也不执行编译或压测。
+
+name: skill-integrity
+skill: kunpeng-precision-optimization
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: skills_checked
+    op: gte
+    expect: 1
+  - type: json_field
+    file: results/result.json
+    field: links_checked
+    op: gte
+    expect: 7
+  - type: json_field
+    file: results/result.json
+    field: anchors_found
+    op: gte
+    expect: 5
+  - type: json_field
+    file: results/result.json
+    field: evals_checked
+    op: gte
+    expect: 3
+  - type: json_field
+    file: results/result.json
+    field: eval_queries_checked
+    op: gte
+    expect: 6
+  - type: json_field
+    file: results/result.json
+    field: sensitive_findings
+    expect: 0
