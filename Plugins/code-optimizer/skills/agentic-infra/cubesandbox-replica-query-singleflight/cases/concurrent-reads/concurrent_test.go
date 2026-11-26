@@ -172,6 +172,55 @@ func TestCanceledLeaderDoesNotCancelLiveFollower(t *testing.T) {
 	}
 }
 
+func TestReadyFlightSharesDatabaseErrorAndRetries(t *testing.T) {
+	db := setup()
+	failure := errors.New("replica database unavailable")
+	release := make(chan struct{})
+	db.failure, db.blocked, db.entered = failure, release, make(chan struct{}, 1)
+	joined := make(chan string, 1)
+	resolveResultFetchGroup.followerJoined = joined
+	ctx, cancel := context.WithCancel(context.Background())
+	var workers sync.WaitGroup
+	var once sync.Once
+	resume := func() { once.Do(func() { close(release) }) }
+	defer func() { cancel(); resume(); workers.Wait() }()
+	result := make(chan error, 2)
+	query := func() {
+		defer workers.Done()
+		_, err := ResolveTemplateReadyReplica(ctx, "tpl", "a")
+		result <- err
+	}
+
+	workers.Add(1)
+	go query()
+	receive(t, db.entered)
+	key := readyReplicaCacheKey("tpl")
+	_, _, generation := readyReplicaResultCache.Lookup(key)
+	workers.Add(1)
+	go query()
+	receive(t, joined)
+	db.mu.Lock()
+	db.failure = nil // The blocked read captured the error. Any new read can succeed.
+	db.mu.Unlock()
+	resume()
+
+	for i := 0; i < 2; i++ {
+		if err := receive(t, result); err != failure {
+			t.Fatalf("wanted the shared database error, got %v", err)
+		}
+	}
+	if _, _, current := readyReplicaResultCache.ReadCurrent(key, generation); current {
+		t.Fatal("failed read retained its generation")
+	}
+	if reads := db.listReads["tpl"]; reads != 1 {
+		t.Fatalf("wanted one failed read shared by both callers, got %d", reads)
+	}
+	replica, err := ResolveTemplateReadyReplica(ctx, "tpl", "b")
+	if err != nil || replica.NodeID != "b" || db.listReads["tpl"] != 2 {
+		t.Fatalf("retry: node=%q err=%v reads=%d", replica.NodeID, err, db.listReads["tpl"])
+	}
+}
+
 func TestReadyInvalidationSeparatesFlightsAndRejectsOldRefill(t *testing.T) {
 	db := setup()
 	db.rows["tpl"] = []ReplicaStatus{{"a", "READY"}}
