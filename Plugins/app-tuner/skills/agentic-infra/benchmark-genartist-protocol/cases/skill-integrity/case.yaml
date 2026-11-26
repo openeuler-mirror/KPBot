@@ -1,0 +1,33 @@
+# 用例：tier A 纯逻辑 —— GenArtist skill 静态契约看护（skill-integrity）
+#
+# 运行方法：bash Plugins/app-tuner/skills/agentic-infra/benchmark-genartist-protocol/cases/skill-integrity/run.sh
+# 断言：frontmatter 与命名、引用资源、画像按 case_id 行级逐字段对账（设
+# SUITE_MANIFEST=<suite import-manifest.json> 时对上游核验）、命令纯度（导入命令必含
+# --benchmarks genartist）、真源 commit 钉扎（可选 SUITE_REPO 实证）、凭据扫描（详情脱敏）、
+# runbook flag/环境变量 ⊆ fixture 契约锚点。
+# 真机三后端（docker/aenv/e2b）回放属 tier C，不在本用例覆盖。
+
+name: skill-integrity
+skill: benchmark-genartist-protocol
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+env_requires: []                        # 仅需 bash + python3（标准库）
+
+env_vars: {}
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_passed
+    expect: 21
+
+# tier C 待办：按 runbook §5 在目标宿主跑 docker/aenv/e2b 三后端各一轮，
+# 声明 env_requires 后按 case-spec 处理。

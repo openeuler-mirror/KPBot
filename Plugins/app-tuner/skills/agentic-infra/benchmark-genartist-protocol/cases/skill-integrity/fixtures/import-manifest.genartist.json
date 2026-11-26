@@ -1,0 +1,28 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "genartist",
+ "cases": [
+  {"case_id": "genartist_01_layout_text_to_image", "image": "agbench-genartist_01_layout_text_to_image:v1", "steps": 34, "exec": 32, "read": 0, "write": 0, "edit": 0, "apply_patch": 0, "tokens_total": 948702, "think_time": 386.6, "skipped": "process×3"},
+  {"case_id": "genartist_02_object_addition_edit", "image": "agbench-genartist_02_object_addition_edit:v1", "steps": 31, "exec": 23, "read": 4, "write": 1, "edit": 1, "apply_patch": 0, "tokens_total": 1161133, "think_time": 528.1, "skipped": "process×7"},
+  {"case_id": "genartist_03_scene_edit_correction", "image": "agbench-genartist_03_scene_edit_correction:v1", "steps": 43, "exec": 41, "read": 0, "write": 0, "edit": 0, "apply_patch": 0, "tokens_total": 2623047, "think_time": 465.8, "skipped": "image×1、process×44"},
+  {"case_id": "genartist_04_layout_guided_generation", "image": "agbench-genartist_04_layout_guided_generation:v1", "steps": 55, "exec": 45, "read": 2, "write": 4, "edit": 2, "apply_patch": 0, "tokens_total": 2806405, "think_time": 832.0, "skipped": "process×32"},
+  {"case_id": "genartist_05_object_manipulation", "image": "agbench-genartist_05_object_manipulation:v1", "steps": 44, "exec": 32, "read": 0, "write": 5, "edit": 5, "apply_patch": 0, "tokens_total": 1902737, "think_time": 687.4, "skipped": "image×15、process×9"},
+  {"case_id": "genartist_06_full_pipeline_correction", "image": "agbench-genartist_06_full_pipeline_correction:v1", "steps": 44, "exec": 39, "read": 3, "write": 0, "edit": 0, "apply_patch": 0, "tokens_total": 2288541, "think_time": 730.3, "skipped": "image×1、process×30"},
+  {"case_id": "genartist_07_bsrgan_enhancement", "image": "agbench-genartist_07_bsrgan_enhancement:v1", "steps": 48, "exec": 42, "read": 2, "write": 2, "edit": 0, "apply_patch": 0, "tokens_total": 2914026, "think_time": 439.0, "skipped": "process×45"},
+  {"case_id": "genartist_08_dinov2_feature_search", "image": "agbench-genartist_08_dinov2_feature_search:v1", "steps": 39, "exec": 26, "read": 4, "write": 5, "edit": 2, "apply_patch": 0, "tokens_total": 1326402, "think_time": 485.6, "skipped": "process×12"},
+  {"case_id": "genartist_09_scipy_filter_pipeline", "image": "agbench-genartist_09_scipy_filter_pipeline:v1", "steps": 39, "exec": 30, "read": 3, "write": 2, "edit": 2, "apply_patch": 0, "tokens_total": 1814116, "think_time": 454.4, "skipped": "image×3、process×18"},
+  {"case_id": "genartist_10_torchvision_preprocess", "image": "agbench-genartist_10_torchvision_preprocess:v1", "steps": 48, "exec": 42, "read": 2, "write": 2, "edit": 0, "apply_patch": 0, "tokens_total": 2593340, "think_time": 456.5, "skipped": "image×2、process×38"},
+  {"case_id": "genartist_11_groundingdino_detect", "image": "agbench-genartist_11_groundingdino_detect:v1", "steps": 46, "exec": 33, "read": 4, "write": 3, "edit": 4, "apply_patch": 0, "tokens_total": 2025700, "think_time": 638.7, "skipped": "image×2、process×19"},
+  {"case_id": "genartist_12_lama_inpaint_mkl", "image": "agbench-genartist_12_lama_inpaint_mkl:v1", "steps": 22, "exec": 17, "read": 3, "write": 0, "edit": 0, "apply_patch": 0, "tokens_total": 986168, "think_time": 250.3, "skipped": "image×2、process×14"},
+  {"case_id": "genartist_13_anydoor_data_load", "image": "agbench-genartist_13_anydoor_data_load:v1", "steps": 28, "exec": 19, "read": 4, "write": 3, "edit": 0, "apply_patch": 0, "tokens_total": 1175592, "think_time": 324.5, "skipped": "process×12"}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py + image-build/agbench (build/import) argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "build_cli": ["--agbenchmark-root", "--base-image", "--benchmarks", "--cases", "--context-root", "--docker", "--dry-run", "--jdk-path", "--manifest"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}
