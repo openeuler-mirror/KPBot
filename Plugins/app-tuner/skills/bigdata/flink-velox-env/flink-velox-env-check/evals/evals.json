@@ -1,0 +1,35 @@
+{
+  "skill_name": "flink-velox-env-check",
+  "evals": [
+    {
+      "id": "overall-before-install",
+      "query": "动手装环境之前先总查一遍，这台机器离能编译跑 GlutenFlink 栈还差什么",
+      "expected": "触发本 skill：--goal build 跑 9 项子检查，按六组聚合，next_step 指向第一个该修的组的工单；只报告不装"
+    },
+    {
+      "id": "native-goal",
+      "query": "不编译，只跑原生侧，环境就绪了吗",
+      "expected": "触发本 skill：--goal native，构建侧 4 项记 disabled，查 jdk(native 口径)/flink/lib/cluster/nexmark 5 项"
+    },
+    {
+      "id": "after-fix-rerun",
+      "query": "装完 build-env-prepare 回来再查一次，下一项该修什么",
+      "expected": "触发本 skill：重跑 --goal build，next_step 前进到下一个未就绪组的工单"
+    },
+    {
+      "id": "single-detail",
+      "query": "看看具体缺哪几个 C++ 依赖的头文件",
+      "expected": "不触发：单项细节属 flink-velox-cpp-deps-check；本 skill 的 groups 只聚合，不展开子检查的逐项判据"
+    },
+    {
+      "id": "not-install",
+      "query": "把缺的 JDK 17 装上",
+      "expected": "不触发：装东西属安装家族（flink-velox-build-env-prepare）；本 skill 的 next_step 是交给它的工单"
+    },
+    {
+      "id": "not-verify-or-bench",
+      "query": "环境好了之后跑一轮 SQL 双跑验证和 nexmark 吞吐",
+      "expected": "不触发：验证属 flink-velox-e2e-verify、吞吐属 flink-velox-performance-verify；本 skill 到 READY 为止"
+    }
+  ]
+}

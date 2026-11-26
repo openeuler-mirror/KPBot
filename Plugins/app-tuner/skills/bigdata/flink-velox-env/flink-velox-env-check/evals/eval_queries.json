@@ -1,0 +1,67 @@
+{
+  "skill_name": "flink-velox-env-check",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-overall-before-install",
+      "prompt": "装环境之前先总查一遍，这台机器还差什么",
+      "should_trigger": true,
+      "note": "场景入口类触发词：环境统筹检查、还差什么"
+    },
+    {
+      "id": "q-goal-build",
+      "prompt": "这台机器 goal build 环境就绪了吗，能不能编译跑 GlutenFlink 栈",
+      "should_trigger": true,
+      "note": "goal build + flink-velox 环境就绪"
+    },
+    {
+      "id": "q-goal-native",
+      "prompt": "goal native 检查一下，只跑原生侧还缺什么",
+      "should_trigger": true,
+      "note": "goal native：跳过构建侧 4 项、其余 5 项"
+    },
+    {
+      "id": "q-next-work-order",
+      "prompt": "修完这一项之后下一个该修什么",
+      "should_trigger": true,
+      "note": "重跑看 next_step 前进，统筹层职责"
+    },
+    {
+      "id": "q-not-single-detail",
+      "prompt": "缺的 C++ 依赖具体是哪几个包，头文件哪个不在",
+      "should_trigger": false,
+      "note": "单项细节 → flink-velox-cpp-deps-check"
+    },
+    {
+      "id": "q-not-single-cluster",
+      "prompt": "集群守护进程现在加载的是哪套 jar",
+      "should_trigger": false,
+      "note": "单项细节 → flink-velox-cluster-check"
+    },
+    {
+      "id": "q-not-install",
+      "prompt": "把源码仓克隆好、JDK 17 装上",
+      "should_trigger": false,
+      "note": "安装 → flink-velox-build-env-prepare"
+    },
+    {
+      "id": "q-not-e2e",
+      "prompt": "跑一轮两侧 SQL 双跑等价性验证",
+      "should_trigger": false,
+      "note": "验证 → flink-velox-e2e-verify"
+    },
+    {
+      "id": "q-not-bench",
+      "prompt": "跑 nexmark 吞吐基准",
+      "should_trigger": false,
+      "note": "基准 → flink-velox-performance-verify"
+    },
+    {
+      "id": "q-not-single-jdk",
+      "prompt": "JAVA_HOME 指的对不对，Flink 守护进程用的哪个 Java",
+      "should_trigger": false,
+      "note": "单项细节 → flink-velox-jdk-check"
+    }
+  ]
+}
