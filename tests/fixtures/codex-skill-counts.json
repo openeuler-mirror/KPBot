@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "f1fb981e plus benchmark-webarena-protocol",
+  "measured_source_commit": "618dc4ec re-measure (skills merged after f1fb981e included) plus kptools-kvc-crosscheck-analyzer",
   "upstream_commit": "f1fb981e",
-  "manifest_skills": 357,
-  "installed_skill_documents": 404,
-  "source_skill_documents_before_exclusions": 467
+  "manifest_skills": 370,
+  "installed_skill_documents": 416,
+  "source_skill_documents_before_exclusions": 479
 }
