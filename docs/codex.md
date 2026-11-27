@@ -62,9 +62,9 @@ kpbot uninstall global codex
 
 | 口径 | 数量 |
 | --- | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 303 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 347 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 409 |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 341 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 387 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 450 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
