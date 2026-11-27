@@ -1,0 +1,23 @@
+name: template-cache-hit
+skill: cubesandbox-template-cache-encoding
+tier: A
+entrypoint: ["python3", "cases/cache-hit/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: cases/cache-hit/results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: cases/cache-hit/results/result.json
+    field: baseline_hit_encodes
+    expect: 3
+  - type: json_field
+    file: cases/cache-hit/results/result.json
+    field: candidate_hit_encodes
+    expect: 0
+  - type: json_field
+    file: cases/cache-hit/results/result.json
+    field: candidate_fill_encodes
+    expect: 2
