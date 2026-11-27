@@ -2,6 +2,15 @@
 # -*- coding: utf-8 -*-
 """apply_eplb.py -- Configure (or check) EPLB in a vLLM prefill (P) node launch template.
 
+DEPRECATED for EPLB mode switching: this copy lives on for the legacy
+``vllm-eplb-optimization`` flow only and no longer receives bug fixes. Known issues
+that are fixed in the maintained copy (multi ``vllm serve`` arbitration, dangling
+line continuations, ``--additional-config`` JSON booleans, force->off V2 baseline,
+``export`` with multiple assignments) remain here. Use
+``vllm-eplb-deploy-validate/scripts/apply_eplb.py`` when switching modes, and never
+run both scripts against the same template. This file will be removed in a follow-up
+PR once the deploy/parameter/benefit sub-skills have merged.
+
 Target environment: the site-internal vLLM fork described in SKILL.md.
 Two switches (`DYNAMIC_EPLB`, `enable_force_eplb`) are deployment-specific and
 do not exist in upstream vLLM; on stock vLLM the dynamic/force knobs are inert.
