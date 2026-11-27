@@ -1,0 +1,63 @@
+{
+ "skill_name": "mariadb-test-verification",
+ "version": "1.0.0",
+ "notes": "验证协议类评估；不实际执行压测。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "TPC-C 压测的固定口径是什么？为什么强调 10min warmup 和 40min run？不要执行命令。",
+   "expected_output": "TPC-C 固定占比口径（new-order/payment/order-status/delivery/stock-level 按固定比例混合）、并发线程数与仓库数（W）成比例。10min warmup 让 buffer pool/缓存预热到稳态（避免把预热期当性能），40min run 覆盖 checkpoint/刷脏周期获得稳态均值；两腿必须同口径（预热、时长、仓库数、隔离级别）。",
+   "files": [
+    "references/benchmark-harness.md"
+   ],
+   "expectations": [
+    "说明事务占比固定口径",
+    "解释 warmup 与 run 时长的意义",
+    "强调两腿同口径",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "除了 sysbench 和 TPC-C，mtr 是什么？什么时候必须跑？不要执行命令。",
+   "expected_output": "mtr（mysql-test-run）是 MariaDB 官方测试套件：功能/回归/复现测试（单测+主从/复制用例）。改源码/打补丁后必须跑相关套件（至少 main + innodb 套件），编译/参数变更跑冒烟子集；它是正确性门禁，不覆盖性能。冒烟 SQL 与数据对账是轻量替代，但源码级改动以 mtr 为准。",
+   "files": [
+    "references/functional-verification.md"
+   ],
+   "expectations": [
+    "说明 mtr 的定位与套件结构",
+    "源码改动必须跑相关套件",
+    "区分正确性门禁与性能测试",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "一次 A/B 里 B 腿 TPS 高 3.8%，怎么判定？要不要保留？不要执行命令。",
+   "expected_output": "3.8% 低于 5% 噪声阈值：先看轮间波动（>5% 波动重测）、多轮是否稳定、CPU/延迟是否同向；不稳定判噪声不结论。仅当多轮稳定且业务指标同步改善才考虑保留，且记录变更与回滚方式。负收益必须回滚并记录台账。",
+   "files": [
+    "references/ab-protocol.md"
+   ],
+   "expectations": [
+    "引用 5% 噪声阈值判定",
+    "检查轮间波动与多轮稳定性",
+    "说明保留条件与回滚纪律",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "smoke_test.sh 都检查什么？read_only=ON 会不会失败？要验证可写怎么办？不要执行命令。",
+   "expected_output": "只读冒烟：连通性、版本/引擎/字符集、关键参数快照、库表存在性与行数期望、主键访问路径（EXPLAIN 不全表扫）、隔离级别与 read_only 状态、复制状态（IO/SQL 线程、wsrep_ready）。read_only=ON 只显示 info 不失败（只读冒烟不判可写）；需写验收显式 EXPECT_WRITABLE=1，此时 read_only 必须 OFF，防把只读实例/从库验收成可写。",
+   "files": [
+    "scripts/smoke_test.sh"
+   ],
+   "expectations": [
+    "列出检查分组",
+    "说明 read_only 默认 info 语义",
+    "EXPECT_WRITABLE=1 时核 OFF",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
