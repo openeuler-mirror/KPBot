@@ -1,9 +1,9 @@
 ---
 name: kptools-tpsplit-optimization-verify
 description: >-
-  TP 拆分 / TP 拓扑迁移部署完成后的交付验证（L4-L6）：L4 功能测试（正确性 / max-model-len 边界 / 解析器）、L5 性能对比（Prefill 吞吐 / TTFT / KV 传输带宽，对比部署时停服前归档的旧基线，同口径）、L6 稳定性观察（KV 报错率 / 偶发 NPU 错误 / DP 掉员 / 实例重启）。当用户提到以下场景时使用本技能：TP 拆分后验证、TP 拓扑迁移完成后的分层测试、L4/L5/L6、迁移后功能/性能/稳定性验证、新旧集群性能对比、TP8 迁移完效果实测、按部署指南做交付验证。本技能是只读验证面（零变更：不改配置、不重启、不切流、不回滚），不达标时给出回滚/调参建议并转 kptools-tpsplit-optimization（配套 PR #442 交付） 执行。集群还没拉起 / L0-L3 拉起验证归 kptools-tpsplit-optimization（配套 PR #442 交付）；TP 可行性测算归 kptools-tpsplit-check；TTFT 阶段拆解收益对比报告归 kptools-tpsplit-report。
+  TP 拆分 / TP 拓扑迁移部署完成后的交付验证（L4-L6）：L4 功能测试（正确性 / max-model-len 边界 / 解析器）、L5 性能对比（Prefill 吞吐 / TTFT / KV 传输带宽，对比部署时停服前归档的旧基线，同口径）、L6 稳定性观察（KV 报错率 / 偶发 NPU 错误 / DP 掉员 / 实例重启）。当用户提到以下场景时使用本技能：TP 拆分后验证、TP 拓扑迁移完成后的分层测试、L4/L5/L6、迁移后功能/性能/稳定性验证、新旧集群性能对比、TP8 迁移完效果实测、按部署指南做交付验证。本技能是只读验证面（零变更：不改配置、不重启、不切流、不回滚），不达标时给出回滚/调参建议并转 kptools-tpsplit-optimization（配套 PR #442 交付）执行。集群还没拉起 / L0-L3 拉起验证归 kptools-tpsplit-optimization（配套 PR #442 交付）；TP 可行性测算归 kptools-tpsplit-check；TTFT 阶段拆解收益对比报告归 kptools-tpsplit-report。
 license: Proprietary
-compatibility: 远端 Linux（openEuler 等，aarch64）NPU 环境：SSH 只读访问（日志/配置读取）+ 向目标服务发测试/压测请求（发请求是验证动作，会产生真实推理负载，执行窗口与压力档位经用户确认）；压测用现场已有工具（如 manual_benchmark_existing_service.py）；L6 需要跨观察窗口的日志/监控读取权限。标准输入是 kptools-tpsplit-optimization（配套 PR #442 交付） 产出的部署指南。
+compatibility: 远端 Linux（openEuler 等，aarch64）NPU 环境：SSH 只读访问（日志/配置读取）+ 向目标服务发测试/压测请求（发请求是验证动作，会产生真实推理负载，执行窗口与压力档位经用户确认）；压测用现场已有工具（如 manual_benchmark_existing_service.py）；L6 需要跨观察窗口的日志/监控读取权限。标准输入是 kptools-tpsplit-optimization（配套 PR #442 交付）产出的部署指南。
 metadata:
   skill_type: tool_assisted
   category: verification
@@ -14,13 +14,13 @@ metadata:
 
 # kptools-tpsplit-optimization-verify：TP 拓扑迁移交付验证（L4-L6，只读）
 
-承接 `kptools-tpsplit-optimization`（配套 PR #442 交付）（deploy）的交接：新集群已拉起、L0-L3 拉起验证已通过、网关已切流。本 skill 做**交付前验证**——L4 功能 / L5 性能对比 / L6 稳定性观察——逐层执行（不过不进下一层），产出《验证报告 `.md`》，判定「可交付 / 建议调参 / 建议回滚」。
+承接 `kptools-tpsplit-optimization`（配套 PR #442 交付）（deploy）的交接：新集群已拉起、L0-L3 拉起验证已通过、网关已切流。本 skill 做**交付前验证**——L4 功能 / L5 性能对比 / L6 稳定性观察——逐层执行（不过不进下一层），产出《验证报告 `.md`》，判定「可交付 / 建议调参 / 建议回滚 / 验证未完成·暂不判定」（结论四态，逐字段定义见 `references/verification-details.md` §报告结构）。
 
 ## 零变更红线（先读）
 
 本 skill 是**只读验证面**，全程不做任何变更：
 
-- 不改配置、不重启实例、不切流、不回滚、不停服——这些是 `kptools-tpsplit-optimization`（配套 PR #442 交付） 的执行面
+- 不改配置、不重启实例、不切流、不回滚、不停服——这些是 `kptools-tpsplit-optimization`（配套 PR #442 交付）的执行面
 - 发现不达标：给出判定与建议（调参项、回滚步骤引用部署指南），**转 deploy 决策与执行**，本 skill 不代执行
 - 测试/压测请求会对目标服务产生真实推理负载：执行窗口、压力档位、L6 观察时长经用户确认后再发
 
@@ -78,8 +78,9 @@ metadata:
 ## 边界与配套拆分说明
 
 - 本 skill 由 `kptools-tpsplit-optimization`（配套 PR #442 交付）（原部署+验证一体，v0.5.x 及之前 L0-L6 全包）拆分而来：deploy 保留 L0-L3 拉起验证与全部执行面，本 skill 承接 L4-L6 交付验证。两 PR 建议同批合入，避免过渡期 L4-L6 触发面悬空。
+- **L4-L6 唯一归属以配套 PR #442 合入为前提**（#442 已在 deploy 侧删除阶段 5 表 L4-L6 三行与 layered-testing.md 的 L4-L6 章节、EQ-08/EQ-15 触发改负例）：若运行环境仍是拆分前形态——deploy skill 自带 L4-L6——则 L4-L6 请求由 deploy 按其既有细则承接，本 skill 不与之并行生效，避免同一请求双归属、部署指南被两套流程改写。基线口径两侧已统一为「停服前归档的旧基线、同口径对比」（#442 侧阶段 3 停服前采样与阶段 6 交付同款表述）。
 - 与 deploy 的交接：输入 = 部署指南（布局表/修改点清单/L0-L3 结果/备份位置）+ 停服前旧基线归档；输出 = 验证报告 + 不达标时的调参/回滚建议（执行回 deploy）。
-- 相邻边界：TP 可行性测算归 `kptools-tpsplit-check`；TTFT 阶段拆解收益对比报告归 `kptools-tpsplit-report`（本 skill L5 的现场达标判定与它的正式收益报告互补）；TTFT 打点日志采集/解析归 kptools-tpsplit-log-collector / kptools-tpsplit-log-analysis。
+- 相邻边界：TP 可行性测算归 `kptools-tpsplit-check`；TTFT 阶段拆解收益对比报告归 `kptools-tpsplit-report`（本 skill L5 的现场达标判定与它的正式收益报告互补）；TTFT 打点日志采集/解析归 `kptools-tpsplit-log-analysis`（打点 patch 部署归 `kptools-tpsplit-log-trace`，两者均为仓内既有 skill）。
 
 ## 文件
 

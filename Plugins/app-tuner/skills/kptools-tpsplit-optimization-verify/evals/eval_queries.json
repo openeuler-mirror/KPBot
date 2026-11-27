@@ -31,7 +31,7 @@
       "id": "VQ-05",
       "prompt": "把 Prefill 集群从跨机 TP32 拆成单机 TP8 重新部署",
       "should_trigger": false,
-      "note": "routes to kptools-tpsplit-optimization（配套 PR #442 交付）（部署执行面：拉起/L0-L3/切流/回滚）"
+      "note": "routes to `kptools-tpsplit-optimization`（配套 PR #442 交付）（部署执行面：拉起/L0-L3/切流/回滚）"
     },
     {
       "id": "VQ-06",
@@ -49,13 +49,13 @@
       "id": "VQ-08",
       "prompt": "TP8 迁移完跑了两天，Decode 偶发报 KV 相关错误，排查下根因",
       "should_trigger": false,
-      "note": "routes to kptools-tpsplit-optimization（配套 PR #442 交付）（迁移后故障排查 + 回滚执行面）；本 skill 只做计划性验证"
+      "note": "routes to `kptools-tpsplit-optimization`（配套 PR #442 交付）（迁移后故障排查 + 回滚执行面）；本 skill 只做计划性验证"
     },
     {
       "id": "VQ-09",
       "prompt": "把这轮压测的 TTFT 打点日志采下来解析出表",
       "should_trigger": false,
-      "note": "routes to kptools-tpsplit-log-collector / kptools-tpsplit-log-analysis"
+      "note": "routes to kptools-tpsplit-log-analysis（采集+解析出表；打点 patch 部署 routes to kptools-tpsplit-log-trace）"
     },
     {
       "id": "VQ-10",
