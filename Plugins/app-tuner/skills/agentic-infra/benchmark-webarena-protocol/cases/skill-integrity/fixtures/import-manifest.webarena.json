@@ -1,0 +1,19 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "webarena",
+ "cases": [
+  {"case_id": "webarena_01_shopping_ear_cups", "image": "agbench-webarena_01_shopping_ear_cups:v1", "steps": 40, "exec": 37, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 1164755, "think_time": 151.9, "skipped": "无"},
+  {"case_id": "webarena_02_reddit_downvoted_comments", "image": "agbench-webarena_02_reddit_downvoted_comments:v1", "steps": 36, "exec": 33, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 1023838, "think_time": 178.7, "skipped": "无"},
+  {"case_id": "webarena_03_gitlab_todos", "image": "agbench-webarena_03_gitlab_todos:v1", "steps": 32, "exec": 29, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 681849, "think_time": 93.1, "skipped": "无"},
+  {"case_id": "webarena_04_multi_tab_navigation", "image": "agbench-webarena_04_multi_tab_navigation:v1", "steps": 37, "exec": 30, "read": 4, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 1056637, "think_time": 97.5, "skipped": "process×1"}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py + image-build/agbench (build/import) argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "build_cli": ["--agbenchmark-root", "--base-image", "--benchmarks", "--cases", "--context-root", "--docker", "--dry-run", "--jdk-path", "--manifest"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}

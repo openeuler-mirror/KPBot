@@ -64,9 +64,9 @@ kpbot uninstall global codex
 
 | 口径 | `e2a0de84` | `4e3a8b1a`（含 WebIDE） | 加入本 PR |
 | --- | ---: | ---: | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 353 | 354 | 356 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 399 | 400 | 402 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 462 | 463 | 465 |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 356 | 357 | 356 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 403 | 404 | 402 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 466 | 467 | 465 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
