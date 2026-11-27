@@ -1,0 +1,66 @@
+{
+ "skill_name": "oceanbase-build-deployment",
+ "version": "1.0.0",
+ "notes": "部署编译类评估；不实际执行构建/部署。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "4.3.5 源码树从零编译 observer 要先做什么？release 和 perf 构建模式差在哪？不要执行命令。",
+   "expected_output": "先 ./build.sh init 拉取/安装 deps/init/*.deps 三方依赖到 deps/3rd（devtools 含 clang/llvm、各类库），再在 build_<mode> 目录 make，或 ./build.sh <mode> --make -j$(nproc)（build.sh 没有名为 make 的模式，裸 ./build.sh make 会落入 debug 默认分支）。release 为常规优化构建；perf 模式追加性能向参数（LTO/AutoFDO/HOTFUNC、LSE 或 NOLSE；BOLT 在开源树不生效、package 模式显式 OFF，该版本无 PGO/CSPGO 开关）。编译身份要记录（编译器版本、-march/LSE、md5/大小），按 build-and-deps.md §5 的 md5sum/readelf/objdump 命令只读核验。",
+   "files": [
+    "references/build-and-deps.md"
+   ],
+   "expectations": [
+    "指出先 build.sh init 装齐 deps/3rd",
+    "区分 release 与 perf 构建模式参数",
+    "说明产物身份记录与只读核验入口",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "单机 mydeploy 的 install.cfg 最少要正确填哪些项？租户模板起什么作用？不要执行命令。",
+   "expected_output": "最小正确配置：版本兼容（4.x 填 4）、启动方式（rslist）、zone_num=1 且只保留 zone1 与对应 observer 地址、三端口（mysql/rpc/proxy，注意与社区默认可能不同、三处必须一致）、observer 规格（内存/CPU/datafile）、租户模板（创建业务租户的资源单元）。漏填/错填端口是常见部署失败点；install.cfg 的各段有逐项说明。",
+   "files": [
+    "references/deploy-and-acceptance.md"
+   ],
+   "expectations": [
+    "列出最小必填项清单",
+    "说明单机 zone 收缩方式",
+    "指出三端口一致性要求",
+    "说明租户模板与资源单元关系",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "observer 部署前 preflight_check.sh 都检查什么？哪类问题会直接 FAIL？不要执行命令。",
+   "expected_output": "只读检查：架构支持、CPU/内存规格、NUMA 拓扑（提示绑核规划）、OB_BASE 目录与磁盘、THP/swap/SELinux、关键 sysctl（swappiness=0、numa_balancing=0、zone_reclaim_mode=0、max_map_count、aio-max-nr）、nf_conntrack、nofile、chrony 校时、三端口占用与 1-65535 范围校验（非法直接 exit 2）、残留 observer/obproxy 进程、可选构建依赖。直接 FAIL 的：不支持架构、OB_SRC 指向不存在路径、端口非法；其余多为 WARN。",
+   "files": [
+    "scripts/preflight_check.sh"
+   ],
+   "expectations": [
+    "列出主要检查项分组",
+    "区分 FAIL/WARN 的判定",
+    "说明端口范围校验是 exit 2 用法错误",
+    "说明脚本只读不改系统",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "滚动升级怎么做才能不中断业务？升级失败如何回滚？不要执行命令。",
+   "expected_output": "多副本滚动升级：先停一台（zone 内逐台）→ 换二进制 → 启动追平（回放追上多数派）→ 再下一台；单机场景无副本可滚动，须停机窗口。升级前：记录版本/构建身份（版本、commit、md5、编译参数，见本文件 §4.1）、确认兼容版本号、备份关键目录。回滚：换回旧二进制按同样顺序重启；滚动中途失败的停止条件见升级章节（停止条件与回滚纪律）。",
+   "files": [
+    "references/operations-and-troubleshooting.md"
+   ],
+   "expectations": [
+    "给出多副本滚动顺序与追平要求",
+    "说明单机必须停机窗口",
+    "升级前身份记录与备份项",
+    "说明回滚纪律与停止条件",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
