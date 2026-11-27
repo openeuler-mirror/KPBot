@@ -7,8 +7,10 @@
 这正是 EPLB（dynamic）能优化 TTFT 的场景。混码在线形态的流量本身接近均衡，
 EPLB 收益体现不出来，不能用来验证优化效果。
 
-输出 dumpjsonl 格式（每行一个 OpenAI chat 请求 JSON），配套
-benchmark_serving.py --dataset-name dumpjsonl 使用。
+输出为每行一个 OpenAI chat 请求 JSON（dumpjsonl 形态）。注意：`dumpjsonl` 是站点分支
+benchmark 工具私有的 --dataset-name，上游 vLLM 0.32 没有该名字，且其
+benchmarks/benchmark_serving.py 已废弃为转发存根；请改用 `vllm bench serve`
+（--save-result 亦在那里），并用 custom 数据集或站点转换脚本读取本文件。
 
 用法：
     python3 gen_imbalanced_dataset.py --out imbalanced_100x100k.jsonl
@@ -95,6 +97,8 @@ def main():
           (args.out, args.num_requests, est))
     print('口径参考: 32 并发跑该数据集，4 轮剔除第 1 轮，取后 3 轮 mean TTFT 均值')
     print('对比配置: 关闭EPLB（基线） vs dynamic EPLB（优化） vs force EPLB（均衡参照上限）')
+    print('采集命令: vllm bench serve ... --save-result（上游 0.32 起 benchmark_serving.py 已废弃；'
+          'dumpjsonl 为站点分支私有数据集名）')
 
 if __name__ == '__main__':
     main()

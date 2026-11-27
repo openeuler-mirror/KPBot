@@ -17,21 +17,32 @@ import os
 import re
 import sys
 
+from apply_eplb import _strip_comments_text
+
 SCHEMA_VERSION = 1
 DEFAULT_GROUPS = ("off", "dynamic", "force")
 
 
 def parse_effective_params(path):
-    """Read the values that will actually take effect from the template."""
-    text = open(path, encoding="utf-8").read()
+    """Read the values that will actually take effect from the template.
+
+    Uses the same "live (non-comment) config" rule as apply_eplb.check_state:
+    comments are stripped first, flags must start a line, and `dynamic_eplb`
+    only counts an explicit `="true"` (not `"false"` and not a bare mention).
+    Both `--eplb-config.k v` and `--eplb-config.k=v` are accepted.
+    """
+    code = _strip_comments_text(open(path, encoding="utf-8").read())
+
     def grab(key):
-        m = re.search(r"--eplb-config\.%s\s+(\d+)" % re.escape(key), text)
+        m = re.search(r"^\s*--eplb-config\.%s(?:\s+|=)(\d+)(?=\s|\\|$)"
+                      % re.escape(key), code, re.M)
         return int(m.group(1)) if m else None
     return {
         "redundant_experts": grab("num_redundant_experts"),
         "window_size": grab("window_size"),
         "step_interval": grab("step_interval"),
-        "dynamic_eplb": bool(re.search(r"^\s*export\s+DYNAMIC_EPLB\s*=", text, re.M)),
+        "dynamic_eplb": bool(re.search(
+            r'^\s*export\s+DYNAMIC_EPLB\s*=\s*["\']?true["\']?\s*$', code, re.M)),
     }
 
 
@@ -58,6 +69,9 @@ def main():
     ap.add_argument("--rounds", type=int, default=4, help="rounds per group (default 4)")
     ap.add_argument("--groups", default=",".join(DEFAULT_GROUPS),
                     help="comma-separated groups, default off,dynamic,force")
+    ap.add_argument("--group-template", action="append", default=[], metavar="GROUP=PATH",
+                    help="template actually used for a group (repeatable: off=...,dynamic=...,force=...); "
+                         "records each rewritten template's path/sha256 in templates.<group>")
     ap.add_argument("--branch", choices=["site-fork", "upstream"], default="site-fork")
     ap.add_argument("--service", default=None)
     ap.add_argument("--note", default=None)
@@ -75,6 +89,19 @@ def main():
         print("ERROR: --rounds must be >= 1", file=sys.stderr)
         return 2
 
+    templates = {}
+    for spec in args.group_template:
+        group, sep, tpath = spec.partition("=")
+        group, tpath = group.strip(), tpath.strip()
+        if not sep or group not in DEFAULT_GROUPS or not tpath:
+            print("ERROR: --group-template must be GROUP=PATH with GROUP in %s (got %r)"
+                  % (",".join(DEFAULT_GROUPS), spec), file=sys.stderr)
+            return 2
+        if not os.path.isfile(tpath):
+            print("ERROR: group template not found: %s" % tpath, file=sys.stderr)
+            return 2
+        templates[group] = {"path": os.path.abspath(tpath), "sha256": file_sha256(tpath)}
+
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "created_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -84,6 +111,7 @@ def main():
             "path": os.path.abspath(args.template),
             "sha256": file_sha256(args.template),
         },
+        "templates": templates,
         "mode": args.mode,
         "params": {
             "ep_size": args.ep_size,

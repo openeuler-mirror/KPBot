@@ -21,6 +21,9 @@ Modes (mutually exclusive target states):
              Only rewrites VLLM_USE_V2_MODEL_RUNNER when the live (non-comment)
              config actually carried EPLB markers; a plain/V1 template -- or one
              that merely mentions the knob in a comment -- is left untouched.
+             A template that went through `force` carries a probe anchor with
+             its original V2 value, so off restores that value exactly (V2=1
+             baselines stay V2=1, V1 baselines stay V2=0, absent stays absent).
     dynamic  V2 model runner + export DYNAMIC_EPLB="true" + --enable-eplb
              + --eplb-config.* flags   (优化手段)
     force    V1 model runner (VLLM_USE_V2_MODEL_RUNNER=0) + unset DYNAMIC_EPLB
@@ -69,9 +72,8 @@ RE_DYN_UNSET = re.compile(r'^\s*unset\s+DYNAMIC_EPLB\b')
 RE_EPLB_FLAG = re.compile(r'^(\s*)(--enable-eplb\b|--eplb-config\.)')
 RE_EP_LINE = re.compile(r'^(\s*)--enable-expert-parallel\b.*$')
 RE_SERVE_LINE = re.compile(r'^\s*vllm\s+serve\b')
-RE_AC_SINGLE = re.compile(r"^(\s*)--additional-config\s+'(\{.*\})'\s*(\\?)\s*$")
-RE_AC_OPEN = re.compile(r"^(\s*)--additional-config\s+'\{(.*)$")
-RE_AC_CLOSE = re.compile(r"^\s*\}'(.*)$")
+# force probe anchor: records the V2 runner value seen *before* force rewrote it
+RE_FORCE_ANCHOR = re.compile(r'^(\s*)#\s*eplb-force-probe:\s*baseline_v2=(1|0|absent)\s*$')
 
 # eplb-config keys that are boolean switches (take no value)
 EPLB_BOOL_KEYS = ('log_balancedness',)
@@ -87,36 +89,96 @@ def die(msg, code=1):
     sys.exit(code)
 
 
-def find_json_block(lines, flag):
-    """Locate a `--flag '{...}'` JSON block.
+def _strip_inline_comment(line):
+    """Drop an unquoted bash `#` comment from one line."""
+    quote = None
+    for i, ch in enumerate(line):
+        if quote is not None:
+            if ch == quote:
+                quote = None
+        elif ch in ('"', "'"):
+            quote = ch
+        elif ch == '#' and (i == 0 or line[i - 1].isspace()):
+            return line[:i].rstrip()
+    return line.rstrip()
 
-    Returns (start, end, json_text, base_indent, suffix, single_line) or None.
-    suffix is what followed the closing }' on the closing line (usually ' \\').
-    """
-    single_re = re.compile(r"^(\s*)" + re.escape(flag) + r"\s+'(\{.*\})'\s*(\\?)\s*$")
-    open_re = re.compile(r"^(\s*)" + re.escape(flag) + r"\s+'\{(.*)$")
-    close_re = re.compile(r"^\s*\}'(.*)$")
-    for i, line in enumerate(lines):
-        if flag not in line:
+
+def _strip_comments_text(text):
+    """Drop bash comments from a whole script, keeping quote contents intact."""
+    out = []
+    quote = None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if quote is not None:
+            out.append(ch)
+            if quote == '"' and ch == '\\' and i + 1 < len(text):
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in ('"', "'"):
+            quote = ch
+            out.append(ch)
+        elif ch == '#' and (i == 0 or text[i - 1].isspace()):
+            while i < len(text) and text[i] != '\n':
+                i += 1
             continue
-        m_single = single_re.match(line)
-        if m_single:
-            base, jtext, cont = m_single.group(1), m_single.group(2), m_single.group(3)
-            suffix = (' \\' if cont else '')
-            return i, i, jtext, base, suffix, True
-        m_open = open_re.match(line)
-        if m_open:
-            base = m_open.group(1)
-            body = [m_open.group(2)]  # content after '{ on the opening line
-            for j in range(i + 1, len(lines)):
-                m_close = close_re.match(lines[j])
-                if m_close:
-                    suffix = m_close.group(1)
-                    jtext = '{' + '\n'.join(body) + '}'
-                    return i, j, jtext, base, suffix, False
-                body.append(lines[j])
-            return None  # unterminated block
-        return None  # unexpected format
+        else:
+            out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
+def _unquote_shell(text, quote):
+    """Turn a shell double-quoted body back into its literal text."""
+    if quote == "'":
+        return text
+    return re.sub(r'\\(["\\$`])', r'\1', text)
+
+
+def _quote_shell(text, quote):
+    """Escape a literal body for the given shell quote character."""
+    if quote == "'":
+        return text
+    return (text.replace('\\', '\\\\').replace('"', '\\"')
+            .replace('$', '\\$').replace('`', '\\`'))
+
+
+def find_json_block(lines, flag):
+    """Locate a `--flag '{...}'` / `--flag "{...}"` JSON block.
+
+    Returns (start, end, json_text, base_indent, suffix, single_line, quote)
+    or None. json_text is the shell-unescaped body. suffix is what followed the
+    closing quote on the closing line (usually ' \\').
+    """
+    for quote in ("'", '"'):
+        q = re.escape(quote)
+        single_re = re.compile(r"^(\s*)" + re.escape(flag) + r"\s+" + q + r"(\{.*\})" + q + r"\s*(\\?)\s*$")
+        open_re = re.compile(r"^(\s*)" + re.escape(flag) + r"\s+" + q + r"\{(.*)$")
+        close_re = re.compile(r"^\s*\}" + q + r"(.*)$")
+        for i, line in enumerate(lines):
+            if flag not in line:
+                continue
+            m_single = single_re.match(line)
+            if m_single:
+                base, jtext, cont = m_single.group(1), m_single.group(2), m_single.group(3)
+                suffix = (' \\' if cont else '')
+                return i, i, _unquote_shell(jtext, quote), base, suffix, True, quote
+            m_open = open_re.match(line)
+            if m_open:
+                base = m_open.group(1)
+                body = [m_open.group(2)]  # content after '{ on the opening line
+                for j in range(i + 1, len(lines)):
+                    m_close = close_re.match(lines[j])
+                    if m_close:
+                        suffix = m_close.group(1)
+                        jtext = _unquote_shell('{' + '\n'.join(body) + '}', quote)
+                        return i, j, jtext, base, suffix, False, quote
+                    body.append(lines[j])
+                return None  # unterminated block
+            break  # this quote style did not match; try the other quote
     return None
 
 
@@ -149,15 +211,17 @@ def _serve_swallowed_command(lines):
     start = find_serve(lines)
     if start is None:
         return None
-    in_squote = False
+    in_squote = in_dquote = False
     i = start
     while i < len(lines):
         line = lines[i]
-        if line.count("'") % 2 == 1:
+        if not in_dquote and line.count("'") % 2 == 1:
             in_squote = not in_squote
-        if i > start and not in_squote and _SHELL_CMD_RE.match(line):
+        if not in_squote and line.count('"') % 2 == 1:
+            in_dquote = not in_dquote
+        if i > start and not in_squote and not in_dquote and _SHELL_CMD_RE.match(line):
             return line
-        if not in_squote and not line.rstrip().endswith('\\'):
+        if not in_squote and not in_dquote and not line.rstrip().endswith('\\'):
             break
         i += 1
     return None
@@ -172,10 +236,11 @@ def _is_single_eplb_arg(body):
     """
     if body == '--enable-eplb':
         return True
-    m = re.fullmatch(r'--eplb-config\.([A-Za-z0-9_]+)(?:\s+(\S+))?', body)
+    # upstream vLLM accepts both `--eplb-config.k v` and `--eplb-config.k=v`
+    m = re.fullmatch(r'--eplb-config\.([A-Za-z0-9_]+)(?:=(\S+)|\s+(\S+))?', body)
     if not m:
         return False
-    key, val = m.group(1), m.group(2)
+    key, val = m.group(1), m.group(2) if m.group(2) is not None else m.group(3)
     if key in EPLB_BOOL_KEYS:
         # boolean switch: a following token is another argument, not its value
         return val is None
@@ -211,7 +276,7 @@ def _has_dynamic_eplb_markers(lines):
     evidence that the template was dynamic. Counting them made force->off flip a
     V1 baseline's V2 runner to 1. Comments must not count either.
     """
-    code = '\n'.join(ln for ln in lines if not ln.lstrip().startswith('#'))
+    code = _strip_comments_text('\n'.join(lines))
     return bool(re.search(
         r'^\s*export\s+DYNAMIC_EPLB\s*=\s*["\']?true["\']?\s*$'
         r'|^\s*--enable-eplb\b'
@@ -231,8 +296,11 @@ def _first_index(lines, regex):
 
 
 def _export_has_extra(line, name):
-    """True if an `export NAME=...` line also assigns other variables."""
-    body = line.strip()
+    """True if an `export NAME=...` line also assigns other variables.
+
+    A trailing `# comment` is not an assignment and must not be counted.
+    """
+    body = _strip_inline_comment(line).strip()
     m = re.match(r'^export\s+', body)
     if not m:
         return False
@@ -264,21 +332,43 @@ def _repair_serve_continuation(lines):
     if start is None:
         return lines
     out = list(lines)
-    in_squote = False
+    in_squote = in_dquote = False
     i = start
     while i < len(out):
         line = out[i]
-        if line.count("'") % 2 == 1:
+        if not in_dquote and line.count("'") % 2 == 1:
             in_squote = not in_squote
-        if i > start and not in_squote and _SHELL_CMD_RE.match(line):
+        if not in_squote and line.count('"') % 2 == 1:
+            in_dquote = not in_dquote
+        if i > start and not in_squote and not in_dquote and _SHELL_CMD_RE.match(line):
             prev = i - 1
             if out[prev].rstrip().endswith('\\'):
                 out[prev] = out[prev].rstrip()[:-1].rstrip()
             break
-        if not in_squote and not line.rstrip().endswith('\\'):
+        if not in_squote and not in_dquote and not line.rstrip().endswith('\\'):
             break
         i += 1
     return out
+
+
+def _v2_baseline(lines):
+    """Return (value, anchored) for the V2 runner value to restore on off.
+
+    A force probe records the pre-probe value in a comment anchor. Without an
+    anchor, the current live V2 assignment is the baseline. `absent` means the
+    template had no V2 line at all.
+    """
+    for line in lines:
+        m = RE_FORCE_ANCHOR.match(line)
+        if m:
+            return m.group(2), True
+    idx = _first_index(lines, RE_V2)
+    if idx is None:
+        return 'absent', False
+    m = re.match(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER\s*=\s*(\S+)\s*$',
+                 _strip_inline_comment(lines[idx]))
+    val = m.group(1).strip('"\'') if m else '1'
+    return (val if val in ('0', '1') else '1'), False
 
 
 
@@ -295,16 +385,19 @@ def transform(src, mode, redundant, window, interval):
     has_markers = _has_dynamic_eplb_markers(lines)
 
     # Drop existing DYNAMIC_EPLB lines and standalone EPLB args first.
+    # Inline bash comments are stripped for the checks, never treated as
+    # additional assignments (only a real second assignment is refused).
     out = []
     for line in lines:
-        if RE_DYN_EXPORT.match(line):
-            if _export_has_extra(line, 'DYNAMIC_EPLB'):
+        code = _strip_inline_comment(line)
+        if RE_DYN_EXPORT.match(code):
+            if _export_has_extra(code, 'DYNAMIC_EPLB'):
                 raise ValueError("DYNAMIC_EPLB 与其它变量写在同一 export 行（%r）；"
                                  "请先拆成独立行，避免切换模式时误删其它赋值" % line.strip())
             continue
-        if re.match(r'^\s*unset\s+DYNAMIC_EPLB\s*$', line):
+        if re.match(r'^\s*unset\s+DYNAMIC_EPLB\s*$', code):
             continue
-        if re.match(r'^\s*unset\s+DYNAMIC_EPLB\s+\S', line):
+        if re.match(r'^\s*unset\s+DYNAMIC_EPLB\s+\S', code):
             raise ValueError("unset DYNAMIC_EPLB 与其它变量写在同一行（%r）；请先拆成独立行" % line.strip())
         out.append(line)
     out = strip_eplb_args(out)
@@ -331,13 +424,29 @@ def transform(src, mode, redundant, window, interval):
 
     # --- runner / DYNAMIC_EPLB ---
     if mode == 'dynamic':
+        out = [ln for ln in out if not RE_FORCE_ANCHOR.match(ln)]
         v2_idx = set_v2('1')
         out.insert(v2_idx + 1, '%sexport DYNAMIC_EPLB="true"' % indent)
     elif mode == 'force':
+        baseline_v2, anchored = _v2_baseline(out)
         v2_idx = set_v2('0')
         out.insert(v2_idx + 1, '%sunset DYNAMIC_EPLB' % indent)
-    else:  # off: only touch V2 when the file carried *dynamic* EPLB markers
-        if has_markers:
+        if not anchored:
+            # Record the pre-probe value so a later `off` restores it even
+            # though force itself removed every dynamic marker.
+            out.insert(v2_idx + 2, '%s# eplb-force-probe: baseline_v2=%s'
+                       % (indent, baseline_v2))
+    else:  # off
+        baseline_v2, anchored = _v2_baseline(out)
+        if anchored:
+            if baseline_v2 == 'absent':
+                idx = _first_index(out, RE_V2)
+                if idx is not None:
+                    out.pop(idx)
+            else:
+                set_v2(baseline_v2)
+            out = [ln for ln in out if not RE_FORCE_ANCHOR.match(ln)]
+        elif has_markers:
             set_v2('1')
 
     # --- EPLB serve flags (dynamic only) ---
@@ -368,7 +477,7 @@ def transform(src, mode, redundant, window, interval):
     # --- --additional-config ---
     ac = find_json_block(out, '--additional-config')
     if ac is not None:
-        start, end, jtext, base, suffix, single = ac
+        start, end, jtext, base, suffix, single, quote = ac
         try:
             obj = json.loads(jtext)
         except ValueError as e:
@@ -383,15 +492,26 @@ def transform(src, mode, redundant, window, interval):
             changed = True
         if not changed:
             return '\n'.join(out) + '\n'
+        # Keep the block's original indent width and colon spacing so a later
+        # off restores a diff-free baseline for common template styles.
+        colon = ':'
+        m_colon = re.search(r'"[^"\n]*"(\s*):(\s*)', jtext)
+        if m_colon and m_colon.group(2):
+            colon = ': '
+        m_indent = re.search(r'\n(\s*)"', jtext)
+        # indent in the dump is relative; the raw block already carries `base`
+        indent_width = max(len(m_indent.group(1)) - len(base), 1) if m_indent else 4
         if single:
-            dumped = json.dumps(obj, separators=(',', ':'))
-            out[start] = "%s--additional-config '%s'%s" % (base, dumped, suffix)
+            item_sep = ', ' if re.search(r',\s', jtext) else ','
+            dumped = json.dumps(obj, separators=(item_sep, colon))
+            out[start] = "%s--additional-config %s%s%s%s" % (
+                base, quote, _quote_shell(dumped, quote), quote, suffix)
         else:
-            dumped = json.dumps(obj, indent=4, separators=(',', ':'))
+            dumped = json.dumps(obj, indent=indent_width, separators=(',', colon))
             inner = dumped.splitlines()[1:-1]
-            body = [(base + ln) if ln else ln for ln in inner]
-            out[start:end + 1] = ["%s--additional-config '{" % base] + body + \
-                ["%s}'%s" % (base, suffix)]
+            body = [(base + _quote_shell(ln, quote)) if ln else ln for ln in inner]
+            out[start:end + 1] = ["%s--additional-config %s{" % (base, quote)] + body + \
+                ["%s}%s%s" % (base, quote, suffix)]
     elif mode == 'force':
         raise ValueError("no --additional-config block found to merge "
                          '"enable_force_eplb":true into -- add it manually near '
@@ -437,11 +557,11 @@ def verify(text, mode, redundant, window, interval):
              'export DYNAMIC_EPLB="true" must be a standalone line before vllm serve'),
             (inside_serve(r'^\s*--enable-eplb(\s|\\|$)'),
              '--enable-eplb flag present inside the serve command'),
-            (inside_serve(r'^\s*--eplb-config\.num_redundant_experts\s+%d(\s|\\|$)' % redundant),
+            (inside_serve(r'^\s*--eplb-config\.num_redundant_experts(?:\s+|=)%d(\s|\\|$)' % redundant),
              '--eplb-config.num_redundant_experts %d present' % redundant),
-            (inside_serve(r'^\s*--eplb-config\.window_size\s+%d(\s|\\|$)' % window),
+            (inside_serve(r'^\s*--eplb-config\.window_size(?:\s+|=)%d(\s|\\|$)' % window),
              '--eplb-config.window_size %d present' % window),
-            (inside_serve(r'^\s*--eplb-config\.step_interval\s+%d(\s|\\|$)' % interval),
+            (inside_serve(r'^\s*--eplb-config\.step_interval(?:\s+|=)%d(\s|\\|$)' % interval),
              '--eplb-config.step_interval %d present' % interval),
             (not _force_enabled(text), 'no enable_force_eplb key'),
         ],
@@ -498,16 +618,17 @@ def check_state(src, path):
         print('状态: 不明确 —— 不会改写该模板；请确认 --kv-transfer-config 的 "kv_role":"kv_producer"')
         return 1
 
-    dyn_export = re.search(r'^\s*export\s+DYNAMIC_EPLB="true"\s*$', src, re.M) is not None
-    dyn_any = re.search(r'^\s*export\s+DYNAMIC_EPLB\s*=', src, re.M) is not None
-    unset = re.search(r'^\s*unset\s+DYNAMIC_EPLB\b', src, re.M) is not None
-    v2_1 = re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=1\s*$', src, re.M) is not None
-    v2_0 = re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=0\s*$', src, re.M) is not None
-    enable = re.search(r'^\s*--enable-eplb\b', src, re.M) is not None
-    cfg = {k: re.search(r'^\s*--eplb-config\.%s\s+\S+' % k, src, re.M) is not None
+    code = _strip_comments_text(src)
+    dyn_export = re.search(r'^\s*export\s+DYNAMIC_EPLB="true"\s*$', code, re.M) is not None
+    dyn_any = re.search(r'^\s*export\s+DYNAMIC_EPLB\s*=', code, re.M) is not None
+    unset = re.search(r'^\s*unset\s+DYNAMIC_EPLB\b', code, re.M) is not None
+    v2_1 = re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=1\s*$', code, re.M) is not None
+    v2_0 = re.search(r'^\s*export\s+VLLM_USE_V2_MODEL_RUNNER=0\s*$', code, re.M) is not None
+    enable = re.search(r'^\s*--enable-eplb\b', code, re.M) is not None
+    cfg = {k: re.search(r'^\s*--eplb-config\.%s(?:\s+|=)\S+' % k, code, re.M) is not None
            for k in EPLB_CONFIG_KEYS}
     force_key = _force_enabled(src)
-    n_ac = len(re.findall(r'--additional-config', src))
+    n_ac = len(re.findall(r'--additional-config', code))
 
     markers = {
         'V2 runner=1': v2_1, 'V2 runner=0': v2_0,

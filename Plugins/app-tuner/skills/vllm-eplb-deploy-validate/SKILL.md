@@ -38,7 +38,7 @@ metadata:
 
 | 状态 | V2 runner | 环境变量 | serve 参数 | 定位 |
 |---|---|---|---|---|
-| `off` | `=1`（仅当模板原本开过 EPLB，否则不改 V2） | 无 `DYNAMIC_EPLB` | 无 eplb 参数 | 基线，用来做对照 |
+| `off` | `=1`（仅当模板原本开过 **dynamic** EPLB；经 force 探针后按探针记录的原始值还原） | 无 `DYNAMIC_EPLB` | 无 eplb 参数 | 基线，用来做对照 |
 | `dynamic` | `=1` | `export DYNAMIC_EPLB="true"` | `--enable-eplb` + 3 个 `--eplb-config.*` | **优化手段，唯一可上线形态** |
 | `force` | `=0` | `unset DYNAMIC_EPLB` | 在 `--additional-config` JSON 里加 `"enable_force_eplb":true` | 均衡性能的**参照上限**，不可上线 |
 
@@ -52,6 +52,9 @@ metadata:
 1. **只改 P（prefill）节点**的 `run_dp_template.sh`。D 节点/代理/mooncake 脚本一律不动；正向判据是
    `--kv-transfer-config` 的 JSON 里 `"kv_role":"kv_producer"`。
 2. `dynamic` 依赖 `VLLM_USE_V2_MODEL_RUNNER=1`，`force` 依赖 `=0`，两者互斥，只改一半等于配置矛盾。
+   force 写盘前会把模板原有 V2 值记在 `# eplb-force-probe: baseline_v2=...` 注释锚里，
+   之后 `--mode off` 按该值还原（V2=1 基线仍是 1、V1 基线仍是 0、原本没有 V2 行则删掉），
+   避免 off 组跑在 force 留下的 V1 runner 上污染 A/B 对照。
 3. 已有 `--additional-config` 时必须**合并进那个 JSON**，不能出现第二个同名 flag。
 4. 关闭 dynamic 用 `unset DYNAMIC_EPLB`（unset 不接受 `=`）。
 5. 改文件前留带时间戳的备份；写入用同目录唯一临时文件 + 原子替换。
@@ -70,7 +73,9 @@ python3 <skill>/scripts/apply_eplb.py --template <...> --mode dynamic --ep-size 
 
 脚本保证：只接受 `kv_role=kv_producer` 的 P 节点模板；拒绝没有 `vllm serve` 的脚本；没有
 `--enable-expert-parallel` 时拒绝开 dynamic；EPLB 参数与其它参数写在同一行时拒绝（布尔开关
-`--eplb-config.log_balancedness` 后跟另一 flag 也算同行）；`dynamic` 必须给 `--ep-size` 并据其校验
+`--eplb-config.log_balancedness` 后跟另一 flag 也算同行）；`--eplb-config.k v` 与上游等价的
+`--eplb-config.k=v` 两种写法都能识别；`export`/`unset` 行尾的 `#` 注释不算额外赋值；
+`--additional-config` 的单引号与双引号包裹都支持；`dynamic` 必须给 `--ep-size` 并据其校验
 整除、非整倍向上取整；`--mode off` 只按有效（非注释）配置判断模板是否开过 EPLB；`--enable-expert-parallel`
 是 serve 末参数时，EPLB 参数插在该行之前、不改 EP 行本身，重复执行或切 off/force 都不会留下悬空续行符
 把下一行命令吞进 serve（verify 会检测并拒绝）；符号链接先解析真实文件；写后 `bash -n` 失败自动回滚；
@@ -87,8 +92,11 @@ python3 <skill>/scripts/gen_imbalanced_dataset.py --out imbalanced_100x100k.json
     --num-requests 100 --target-tokens 100000 --model dsv41
 ```
 
-每条请求带约 100k token 的重复长前缀，专家命中高度集中。输出 dumpjsonl（每行一个 OpenAI chat 请求），
-配 `benchmark_serving.py --dataset-name dumpjsonl` 使用。
+每条请求带约 100k token 的重复长前缀，专家命中高度集中。输出为每行一个 OpenAI chat 请求的 JSONL。
+
+> `dumpjsonl` 是站点分支 benchmark 工具私有的 `--dataset-name`，上游 vLLM 0.32 没有这个名字；
+> 上游 0.32 的 `benchmarks/benchmark_serving.py` 已废弃为转发存根（运行即退出），请改用
+> `vllm bench serve`（`--save-result` 也在这里），并用其 `custom` 数据集或站点提供的转换脚本读取该 JSONL。
 
 ## 三组对照（是否实测由使用者决定）
 
@@ -109,7 +117,7 @@ python3 <skill>/scripts/make_run_manifest.py --out eplb_run_manifest.json \
     --window-size 1000 --step-interval 1000 \
     --dataset imbalanced_100x100k.jsonl --concurrency 32 --rounds 4 \
     --service dsv41-prefill
-# measurements: 每组每轮 TTFT（benchmark --save-result 结果，或归一化 JSON）
+# measurements: 每组每轮 TTFT（`vllm bench serve --save-result` 结果，或归一化 JSON）
 ```
 
 **实测前置**：使用者提供 benchmark 服务器与端点后才执行；Agent 不擅自重启服务、不擅自压测。若使用者
@@ -132,7 +140,12 @@ cd <P脚本目录> && bash start_proxy.sh
 
 ## 输出契约（供后续收益分析/人工使用）
 
-- `eplb_run_manifest.json`：`template.sha256`、`params`、`experiment{dataset,concurrency,rounds,groups,drop_warmup_round}`。
+- `eplb_run_manifest.json`：`template.sha256`（源模板）、`params`（计划值）、`params_effective`
+  （从模板实际读到的值：三项 eplb-config 参数 + `dynamic_eplb` 布尔）、`templates`（用
+  `--group-template off=...` 等传入时逐组记录改写后模板的 path/sha256）、
+  `experiment{dataset,concurrency,rounds,groups,drop_warmup_round}`。
+- `--additional-config` 改写会按原块的缩进宽度与冒号风格重建；常见风格下 force→off 可逐字节还原，
+  自定义了特殊排版/空格时可能有等价但非逐字节一致的 diff。
 - `eplb_measurements.json`：三组逐轮原始 TTFT（`{group: [ttft_round1, ...]}`），保留原始值不预先求均值。
 
 ## 排查（部署/模板类）
@@ -145,7 +158,7 @@ cd <P脚本目录> && bash start_proxy.sh
 | force 下 `--additional-config` 数量不是 1 | 模板本来就有重复 flag，先合并 |
 | 报"EPLB 参数没有独占一行" | 把 EPLB 参数拆成独立行，避免误删 `--port` 等相邻参数 |
 | dynamic 写入参数与预期不符 | `--ep-size` 为 dynamic 必填；非整数倍会取整并提示 |
-| 切 off 后 V1 模板被翻转 | 仅当模板有效配置里确有 EPLB 标记才动 V2；注释不算 |
+| 切 off 后 V1 模板被翻转 | 仅当有效配置里确有 dynamic EPLB 标记才补 V2=1；force 过的模板按探针锚还原原值，注释不算 |
 | 写后 `bash -n` 失败 | 脚本自动回滚到备份，检查模板 shell 结构 |
 
 收益是否达标、要不要保留/回退，可在拿到 measurements 后另行分析。

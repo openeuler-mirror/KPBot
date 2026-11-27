@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tier-A case runner: skill-contract checks for vllm-eplb-optimization.
+# Tier-A case runner: skill-contract checks for vllm-eplb-deploy-validate.
 # Runs the unittest contract suite plus the bundled script regression, then
 # writes results/result.json. Exit 0 only if every group is failure-free.
 #

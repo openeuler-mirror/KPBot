@@ -373,6 +373,110 @@ def main():
               and md.get("params_effective", {}).get("redundant_experts") == 32,
               str(md.get("params_effective")))
 
+        # --- 5k. review regressions (PR #383) ---
+        # V2=1 baseline must survive force -> off with V2=1 restored.
+        v2f = os.path.join(tmp, "v2_force_off.sh")
+        write(v2f, "#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=1\nvllm serve /models/x \\\n" + KV +
+                   "    --additional-config '{\"a\":1}' \\\n    --port 8000\n")
+        run([APPLY, "--template", v2f, "--mode", "force"])
+        rv2 = run([APPLY, "--template", v2f, "--mode", "off"])
+        tv2 = read(v2f)
+        check("force->off: V2=1 基线恢复 V2=1 且清掉探针锚",
+              rv2.returncode == 0 and "VLLM_USE_V2_MODEL_RUNNER=1" in tv2
+              and "eplb-force-probe" not in tv2, tv2)
+
+        chain = os.path.join(tmp, "dynamic_force_off.sh")
+        shutil.copy2(os.path.join(FIXTURES, "run_dp_template_p_clean.sh"), chain)
+        run([APPLY, "--template", chain, "--mode", "dynamic", "--ep-size", "16"])
+        run([APPLY, "--template", chain, "--mode", "force"])
+        rc2 = run([APPLY, "--template", chain, "--mode", "off"])
+        tc2 = read(chain)
+        check("dynamic->force->off: 还原为 V2=1",
+              rc2.returncode == 0 and "VLLM_USE_V2_MODEL_RUNNER=1" in tc2
+              and "eplb-force-probe" not in tc2)
+
+        # Upstream accepts `--eplb-config.k=v`; it must be parsed and removable.
+        eq = os.path.join(tmp, "eq_form.sh")
+        eq_src = read(os.path.join(FIXTURES, "run_dp_template_p_dynamic.sh"))
+        for key, val in (("num_redundant_experts", 16), ("window_size", 1000),
+                         ("step_interval", 1000)):
+            eq_src = eq_src.replace("--eplb-config.%s %d" % (key, val),
+                                    "--eplb-config.%s=%d" % (key, val))
+        write(eq, eq_src)
+        req = run([APPLY, "--template", eq, "--mode", "off"])
+        check("equals form: 识别并关闭 --eplb-config.k=v",
+              req.returncode == 0 and "--eplb-config." not in read(eq))
+        write(eq, read(os.path.join(FIXTURES, "run_dp_template_p_clean.sh")))
+        req2 = run([APPLY, "--template", eq, "--mode", "dynamic", "--ep-size", "16"])
+        check("equals form: dynamic 以空格形式落盘",
+              req2.returncode == 0 and "--eplb-config.num_redundant_experts 16" in read(eq))
+
+        # Inline bash comments are legal and not extra assignments.
+        cm = os.path.join(tmp, "inline_comment.sh")
+        write(cm, '#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=1 # v2 runner\n'
+                  'export DYNAMIC_EPLB="true" # dynamic on\n'
+                  'unset DYNAMIC_EPLB # force probe\n'
+                  "vllm serve /models/x \\\n" + KV +
+                  "    --enable-expert-parallel\n")
+        rcm = run([APPLY, "--template", cm, "--mode", "dynamic", "--ep-size", "16"])
+        check("inline comment: export/unset 行尾注释不误拒",
+              rcm.returncode == 0 and 'export DYNAMIC_EPLB="true"' in read(cm)
+              and "unset DYNAMIC_EPLB" not in read(cm))
+
+        # Double-quoted --additional-config (shell-escaped JSON).
+        dq = os.path.join(tmp, "dq_ac.sh")
+        dq_src = ('#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=1\nvllm serve /models/x \\\n'
+                  + KV + '    --additional-config "{\\"a\\": 1, \\"b\\": false}" \\\n'
+                  '    --port 8000\n')
+        write(dq, dq_src)
+        rdq = run([APPLY, "--template", dq, "--mode", "force"])
+        cdq = run([APPLY, "--template", dq, "--mode", "check"])
+        check("double-quote AC: force 合并并可识别",
+              rdq.returncode == 0 and '"enable_force_eplb": true' in read(dq).replace('\\"', '"')
+              and "状态: force EPLB" in cdq.stdout)
+        rdq2 = run([APPLY, "--template", dq, "--mode", "off"])
+        check("double-quote AC: off 逐字节还原",
+              rdq2.returncode == 0 and read(dq) == dq_src)
+
+        # additional-config block keeps its indent/colon style on rewrite.
+        sty = os.path.join(tmp, "style_ac.sh")
+        sty_src = ('#!/bin/bash\nexport VLLM_USE_V2_MODEL_RUNNER=1\nvllm serve /models/x \\\n'
+                   + KV + "    --additional-config '{\n      \"a\": 1,\n"
+                   "      \"b\": false\n    }' \\\n    --port 8000\n")
+        write(sty, sty_src)
+        run([APPLY, "--template", sty, "--mode", "force"])
+        rst = run([APPLY, "--template", sty, "--mode", "off"])
+        check("AC 风格: force->off 保留缩进/冒号风格并逐字节还原",
+              rst.returncode == 0 and read(sty) == sty_src)
+
+        # manifest params_effective must use live (non-comment) config only.
+        mtpl2 = os.path.join(tmp, "manifest_comment.sh")
+        write(mtpl2, base_template("# 计划参考: --eplb-config.num_redundant_experts 17\n"
+                                   'export DYNAMIC_EPLB="false"\n'
+                                   "vllm serve /models/x \\\n" + KV +
+                                   "    --enable-expert-parallel \\\n"
+                                   "    --eplb-config.num_redundant_experts 16 \\\n"
+                                   "    --eplb-config.window_size 1000 # window\n"
+                                   "    --eplb-config.step_interval 1000\n"))
+        mf2 = os.path.join(tmp, "manifest_comment.json")
+        run([MANIFEST, "--out", mf2, "--template", mtpl2, "--mode", "dynamic",
+             "--redundant-experts", "17"])
+        eff = json.load(open(mf2)).get("params_effective", {})
+        check("manifest: params_effective 忽略注释且只认 =\"true\"",
+              eff.get("redundant_experts") == 16 and eff.get("window_size") == 1000
+              and eff.get("dynamic_eplb") is False, str(eff))
+
+        mfg = os.path.join(tmp, "manifest_groups.json")
+        gtpl = os.path.join(FIXTURES, "run_dp_template_p_clean.sh")
+        run([MANIFEST, "--out", mfg, "--template", gtpl, "--mode", "multiple",
+             "--groups", "off,dynamic",
+             "--group-template", "off=" + os.path.join(FIXTURES, "run_dp_template_p_clean.sh"),
+             "--group-template", "dynamic=" + os.path.join(FIXTURES, "run_dp_template_p_dynamic.sh")])
+        mdg = json.load(open(mfg))
+        check("manifest: 记录每组改写后模板哈希",
+              set(mdg.get("templates", {})) == {"off", "dynamic"}
+              and len(mdg["templates"]["off"]["sha256"]) == 64)
+
         # --- 6. dataset generator ---
         out = os.path.join(tmp, "imb.jsonl")
         rg = run([GEN, "--out", out, "--num-requests", "5", "--target-tokens", "2000"])
