@@ -1,0 +1,28 @@
+{
+  "skill_name": "ceph-file-expansion",
+  "evals": [
+    {
+      "id": "CFX-E01",
+      "prompt": "现有 x86 的 Ceph 集群（Ceph 12.2.11），要加两台鲲鹏服务器 ceph4/ceph5 扩容，文件存储（CephFS/MDS）路径怎么做？",
+      "expected_output": "按 file-expansion.md 文件存储扩容路径：新节点完成防火墙收敛（放通 Ceph 端口或仅新增节点停止防火墙，需授权）/主机名/hosts/NTP/免密/SELINUX/epel 源/https ceph.repo 配置后安装同版本 Ceph（钉死精确包名，排除 debuginfo 包）；修改 ceph1 的 ceph.conf 将 ceph4/ceph5 加入 mon_initial_members 与 mon_host，用 ceph-deploy config push 推送配置后 ceph-deploy mon create ceph4 ceph5 并用 ceph mon stat 验证；ceph-deploy mgr create 与 ceph-deploy mds create 部署 MGR/MDS（需扩 active 时调大 max_mds），建 OSD 前逐机核对设备标识并按 by-id 逐盘创建；先采集存储池原值，再按官方口径公式（OSD 总数×100/最大副本数，向上取整 2 的整数次幂，多池按数据量占比分摊）调整 fs_metadata/fs_data 存储池 pg_num/pgp_num；CephFS 客户端以受限身份与 secretfile 重新挂载（不回显密钥）；扩容后用 ceph -s 确认数据迁移结束集群恢复健康、ceph osd df 确认容量增加、ceph fs status 确认 MDS 生效；删除 Monitor（mon destroy）属破坏性操作需二次确认",
+      "files": [],
+      "expectations": [
+        "给出新节点环境配置项（防火墙收敛需授权）与安装同版本 Ceph（钉死精确包名、排除 debuginfo 包）",
+        "给出编辑 ceph.conf 增加 mon_initial_members/mon_host、config push 推送配置、创建 Monitor 并以 mon stat 验证的顺序",
+        "给出部署 MGR/MDS（max_mds）、建 OSD 前逐机核对设备标识并按 by-id 创建、采集存储池原值后按官方口径公式调整 fs_metadata/fs_data 存储池 pg_num/pgp_num",
+        "说明 CephFS 客户端以受限身份与 secretfile 重新挂载且不得回显密钥，并给出 ceph -s、ceph osd df、ceph fs status 的扩容验证与删除 Monitor 破坏性二次确认"
+      ]
+    },
+    {
+      "id": "CFX-E02",
+      "prompt": "Ceph 文件存储扩容变更后，CephFS 客户端挂载要不要动？具体怎么重新挂载？",
+      "expected_output": "按 file-expansion.md：扩容变更后 CephFS 客户端必须重新挂载；先在 ceph1 用 ceph auth get-or-create 创建受限客户端身份 client.fs-expansion（mon allow r、osd allow rwx pool=fs_data、mds allow rw path=/）并生成 0600 权限的 keyring 留在 ceph1（供 ceph -s --name client.fs-expansion 受限身份验证），全程不得回显或打印任何密钥内容；从 keyring 提取 key= 值另存 0600 纯 key 文件 /root/.ceph-fs-key 并完成 ceph1 到 client1 的传输（12.2.11 mount.ceph 的 secretfile 只取文件首行纯 base64 key，keyring 文件首行是段头，整 keyring 文件作 secretfile 会报 secret is not valid base64）；在 client1 卸载原挂载点后以 ceph 为 type 将 MON 节点根目录重新挂载至 /mnt/cephfs，挂载选项使用 name=fs-expansion 与 secretfile 指向该纯 key 文件并加 sync，密钥不进命令行参数与 shell 历史；重新挂载后用 stat -f 验证挂载生效，并以 ceph -s 确认集群恢复健康",
+      "files": [],
+      "expectations": [
+        "说明扩容变更后 CephFS 客户端必须重新挂载",
+        "说明使用受限客户端身份 client.fs-expansion，secretfile 指向从 keyring 提取的 0600 纯 key 文件（keyring 留作 ceph -s --name 验证），不得回显密钥、密钥不进命令行参数",
+        "给出重新挂载后的验证方式与集群健康确认"
+      ]
+    }
+  ]
+}
