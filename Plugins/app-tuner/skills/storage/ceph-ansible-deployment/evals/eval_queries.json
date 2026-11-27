@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-ansible-deployment",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "用 ceph-ansible 部署一套新的 Ceph 集群，all.yml 和 hosts 怎么配",
+      "should_trigger": true,
+      "note": "ansible 路径部署集群"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "ceph-ansible 部署完的集群怎么加 OSD 节点，整套集群怎么删掉",
+      "should_trigger": true,
+      "note": "ansible 扩容（add-mon/add-osd）与删除集群（purge-cluster.yml）"
+    },
+    {
+      "id": "CQ-03",
+      "prompt": "Ceph 自动部署套件 ceph_input.xlsx 的安装参数怎么填、怎么校验",
+      "should_trigger": true,
+      "note": "自动部署路径 auto-deployment"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "ceph-deploy 手工部署块存储，MON/OSD 初始化和 rbd 块设备创建映射怎么做",
+      "should_trigger": false,
+      "note": "routes to 姊妹 skill ceph-block-storage-deployment（同批姊妹 PR，同批交付，ceph-deploy 手工路径）"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "鲲鹏节点加入现有 x86 Ceph 集群做扩容，ceph-deploy 路径怎么做",
+      "should_trigger": false,
+      "note": "routes to 姊妹 skill ceph-block-expansion / ceph-file-expansion / ceph-object-expansion（同批姊妹 PR，同批交付，非 ansible 的鲲鹏扩容按集群实际使用的存储接口路由）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "Ceph 集群 ceph.conf 参数和 PG 分布怎么调优",
+      "should_trigger": false,
+      "note": "routes to ceph-parameter-tuning（集群运行期参数调优）"
+    }
+  ]
+}
