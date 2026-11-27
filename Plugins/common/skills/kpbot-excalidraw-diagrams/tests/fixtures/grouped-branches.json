@@ -1,0 +1,27 @@
+{
+  "title": "从文档到清晰图表",
+  "source": "source.md",
+  "direction": "TB",
+  "groups": [
+    {"id": "understand", "label": "01 · 理解输入"},
+    {"id": "create", "label": "02 · 生成与检查"}
+  ],
+  "nodes": [
+    {"id": "input", "label": "文字 / Markdown"},
+    {"id": "extract", "label": "提取实体与关系", "group": "understand"},
+    {"id": "complete", "label": "信息完整？", "shape": "diamond", "group": "understand"},
+    {"id": "draw", "label": "生成可编辑图", "group": "create"},
+    {"id": "unknown", "label": "标注待确认项", "group": "create"},
+    {"id": "check", "label": "检查文字、元素与箭头", "group": "create"},
+    {"id": "deliver", "label": "交付图文件与预览"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "input", "to": "extract"},
+    {"id": "e2", "from": "extract", "to": "complete"},
+    {"id": "e3", "from": "complete", "to": "draw", "label": "是"},
+    {"id": "e4", "from": "complete", "to": "unknown", "label": "否"},
+    {"id": "e5", "from": "draw", "to": "check"},
+    {"id": "e6", "from": "unknown", "to": "check"},
+    {"id": "e7", "from": "check", "to": "deliver"}
+  ]
+}

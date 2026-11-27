@@ -1,0 +1,4 @@
+interface:
+  display_name: "CPU 推理与 Host 机制验证"
+  short_description: "沿指定 PR 或调用路径核对 CPU 与 Host 性能假设，设计单变量对照实验"
+  default_prompt: "请使用 $kpbot-ai-host-insight 核对我指定的 CPU 推理或 Host 机制，定位关键路径、列出证据并设计可证伪的 A/B 实验。"

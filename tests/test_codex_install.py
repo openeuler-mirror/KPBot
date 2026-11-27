@@ -723,6 +723,31 @@ class CodexInstallTests(unittest.TestCase):
                 self.install()
         self.assertFalse(self.installed().exists())
 
+    def test_npm_skill_install_and_update_skip_local_artifacts(self):
+        source = self.plugin / "skills/example"
+        write_json(source / "package-lock.json", {"lockfileVersion": 3})
+        write(source / "test-output/SKILL.md", "Generated output")
+        write(source / "references/test-output/example.txt", "Published example")
+        tool = source / "node_modules/tool"
+        write(tool / "SKILL.md", "Dependency instructions")
+        write(tool / "cli.js", "fixture")
+        with directory_link(tool, source / "node_modules/.bin/tool"):
+            documents = [path for path in codex.skill_resources(source) if path.name == "SKILL.md"]
+            self.assertEqual(documents, [source / "SKILL.md"])
+            for version in ("first", "updated"):
+                write(source / "scripts/diagram.mjs", version)
+                self.assertEqual(self.install(), 1)
+                self.assertEqual((self.installed() / "scripts/diagram.mjs").read_text(), version)
+                self.assertTrue((self.installed() / "package-lock.json").is_file())
+                self.assertTrue((self.installed() / "references/test-output/example.txt").is_file())
+                self.assertFalse((self.installed() / "node_modules").exists())
+                self.assertFalse((self.installed() / "test-output").exists())
+
+            with directory_link(tool, source / "references/tool"):
+                with self.assertRaisesRegex(ValueError, "regular files"):
+                    self.install()
+            self.assertEqual((self.installed() / "scripts/diagram.mjs").read_text(), "updated")
+
     @unittest.skipUnless(os.name == "nt", "Windows junction behavior")
     def test_windows_junction_installation_directories_are_rejected(self):
         outside = self.directory / "outside"
@@ -871,9 +896,11 @@ class CodexInstallTests(unittest.TestCase):
         manifest = json.loads((self.root / codex.MANIFEST).read_text(encoding="utf-8"))
         skills = self.root / "skills"
         names = [codex.skill_document(document)[0] for document in skills.rglob("SKILL.md")]
-        source_count = sum(len(list((metadata.parent.parent / "skills").rglob("SKILL.md")))
+        source_count = sum(1
                            for metadata in codex.plugin_manifests(REPOSITORY / "Plugins")
-                           if codex.plugin_config(metadata) is not None)
+                           if codex.plugin_config(metadata) is not None
+                           for path in codex.skill_resources(metadata.parent.parent / "skills")
+                           if path.name == "SKILL.md")
         measured = {
             "manifest_skills": len(manifest["installed_skills"]),
             "installed_skill_documents": len(names),
@@ -888,7 +915,8 @@ class CodexInstallTests(unittest.TestCase):
 
     def test_repository_catalog_installs_with_nested_resources(self):
         codex.install(REPOSITORY, self.root, "project")
-        for name in ("kpbot-code-optimizer", "faiss-build", "kptools-openeuler-agentenv", "openwiki-sync"):
+        for name in ("kpbot-ai-host-insight", "kpbot-excalidraw-diagrams",
+                     "kpbot-code-optimizer", "faiss-build", "kptools-openeuler-agentenv", "openwiki-sync"):
             self.assertTrue((self.installed(name) / "SKILL.md").is_file(), name)
         for name in ("drive-claude-optimize-pipeline", "multimedia-code-optimizer", "kunpeng-knowledge"):
             self.assertFalse(self.installed(name).exists(), name)

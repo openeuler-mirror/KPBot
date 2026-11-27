@@ -60,13 +60,27 @@ def check_directory(path):
         raise ValueError("Expected a directory without links: " + str(path))
 
 
+def local_npm_artifacts(directory, names):
+    if "SKILL.md" not in names or "package-lock.json" not in names:
+        return set()
+    candidates = (Path(directory) / name for name in ("node_modules", "test-output") if name in names)
+    return {path.name for path in candidates if not is_link(path) and path.is_dir()}
+
+
+def skill_resources(root):
+    yield root
+    if root.is_dir() and not is_link(root):
+        names = os.listdir(root)
+        ignored = local_npm_artifacts(root, names)
+        for name in names:
+            if name not in ignored:
+                yield from skill_resources(root / name)
+
+
 def check_tree(root):
-    if is_link(root) or not (root.is_file() or root.is_dir()):
-        raise ValueError("Skill resources must be regular files or directories: " + str(root))
-    if root.is_dir():
-        for path in root.rglob("*"):
-            if is_link(path) or not (path.is_file() or path.is_dir()):
-                raise ValueError("Skill resources must be regular files or directories: " + str(path))
+    for path in skill_resources(root):
+        if is_link(path) or not (path.is_file() or path.is_dir()):
+            raise ValueError("Skill resources must be regular files or directories: " + str(path))
 
 
 def read_json(path):
@@ -199,7 +213,11 @@ def discover_skills(repository):
 
 
 def prepare_skill(repository, destination, source, package, plugin):
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".git")
+    ignore_caches = shutil.ignore_patterns("__pycache__", "*.pyc", ".git")
+
+    def ignore(directory, names):
+        return ignore_caches(directory, names) | local_npm_artifacts(directory, names)
+
     check_tree(source)
     shutil.copytree(source, destination, ignore=ignore)
     if source != package:

@@ -38,6 +38,16 @@
         "precision", "accuracy", "regression", "quantization"]
     },
     {
+      "name": "common",
+      "description": "Codex 公共技能，支持 CANNLab WebIDE、可编辑的 Excalidraw 绘图和单项 CPU 推理或 Host 开销验证",
+      "author": {"name": "Kunpeng Acceleration Team"},
+      "category": "productivity",
+      "source": "./Plugins/common",
+      "version": "1.0.0",
+      "platforms": ["codex"],
+      "tags": ["excalidraw", "diagrams", "ai", "inference", "host"]
+    },
+    {
       "name": "openwiki-sync",
       "description": "OpenWiki 代码仓文档自动生成与同步 — 为代码仓生成 OpenWiki 并托管到独立 wiki 仓，记录代码仓与 wiki 仓的关联关系；代码 commit 后自动增量更新 wiki 仓并生成对应 commit，覆盖初次生成、关联恢复、增量更新、wiki 查询全场景，支持 GitCode/Gitee/GitHub/通用 git 平台",
       "author": {

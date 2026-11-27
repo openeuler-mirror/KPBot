@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "e2a0de84 plus kpbot-cannlab-webide (Plugins tree 27e5ab95)",
-  "upstream_commit": "e2a0de84",
-  "manifest_skills": 354,
-  "installed_skill_documents": 400,
-  "source_skill_documents_before_exclusions": 463
+  "measured_source_commit": "4e3a8b1a plus kpbot-ai-host-insight and kpbot-excalidraw-diagrams",
+  "upstream_commit": "4e3a8b1a",
+  "manifest_skills": 356,
+  "installed_skill_documents": 402,
+  "source_skill_documents_before_exclusions": 465
 }
