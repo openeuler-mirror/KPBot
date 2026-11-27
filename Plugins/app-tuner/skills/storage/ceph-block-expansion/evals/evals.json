@@ -1,0 +1,28 @@
+{
+  "skill_name": "ceph-block-expansion",
+  "evals": [
+    {
+      "id": "CBX-E01",
+      "prompt": "现有 x86 的 Ceph 集群（Ceph 12.2.11），要加两台鲲鹏服务器 ceph4/ceph5 扩容，块存储路径怎么做？",
+      "expected_output": "按 block-expansion.md 块存储扩容路径：新节点完成防火墙（最小化范围）/主机名/hosts/NTP/免密（安全基线）/SELINUX（仅新增节点）/epel 源/rpm-luminous ceph.repo 配置后安装同版本 Ceph（排除 debuginfo 包）；修改 ceph1 的 ceph.conf 在现有 mon_initial_members 与 mon_host 末尾追加 ceph4/ceph5，用 ceph-deploy --overwrite-conf config push 推送配置（config push 仅同步配置不下发 client.admin keyring）后 ceph-deploy mon create ceph4 ceph5 并用 ceph mon stat 验证；ceph-deploy mgr create 与按核对数据盘（lsblk + /dev/disk/by-id 对照、遇错即停）以 by-id 路径逐盘 osd create 创建 MGR/OSD；按官方公式核准目标 PG 数后调整存储池 pg_num/pgp_num；rbd create 在 RBD 存储池创建块设备并以 rbd ls 验证；扩容后用 ceph -s 确认数据迁移结束集群恢复健康、ceph osd df 确认容量增加；删除 Monitor（mon destroy）属破坏性操作需二次确认",
+      "files": [],
+      "expectations": [
+        "给出新节点环境配置项与安装同版本 Ceph（排除 debuginfo 包）",
+        "给出编辑 ceph.conf 增加 mon_initial_members/mon_host、推送配置、创建 Monitor 并以 mon stat 验证的顺序",
+        "给出部署 MGR、按核对数据盘以 by-id 路径逐盘创建 OSD（遇错即停）与按官方公式核准目标 PG 数后调整存储池 pg_num/pgp_num",
+        "给出 rbd 创建块设备与 ceph -s、ceph osd df 的扩容验证，并标注删除 Monitor 属破坏性操作需二次确认"
+      ]
+    },
+    {
+      "id": "CBX-E02",
+      "prompt": "Ceph 集群块存储扩容：要把 ceph2/ceph3 两个 Monitor 摘掉，同时给新节点加块设备，怎么操作？",
+      "expected_output": "按 block-expansion.md：删除 Monitor 属破坏性操作，执行前必须与用户二次确认目标节点；先编辑 ceph1 的 ceph.conf，在 mon_initial_members 与 mon_host 中移除 ceph2/ceph3（mon_initial_members=ceph1,ceph4,ceph5），ceph-deploy --overwrite-conf config push 推送至各节点后执行 ceph-deploy mon destroy ceph2 ceph3；新节点添加块设备：在 RBD 存储池用 rbd create 按规格创建 image（--image-format 2 --image-feature layering）并以 rbd ls 验证；扩容后按官方 Total PGs 公式核准目标 PG 数并调整存储池 pgnum/pgpnum，ceph -s 确认集群恢复健康、ceph osd df 确认容量增加",
+      "files": [],
+      "expectations": [
+        "标注删除 Monitor 属破坏性操作需二次确认，并给出修改 ceph.conf、推送配置、mon destroy 的顺序",
+        "给出在 RBD 存储池用 rbd create 创建块设备并以 rbd ls 验证的步骤",
+        "给出按公式调整存储池 pg_num/pgp_num 与 ceph -s、ceph osd df 验证"
+      ]
+    }
+  ]
+}
