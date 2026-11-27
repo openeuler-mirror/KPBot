@@ -1,0 +1,33 @@
+{
+  "skill_name": "kptools-dplb-optimization-install",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "source-build-offline",
+      "prompt": "内网容器（无外网、无 cargo、无 libzmq 开发包）要从源码编译安装 MindIE Motor 做负载均衡，源码包我已经放到 /tmp/mm-src 了，Python 3.11 环境是好的。怎么编译安装？",
+      "expected_output": "按方式 B 离线路径回答：严禁 pip3 wheel .（空壳 whl 根因）；走 bash build.sh，先 chmod +x；编译前 pip3 install -r requirements.txt（构建与运行都依赖，离线按上游 standalone.md 附录 A）；再装与运行时 grpcio 版本一致的 grpcio-tools；SKIP_RUST_INSTALL=1 先探测（缺 cargo 会明确报 refusing to emit whl）；无 cargo 的离线解法（本机下载 Rust 离线包分片上传安装、vendor libc、SKIP_KV_CONDUCTOR_BUILD=1 跳过可选组件）或 WORKLOAD_SHM_PREBUILT 预编译直通；安装前断言 whl 含 libmindie_workload_shm.so；pip3 install --no-deps --force-reinstall 后在源码目录外 import motor 验证。不应建议 pip wheel 或在线 pip/curl 命令。装好后说明配置/启动/注册转 kptools-dplb-optimization（配套 PR #443 交付）。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "eval_name": "user-provided-whl-only",
+      "prompt": "我有编译好的 mindie_motor-1.0.0-py3-none-any.whl 在我本地 D:\\downloads\\ 下，帮我装到远端 172.16.0.20 上，配置先不用管。",
+      "expected_output": "走方式 A：不克隆源码、不要求 git/gcc/cargo/grpcio-tools，流程为上传 whl（上传前确认 whl 本地路径与目标架构 aarch64/x86_64 匹配）-> 运行依赖预检（requirements.txt 全量口径，探 fastapi/pydantic/zmq/msgspec 等硬 import；whl 无依赖声明需按 requirements.txt 补装）-> 安装前原生库断言（防 pip wheel 空壳包；选定唯一/用户指定的 whl 文件，校验与安装使用同一路径，不要 glob）-> pip3 install --no-deps --force-reinstall -> 源码目录外验证 import motor。应提示 whl 架构匹配问题；交付终点是 import motor 成功 + pip3 show motor，不生成任何 user_config.json/register.sh/start_motor.sh（配置类诉求转 kptools-dplb-optimization（配套 PR #443 交付））。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "eval_name": "upgrade-stop-old-first",
+      "prompt": "motor 要升级到新版本，远端有个 coordinator 正在跑，先把旧的停干净再装新的。",
+      "expected_output": "执行重装停服纪律：读 ./log/motor_coordinator.pid 的 PID 后先 ps -p <PID> -o args= 核对命令行确为 python3 -m motor.coordinator.main 且归属本部署实例（PID 可能已退出被复用，不匹配不 kill，改用 ps -ef | grep motor.coordinator.main 定位真实进程）；核对通过才 kill 并 while kill -0 等待真正退出（长时间不退则人工介入）；再 pip3 install --no-deps --force-reinstall 新版本（--upgrade 不会重装同版本号）；源码目录外 import motor 验证。装好后提醒：coordinator 重启后注册表清空，必须回 kptools-dplb-optimization（配套 PR #443 交付） 重新走配置并重新执行 register.sh。不用 pkill -f（会误杀当前 shell）。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "eval_name": "boundary-route-to-deploy",
+      "prompt": "motor 已经装好了，帮我生成 user_config.json、register.sh 和 start_motor.sh，后端 3 个 MindIE 实例。",
+      "expected_output": "识别为配置部署诉求并转 kptools-dplb-optimization（配套 PR #443 交付）：本 skill 只做软件安装（交付终点 = import motor + pip3 show motor），配置三件套/启动/注册/LB 策略调整不在本 skill 范围；不在本 skill 内生成任何配置文件或注册命令。",
+      "files": []
+    }
+  ]
+}
