@@ -1,0 +1,28 @@
+{
+  "skill_name": "ceph-install",
+  "evals": [
+    {
+      "id": "CI-E01",
+      "prompt": "openEuler 22.03 上直接装 Ceph 16.2.7，repo 源怎么配、怎么安装验证？",
+      "expected_output": "Ceph 16.2.7 Pacific 已集成到 openEuler 22.03 系统镜像源，使用系统镜像源自带包即可：本地源方式先备份 openEuler.repo，挂载 openEuler-22.03-LTS-SP4 iso 到 /media 并配置 local.repo；或在线源方式配置指向 repo.openeuler.org 的 openEuler.repo（OS/everything/EPOL/debuginfo/source/update/update-source 七段）；刷新 Yum 缓存后安装 ceph 包，ceph -v 能正确显示版本号即安装成功",
+      "files": [],
+      "expectations": [
+        "说明 Ceph 16.2.7 已集成 openEuler 22.03 系统镜像源，使用系统镜像源自带包即可",
+        "给出本地源与在线源两种 repo 配置路径，且前置动作包含备份 openEuler.repo",
+        "给出先刷新 Yum 缓存再安装 Ceph 包的步骤顺序",
+        "给出 ceph -v 版本验证的成功判据"
+      ]
+    },
+    {
+      "id": "CI-E02",
+      "prompt": "Ceph 16.2.7 装好之后想搭一套集群，接下来该做什么？你们这个安装路径管到哪一步？",
+      "expected_output": "本 skill 边界止于 openEuler 22.03 上的 16.2.7 安装：安装完成后用 ceph -v 确认显示 16.2.7 版本号即完成；集群搭建属部署路径——ceph-ansible 编排或自动部署走姊妹 skill ceph-ansible-deployment，ceph-deploy 手工块存储走姊妹 skill ceph-block-storage-deployment（均为同批姊妹 PR，同批交付）；14.2.8 源码编译走 skill ceph-build；集群运行期参数调优走 skill ceph-parameter-tuning",
+      "files": [],
+      "expectations": [
+        "给出 ceph -v 显示 16.2.7 版本号作为安装完成的判据",
+        "声明集群搭建路由到姊妹 skill ceph-ansible-deployment 或 ceph-block-storage-deployment（同批姊妹 PR，同批交付）",
+        "声明本 skill 边界：仅覆盖 openEuler 22.03 的 16.2.7 安装，源码编译属 ceph-build"
+      ]
+    }
+  ]
+}
