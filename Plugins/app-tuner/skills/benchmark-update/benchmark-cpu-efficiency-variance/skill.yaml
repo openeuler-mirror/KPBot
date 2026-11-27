@@ -1,0 +1,23 @@
+id: benchmark-cpu-efficiency-variance
+name: benchmark-cpu-efficiency-variance
+version: 1.0.0
+description: 当 benchmark 工作量和单位工作量指令数可比时，判断波动是否由 CPI 上升、有效频率下降或其他 CPU 执行效率变化引起，并输出证据与缺项。
+entrypoint: scripts/classify.py
+resources:
+  - SKILL.md
+  - scripts
+  - references
+  - cases
+supervisor:
+  action: classify
+  inputs:
+    - name: comparison
+      contract: benchmark-comparison/v1
+      required: true
+  outputs:
+    - name: decision
+      contract: benchmark-cpu-efficiency-variance-decision/v1
+      path: decision.json
+capabilities:
+  - id: benchmark.variance.classify.cpu-efficiency
+    contract: benchmark-cpu-efficiency-variance-decision/v1

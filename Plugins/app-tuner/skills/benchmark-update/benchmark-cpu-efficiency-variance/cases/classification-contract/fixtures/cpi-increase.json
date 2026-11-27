@@ -1,0 +1,17 @@
+{
+  "contract": "benchmark-comparison/v1",
+  "run_id": "cpu-cpi-confirmed",
+  "counter_quality": "valid",
+  "execution_model": "single-threaded",
+  "counter_scope": "process-aggregate",
+  "work_metric": {"field": "effective_work_units", "unit": "operations"},
+  "thresholds": {"min_samples_per_cohort": 3, "material_change_ratio": 0.15, "equivalence_ratio": 0.05},
+  "samples": [
+    {"cohort": "fast", "elapsed_ms": 105, "effective_work_units": 1000, "task_clock_ms": 100, "instructions": 300000000, "cycles": 300000000},
+    {"cohort": "fast", "elapsed_ms": 106, "effective_work_units": 1000, "task_clock_ms": 101, "instructions": 301000000, "cycles": 301000000},
+    {"cohort": "fast", "elapsed_ms": 104, "effective_work_units": 1000, "task_clock_ms": 99, "instructions": 299000000, "cycles": 299000000},
+    {"cohort": "slow", "elapsed_ms": 132, "effective_work_units": 1000, "task_clock_ms": 125, "instructions": 300000000, "cycles": 375000000},
+    {"cohort": "slow", "elapsed_ms": 133, "effective_work_units": 1000, "task_clock_ms": 126, "instructions": 301000000, "cycles": 376250000},
+    {"cohort": "slow", "elapsed_ms": 131, "effective_work_units": 1000, "task_clock_ms": 124, "instructions": 299000000, "cycles": 373750000}
+  ]
+}

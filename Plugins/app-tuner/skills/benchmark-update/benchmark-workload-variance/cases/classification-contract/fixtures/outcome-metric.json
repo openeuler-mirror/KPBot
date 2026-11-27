@@ -1,0 +1,15 @@
+{
+  "contract": "benchmark-comparison/v1",
+  "run_id": "fixed-duration-outcome",
+  "benchmark_mode": "fixed-duration",
+  "work_metric": {"field": "completed_requests", "unit": "requests", "causal_role": "outcome"},
+  "thresholds": {"min_samples_per_cohort": 3, "material_change_ratio": 0.15, "equivalence_ratio": 0.05},
+  "samples": [
+    {"cohort": "fast", "elapsed_ms": 60000, "completed_requests": 10000},
+    {"cohort": "fast", "elapsed_ms": 60000, "completed_requests": 10100},
+    {"cohort": "fast", "elapsed_ms": 60000, "completed_requests": 9900},
+    {"cohort": "slow", "elapsed_ms": 60000, "completed_requests": 7000},
+    {"cohort": "slow", "elapsed_ms": 60000, "completed_requests": 7100},
+    {"cohort": "slow", "elapsed_ms": 60000, "completed_requests": 6900}
+  ]
+}

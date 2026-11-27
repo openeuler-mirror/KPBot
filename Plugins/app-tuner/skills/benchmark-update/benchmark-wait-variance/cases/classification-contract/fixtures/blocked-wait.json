@@ -1,0 +1,15 @@
+{
+  "contract": "benchmark-comparison/v1",
+  "run_id": "wait-blocked-confirmed",
+  "execution_model": "single-threaded",
+  "work_metric": {"field": "effective_work_units", "unit": "operations"},
+  "thresholds": {"min_samples_per_cohort": 3, "material_change_ratio": 0.15, "equivalence_ratio": 0.05, "min_explained_fraction": 0.70},
+  "samples": [
+    {"cohort": "fast", "elapsed_ms": 100, "effective_work_units": 1000, "instructions": 300000000, "task_clock_ms": 90, "blocked_ms": 5},
+    {"cohort": "fast", "elapsed_ms": 101, "effective_work_units": 1000, "instructions": 301000000, "task_clock_ms": 91, "blocked_ms": 5},
+    {"cohort": "fast", "elapsed_ms": 99, "effective_work_units": 1000, "instructions": 299000000, "task_clock_ms": 89, "blocked_ms": 5},
+    {"cohort": "slow", "elapsed_ms": 150, "effective_work_units": 1000, "instructions": 300000000, "task_clock_ms": 92, "blocked_ms": 53},
+    {"cohort": "slow", "elapsed_ms": 151, "effective_work_units": 1000, "instructions": 301000000, "task_clock_ms": 93, "blocked_ms": 53},
+    {"cohort": "slow", "elapsed_ms": 149, "effective_work_units": 1000, "instructions": 299000000, "task_clock_ms": 91, "blocked_ms": 53}
+  ]
+}
