@@ -1,0 +1,1 @@
+{"skill_name":"variant-build-safety","queries":[{"id":"VBS-01","prompt":"确认构建链接的是新编译的变体库而不是系统库","should_trigger":true},{"id":"VBS-02","prompt":"解析火焰图算库占比","should_trigger":false}]}

@@ -1,0 +1,25 @@
+# 验证 tier-A 用例：variant-build-safety 完整性契约
+#
+# 验证内容：
+#   skill     SKILL.md 自身格式（frontmatter name/description）
+#   links     SKILL.md 的 references 链接必须存在且 >=1
+#   invariants 方法论锚点（链接指纹/CMAKE_PREFIX_PATH/trap/链接方式选择/生成记录）
+#   template  安全模板契约断言——基线校验先于 trap 注册、快照独立目录 +
+#             per-file cp 还原、整目录 mv 还原写法仅作为陷阱披露、
+#             marker 双向校验
+#   sensitive 敏感内容看护（SKILL.md + references + evals 全覆盖：
+#             私网 IP/IPv6/凭据/私钥/个人路径，凭据命中脱敏）+ BOM 检查
+
+name: skill-integrity
+skill: variant-build-safety
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: pass
+    expect: true
