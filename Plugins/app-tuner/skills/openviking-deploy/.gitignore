@@ -1,0 +1,4 @@
+cases/*/results/
+cases/*/results/**
+__pycache__/
+*.pyc

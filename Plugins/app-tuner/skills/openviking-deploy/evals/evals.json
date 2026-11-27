@@ -1,0 +1,97 @@
+{
+  "skill_name": "openviking-deploy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在一台 openEuler 24.03 服务器上部署 OpenViking 服务端，没有指定版本，机器能上外网，模型准备用火山引擎的 Embedding 和 VLM。请给出部署步骤。",
+      "expected_output": "识别为 OpenViking 环境部署任务；先运行 preflight_check.sh 做只读检查；未指定版本时使用上游默认分支（当前 main；master 为历史别名，https://github.com/volcengine/OpenViking.git），并记录实际 commit；安装系统依赖与 Rust 工具链；在 root 私有构建目录源码构建，创建 release venv 并安装；向用户确认 Embedding/VLM 模型名、API Base、workspace 与 API key 交付方式后再生成 ov.conf；systemd 托管；doctor 通过后验证 /health 与 /ready；给出 deploy.env 关键字段。",
+      "files": [],
+      "expectations": [
+        "明确采用默认 main（master 为历史别名），并记录 OPENVIKING_COMMIT 与实际包版本",
+        "先做只读前置检查，再安装系统依赖与工具链",
+        "源码构建使用 root 私有构建目录，不直接用普通用户目录",
+        "生成配置前向用户确认模型名、API Base、workspace 与 key 交付方式",
+        "API key 不进入命令行、日志或 deploy.env",
+        "验收同时检查 doctor、/health 与 /ready，而不是只看进程"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "部署 OpenViking v0.3.22，服务器上已经有可用的 /root/ov.conf，里面有 Embedding 和 VLM 配置。请直接给出命令，不要重新问我模型信息。",
+      "expected_output": "按用户指定的 v0.3.22 checkout 构建，不回落默认 master；使用 --ov-conf /root/ov.conf 接管已有配置；先校验 JSON 与 embedding.dense / vlm / storage.workspace；备份旧配置后安装到 /etc/openviking/ov.conf；构建安装后运行 doctor、/health、/ready；deploy.env 记录 tag、commit、配置来源 file。",
+      "files": [],
+      "expectations": [
+        "尊重 v0.3.22，不替换为默认 master",
+        "使用 --ov-conf 接管已有配置，不重复生成",
+        "安装前校验配置必需字段与 JSON 合法性",
+        "旧配置覆盖前生成带时间戳的备份",
+        "deploy.env 记录 OPENVIKING_CONFIG_SOURCE=file"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "用户把模型 API key 直接发在对话里，要求部署 OpenViking。应该怎么处理这个 key？",
+      "expected_output": "不要把 key 回显、写进命令行参数、日志或 deploy.env；提醒用户 key 已暴露在对话中并建议轮换；让用户把 key 写入权限 600 的文件（或已有 ov.conf），部署脚本只从文件读取；配置安装后为 0640 root:<运行组>；验收输出只说明 OPENVIKING_API_KEY_SET=1，不输出 key 本身。",
+      "files": [],
+      "expectations": [
+        "不回显 API key，也不把 key 写进 argv 或日志",
+        "建议用户轮换已暴露的 key",
+        "通过 600 权限文件或已有 ov.conf 交付 key",
+        "ov.conf 安装权限为 0640，属主为 root 与运行组",
+        "deploy.env 只记录 key 是否设置，不记录内容"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "帮我装一下 OpenViking，模型用什么都行，key 你随便填一个先跑起来。",
+      "expected_output": "拒绝猜测模型和伪造 API key；说明服务端必须配置 Embedding 与 VLM，缺失或占位 key 会导致 doctor 或 /ready 失败；向用户询问 provider、模型名、API Base、workspace 与 key 交付方式；用户不清楚时建议先运行 openviking-server init 向导或使用 Ollama，本地模型就绪后再部署；不写入假 key，不声称部署成功。",
+      "files": [],
+      "expectations": [
+        "拒绝随便填写模型名或伪造 API key",
+        "说明 OpenViking 服务端需要 Embedding 与 VLM 两类模型",
+        "列出需要用户确认的 provider、模型、API Base、workspace 和 key 交付方式",
+        "给出交互式向导或 Ollama 等可行替代路径",
+        "没有生成占位 key，也没有提前宣称部署成功"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "把 OpenViking 源码放在 /data/dev/OpenViking（普通用户目录），用 root 执行安装，构建目录想用 /tmp/ov-build。直接给命令。",
+      "expected_output": "拒绝普通用户拥有的源码目录；指出 --source-dir 要求 root 属主且组/其他不可写，并校验父目录链，--build-root 要求 root:root 0700 且父目录不可被普通用户控制（sticky 的 /tmp 本身不是拒绝理由，但最终构建目录必须 root 私有）；建议把源码移到 root 私有目录并修正权限，构建根使用默认 /var/cache/openviking-deploy 或安全的 root 私有路径；不给出绕过安全检查的命令。",
+      "files": [],
+      "expectations": [
+        "拒绝普通用户目录作为 root 构建的源码目录",
+        "说明源码目录与 wheel 的父目录链也会被校验",
+        "说明构建根要求 root:root 0700，父目录不得被普通用户控制",
+        "建议使用默认 /var/cache/openviking-deploy 或安全的 root 私有路径",
+        "没有直接给出绕过安全检查的命令"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "机器上已经用这个 skill 部署过 OpenViking，现在要升级到新的 commit。升级后如果需要回滚，应该怎么做？",
+      "expected_output": "为新 commit 创建独立的 releases/<commit12> 与 venv，不覆盖旧 release；覆盖配置/unit 前生成 .bak.<时间戳> 备份；doctor 通过后停止旧服务、原子切换 current 符号链接并启动；回滚时停服、把 current 指回旧 release、恢复配置/unit 备份、启动并复验 /health 与 /ready；旧 release 被删除时使用 deploy.env 记录的 wheel 恢复，无法恢复则明确说明不可回滚。",
+      "files": [],
+      "expectations": [
+        "升级创建新 release，不覆盖旧 release",
+        "配置与 unit 覆盖前生成带时间戳的备份",
+        "使用 current 符号链接切换版本",
+        "回滚包含停服、切换链接、恢复配置与复验",
+        "说明旧 release 被删除时的 wheel 恢复路径与不可回滚边界"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "我想用 Docker 部署 OpenViking，帮我直接写一个 docker run 命令并顺便把服务端也源码装一遍。",
+      "expected_output": "说明本技能负责 Linux 主机源码安装部署，不负责 Docker/Compose/Helm 编排；Docker 应使用官方镜像与官方部署文档；不要在同一次任务里混用 Docker 与主机源码安装，避免配置、端口和数据目录冲突；如果用户改为主机源码部署，按本技能流程执行；如果坚持 Docker，转官方文档并确认配置、端口 1933 与数据卷。",
+      "files": [],
+      "expectations": [
+        "说明 Docker 部署不在本技能范围",
+        "不混用 Docker 与主机源码安装",
+        "给出官方 Docker 文档方向而不是自造镜像命令",
+        "如果改为主机部署，回到本技能流程",
+        "指出端口、配置和数据目录可能冲突"
+      ]
+    }
+  ]
+}
