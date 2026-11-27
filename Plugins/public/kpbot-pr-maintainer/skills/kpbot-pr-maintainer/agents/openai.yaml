@@ -1,0 +1,4 @@
+interface:
+  display_name: "KPBot PR Maintainer"
+  short_description: "Submit KPBot changes and follow reviews through merge"
+  default_prompt: "使用 $kpbot-pr-maintainer 提交指定的 KPBot 修改或接管给定 PR，持续处理检视与门禁直到确认合并。"

@@ -4,6 +4,8 @@
 
 关联 [issue #11](https://gitcode.com/openeuler/KPBot/issues/11)。首版聚焦 code-optimizer 的技能加载与普通子代理优化流水线；支持项目级/用户级安装，以及 DSH 原生 bundle。app-tuner、Claude 批量驱动、`kpbot-code-optimizer-workflow`、使用旧 `scriptPath` 接口的 `multimedia-code-optimizer` 和 OpenCode 专属 TF 推理执行系列暂不声明 DSH 支持；通用的 `tf-inference-opt` 方法技能仍可加载。硬件专项能力仍受实际机器、工具链和数据约束，安装成功不等于完成专项性能验收。
 
+社区贡献插件 `kpbot-pr-maintainer` 的技能名与插件名相同。独立的项目级安装测试覆盖该插件及其 DSH 运行协议。在基线 `de731ebc`，全仓 DSH 扫描会因 `Plugins/code-optimizer/skills/benchmark/evals` 缺少入口而中断。
+
 验证目标版本：DSH 0.2.2-rc.3；需要 `skill`、`subagent`、`ask_user_question`、`todo_write` 和文件/命令工具。不同预设缺少必要工具时明确停止，不以主代理代做隔离阶段或跳过审批。
 
 ## 安装
