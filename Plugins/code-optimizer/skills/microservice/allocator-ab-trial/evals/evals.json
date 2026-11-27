@@ -1,0 +1,11 @@
+{
+  "skill_name": "allocator-ab-trial",
+  "evals": [
+    {
+      "id": 0, "name": "form-dependence",
+      "prompt": "jemalloc 在服务器上是标配，换了肯定更快吧？",
+      "expected_output": "不一定——分配器性能高度依赖负载形态。folly 小对象高频构造负载实测 jemalloc 耗时 +69.5%（性能约 -41%）。结论不可跨形态搬运。",
+      "files": []
+    }
+  ]
+}

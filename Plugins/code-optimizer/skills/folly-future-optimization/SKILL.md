@@ -20,7 +20,7 @@ description: >
 1. **类型擦除是架构性成本，不是 bug**：`FunctionTraits` 系热点（典型生产占比 3~4%）是 std::function 式类型擦除的实现税，其帧不应作为优化目标——收益通常在**调用它构造的节点对象与 malloc 面**，见归属判决一节。
 2. **收益必须归属判决**：benchmark 变快 ≠ 你以为的那个机制变快。每个采纳的优化点都要用"只含该机制的镜像微基"确认收益归属，机制假设未实测的归属一律存疑。
 3. **官方代码也带形态前提**：上游 folly 自己的优化（如 ThrottledLifoSem 唤醒策略）移植到不匹配的负载形态实测 -17%——移植前必须核对负载形态，与库版本新旧无关。
-4. **分配器必须三方实测**：glibc/jemalloc/tcmalloc 在同一负载上的差异可达 -69.5% ~ +8%，任何"大家都说 jemalloc 快"的先验都不可信，LD_PRELOAD 三方对照是必做实验。
+4. **分配器必须三方实测**：glibc/jemalloc/tcmalloc 在同一负载上的耗时差异可达 +69.5% ~ -8%（jemalloc 侧耗时 +69.5%，性能约 -41%），任何"大家都说 jemalloc 快"的先验都不可信，LD_PRELOAD 三方对照是必做实验。
 5. **三层报数口径分离**：benchmark 用例整体提升（如 +8.2%）≠ 热点函数自身提升（≈15~20%）≠ 生产 E2E 预期（≈热点占比×路径改善封顶）——三层混用是汇报事故的第一来源。
 
 ## 输入
@@ -82,7 +82,7 @@ description: >
 
 ### 步骤 5：分配器三方对照与编译层收尾
 
-1. **分配器**：`LD_PRELOAD=` 同一负载下 glibc / jemalloc / tcmalloc 三方对照（协议脚本见 `scripts/allocator_ab.sh`，实测数据与部署前检查清单见[分配器三方对照档案](references/allocator-benchmark.md)）。实测参考：folly future 链路（小对象高频构造）tcmalloc 收益 +8%、glibc 持平、jemalloc **-69.5%**（页回收策略与小对象负载严重不合）。部署前先确认生产进程当前分配器（`cat /proc/<pid>/maps | grep -E 'jemalloc|tcmalloc'`）——已在用 jemalloc 的结论完全不同。
+1. **分配器**：`LD_PRELOAD=` 同一负载下 glibc / jemalloc / tcmalloc 三方对照（协议脚本见 `allocator-ab-trial` skill，安装后位于 skills/allocator-ab-trial/scripts/；用法与退出码见该 skill 的 SKILL.md；实测数据与部署前检查清单见[分配器三方对照档案](references/allocator-benchmark.md)）
 2. **编译选项**：`-O3` + 按目标 CPU 选 `-mcpu`（映射与 `compiler-flag-tuning` skill 的 canonical 保持一致：读 `cpu_part_id`，0xd01 → `-mcpu=tsv110`，0xd03/0xd06 → `-mcpu=native`（GCC 12 对鲲鹏后端尚未提供独立代号）；LLVM 侧工具链映射见 `llvm-mca-analysis` 的 `mca_analyze.py`（0xd03 → hip10c、0xd06 → hip12a），勿与 GCC 参数混用）。确认与构建系统的全局继承链一致——配置声明值 ≠ 产物生效值，用产物反推（`DW_AT_producer` 字段含实际编译参数指纹）——工具已拆分至 `binary-compile-forensics` skill（comment 版本/参数指纹/SIMD 兜底三链通用层）。
 
 ### 步骤 6：终极验证与产物级确认
@@ -101,7 +101,7 @@ bash scripts/verify_folly_patch.sh /path/to/服务二进制
 binary-compile-forensics skill 的 inspect_build_flags.sh（见该 skill 的 SKILL.md 获取安装后入口）
 
 # 分配器三方对照（glibc/jemalloc/tcmalloc LD_PRELOAD 交替，输出每轮 ns/次与比值）
-bash scripts/allocator_ab.sh -c "<benchmark 命令>" -r 5
+bash ../microservice/allocator-ab-trial/scripts/allocator_ab.sh -c "<benchmark 命令>" -r 5   # 源码树布局；安装平铺布局下去掉 microservice 一级
 ```
 
 脚本依赖与边界说明见 `scripts/README.md`。
@@ -113,7 +113,7 @@ bash scripts/allocator_ab.sh -c "<benchmark 命令>" -r 5
 | "类型擦除帧占比 4%，优化它能拿大头" | 架构性成本，实测把优化火力集中于此多轮无产出；收益在构造/malloc 面（归属判决实证） |
 | "新版 folly 修了这些，升级就行" | 官方优化带负载形态前提（ThrottledLifoSem 移植实测 -17%），升级 ≠ 收益，形态核对先行 |
 | "benchmark 快了 8%，生产也快 8%" | 生产预期 ≈ folly 热点占比 × 路径改善，封顶换算；热点占比 <2% 的服务 E2E 预期通常 <0.5% |
-| "jemalloc 是服务器标配" | 本场景实测 -69.5%；分配器结论不可跨负载形态搬运 |
+| "jemalloc 是服务器标配" | 本场景实测耗时 +69.5%（性能约 -41%）；分配器结论不可跨负载形态搬运 |
 | "重构顺手清理 Core 内部结构" | 结构清理类 patch 实测 -3~8%，非瓶颈路径上只增加扰动 |
 
 ## 优化知识库
@@ -133,7 +133,7 @@ bash scripts/allocator_ab.sh -c "<benchmark 命令>" -r 5
 | LTO / ThinLTO | -9.8% | 全库 LTO 的重排收益抵不过内联爆炸的 icache 损失 |
 | Core 内部整理系列（cleanup/常量初始化等 3 项） | -3~8% | 结构清理在非瓶颈路径上只增加代码扰动 |
 | small_vector 替换 Core 内部容器 | +1%（不显著） | 容量极小的容器换 small_vector 无意义 |
-| jemalloc | -69.5% | 分配器选择没有普适答案，必须三方实测 |
+| jemalloc | 耗时 +69.5%（性能约 -41%） | 分配器选择没有普适答案，必须三方实测 |
 
 ## 部署验收清单
 

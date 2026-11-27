@@ -1,6 +1,6 @@
 # 分配器三方对照 — 实测数据与部署检查
 
-> 配套 SKILL.md 步骤 5。协议脚本 `scripts/allocator_ab.sh`。核心结论：**分配器选择没有普适答案，必须按负载形态三方实测**。
+> 配套 SKILL.md 步骤 5。协议脚本见 `allocator-ab-trial` skill 的 `scripts/allocator_ab.sh`（安装平铺布局下位于 skills/allocator-ab-trial/scripts/）。核心结论：**分配器选择没有普适答案，必须按负载形态三方实测**。
 
 ## 实测数据（folly future 链路，小对象高频构造负载）
 
