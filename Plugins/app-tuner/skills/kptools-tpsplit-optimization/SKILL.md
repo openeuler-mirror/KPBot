@@ -1,19 +1,19 @@
 ---
 name: kptools-tpsplit-optimization
 description: >-
-  TP 拆分、TP size 变更、张量并行度调整、单机 TP 闭环、去 Ray 化、显式 DP 组网（rpc-port 16600）、单机双实例 9000/9001 分流：连接远端把跨机 TP32+Ray Prefill 迁移为新 TP size（TP8/TP4/TP16）+ Mooncake tp/dp 对齐，按 tpsplit 可行性报告或用户给定值部署，含配置调用链梳理与分层测试。
+  TP 拆分、TP size 变更、张量并行度调整、单机 TP 闭环、去 Ray 化、显式 DP 组网（rpc-port 16600）、单机双实例 9000/9001 分流：连接远端把跨机 TP32+Ray Prefill 迁移为新 TP size（TP8/TP4/TP16）+ Mooncake tp/dp 对齐，按 tpsplit 可行性报告或用户给定值部署，含配置调用链梳理与拉起验证（L0-L3）。本 skill 是部署执行面（方案/停旧/生成分发/拉起/切流/回滚/迁移后配置错配排查）；部署完成后的交付验证（L4-L6：功能/性能对比/稳定性观察）转 kptools-tpsplit-optimization-verify（配套 PR #441 交付）——该 skill 已部署时，分层验证、性能对比、稳定性观察、迁移后测试清单类请求不要发给本 skill；其未合入/未部署的过渡期，L4-L6 由本 skill 按拆分前细则兜底承接（见阶段 5 过渡期兜底），不悬空。
 license: Proprietary
 compatibility: 远端 Linux（openEuler 等，aarch64）；SSH 访问所有涉及主机；NPU 环境（npu-smi、ASCEND_RT_VISIBLE_DEVICES）；vLLM（--data-parallel-size 外部 DP 拉起）+ Mooncake/AscendStore KV 传输；优先 ssh-mcp-server upload/execute-command/download，无 MCP 回退本地 ssh/scp
 metadata:
   skill_type: tool_assisted
   category: deployment
   domain: tp_topology_migration
-  version: "0.5.3"
+  version: "0.6.0"
 ---
 
 # kptools-tpsplit-optimization：新 TP size 集群部署（TP 拓扑变更）
 
-把推理集群从旧 TP 拓扑（典型：跨机 TP32 + Ray 托管）迁移到新 TP 拓扑（典型：单机 TP8 闭环 + 显式 DP 组网 + Mooncake 对齐）。新 TP size 来自用户输入，或来自 TP 可行性分析报告（由仓内 `Plugins/app-tuner/skills/kptools-tpsplit-check/` 的 `analyze_feasibility.py` 产出，样例报告见其 `examples/glm52_report.*`，以报告文件路径交接）。产出：已拉起并验证的新集群 + 一份部署指南 `.md`。
+把推理集群从旧 TP 拓扑（典型：跨机 TP32 + Ray 托管）迁移到新 TP 拓扑（典型：单机 TP8 闭环 + 显式 DP 组网 + Mooncake 对齐）。新 TP size 来自用户输入，或来自 TP 可行性分析报告（由仓内 `Plugins/app-tuner/skills/kptools-tpsplit-check/` 的 `analyze_feasibility.py` 产出，样例报告见其 `examples/glm52_report.*`，以报告文件路径交接）。产出：已拉起并通过 L0-L3 拉起验证的新集群 + 已切流的网关 + 一份部署指南 `.md`。**部署完成后的交付验证（L4-L6：功能/性能对比/稳定性）由 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）承接**（独立 PR 交付），交接物即部署指南；本 skill 到切流为止。
 
 核心原则（原理详见 `references/tp-topology-principles.md`，动手前先读）：
 
@@ -26,8 +26,9 @@ metadata:
 
 1. 用户直接给了新 TP size（数字）→ 阶段 1 收集其余拓扑信息
 2. 用户给了可行性分析报告或说"按上次分析的结论部署" → 阶段 1 优先解析 `.json` 提取结论，复述确认后补齐缺的信息
-3. 用户只要脚本和配置（远端自己拉）→ 该分支**止步于本地交付，不做任何远端变更**：按用户确认后的布局表生成全部部署脚本/配置（阶段 2 输出 + 阶段 4 生成规则），完成**本地**静态检查（`bash -n`、KV `json.loads`、实例 diff、dp 守恒，可用 `references/l0_static_check.py` 本地跑），不停旧集群、不向远端分发；停服、分发、拉起与分层测试（L0-L6）写成**可照做的步骤**放进交付指南，由用户自行执行
-4. 部署后 KV 报错 / NPU 偶发错误 / hangs → 优先按阶段 5 的 L3/L4 排查一致性（大概率 Mooncake tp/dp 错配或混跑），再考虑回滚
+3. 用户只要脚本和配置（远端自己拉）→ 该分支**止步于本地交付，不做任何远端变更**：按用户确认后的布局表生成全部部署脚本/配置（阶段 2 输出 + 阶段 4 生成规则），完成**本地**静态检查（`bash -n`、KV `json.loads`、实例 diff、dp 守恒，可用 `references/l0_static_check.py` 本地跑），不停旧集群、不向远端分发；停服、分发、拉起与拉起验证（L0-L3）写成**可照做的步骤**放进交付指南，由用户自行执行；L4-L6 交付验证在指南中标注由 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）执行
+4. 部署后 KV 报错 / NPU 偶发错误 / hangs → 优先按阶段 5 的 L3 判据排查一致性（大概率 Mooncake tp/dp 错配或混跑），再考虑回滚；纯计划性验证/观察（无故障征兆、只要分层验证或稳定性观察）转 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）
+5. 部署与 L0-L3 完成、切流已做，用户要功能/性能/稳定性验证 → 转 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付），交接物为部署指南（布局表 + 修改点清单 + L0-L3 结果 + 备份位置 + 停服前归档的旧基线数据）
 
 ## SSH/容器操作约定（工具链实测，贯穿全程）
 
@@ -105,7 +106,7 @@ ss -ltn 2>/dev/null | grep -E ':(9000|9001|16600|30000|10001)\b'   # 端口占�
 ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留
 ```
 
-红线（细则见 `references/deployment-details.md`）：旧集群**必须问过才能停**，按 PID 逐个 kill（**勿用宽匹配 pkill**）；旧方案确实用 Ray 时，先核对每个 Ray 进程归属本集群、按 PID 逐个停——**共享主机禁用 `ray stop`**（作用于本机全部 Ray 进程，会误停其他业务）；旧方案有 Ray 时清理旗标/环境变量残留；跨主机 DP 组 16600 互通；⚠️ **新旧拓扑禁止混跑**（D 侧整体指向同一套 P 拓扑）；卡/端口被其他业务占用 → 并入"拉起前置条件"交用户协调（只停卡不够）；预检异常 → 反馈用户停下，不要自行换端口/换卡继续。
+红线（细则见 `references/deployment-details.md`）：旧集群**必须问过才能停**，按 PID 逐个 kill（**勿用宽匹配 pkill**）；旧方案确实用 Ray 时，先核对每个 Ray 进程归属本集群、按 PID 逐个停——**共享主机禁用 `ray stop`**（作用于本机全部 Ray 进程，会误停其他业务）；旧方案有 Ray 时清理旗标/环境变量残留；跨主机 DP 组 16600 互通；⚠️ **新旧拓扑禁止混跑**（D 侧整体指向同一套 P 拓扑）；卡/端口被其他业务占用 → 并入"拉起前置条件"交用户协调（只停卡不够）；预检异常 → 反馈用户停下，不要自行换端口/换卡继续。**停服前基线采样（默认必做——停服后无法补采；用户明确放弃 L5 性能对比并留痕时除外）**：旧集群停服即无法再测——停旧实例前先完成旧集群基线压测采样，**逐项确认三项指标的实测值、单位和原始结果位置**（① Prefill 吞吐（req/s 或 token/s）② TTFT（P50/P99，ms）③ P-D KV 传输带宽（GB/s，附传输侧计数器/日志来源）——三项缺一不可，停服后无法补采），连同负载/并发/计时口径（数据集、请求长度分布、并发数、压测时长、预热策略、统计窗口）一并记录归档，随部署指南交付给 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）的 L5 消费。
 
 ## 阶段 4：生成脚本与配置分发
 
@@ -118,9 +119,9 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留
 - DP 组网旗标对齐 vLLM 官方口径（`--data-parallel-size/rank/address` + `--data-parallel-rpc-port 16600`；旗标名以现场 `vllm serve --help` 实测为准，兜底见 deployment-details.md）
 - 分发：每台主机只放自己的实例脚本；远端自检（`bash -n` + KV `json.loads`）通过才进阶段 5
 
-## 阶段 5：分层测试与交付（逐层过，不过不进下一层）
+## 阶段 5：拉起验证（L0-L3，逐层过，不过不进下一层）
 
-故障多数不是"起不来"，而是"起来了但 KV 错配/容量不够/性能回退"——测试分层铺开，每层通过标准与执行口径详见 `references/layered-testing.md`。
+拉起期的故障多数不是"起不来"，而是"起来了但 KV 错配"——拉起验证分层铺开，每层通过标准与执行口径详见 `references/layered-testing.md`（L0-L3）。
 
 | 层 | 内容与通过判据（简） |
 | --- | --- |
@@ -128,15 +129,16 @@ ps -ef | grep -E 'vllm|ray' | grep -v grep  # 旧实例与 Ray 残留
 | L1 单实例启动 | 按 DP 组序拉起（先组内 rank 0）：`/v1/models` 探活通过；TP 与目标一致；`npu-smi` 卡占用与布局表一致 |
 | L2 DP 组网 | rank 全部入组、16600 组内互通，日志无掉队/重试报错 |
 | L3 KV 链路 | 经 Proxy 或直连发真实 completion 正常出 token，双侧日志无 Mooncake/DP 报错 |
-| L4 功能 | 正确性 / max-model-len 边界 / parser 各一例，行为与旧集群一致 |
-| L5 性能对比 | 吞吐 / TTFT / KV 带宽**对比重新实测的基线**：达标或走调参/回滚决策 |
-| L6 稳定性 | ≥24h 观察 KV 报错率 / 偶发 NPU 错误 / DP 掉员 / 实例重启，通过才算交付完成 |
 
-失败处理：L0-L2 失败 = 配置/环境问题，修复后从 L1 重来；L3 失败先怀疑 Mooncake 错配或混跑；L4 检查容量参数（回 2.3）；L5 不达标走回滚或调参。结果逐层记录进部署指南。
+失败处理：L0-L2 失败 = 配置/环境问题，修复后从 L1 重来；L3 失败先怀疑 Mooncake 错配或新旧混跑。结果逐层记录进部署指南。
+
+**L0-L3 全绿即本 skill 的验证终点**：交付验证（L4 功能 / L5 性能对比 / L6 稳定性）由 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）执行（输入 = 部署指南 + 停服前归档的旧基线），本 skill 不代做，也不在部署指南里预填 L4-L6 结论。verify 判定 L4 失败时的容量参数复核（max-model-len 等）回到本 skill 阶段 2.3 重议；L5 不达标的调参/回滚决策与执行同样回到本 skill。
+
+**过渡期兜底（仅当运行环境不存在 `kptools-tpsplit-optimization-verify`，即 #441 未合入/未部署时生效）**：L4-L6 交付验证不悬空——仍由本 skill 按拆分前 v0.5.x 的分层测试细则执行（L4 功能 / L5 性能对比 / L6 稳定性，细则见 git 历史中拆分前的 `references/layered-testing.md`；L5 同样只用停服前归档基线做同口径对比），结果照常写入部署指南，并向用户说明这是拆分过渡期的兜底承接；#441 合入后此兜底即让位给 verify。
 
 ## 阶段 6：Proxy 更新与交付
 
-L1-L3 全绿后才切流量：P 后端列表换成新实例地址（`<主机>:9000`、`<主机>:9001` …），按用户网关类型改配置并 reload（改前备份，改后探活）；MindIE Motor 类网关注册表是内存态，coordinator 重启或后端换血后必须重新执行 `register.sh` 注册，否则请求报 No instance available。交付《部署指南 `.md`》（内容见 `references/deployment-details.md`）：拓扑摘要、启动顺序、L0-L6 结果、回滚步骤、L5/L6 基线与观察结论。
+L1-L3 全绿后才切流量：P 后端列表换成新实例地址（`<主机>:9000`、`<主机>:9001` …），按用户网关类型改配置并 reload（改前备份，改后探活）；MindIE Motor 类网关注册表是内存态，coordinator 重启或后端换血后必须重新执行 `register.sh` 注册，否则请求报 No instance available。交付《部署指南 `.md`》（内容见 `references/deployment-details.md`）：拓扑摘要、启动顺序、L0-L3 结果、回滚步骤、停服前归档的旧基线数据（供 verify 的 L5 对比），并注明 L4-L6 交付验证由 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）执行。
 
 ## 上线检查清单（写进部署指南，逐项打勾）
 
@@ -147,17 +149,23 @@ L1-L3 全绿后才切流量：P 后端列表换成新实例地址（`<主机>:90
 5. 端口：http 与 16600 无冲突；kv_port / lookup_rpc_port / engine_id 保持旧值未动
 6. 全局 DP：Mooncake dp_size == 所有主机 P 实例数之和（逐台数）
 7. 容量参数：max-model-len / max-num-batched-tokens / max-num-seqs 已复核
-8. 测试记录：L0-L5 结果与 L6 窗口/责任人明确；改动文件均已备份
+8. 测试记录：L0-L3 结果已记录；停服前旧基线已归档；L4-L6 验证窗口/责任人已与 kptools-tpsplit-optimization-verify（配套 PR #441 交付）交接；改动文件均已备份
 
 ## 回滚
 
 任一环节失败且短期修不好：停新实例（按 PID），恢复备份的旧脚本/配置，按旧方案**原样**重启（含不含 Ray 以备份旧脚本为准），D 侧 KV_TRANSFER_CONFIG 恢复旧 prefill 段；**已切过流量（阶段 6）的必须同步回滚网关**——Proxy 后端列表恢复为原实例地址，按网关类型 reload 配置或重新注册旧实例（MindIE Motor 注册表是内存态，须重跑 `register.sh`），否则网关仍把请求发往已停止的新地址；最后**经网关发一条真实请求**，确认路由到旧实例且响应正常，才算回滚完成。**回滚前先确认旧形态全部依赖可达**（跨机 Ray worker、mooncake_master 等，缺一个 = 回滚不完整）。回滚命令在部署指南里写完整，不要临场发挥。
 
+## 边界与配套拆分说明
+
+- **本 skill 只做部署执行面**（方案推演/调用链梳理/停旧/生成分发/拉起 L0-L3/切流/回滚/迁移后配置错配排查）；交付验证（L4-L6）由 `kptools-tpsplit-optimization-verify`（配套 PR #441 交付）承载（独立 PR 交付）：输入为本 skill 的部署指南 + 停服前归档的旧基线，不达标时由 verify 给出调参/回滚建议、回本 skill 执行。两 PR 建议同批合入，避免过渡期 L4-L6 触发面悬空。
+- 本 skill 由原「部署+验证一体」形态（v0.5.x 及之前，L0-L6 全包）拆分而来：L4-L6 细则随拆分迁至 verify 侧，本仓不再维护。
+- 相邻边界：TP 可行性测算（能不能切/值不值）归 `kptools-tpsplit-check`（上游，报告交接见 1.1）；TTFT 阶段拆解的收益对比报告（两套 ttft_table.csv 出 .md/.html/.json 三件套）归 `kptools-tpsplit-report`——verify 的 L5 只做现场达标判定，正式收益报告转它。
+
 ## 模板与参考
 
 - `references/tp-topology-principles.md` — 拓扑变更原理与风险详解
 - `references/deployment-details.md` — 阶段细则（1.3 清单模板、阶段 3 处置、阶段 4 占位符表与生成要点、阶段 6 交付清单）
-- `references/layered-testing.md` — L0-L6 通过标准与 `l0_static_check.py` 调用口径
+- `references/layered-testing.md` — L0-L3 拉起验证通过标准与 `l0_static_check.py` 调用口径（L4-L6 交付验证见 kptools-tpsplit-optimization-verify（配套 PR #441 交付））
 - `references/l0_static_check.py` — L0 静态检查参考实现（不依赖 NPU）
 - `references/templates/prefill-tp8-instance.sh` — 新方案实例启动模板（占位符版）
 - `references/templates/legacy-prefill-tp32.sh` — 旧方案基线（TP32+Ray 样例）

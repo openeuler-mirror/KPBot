@@ -41,7 +41,14 @@
     {
       "id": "EQ-08",
       "prompt": "TP8 部署完之后要做哪些测试验证，帮我列一下",
-      "should_trigger": true
+      "should_trigger": false,
+      "note": "routes to kptools-tpsplit-optimization-verify（配套 PR #441 交付）（部署后的 L4-L6 交付验证；期望依赖 #441 合入，verify 未部署时由本 skill 阶段 5 过渡期兜底承接）"
+    },
+    {
+      "id": "EQ-15",
+      "prompt": "TP8 迁移完跑一轮压测对比新旧集群性能，不达标的话要不要回滚",
+      "should_trigger": false,
+      "note": "routes to kptools-tpsplit-optimization-verify（配套 PR #441 交付）（L5 性能对比与达标判定；期望依赖 #441 合入，verify 未部署时由本 skill 阶段 5 过渡期兜底承接；调参/回滚的执行回本 skill，但入口是 verify 判定）"
     },
     {
       "id": "EQ-09",
