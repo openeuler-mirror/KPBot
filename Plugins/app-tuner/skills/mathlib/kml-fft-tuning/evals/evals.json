@@ -1,0 +1,85 @@
+{
+  "skill_name": "kml-fft-tuning",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我们要在鲲鹏上建一个 2 维 C2C 的 KML_FFT plan，说说参数怎么写、有哪些硬约束、怎么判断是否建成功。不要执行命令。",
+      "expected_output": "kml_fft_plan kml_fft_plan_dft(int rank, const int *n, kml_fft_complex *in, kml_fft_complex *out, int sign, unsigned flags)。rank 为 int，约束 1≤rank≤4；n 为长度 rank 的数组，每个元素 n[i]≥1；in/out 为复数组（in==out 即 in-place）；sign 取 -1(KML_FFT_FORWARD) 或 +1(KML_FFT_BACKWARD)；flags 取 KML_FFT_ESTIMATE 或 KML_FFT_PATIENT。返回非空指针表示成功，空表示失败（函数说明未定义扩展错误码）。",
+      "files": [],
+      "expectations": [
+        "给出函数签名（rank/n/in/out/sign/flags）",
+        "说明 rank 约束 1–4 与 n[i]≥1",
+        "说明 sign 取值 -1 FORWARD / +1 BACKWARD",
+        "说明 flags 只有 ESTIMATE / PATIENT 两档",
+        "说明返回非空=成功、空=失败",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "这份代码每个时间步都重新建 plan，端到端慢得离谱。KML 里规划成本怎么省？patience 选哪个？不要执行命令。",
+      "expected_output": "KML_FFT 的 flags 只有 ESTIMATE（不实测、快）与 PATIENT（实测多个方案、规划耗时增加）两档。同形状反复执行时：PATIENT 建一次 plan，之后只用 kml_fft_execute 或 kml_fft_execute_dft 换数据指针复用；一次性场景用 ESTIMATE。KML 本版没有 wisdom 序列化接口，跨运行复用只能在进程内自建「形状→plan」表。",
+      "files": [],
+      "expectations": [
+        "说明只有 ESTIMATE/PATIENT 两档",
+        "说明 PATIENT 规划更慢但执行可能更优",
+        "给出「同形状只建一次 plan + execute/execute_dft 复用」",
+        "指出没有 wisdom 跨运行复用，只能进程内表",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我给 KML 设了 8 线程但 perf 显示只有一个线程在跑，是不是用法不对？不要执行命令。",
+      "expected_output": "线程数必须在建 plan 之前设置，顺序是 kml_fft_init_threads() → kml_fft_plan_with_nthreads(n) → 建 plan → … → kml_fft_cleanup_threads()。plan_with_nthreads 是全局设置，只影响其后新建的 plan；plan 结构里带 num_threads，即建 plan 那一刻的快照。三个函数都不可重入，cleanup 之后不能再使用多线程。所以先建 plan 再设线程数会静默失效，必须重建 plan。",
+      "files": [],
+      "expectations": [
+        "给出 init_threads → plan_with_nthreads → 建 plan → cleanup 的顺序",
+        "指出 plan_with_nthreads 只影响后续新建的 plan",
+        "指出线程数在建 plan 时被快照、需重建 plan",
+        "指出三个函数不可重入",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "MPI 下 KML_FFT 的本地缓冲应该开多大？kml_fft_mpi_local_size 返回的是什么？不要执行命令。",
+      "expected_output": "ptrdiff_t kml_fft_mpi_local_size(int rank, const ptrdiff_t *n, MPI_Comm comm, ptrdiff_t *local_n0, ptrdiff_t *local_0_start)，返回本进程需要分配的元素数量（不是字节，也不是 n/nproc 估算值）；local_n0 是本进程数据大小，local_0_start 是相对全局起点的偏移。按 返回值 * sizeof(元素) 用 kml_fft_malloc 分配，并用 local_0_start 做全局索引换算。MPI 版 plan 的 rank 上限是 3。",
+      "files": [],
+      "expectations": [
+        "给出 local_size 的签名与返回值含义（元素数）",
+        "指出要乘 sizeof 后分配，而不是按尺寸除法估",
+        "说明 local_n0 与 local_0_start 的用途",
+        "指出 MPI plan 的 rank ≤ 3",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "4096 点实数序列做 R2C，out 数组开多大？为什么不是 4096？不要执行命令。",
+      "expected_output": "R2C 用 kml_fft_plan_dft_r2c(rank, n, double *in, kml_fft_complex *out, unsigned flags)，没有 sign 参数。out 采用半复数形式：n0×n1 的实数数组只需 n0×[(n1/2)+1] 个复数保存，所以 1 维 4096 点实数只需 4096/2+1 = 2049 个复数。按输入尺寸申请 out 是浪费但安全，按输出尺寸申请必须按半复数公式。",
+      "files": [],
+      "expectations": [
+        "指出 R2C 没有 sign 参数",
+        "给出半复数形式 n0×(n1/2+1)",
+        "算出 4096 点对应 2049 个复数",
+        "指出 in 是实数组、out 是复数组",
+        "没有执行命令"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "把一份 FFTW 代码迁到 KML_FFT，哪些地方一定要改？不要执行命令。",
+      "expected_output": "接口基本同名同签名，通常是换头文件 kfft.h 与函数前缀。必须改的五处：(1) flags 只有 ESTIMATE/PATIENT，FFTW_MEASURE、FFTW_WISDOM_ONLY、FFTW_UNALIGNED、FFTW_PRESERVE_INPUT 没有对应值；(2) 本版没有 wisdom 序列化，跨运行复用要改成进程内 plan 表；(3) 线程数在建 plan 时快照，先 init_threads/plan_with_nthreads 再建 plan；(4) rank 上限不同（C2C ≤4、R2R 与 MPI ≤3）；(5) R2R 的 kind 宏名不同（R2HC/HC2R/DHT/REDFT00-11/RODFT00-11）。内存必须 kml_fft_malloc/kml_fft_free 配对，plan 用 destroy_plan 释放。",
+      "files": [],
+      "expectations": [
+        "指出接口同名、主要换前缀与 kfft.h",
+        "列出 flags 不存在 MEASURE/WISDOM_ONLY/UNALIGNED/PRESERVE_INPUT",
+        "指出没有 wisdom 序列化、改为进程内复用",
+        "指出线程数在建 plan 时快照",
+        "指出 rank 上限差异，R2R/MPI 只到 3 维",
+        "指出内存必须 kml_fft_malloc/free 配对"
+      ]
+    }
+  ]
+}
