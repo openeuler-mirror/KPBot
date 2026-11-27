@@ -4,9 +4,12 @@ description: >
   鲲鹏平台 Ceph 14.2.8 源码编译 SOP：CentOS 7.6 / openEuler 20.03&22.03 三条编译路径的依赖
   环境、openEuler 22.03 路径的 isa-l 升级与 22.03_adaptation.patch 补丁、rpmdev-setuptree +
   rpmbuild -ba ceph.spec 编译、编译产物 local_ceph 本地源安装与 ceph -v 验证、故障排除三则。
-  当需要从源码编译 Ceph 14.2.8 或为部署准备自编译 RPM 产物时使用；不适用 Ceph 16.2.7 repo
-  安装与集群部署（当前仓库无对应 skill，规划中，按通用流程处理并标注未覆盖）
-  与集群运行期调优（→ skill `ceph-parameter-tuning`）。
+  当需要从源码编译 Ceph 14.2.8 或为部署准备自编译 RPM 产物时使用；不适用 Ceph
+  16.2.7 repo 安装（openEuler 22.03 LTS SP4，ceph-install 矩阵，16.2.7 仅集成于 SP4
+  系统镜像源）→ skill `ceph-install`（同批 PR #444，同批交付）、
+  集群部署（MON/MGR/OSD 初建，含 ceph-ansible 路径）→ skill `ceph-ansible-deployment`
+  / `ceph-block-storage-deployment`（同批 PR #445/#446，同批交付）与集群运行期调优
+  （→ skill `ceph-parameter-tuning`）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）；OS 矩阵 CentOS 7.6.1810 / openEuler 20.03 LTS SP1 / openEuler 22.03 LTS SP2；Ceph 14.2.8 Nautilus；工具链 gcc-c++、cmake（CentOS 为 cmake3 + devtoolset-8-gcc-c++）、rpmbuild、rpmdevtools；安装依赖需接入互联网
 metadata:
@@ -35,8 +38,8 @@ metadata:
 | 场景 | 归属 |
 |---|---|
 | Ceph 14.2.8 源码编译（CentOS 7.6 / openEuler 20.03 / openEuler 22.03 三路径） | **本 skill** |
-| Ceph repo 安装（16.2.7，openEuler 22.03 本地源/在线源） | 当前仓库无对应 skill（规划中）；按通用 yum 流程处理并在产出中标注「未覆盖」 |
-| 集群部署（MON/MGR/OSD 初建，含 ceph-ansible 路径） | 当前仓库无对应 skill（规划中）；按通用部署流程处理并在产出中标注「未覆盖」 |
+| Ceph repo 安装（16.2.7，openEuler 22.03 LTS SP4 本地源/在线源；ceph-install 矩阵，16.2.7 仅集成于 SP4 系统镜像源） | skill `ceph-install`（同批 PR #444，同批交付） |
+| 集群部署（MON/MGR/OSD 初建，含 ceph-ansible 路径（其矩阵为 14.2.22/CentOS 7.6/20.03）） | skill `ceph-ansible-deployment` / `ceph-block-storage-deployment`（同批 PR #445/#446，同批交付） |
 | 集群运行期参数调优（ceph.conf、PG、绑核、OS 层） | skill `ceph-parameter-tuning`（姊妹 PR #308，同批交付） |
 
 ## 铁律
@@ -87,7 +90,7 @@ metadata:
 
 | 工具/资源 | 用途 | 缺失影响与降级 |
 |---|---|---|
-| gcc-c++ / cmake（CentOS 为 cmake3 + devtoolset-8-gcc-c++） | Ceph 14.2.8 源码编译 | 缺失时编译路径 blocked，降级为 Ceph 16.2.7 系统镜像源直接安装（当前仓库无对应安装 skill，规划中；标注未覆盖） |
+| gcc-c++ / cmake（CentOS 为 cmake3 + devtoolset-8-gcc-c++） | Ceph 14.2.8 源码编译 | 缺失时编译路径 blocked（编译任务要求的 14.2.8 自编译 RPM 无法由 16.2.7 安装交付）；仅当 OS 为 openEuler 22.03 LTS SP4（ceph-install 矩阵，16.2.7 仅集成于 SP4 系统镜像源）且用户明确接受改用 16.2.7 repo 安装时，转交 skill `ceph-install`（同批 PR #444） |
 | rpmbuild / rpmdevtools | spec 打包编译 | 缺失时编译路径 blocked，先补装工具链 |
 | OS 系统镜像 iso（本地源）/ 互联网接入 | 依赖安装、下载 isa-l/补丁/源码包 | 无外网时用离线压缩包与预置补丁，缺补丁不得跳过直接编译 |
 | `references/build-guide.md` | 全量命令 SOP（三路径 + 故障排除） | 缺失时输出 blocked，不得凭记忆拼命令 |
