@@ -1,0 +1,7 @@
+{
+  "skill_name": "flamegraph-parsing",
+  "queries": [
+    { "id": "FGP-01", "prompt": "解析火焰图 SVG 计算库占比", "should_trigger": true },
+    { "id": "FGP-02", "prompt": "优化 protobuf 序列化", "should_trigger": false }
+  ]
+}
