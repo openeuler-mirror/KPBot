@@ -85,23 +85,22 @@ mkdir -p /tmp/mm-src/vendor/libc
 tar -xzf /tmp/libc-0.2.191.crate -C /tmp/mm-src/vendor/libc --strip-components=1
 ```
 
-`/tmp/mm-src/vendor/libc/.cargo-checksum.json`（**内容必须从 crates.io 下载时核对的
-实际 sha256 提取，不要写死预设值**——上传/解包内容变化时写死值无法检出）：
+`/tmp/mm-src/vendor/libc/.cargo-checksum.json`（**package 摘要用下载时核对的 crate 整体
+实测 sha256，不要写死预设值**——上传/解包内容变化时写死值无法检出）：
 
 ```bash
 # 下载 .crate 后，先核对实际 sha256（crates.io 页面或 python3 -c "import hashlib; ..." 均可），
-# 再提取归档内 .cargo-checksum.json（这是 crates.io 构建时生成的逐文件校验，带 files 字典——
-# 覆盖每个文件的独立摘要，比手写一行更能检出传输/解包异常）：
-tar -xzf /tmp/libc-0.2.191.crate -O .cargo-checksum.json > /tmp/mm-src/vendor/libc/.cargo-checksum.json
-# 核对提取的 package 摘要与 crate 整体 sha256 一致（不一致说明解包出错或被篡改，重新上传）：
+# 再按该实测 sha256 构造 .cargo-checksum.json（实测 libc-0.2.191.crate：全部成员位于
+# libc-0.2.191/ 前缀下、归档内不含 .cargo-checksum.json 成员，无法从归档内提取；
+# package 摘要即 crate 整体 sha256，files 置空表示整包校验、不检逐文件变化）：
+python3 -c "import json,hashlib; sha=hashlib.sha256(open('/tmp/libc-0.2.191.crate','rb').read()).hexdigest(); json.dump({'files':{},'package':sha}, open('/tmp/mm-src/vendor/libc/.cargo-checksum.json','w'))"
+# 复核写入的 package 摘要与实测 sha256 一致（不一致说明写错/被篡改，重新构造）：
 python3 -c "import json,hashlib; ck=json.load(open('/tmp/mm-src/vendor/libc/.cargo-checksum.json')); sha=hashlib.sha256(open('/tmp/libc-0.2.191.crate','rb').read()).hexdigest(); assert ck.get('package')==sha, f'checksum mismatch: cargo={ck.get(\"package\")[:12]} file={sha[:12]}'"
-# 确认 files 字典非空（crates.io 构建包应包含逐文件摘要）：
-python3 -c "import json; ck=json.load(open('/tmp/mm-src/vendor/libc/.cargo-checksum.json')); assert len(ck.get('files',{}))>0, 'files 为空——手写预设摘要无法检出逐文件变化，改用完整 crate 归档中的原始 checksum'"
 ```
 
-备选方案（更完备）：用 `cargo vendor` 生成完整 vendor 目录（在可联网的构建机上执行
-`cargo vendor` 后把整个 `vendor/` 目录连同各自的 .cargo-checksum.json 上传），
-保留逐文件校验与完整目录结构。
+需要逐文件校验时（检出传输/解包后的单文件变化），用 `cargo vendor` 生成完整 vendor
+目录（在可联网的构建机上执行 `cargo vendor` 后把整个 `vendor/` 目录连同各自的
+.cargo-checksum.json——带逐文件 files 摘要——上传），保留逐文件校验与完整目录结构。
 
 `/tmp/mm-src/.cargo/config.toml`（把 crates.io 替换为本地 vendor 目录）：
 
@@ -164,7 +163,7 @@ python3 -c "import motor; print(motor.__file__)"   # site-packages/motor/__init_
 - wheel 内容：含 `motor/coordinator/workload_shm_rs/lib/libmindie_workload_shm.so`（实测 458,712 字节）；不含 `kv-conductor`（可选）。源码构建 wheel 约 1.4MB（官方 aarch64 3.6MB，差额主要是 kv-conductor）
 - **`import motor` 必须在源码目录之外执行**：在 `/tmp/mm-src` 内执行会命中源码目录而不是 site-packages，验证安装结果必须切到 `/opt/mindie-motor` 等外部目录
 - **运行依赖按上游 `requirements.txt` 全量补装**：本手册实测当时的基础镜像已具备大部分依赖，只补了 pyOpenSSL/watchdog——**新环境不要沿用该最小清单**，coordinator 还硬 import fastapi/pydantic/zmq/msgspec/uvicorn 等，缺任何一个都起不来；离线全量下载见上游 standalone.md 附录 A（`pip download -r requirements.txt`）
-- 上面第 123 行的通配 `dist/motor-*.whl` 是当时的一次通装了两个 wheel（`-none-any` 与 `-linux_aarch64`，恰好按字母序平台包最后生效）；正式部署不要沿用——build 可能同时产出两个 wheel，按 SKILL.md 方式 B 第 6 步用第 5 步断言选中的**明确文件名**安装，避免 glob 先后覆盖
+- §7 首行命令的通配 `dist/motor-*.whl` 是当时的一次通装了两个 wheel（`-none-any` 与 `-linux_aarch64`，恰好按字母序平台包最后生效）；正式部署不要沿用——build 可能同时产出两个 wheel，按 SKILL.md 方式 B 第 6 步用第 5 步断言选中的**明确文件名**安装，避免 glob 先后覆盖
 
 ## 附：ISS-09 根因——为什么 `pip3 wheel .` 是陷阱
 

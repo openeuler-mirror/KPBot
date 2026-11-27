@@ -35,6 +35,7 @@ metadata:
 3. 升级/重装 → **先停旧 coordinator**（停服纪律见下）再装；装好后提醒用户：必须回 `kptools-dplb-optimization`（配套 PR #443 交付） 重新生成配置并重新执行 register.sh（注册表是内存态，重启即清空）
 4. 用户要的是配置三件套 / 启动 / 注册 / 改 LB 策略 → 转 `kptools-dplb-optimization`（配套 PR #443 交付）（其阶段 3 做安装前置确认，本 skill 只管软件本体）
 5. 用户只描述负载不均衡现象 → 先确认意图：要部署负载均衡组件走 `kptools-dplb-optimization`（配套 PR #443 交付）（主入口，未装时它转本 skill），只要采集/分析转 `kptools-dplb-profiler`
+6. 用户两种方式都没提（既没给 whl，也没要源码编译）→ 主动询问用户选哪种（方式 A 自备 whl 直装 / 方式 B 源码编译），不要替用户决定
 
 ## 阶段 1：环境检查（SSH 连通后先做，再动手装）
 
@@ -62,7 +63,7 @@ curl -m 5 -sI https://gitcode.com >/dev/null && echo OK || echo UNREACHABLE   # 
 
 - 编译环境缺失时，先与用户确认是否允许 `yum/dnf install` 安装依赖，不要静默装系统包
 - 检查是否已有旧版本：`pip3 show motor`（**包名是 `motor` 不是 `mindie-motor`**——motor 3.x whl 元数据 `Name: motor`，用错名字永远查不到），有则询问覆盖还是并存；覆盖（升级/重装）先按下方停服纪律停旧
-  - **同名异包防误判**：PyPI 的 MongoDB 异步驱动同样叫 `motor`（`pip show motor` 与 `import motor` 均命中）——发现已有 `motor` 时，先核对 **MindIE 专属特征**（`python3 -c "import motor.coordinator"` 成功且 `motor/__file__` 同级有 `libmindie_workload_shm.so`）再判定是旧 MindIE Motor；仅命中 `pip show motor` 但无 coordinator 模块即为 MongoDB 驱动（其他应用的依赖），**禁止覆盖安装**——改用独立虚拟环境（`python3 -m venv /opt/motor-venv && source /opt/motor-venv/bin/activate` 后在 venv 内安装本 skill 的 motor），避免破坏其他应用
+  - **同名异包防误判**：PyPI 的 MongoDB 异步驱动同样叫 `motor`（`pip show motor` 与 `import motor` 均命中）——发现已有 `motor` 时，先核对 **MindIE 专属特征**（`python3 -c "import motor.coordinator"` 成功且 motor 包目录内递归存在 `libmindie_workload_shm.so`——实际位于 `motor/coordinator/workload_shm_rs/lib/` 下，不在 `motor/__file__` 同级）再判定是旧 MindIE Motor；仅命中 `pip show motor` 但无 coordinator 模块即为 MongoDB 驱动（其他应用的依赖），**禁止覆盖安装**——改用独立虚拟环境（`python3 -m venv /opt/motor-venv && source /opt/motor-venv/bin/activate` 后在 venv 内安装本 skill 的 motor），避免破坏其他应用
 - 外网不可达时立即反馈用户"远端无法访问外网"，给出替代建议（改用方式 A 上传 whl、依赖 whl 由本地经内网镜像下载后上传、用户提供离线源码包），让用户选择，不要自行切换方案后闷头继续
 
 ## 阶段 2：安装（按用户选择的方式二选一）
@@ -82,6 +83,10 @@ curl -m 5 -sI https://gitcode.com >/dev/null && echo OK || echo UNREACHABLE   # 
 
 ```
 # 1. 上传用户提供的 whl 到远端（ssh-mcp-server upload 或 scp）
+#    上传前先确认 whl 的本地路径与目标架构（aarch64/x86_64）匹配——远端是 aarch64 时
+#    不要装 x86_64 平台标签的 whl（从 whl 文件名平台标签或远端
+#    python3 -c "import sysconfig; print(sysconfig.get_platform())" 核对），不匹配先向用户
+#    确认替代来源，不要装了再报错
 #    例：motor-xxx-py3-none-any.whl 或早期命名的 mindie_motor-xxx.whl -> /tmp/mindie-motor-whl/
 #    注意：whl 元数据无 Requires-Dist，pip 安装它不会自动装任何运行依赖；
 #    依赖按上游 requirements.txt 全量补（见第 4 步），缺模块时启动报 ModuleNotFoundError
@@ -89,9 +94,12 @@ curl -m 5 -sI https://gitcode.com >/dev/null && echo OK || echo UNREACHABLE   # 
 #    八个硬 import 只是快速探测（DEPS_OK/DEPS_MISSING）；**交付验证必须用完整清单核对**——
 #    向用户索取/从源码仓库获取对应版本 requirements.txt 后，用目标解释器逐项核对：
 python3 -c "import OpenSSL, watchdog, grpc, fastapi, pydantic, zmq, msgspec, uvicorn" 2>/dev/null && echo DEPS_PROBE_OK || echo DEPS_MISSING
-#    完整核对（在目标解释器上，版本号以 requirements.txt 为准）：
-pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
-#    上述命令会解析全量依赖并补齐缺失项/版本不满足项（--dry-run 先预览再装，无 --dry-run 直接装）
+#    完整核对 + 补装（在目标解释器上，版本号以 requirements.txt 为准），两步分开执行、不要用 || 串联：
+pip3 install --dry-run -r requirements.txt
+#    ↑ 只预览不安装：输出中的 "Would install/Would upgrade" 行即缺失/版本不满足清单（保留输出，
+#      不要重定向丢弃；退出码恒为 0，不能作为"已满足"的依据；pip < 22.2 无 --dry-run 时跳过本步）
+pip3 install -r requirements.txt
+#    ↑ 真正补装缺失项/版本不满足项（裸安装，幂等：已满足的项 pip 自动跳过）
 # 3. 安装前断言 whl 含原生库（用户拿到的"编译好的 whl"也可能是 pip wheel 空壳，同 ISS-09）。
 #    **选定一个明确的 whl 文件**（不要 glob——目录含多个 whl 时，校验的是第一个、安装却传全部，
 #    冲突时安装可能失败；由用户指定或列出后选唯一匹配），校验和安装使用同一路径：
@@ -122,7 +130,10 @@ python3 -c "import motor; print(motor.__file__)"   # 应指向 site-packages/mot
 python3 -c "import motor, os; p=motor.__file__; assert 'site-packages' in p, f'安装验收失败：motor.__file__={p} 不在 site-packages（可能命中的是源码目录）'; print('verified:', p)"
 pip3 show motor
 #    依赖完整性——用目标解释器核对 requirements.txt 全量（不只 8 个硬 import 模块）：
-pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
+#    --dry-run 只预览不安装（退出码恒为 0，不代表已满足）：输出含 "Would install/Would upgrade"
+#    即有缺失/版本不满足，执行 pip3 install -r requirements.txt 补装后复验；
+#    输出全部 "Requirement already satisfied" 才是全量满足（pip < 22.2 无 --dry-run 时改裸安装复验）
+pip3 install --dry-run -r requirements.txt
 ```
 
 ### 方式 B：拉源码、编译 whl、安装
@@ -162,7 +173,10 @@ cd /opt/mindie-motor   # 或任意已确认存在的源码目录之外位置；�
 python3 -c "import motor, os; p=motor.__file__; assert 'site-packages' in p, f'安装验收失败：motor.__file__={p} 不在 site-packages（可能命中的是源码目录）'; print('verified:', p)"
 pip3 show motor
 #    依赖完整性——用目标解释器核对 requirements.txt 全量（不只 8 个硬 import 模块）：
-pip3 install --dry-run -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
+#    --dry-run 只预览不安装（退出码恒为 0，不代表已满足）：输出含 "Would install/Would upgrade"
+#    即有缺失/版本不满足，执行 pip3 install -r requirements.txt 补装后复验；
+#    输出全部 "Requirement already satisfied" 才是全量满足（pip < 22.2 无 --dry-run 时改裸安装复验）
+pip3 install --dry-run -r requirements.txt
 ```
 
 **cargo 离线安装**（远端无外网时，完整步骤见 `references/field-playbook-offline-build.md`；空间预检：离线包 ~345MB + 上传/解压两份副本 + cargo target，`df -h /tmp /usr/local` 确认余量——容器 /tmp 常只有几百 MB）：

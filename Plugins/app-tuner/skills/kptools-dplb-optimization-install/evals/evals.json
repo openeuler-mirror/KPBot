@@ -12,7 +12,7 @@
       "id": 2,
       "eval_name": "user-provided-whl-only",
       "prompt": "我有编译好的 mindie_motor-1.0.0-py3-none-any.whl 在我本地 D:\\downloads\\ 下，帮我装到远端 172.16.0.20 上，配置先不用管。",
-      "expected_output": "走方式 A：不克隆源码、不要求 git/gcc/cargo/grpcio-tools，流程为上传 whl -> 运行依赖预检（requirements.txt 全量口径，探 fastapi/pydantic/zmq/msgspec 等硬 import；whl 无依赖声明需按 requirements.txt 补装）-> 安装前原生库断言（防 pip wheel 空壳包；glob 用 *motor*.whl 兼容 mindie_motor-* 前缀并防空列表 IndexError）-> pip3 install --no-deps --force-reinstall -> 源码目录外验证 import motor。应提示 whl 架构匹配问题；交付终点是 import motor 成功 + pip3 show motor，不生成任何 user_config.json/register.sh/start_motor.sh（配置类诉求转 kptools-dplb-optimization（配套 PR #443 交付））。",
+      "expected_output": "走方式 A：不克隆源码、不要求 git/gcc/cargo/grpcio-tools，流程为上传 whl（上传前确认 whl 本地路径与目标架构 aarch64/x86_64 匹配）-> 运行依赖预检（requirements.txt 全量口径，探 fastapi/pydantic/zmq/msgspec 等硬 import；whl 无依赖声明需按 requirements.txt 补装）-> 安装前原生库断言（防 pip wheel 空壳包；选定唯一/用户指定的 whl 文件，校验与安装使用同一路径，不要 glob）-> pip3 install --no-deps --force-reinstall -> 源码目录外验证 import motor。应提示 whl 架构匹配问题；交付终点是 import motor 成功 + pip3 show motor，不生成任何 user_config.json/register.sh/start_motor.sh（配置类诉求转 kptools-dplb-optimization（配套 PR #443 交付））。",
       "files": []
     },
     {
