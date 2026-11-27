@@ -1,0 +1,28 @@
+{
+  "skill_name": "ceph-object-expansion",
+  "evals": [
+    {
+      "id": "COX-E01",
+      "prompt": "现有 x86 的 Ceph 集群（Ceph 12.2.11），要加两台鲲鹏服务器 ceph4/ceph5 扩容，对象存储（RGW）路径怎么做？",
+      "expected_output": "按 object-expansion.md 对象存储扩容路径：新节点完成防火墙（最小化范围）/主机名/hosts/NTP/免密（安全基线）/SELINUX（仅新增节点）/epel 源/rpm-luminous ceph.repo 配置后安装同版本 Ceph（排除 debuginfo 包）；编辑 ceph.conf 在现有 mon_initial_members 与 mon_host 末尾追加 ceph4/ceph5，用 ceph-deploy --overwrite-conf config push 推送配置（config push 仅同步配置不下发 client.admin keyring）后 ceph-deploy mon create ceph4 ceph5 并用 ceph mon stat 验证（mon 名称与规划 ceph4/ceph5 一一对应）；在 ceph.conf 按 bucket 端口递推规划 RGW 实例端口（本次新增 bucket37~bucket60、端口 10037~10060）并 ceph-deploy --overwrite-conf config push 同步配置；主节点 ceph1 执行 ceph-deploy rgw create ceph4:bucket37~48 与 ceph5:bucket49~60，ceph -s 确认 60 个 RGW 进程在线、curl 验证网关；ceph-deploy mgr create 与按核对数据盘（lsblk + /dev/disk/by-id 对照、遇错即停）以 by-id 路径逐盘 osd create 部署 MGR/OSD；按官方公式核准目标 PG 数后调整 default.rgw.buckets.data/index 存储池 pg_num/pgp_num；扩容后用 ceph -s 确认集群恢复健康、ceph osd df 确认容量增加；删除 Monitor（mon destroy）属破坏性操作需二次确认",
+      "files": [],
+      "expectations": [
+        "给出新节点环境配置项与安装同版本 Ceph（排除 debuginfo 包）",
+        "给出编辑 ceph.conf 增加 mon_initial_members/mon_host、推送配置、创建 Monitor 并以 mon stat 验证的顺序",
+        "给出 ceph.conf RGW 端口规划（bucket 端口递推）与主节点新增 RGW 实例、进程在线与 curl 网关验证的步骤",
+        "给出部署 MGR、按核对数据盘以 by-id 路径逐盘创建 OSD（遇错即停）、按官方公式核准目标 PG 数后调整 default.rgw.buckets.data/index 存储池 pg_num/pgp_num 与 ceph -s、ceph osd df 验证，并标注删除 Monitor 属破坏性操作需二次确认"
+      ]
+    },
+    {
+      "id": "COX-E02",
+      "prompt": "Ceph 对象存储扩容：ceph.conf 里 RGW 实例的端口配置怎么写，加完实例怎么验证网关可用？",
+      "expected_output": "按 object-expansion.md：在 ceph1 上编辑 /etc/ceph/ceph.conf，为每个 rgw 实例添加配置段（结构完全一致、按 bucket 递推端口）：[client.rgw.bucketN] 段内 rgw_frontends = civetweb port=100NN，log file = /var/log/ceph/client.rgw.bucketN.log；原集群实例（bucket1~bucket36、端口 10001~10036）保持不变，本次扩容新增 bucket37~bucket60、端口 10037~10060，同时 global 段 mon_initial_members/mon_host 加入 ceph4/ceph5；配置后 ceph-deploy --overwrite-conf config push ceph1 ceph2 ceph3 ceph4 ceph5 在所有集群节点同步；主节点按 ceph4:bucket37~48、ceph5:bucket49~60 执行 ceph-deploy rgw create，ceph -s 查看 60 个 RGW 进程是否在线，最后用 curl 或者 web 节点登录验证网关服务",
+      "files": [],
+      "expectations": [
+        "给出 ceph.conf 中 [client.rgw.bucketN] 配置段结构（rgw_frontends civetweb 端口递推与 log file）",
+        "说明原集群实例保持不变、本次扩容新增实例的端口区间，并同步 mon_initial_members/mon_host 与配置推送",
+        "给出 ceph-deploy rgw create 创建实例、ceph -s 查看进程在线与 curl 验证网关的步骤"
+      ]
+    }
+  ]
+}
