@@ -1,0 +1,69 @@
+{
+ "skill_name": "oceanbase-performance-optimization",
+ "version": "1.0.0",
+ "notes": "优化决策类评估；不实际执行变更。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "128U 大规格机器 sysbench 跑不满，CPU 只有七成，先查什么？不要执行命令。",
+   "expected_output": "大规格跑不满首查规格与租户资源：租户 cpu_count 是否给足（net_thread_count 要一起调，否则出现机器有核但租户不用）、Unit/资源单元是否绑核正确、跨 NUMA/跨 P（numa_distance、cgroup 绑核策略）、sysbench/obproxy 客户端是否先饱和。先走决策矩阵按瓶颈选杠杆，单变量调整并 A/B；负结果台账防止重复踩坑。",
+   "files": [
+    "references/config-tuning.md",
+    "references/decision-and-negative-results.md"
+   ],
+   "expectations": [
+    "首查租户资源与线程配额",
+    "提到 net_thread_count 联动与客户端饱和",
+    "提到 NUMA/跨 P 检查",
+    "走决策矩阵单变量纪律",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "想上 ApplySrv 自适应线程的源码改动，收益大概多少？风险和回滚怎么考虑？不要执行命令。",
+   "expected_output": "实测口径（OB 4.2.5.5、鲲鹏实测，换版本/机型需重测）：单独启用 ApplySrv 时 insert 约 +12%，write 约 -3%（可能为转储波动，需多轮复测），read/select/update 无明显变化或略降；叠加 sql_nio 多队列后各场景无劣化——两组实验要分开说，不能把叠加结果当成单独启用结果。改动是回放线程按积压自适应扩缩。风险：改源码需干净重编+重启、行为回归风险；回滚=还原补丁后同流程干净重编（未启用 --enable-depend 类依赖时必须 clean rebuild）并验证二进制身份。低风险替代先试：配置侧租户/线程扩容。落地按源码杠杆的补丁检查单走。",
+   "files": [
+    "references/source-optimizations.md"
+   ],
+   "expectations": [
+    "给出实测收益与口径限定",
+    "区分单独启用与叠加多队列两组实验并保留 write 回退",
+    "列出风险与干净重编要求",
+    "说明回滚流程与身份验证",
+    "提到先试低风险配置替代",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "换 LLVM for openEuler 编译、关 LSE 两个手段要不要都上？怎么确认编译身份？不要执行命令。",
+   "expected_output": "按瓶颈选：LLVM for openEuler 实测 920B +21.8%、950 +11.25%（口径 OB 4.2.5.5）；NOLSE 在低争用负载 2-5% 收益但高争用可能反向——两者独立验证、单变量分开 A/B，不能叠加下结论。身份用 verify_build_opts.sh 只读核验：.comment 编译器、AArch64-only 的 LSE 计数（助记符列 $3 匹配带内存序后缀变体，排除 __aarch64_*_relax outline 桩后按数量级判定，非 AArch64 跳过）、md5/大小、BOLT 段线索，并记录到 A/B 报告。",
+   "files": [
+    "references/compiler-and-thirdparty.md",
+    "scripts/verify_build_opts.sh"
+   ],
+   "expectations": [
+    "给出两个手段的实测口径与适用条件",
+    "强调单变量独立 A/B",
+    "说明只读身份核验内容",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "同事建议把 jemalloc 换掉、再试试 CRC 硬件指令加速，值得做吗？不要执行命令。",
+   "expected_output": "先查负结果台账：jemalloc 替换、CRC 指令替换、false sharing 对齐、数据预取等在实测中**已证伪**（无收益或负收益）——重复试错前先看台账结论与当时的口径/环境；若环境明显不同（机型/版本变化）才按台账里的复验条件重新开题，且预期收益要重新举证，不沿用旧结论。",
+   "files": [
+    "references/decision-and-negative-results.md",
+    "references/source-optimizations.md"
+   ],
+   "expectations": [
+    "指出这些是负结果台账中的已证伪项",
+    "说明负结果的作用（防重复踩坑）",
+    "说明何时才需要复验（环境变化）",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
