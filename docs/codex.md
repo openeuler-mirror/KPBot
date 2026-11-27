@@ -60,13 +60,13 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-以下计数来自三次独立的空目录安装。主干 `e2a0de84` 已含 `kpbot-pr-maintainer`，`4e3a8b1a` 加入了 `kpbot-cannlab-webide`（`Plugins` 树 `27e5ab95`）。本 PR 在 `4e3a8b1a` 上加入绘图与 Host 验证两个技能。
+分别将主干 `618dc4ec` 和在该基线上加入 `sra-scenario-analysis` 的工作树安装到空目录，得到以下计数。
 
-| 口径 | `e2a0de84` | `4e3a8b1a`（含 WebIDE） | 加入本 PR |
-| --- | ---: | ---: | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 356 | 357 | 356 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 403 | 404 | 402 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 466 | 467 | 465 |
+| 口径 | 主干 `618dc4ec` | 加入 `sra-scenario-analysis` 后 |
+| --- | ---: | ---: |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 369 | 370 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
