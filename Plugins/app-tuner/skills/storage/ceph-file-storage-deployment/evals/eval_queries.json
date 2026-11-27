@@ -1,0 +1,35 @@
+{
+  "skill_name": "ceph-file-storage-deployment",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "ceph-deploy 部署文件存储，MDS 创建和 CephFS 客户机挂载怎么做",
+      "should_trigger": true,
+      "note": "文件存储 MDS 部署与挂载"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "CephFS 的 fs_data 和 fs_metadata 存储池 pg 数怎么规划，ceph fs new 参数顺序是什么",
+      "should_trigger": true,
+      "note": "存储池规划与 ceph fs new 元数据池在前"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "ceph-deploy 部署块存储，rbd map 映射块设备怎么做",
+      "should_trigger": false,
+      "note": "routes to ceph-block-storage-deployment（块存储路径）"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "Ceph 对象存储 RGW 的 cephadm 容器化部署",
+      "should_trigger": false,
+      "note": "routes to ceph-object-storage-deployment（对象存储路径）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "Ceph 集群 MDS cache 相关参数怎么调优",
+      "should_trigger": false,
+      "note": "routes to ceph-parameter-tuning（集群运行期参数调优）"
+    }
+  ]
+}
