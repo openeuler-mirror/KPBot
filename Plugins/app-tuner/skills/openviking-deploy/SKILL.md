@@ -25,7 +25,7 @@ systemd 托管与健康验收，产出 `deploy.env`，并按 commit 保留旧 re
 | 指定 tag/分支/commit | 按 ref checkout，记录 commit 与包版本；需要时加 `--verify-signature` 做 GPG 校验 |
 | 使用 `--source-dir` | 使用目录自带版本，不得再指定非 main 的 `--version` |
 | 只说要“最新版” | 说明默认分支是移动分支；按默认分支执行并记录 commit，不猜测 tag |
-| 要求预编译包 | 使用 `--wheel` 安装，不混用源码版本声明 |
+| 要求预编译包 | 使用 `--wheel` 安装；不能与 `--version` 同用，版本以 wheel 元数据为准 |
 
 禁止把“未指定版本”解释为发行版包或旧 tag；禁止不记录实际 commit。
 
@@ -97,7 +97,7 @@ bash scripts/install_openviking.sh --dry-run \
 | 参数 | 说明 |
 |------|------|
 | `--version REF` | 版本/分支/commit，默认 main |
-| `--verify-signature` | 对 tag/commit 做 GPG 校验；source-dir 从验签对象生成干净构建树 |
+| `--verify-signature` | 对 tag/commit 做 GPG/SSH 校验；tag 未签名时回退 commit；source-dir 从验签对象生成干净构建树 |
 | `--git-url URL` | 仅 http(s)://，不得含 userinfo；本地源码用 `--source-dir` |
 | `--source-dir DIR` / `--wheel FILE` | 离线源码 / 预编译 wheel（root 属主，组/其他不可写） |
 | `--prefix` / `--build-root` / `--result-dir` | 安装前缀 / 构建缓存（root:root 0700）/ 日志与产物 |
@@ -133,7 +133,8 @@ API Base、API key 交付方式、`storage.workspace`。用户不清楚模型或
 再用 `--ov-conf` 接管。混合 provider 直接使用 `--ov-conf`，不要用共享参数强行生成。
 
 Ollama 默认 API Base 为 `http://127.0.0.1:11434/v1`，可不提供 API key；
-其他 provider 缺少 key 时脚本直接失败，不写占位 key。
+`openai`/`litellm` 且 `api_base` 指向本地 OpenAI 兼容服务（如 vLLM）时，
+`embedding.dense` 可省略 API key。其他 provider 缺少 key 时脚本直接失败，不写占位 key。
 
 ## 产物与验收
 
@@ -145,6 +146,7 @@ OPENVIKING_VERSION=main
 OPENVIKING_BRANCH=main
 OPENVIKING_COMMIT=<实际 commit>
 OPENVIKING_SIGNATURE_VERIFIED=0|1
+OPENVIKING_SIGNATURE_SUBJECT=tag|commit|none
 OPENVIKING_PACKAGE_VERSION=<包版本>
 OPENVIKING_RELEASE_DIR=/opt/openviking/releases/<commit12>
 OPENVIKING_CURRENT_LINK=/opt/openviking/current

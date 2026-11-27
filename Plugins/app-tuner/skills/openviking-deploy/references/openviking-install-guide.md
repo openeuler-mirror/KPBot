@@ -42,15 +42,19 @@
 - 默认分支是移动分支：部署完成后必须把 `git rev-parse HEAD` 写入 `deploy.env` 的
   `OPENVIKING_COMMIT`，同时记录 `OPENVIKING_BRANCH` 与 `OPENVIKING_PACKAGE_VERSION`。
 - 指定 tag（如 `v0.3.22`）、分支或 commit 时按 ref checkout；tag 与 commit 更适合可复现环境。
-  需要 GPG 校验时加 `--verify-signature`：脚本按 ref 类型选择 `git verify-tag` 或
-  `git verify-commit`，并用 `git rev-parse <ref>^{commit}` 核对 checkout 的 HEAD，结果写入
-  `OPENVIKING_SIGNATURE_VERIFIED`。
+  需要签名校验时加 `--verify-signature`：脚本优先 `git verify-tag`，官方版本 tag 多为轻量/
+  未签名对象，失败时告警并回退 `git verify-commit HEAD`；同时用
+  `git rev-parse <ref>^{commit}` 核对 checkout 的 HEAD。GPG 签名需导入公钥；上游 SSH 签名
+  需配置 `gpg.ssh.allowedSignersFile`。结果写入 `OPENVIKING_SIGNATURE_VERIFIED` 与
+  `OPENVIKING_SIGNATURE_SUBJECT`（tag/commit/none）。未配置信任材料时官方仓库校验会失败；
+  该开关主要适用于已配置 GPG/SSH 信任的自签仓库或签名提交。
 - `--verify-signature` 与 `--source-dir` 同用时，要求目录是含 `.git` 的工作树；脚本先验签
-  HEAD，再用 `git archive HEAD` 生成干净构建树，避免本地修改/未跟踪文件进入 wheel。
-  无 tag 时构建版本使用 PEP 440 本地版本 `0.0.0+source`。
+  签名 tag 或 HEAD commit，再用 `git archive HEAD` 生成干净构建树，避免本地修改/未跟踪文件
+  进入 wheel。无 tag 时构建版本使用 PEP 440 本地版本 `0.0.0+source`。
 - 离线部署用 `--source-dir`，使用目录自带版本；目录自带版本，不能再指定非 main 的 `--version`。
   未加 `--verify-signature` 时按目录当前内容构建，不声称源码与 commit 完全一致。
-- 已有预编译 wheel 时用 `--wheel`；wheel 的哈希会写入 release 标识，不与源码版本声明混用。
+- 已有预编译 wheel 时用 `--wheel`；wheel 模式不能指定非 main 的 `--version`，版本以 wheel
+  元数据为准，哈希写入 release 标识。
 - 上游推荐的普通用户路径是 `uv tool install openviking --upgrade`；本技能按部署需求默认源码构建，
   不把预编译包当作默认分支。
 
@@ -167,7 +171,9 @@ provider 默认 API Base：
 | ollama | `http://127.0.0.1:11434/v1` |
 | azure | 必须显式 `--api-base` |
 
-Ollama 可省略 API key；其他 provider 没有 key 时脚本直接失败，不写入占位 key。
+Ollama 可省略 API key；`openai`/`litellm` 且 `api_base` 已设置时，`embedding.dense`
+可省略 API key（用于 vLLM 等本地 OpenAI 兼容服务）。其他 provider 没有 key 时脚本直接失败，
+不写入占位 key；生成配置的共享参数路径仍要求 key，本地无 key Embedding 请用 `--ov-conf` 接管。
 
 ### 4.2 接管已有配置
 
@@ -288,6 +294,9 @@ curl -fsS http://127.0.0.1:1933/ready
 | 构建根目录权限被拒绝 | 使用默认 `/var/cache/openviking-deploy`，或修正为 root:root 0700 |
 | 源码目录被拒绝 | 改为 root 属主且组/其他不可写；不要从普通用户目录以 root 构建 |
 | `ov.conf` 校验失败 | 补齐 `embedding.dense`、`vlm`、`storage.workspace`；检查 JSON 与 key 文件权限 |
+| 本地 OpenAI 兼容 Embedding 被拒 | 确认 `embedding.dense` 有 `api_base`（openai/litellm 可省略 api_key）；用 `--ov-conf` 接管 |
+| `--wheel` 与 `--version` 同时使用 | 去掉 `--version`；wheel 版本以包元数据为准 |
+| `--verify-signature` 校验 tag 失败 | 官方版本 tag 可能未签名，脚本会回退校验 commit；GPG 需公钥，SSH 需 `gpg.ssh.allowedSignersFile` |
 | `doctor` 失败 | 查看 `logs/doctor.log`；检查 api_base、模型名、API key、网络与 provider |
 | `/health` 超时 | 查看 `journalctl -u openviking` 或 `/var/log/openviking/server.log`；检查端口与启动日志 |
 | `/ready` 非 ready | 检查 Embedding 服务可达性、key、模型与维度；`/health` 不能替代 |

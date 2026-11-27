@@ -71,7 +71,8 @@ usage() {
 
 版本与源码:
   --version REF            版本/分支/commit（默认 main；master 为历史别名）
-  --verify-signature       对 tag/commit 做 GPG 签名校验（需已导入公钥）
+  --verify-signature       对 tag/commit 做 GPG/SSH 签名校验；tag 未签名时回退 commit
+                           （需配置 GPG 公钥或 gpg.ssh.allowedSignersFile）
   --git-url URL            源码仓库，仅支持 http(s):// 且不得含 userinfo（默认官方仓库）；
                            本地源码请用 --source-dir，预编译包用 --wheel
   --source-dir DIR         离线/本地源码目录（要求 root 属主、组/其他不可写）
@@ -186,6 +187,9 @@ if [[ -n "$PIP_INDEX_URL" ]]; then
 fi
 if [[ -n "$SOURCE_DIR" && "$OPENVIKING_VERSION" != "main" ]]; then
   die "--source-dir 使用目录自带版本，不能再指定 --version $OPENVIKING_VERSION（默认 main 即可）"
+fi
+if [[ -n "$WHEEL" && "$OPENVIKING_VERSION" != "main" ]]; then
+  die "--wheel 使用包自带版本，不能指定 --version $OPENVIKING_VERSION（默认 main 即可）"
 fi
 if [[ -n "$SOURCE_DIR" && -n "$WHEEL" ]]; then
   die "--source-dir 与 --wheel 不能同时使用"
@@ -343,6 +347,7 @@ OPENVIKING_COMMIT=""
 OPENVIKING_BRANCH=""
 OPENVIKING_PACKAGE_VERSION=""
 SIGNATURE_VERIFIED=0
+SIGNATURE_SUBJECT=""
 SCM_PRETEND_VERSION=""
 CONF_FILE="$CONF_DIR/ov.conf"
 RUN_GROUP=""
@@ -519,7 +524,13 @@ if [[ "$VERIFY_SIGNATURE" == "1" ]]; then
       fi
     done
     if [[ -z "$tag_at_head" ]]; then
+      if [[ -n "$(git -C "$SRC_DIR" tag --points-at HEAD)" ]]; then
+        log_warn "HEAD 上的 tag 未签名或无法验证，回退校验 HEAD commit"
+      fi
       git -C "$SRC_DIR" verify-commit HEAD || die "commit 签名校验失败: $OPENVIKING_COMMIT"
+      SIGNATURE_SUBJECT=commit
+    else
+      SIGNATURE_SUBJECT=tag
     fi
     clean_src="$WORK_DIR/clean-src"
     mkdir -p "$clean_src"
@@ -541,9 +552,17 @@ if [[ "$VERIFY_SIGNATURE" == "1" ]]; then
     [[ "$target_commit" == "$head_commit" ]] \
       || die "checkout HEAD 与请求 ref 不一致（ref=$target_commit head=$head_commit）"
     if git -C "$SRC_DIR" show-ref --verify --quiet "refs/tags/$OPENVIKING_VERSION"; then
-      git -C "$SRC_DIR" verify-tag "$OPENVIKING_VERSION" || die "tag 签名校验失败: $OPENVIKING_VERSION"
+      if git -C "$SRC_DIR" verify-tag "$OPENVIKING_VERSION" 2>/dev/null; then
+        SIGNATURE_SUBJECT=tag
+      else
+        log_warn "tag $OPENVIKING_VERSION 本身未签名或无法验证，回退校验 HEAD commit"
+        git -C "$SRC_DIR" verify-commit HEAD \
+          || die "tag/commit 签名校验均失败: $OPENVIKING_VERSION"
+        SIGNATURE_SUBJECT=commit
+      fi
     else
       git -C "$SRC_DIR" verify-commit HEAD || die "commit 签名校验失败: $OPENVIKING_VERSION"
+      SIGNATURE_SUBJECT=commit
     fi
   fi
   SIGNATURE_VERIFIED=1
@@ -951,6 +970,7 @@ fi
   printf 'OPENVIKING_BRANCH=%s\n' "$OPENVIKING_BRANCH"
   printf 'OPENVIKING_COMMIT=%s\n' "$OPENVIKING_COMMIT"
   printf 'OPENVIKING_SIGNATURE_VERIFIED=%s\n' "$SIGNATURE_VERIFIED"
+  printf 'OPENVIKING_SIGNATURE_SUBJECT=%s\n' "${SIGNATURE_SUBJECT:-none}"
   printf 'OPENVIKING_PACKAGE_VERSION=%s\n' "${OPENVIKING_PACKAGE_VERSION:-unknown}"
   printf 'OPENVIKING_SOURCE=%s\n' "${SOURCE_DIR:-${WHEEL:-$GIT_URL}}"
   printf 'OPENVIKING_WORK_DIR=%s\n' "$WORK_DIR"

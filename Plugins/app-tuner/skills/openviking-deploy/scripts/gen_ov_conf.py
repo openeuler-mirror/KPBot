@@ -63,9 +63,15 @@ def validate(doc):
         if (
             not dense.get("api_key")
             and dense.get("provider") != "ollama"
+            and not (
+                dense.get("provider") in ("openai", "litellm")
+                and dense.get("api_base")
+            )
             and not has_credentials(dense)
         ):
-            problems.append("embedding.dense.api_key 缺失（ollama/credentials 可为空）")
+            problems.append(
+                "embedding.dense.api_key 缺失（ollama、本地 openai/litellm 或 credentials 可为空）"
+            )
     vlm = doc.get("vlm")
     if not isinstance(vlm, dict):
         problems.append("缺少 vlm")

@@ -198,7 +198,10 @@ for marker in (
     "recorded_start",
     "archive --format=tar",
     "refs/tags/",
+    "回退校验 HEAD commit",
+    "SIGNATURE_SUBJECT",
     "0.0.0+source",
+    "--wheel 使用包自带版本",
     "conf_workspace",
     "prepare_workspace",
     'doc.get("healthy") is True',
@@ -235,7 +238,14 @@ for marker in (
 ):
     if marker not in common_text:
         fail("common.sh lost helper: {!r}".format(marker))
-for marker in ("root_api_key", "embedding", "vlm", "workspace", "11434/v1"):
+for marker in (
+    "root_api_key",
+    "embedding",
+    "vlm",
+    "workspace",
+    "11434/v1",
+    "本地 openai/litellm",
+):
     if marker not in gen_text:
         fail("gen_ov_conf.py lost config marker: {!r}".format(marker))
 
@@ -489,6 +499,26 @@ with tempfile.TemporaryDirectory(prefix="openviking-deploy-check-") as tmp:
         out,
     )
 
+    local_openai = tmp_dir / "local-openai.conf"
+    local_openai.write_text(
+        json.dumps(
+            {
+                "embedding": {
+                    "dense": {
+                        "provider": "openai",
+                        "api_base": "http://127.0.0.1:8000/v1",
+                        "model": "bge-m3",
+                    }
+                },
+                "vlm": {"provider": "ollama", "model": "llava"},
+                "storage": {"workspace": str(workspace)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc, out = run_gen(["--check", str(local_openai)])
+    record_behavior("local_openai_embedding_without_key", rc == 0, out)
+
     if bash_bin:
         untrusted_src = tmp_dir / "src"
         untrusted_src.mkdir()
@@ -568,10 +598,39 @@ with tempfile.TemporaryDirectory(prefix="openviking-deploy-check-") as tmp:
             proc is not None and proc.returncode == 0 and str(custom_ws) in detail,
             detail,
         )
+
+        fake_wheel = tmp_dir / "fake.whl"
+        fake_wheel.write_text("", encoding="utf-8")
+        proc = run_process(
+            [
+                bash_bin,
+                str(installer),
+                "--wheel",
+                str(fake_wheel),
+                "--version",
+                "v0.3.22",
+                "--provider",
+                "ollama",
+                "--embedding-model",
+                "m",
+                "--vlm-model",
+                "v",
+                "--dry-run",
+            ]
+        )
+        detail = "" if proc is None else (proc.stdout or "") + (proc.stderr or "")
+        record_behavior(
+            "wheel_version_conflict_rejected",
+            proc is not None
+            and proc.returncode != 0
+            and "不能指定 --version" in detail,
+            detail,
+        )
     else:
         record_behavior("untrusted_source_dir_rejected", False, "bash not found")
         record_behavior("git_url_userinfo_rejected", False, "bash not found")
         record_behavior("ov_conf_workspace_used", False, "bash not found")
+        record_behavior("wheel_version_conflict_rejected", False, "bash not found")
 
 # ---- 8. documented flags must exist in scripts ----
 script_text = "\n".join(read(p) for p in sorted(SCRIPTS_DIR.glob("*.sh"))) + "\n" + read(gen_script)
