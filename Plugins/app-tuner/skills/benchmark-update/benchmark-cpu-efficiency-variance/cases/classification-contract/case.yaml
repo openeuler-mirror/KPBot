@@ -1,0 +1,47 @@
+name: classification-contract
+skill: benchmark-cpu-efficiency-variance
+tier: A
+entrypoint: ["python3", "cases/classification-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: cpi_status
+    expect: confirmed
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: cpi_mechanism
+    expect: cpi_increase
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: effective_ghz_fast
+    expect: 3.0
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: frequency_drop_status
+    expect: confirmed
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: frequency_drop_mechanism
+    expect: effective_frequency_drop
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: frequency_drop_slow_ghz
+    expect: 2.4
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: wall_only_status
+    expect: not_supported
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: aggregate_clock_status
+    expect: inconclusive
+  - type: json_field
+    file: cases/classification-contract/results/result.json
+    field: missing_quality_status
+    expect: blocked

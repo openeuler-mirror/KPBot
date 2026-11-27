@@ -1,0 +1,23 @@
+id: benchmark-workload-variance
+name: benchmark-workload-variance
+version: 1.0.0
+description: 当已有 benchmark 快慢样本及独立工作量计数时，判断波动是否由实际工作量、输入混合、重试或执行路径变化引起，并输出证据与缺项。
+entrypoint: scripts/classify.py
+resources:
+  - SKILL.md
+  - scripts
+  - references
+  - cases
+supervisor:
+  action: classify
+  inputs:
+    - name: comparison
+      contract: benchmark-comparison/v1
+      required: true
+  outputs:
+    - name: decision
+      contract: benchmark-workload-variance-decision/v1
+      path: decision.json
+capabilities:
+  - id: benchmark.variance.classify.workload
+    contract: benchmark-workload-variance-decision/v1

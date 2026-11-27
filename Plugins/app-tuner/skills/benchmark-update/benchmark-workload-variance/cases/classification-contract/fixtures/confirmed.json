@@ -1,0 +1,15 @@
+{
+  "contract": "benchmark-comparison/v1",
+  "run_id": "workload-confirmed",
+  "benchmark_mode": "fixed-work",
+  "work_metric": {"field": "effective_work_units", "unit": "records", "causal_role": "independent"},
+  "thresholds": {"min_samples_per_cohort": 3, "material_change_ratio": 0.15, "equivalence_ratio": 0.05},
+  "samples": [
+    {"cohort": "fast", "elapsed_ms": 100, "effective_work_units": 100, "instructions": 1000},
+    {"cohort": "fast", "elapsed_ms": 101, "effective_work_units": 100, "instructions": 1005},
+    {"cohort": "fast", "elapsed_ms": 99, "effective_work_units": 100, "instructions": 995},
+    {"cohort": "slow", "elapsed_ms": 130, "effective_work_units": 130, "instructions": 1300},
+    {"cohort": "slow", "elapsed_ms": 131, "effective_work_units": 130, "instructions": 1305},
+    {"cohort": "slow", "elapsed_ms": 129, "effective_work_units": 130, "instructions": 1295}
+  ]
+}

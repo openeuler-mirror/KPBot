@@ -1,0 +1,23 @@
+id: benchmark-wait-variance
+name: benchmark-wait-variance
+version: 1.0.0
+description: 当 benchmark 工作量和 CPU 执行成本可比时，判断波动是否由关键路径的 runnable 延迟或 blocked 时间增加引起，并输出等待类别、证据与缺项。
+entrypoint: scripts/classify.py
+resources:
+  - SKILL.md
+  - scripts
+  - references
+  - cases
+supervisor:
+  action: classify
+  inputs:
+    - name: comparison
+      contract: benchmark-comparison/v1
+      required: true
+  outputs:
+    - name: decision
+      contract: benchmark-wait-variance-decision/v1
+      path: decision.json
+capabilities:
+  - id: benchmark.variance.classify.wait
+    contract: benchmark-wait-variance-decision/v1

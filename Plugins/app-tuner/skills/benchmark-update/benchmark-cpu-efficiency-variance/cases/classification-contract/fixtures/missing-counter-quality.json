@@ -1,0 +1,12 @@
+{
+  "contract": "benchmark-comparison/v1",
+  "run_id": "cpu-missing-counter-quality",
+  "execution_model": "single-threaded",
+  "counter_scope": "process-aggregate",
+  "work_metric": {"field": "effective_work_units", "unit": "operations"},
+  "thresholds": {"min_samples_per_cohort": 1, "material_change_ratio": 0.15, "equivalence_ratio": 0.05},
+  "samples": [
+    {"cohort": "fast", "elapsed_ms": 100, "effective_work_units": 1000, "task_clock_ms": 90, "instructions": 300000000, "cycles": 300000000},
+    {"cohort": "slow", "elapsed_ms": 120, "effective_work_units": 1000, "task_clock_ms": 110, "instructions": 300000000, "cycles": 360000000}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "contract": "benchmark-comparison/v1",
+  "run_id": "wait-cpu-cost-decrease",
+  "execution_model": "single-threaded",
+  "work_metric": {"field": "effective_work_units", "unit": "operations"},
+  "thresholds": {"min_samples_per_cohort": 3, "material_change_ratio": 0.15, "equivalence_ratio": 0.05, "min_explained_fraction": 0.70},
+  "samples": [
+    {"cohort": "fast", "elapsed_ms": 100, "effective_work_units": 1000, "instructions": 300000000, "task_clock_ms": 90},
+    {"cohort": "fast", "elapsed_ms": 101, "effective_work_units": 1000, "instructions": 301000000, "task_clock_ms": 91},
+    {"cohort": "fast", "elapsed_ms": 99, "effective_work_units": 1000, "instructions": 299000000, "task_clock_ms": 89},
+    {"cohort": "slow", "elapsed_ms": 120, "effective_work_units": 1000, "instructions": 300000000, "task_clock_ms": 45},
+    {"cohort": "slow", "elapsed_ms": 121, "effective_work_units": 1000, "instructions": 301000000, "task_clock_ms": 46},
+    {"cohort": "slow", "elapsed_ms": 119, "effective_work_units": 1000, "instructions": 299000000, "task_clock_ms": 44}
+  ]
+}
