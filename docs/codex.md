@@ -27,7 +27,7 @@ python adapters/codex/install.py uninstall project codex "C:\my project"
 
 ## 适配范围
 
-- 安装器读取插件的 `.claude-plugin/plugin.json`。其中 `platforms` 包含 `codex` 的插件会参与技能发现，例如 `kpbot-pr-maintainer`。
+- 安装器读取插件的 `.claude-plugin/plugin.json`。其中 `platforms` 包含 `codex` 的插件会参与技能发现，例如 `kpbot-pr-maintainer` 和 `common`。安装后可通过 `$kpbot-cannlab-webide` 操作已授权的 CANNLab WebIDE。
 - 从 `Plugins/` 的分组目录递归发现插件，遇到 `.claude-plugin/plugin.json` 即停止扫描包内资源；嵌入的插件清单作为资源保留，不会产生第二份安装。未声明 Codex 的插件也遵守该包边界，领域拆分时不要在分组目录保留旧聚合清单。
 - 按插件的 `codex.exclude` 跳过依赖其他工具专用工作流的技能。kunpeng-knowledge 的 OpenCode 账户授权流程尚未适配，不在 Codex 中安装。
 - 在安装副本中加入 Codex 工具映射说明，将 Claude/OpenCode 的技能目录改为 `.agents/skills/`；源技能保持原样。
@@ -58,13 +58,13 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-在 PR 基线 `de731ebc` 加入 `kpbot-pr-maintainer` 后，安装结果如下。
+分别从已包含 `kpbot-pr-maintainer` 的主干 `e2a0de84` 和加入 `kpbot-cannlab-webide` 后的插件树（`git rev-parse HEAD:Plugins` 为 `27e5ab95…`）安装到空项目，测得以下数量。
 
-| 口径 | 数量 |
-| --- | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 345 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 391 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 454 |
+| 口径 | 基线 | 加入 WebIDE 后 |
+| --- | ---: | ---: |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 353 | 354 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 399 | 400 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 462 | 463 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”

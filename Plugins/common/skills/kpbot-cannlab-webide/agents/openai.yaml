@@ -1,0 +1,4 @@
+interface:
+  display_name: "CANNLab WebIDE 远程操作"
+  short_description: "接入已登录的 CodeArts IDE，定位 NPU 终端并恢复远端任务"
+  default_prompt: "使用 $kpbot-cannlab-webide 连接我在 Chrome 中打开的 CANNLab 实例，在 NPU 终端检查设备和显存。"
