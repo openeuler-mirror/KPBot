@@ -1,0 +1,65 @@
+{
+ "skill_name": "oceanbase-architecture",
+ "version": "1.0.0",
+ "notes": "架构知识库评估；不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "同一条 SELECT 连续执行，OceanBase 为什么不会每次都完整解析优化？计划缓存命中/未命中分别走什么链路？为什么说字面量直发会持续 miss？不要执行命令。",
+   "expected_output": "OB 在 SQL 层有计划缓存（软解析）：文本/参数化匹配命中后跳过解析/优化直接取执行计划；未命中走解析→改写→优化→生成物理算子完整链路。计划缓存（ObPlanCache）按租户隔离、容量与淘汰受参数控制——同一 SQL 参数化后才能稳定命中模板，字面量直发每条文本不同导致模板不匹配、持续 miss 走完整优化链路。代价与失效：schema 变更/DDL 会使相关计划失效，需重新优化。",
+   "files": [
+    "references/sql-and-dml-flow.md"
+   ],
+   "expectations": [
+    "解释软解析命中链路与未命中完整链路",
+    "说明参数化与字面量对命中率的影响",
+    "提到缓存按租户隔离与失效条件",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "observer 一个进程为什么有上千个线程？哪些线程与 SQL 执行直接相关？不要执行命令。",
+   "expected_output": "observer 单进程多线程 + OMT 多租户：线程按租户/线程组（TG）组织，cpu_quota 决定各租户可运行线程规模，系统租户与用户租户隔离。与 SQL 执行直接相关：sql_nio（网络收发/协议解析）、worker（执行请求）、LQ/队列调度；后台关键线程还有 ApplySrv（回放应用）、ReplaySrv、freeze/dump/merge、PALF 等。线程规模 = 各租户 worker（按 4.3.5 的 min_worker_cnt()/max_worker_cnt() 公式与动态 token 估算：下限 2 + max(1, min_cpu × cpu_quota_concurrency)，上限按内存/栈大小）+ 后台线程池之和；workers_per_cpu_quota 在 4.x OMT 路径上不驱动 worker 数。",
+   "files": [
+    "references/memory-and-thread-model.md",
+    "references/overview-and-source-map.md"
+   ],
+   "expectations": [
+    "指出单进程多线程 + OMT 按租户组织",
+    "列出 sql_nio/worker/ApplySrv/ReplaySrv 及职责",
+    "给出线程规模近似估算思路",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "MemStore 写满后会发生什么？mini/minor/major 三种转储和冻结的关系是什么？不要执行命令。",
+   "expected_output": "memstore 占比达到 freeze_trigger_percentage 触发冻结（freeze）：停止写入该 memtable、生成新的活跃 memtable，随后转储 mini（增量 SSTable，快）、按策略合并 minor、major 合并成基线；memstore_limit_percentage 是写入限流上限（报错/限流保护内存）。未及时转储会放大读放大与合并压力，参数联动（freeze_trigger、memstore_limit、转储线程数）决定写入毛刺。",
+   "files": [
+    "references/storage-and-transaction.md"
+   ],
+   "expectations": [
+    "说明冻结触发条件与转储三级的分工",
+    "区分 freeze_trigger 与 memstore_limit 的作用",
+    "说明参数联动的写毛刺影响",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "OB 的三副本一致性靠什么机制？和传统共享存储数据库的本质差异在哪里？不要执行命令。",
+   "expected_output": "Shared-Nothing + Paxos 多数派：每个日志流（LS）有多个副本，PALF 提供有序日志复制与选主，写走 2PC（本地 prepare/redo + 协调者提交），提交以多数派持久化为准。与共享存储的本质差异：数据按 LS/分区分布、每份副本独立持久化，恢复/选主不依赖共享盘；代价是跨机日志复制与回放（ApplySrv/ReplaySrv）路径。",
+   "files": [
+    "references/storage-and-transaction.md",
+    "references/overview-and-source-map.md"
+   ],
+   "expectations": [
+    "指出 Paxos 多数派与 PALF 的角色",
+    "说明 2PC 提交流程与副本关系",
+    "对比 Shared-Nothing 与共享存储恢复语义",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
