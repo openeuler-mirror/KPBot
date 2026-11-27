@@ -1,0 +1,67 @@
+{
+ "skill_name": "oceanbase-test-verification",
+ "version": "1.0.0",
+ "notes": "验证协议类评估；不实际执行压测。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "换完 observer 二进制后 smoke_test.sh 全 PASS、sysbench 只快 2%，可以宣布优化有效吗？不要执行命令。",
+   "expected_output": "不能：2% 低于 5% 噪声阈值，判噪声、不做结论；且要核对口径——A/B 两侧配置项/系统变量/观测开关/压测参数/预热/轮数是否一致、是否剔首轮、≥3 轮均值、逐轮与末段稳态是否归档。冒烟全过只满足功能/正确性门禁（节点/租户/Unit/参数只读检查），性能判定按同口径 A/B 协议执行。",
+   "files": [
+    "references/ab-protocol.md",
+    "SKILL.md"
+   ],
+   "expectations": [
+    "指出 2% < 5% 噪声阈值判噪声",
+    "列出 A/B 同口径核对项",
+    "区分冒烟门禁与性能判定",
+    "强调剔首轮与 ≥3 轮",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "sysbench 五场景都是什么？各自压到什么链路？经 obproxy 和直连 observer 有什么区别？不要执行命令。",
+   "expected_output": "五场景：write_only（4 写：索引 UPDATE+非索引 UPDATE+DELETE+INSERT，WAL/转储/锁）、read_only（10 点查+4 范围，读路径/缓存）、point_select（纯点查，最快路径）、insert（写入+回放敏感）、update_non_index（非索引更新）。经 obproxy 是业务形态（转发与解析有额外开销、连接模型不同）；直连 observer 作对照可分离代理层差异。A/B 两腿连接方式必须一致；各层端口按直连/代理正确取值（客户端连 PROXY_PORT、obproxy 连 observer 的 MYSQL_PORT）并记录，而非三处端口相同。",
+   "files": [
+    "references/benchmark-harness.md"
+   ],
+   "expectations": [
+    "列出五场景与各自链路特征",
+    "说明 obproxy vs 直连的口径差异",
+    "指出两腿连接方式一致、各层端口按直连/代理正确取值",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "怎么证明压测后数据是对的？只看返回成功就行吗？不要执行命令。",
+   "expected_output": "不行，成功返回不等于数据正确。正确性门禁：DBA 视图核对（DBA_OB_SERVERS/ZONE/TENANTS 状态、副本与 Unit 数量）、表计数对账（每表行数与导入基线一致）、抽样行回读、显式事务+回滚验证、隔离级别行为核对；数据对账失败优先级高于一切性能结论。验收通过标准与清单在 functional-verification.md。",
+   "files": [
+    "references/functional-verification.md"
+   ],
+   "expectations": [
+    "列出正确性门禁的分层检查",
+    "指出数据对账失败否决性能结论",
+    "提到事务回滚/隔离级别验证",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "smoke_test.sh 的 EXPECT_WRITABLE 为什么默认关？什么时候必须开？端口填 70000 会怎样？不要执行命令。",
+   "expected_output": "EXPECT_WRITABLE 默认关：只读冒烟（版本/节点/Zone/租户/Unit/参数）到只读检查即可，不写目标；需要写验收时显式 =1，且必须给出业务租户 BIZ_USER/BIZ_PASSWORD（否则 exit 2），脚本用业务连接核 SHOW VARIABLES LIKE read_only 必须为 OFF，并把被检租户名打印出来——系统租户 root@sys 的 read_only 不代表写目标，只读验证不证明可写。副本数/主 Zone 不由脚本覆盖，须按 functional-verification.md 手工核对。端口非法（如 70000 超出 1-65535）按用法错误直接 exit 2，不做无意义连接探测。",
+   "files": [
+    "scripts/smoke_test.sh",
+    "SKILL.md"
+   ],
+   "expectations": [
+    "解释默认关的安全语义",
+    "说明写验收必须显式开启、用业务租户连接核 read_only 且缺账号/口令 exit 2",
+    "指出副本/主 Zone 不由脚本覆盖",
+    "端口范围校验 exit 2",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
