@@ -23,13 +23,13 @@
       "id": "NQ-01",
       "prompt": "用 ceph-ansible 部署 Ceph 集群，all.yml 怎么配",
       "should_trigger": false,
-      "note": "routes to ceph-ansible-deployment（同批 PR #445，尚未合入；ansible 编排路径）"
+      "note": "routes to ceph-ansible-deployment（同批 PR #445，已合入；ansible 编排路径）"
     },
     {
       "id": "NQ-02",
       "prompt": "Ceph 对象存储 RGW 用 cephadm 容器化部署怎么做",
       "should_trigger": false,
-      "note": "routes to ceph-object-storage-deployment（同批 PR #447，尚未合入；对象存储路径）"
+      "note": "routes to ceph-object-storage-deployment（同批 PR #447，已合入；对象存储路径）"
     },
     {
       "id": "NQ-03",

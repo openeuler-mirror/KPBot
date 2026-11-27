@@ -308,13 +308,14 @@ class Round2FixTests(unittest.TestCase):
         self.assertIn("mon destroy", self._ref_text())  # 有据回退项保留
 
     def test_unmerged_siblings_annotated_with_pr(self):
-        # 未合入姊妹按「名字 + 同批 PR 编号」标注，禁止裸路由
+        # 同批姊妹已合入：仍按「名字 + 同批 PR 编号」标注（已合入态），禁止裸路由，
+        # 也不得残留合入前的降级措辞
         skill = self._skill_text()
         self.assertNotIn("同批姊妹 PR，同批交付", skill)
-        self.assertIn("同批 PR #446，尚未合入", skill)
-        self.assertIn("同批 PR #453，尚未合入", skill)
-        self.assertIn("同批 PR #454，尚未合入", skill)
-        self.assertIn("合入前该场景按通用流程处理并在产出中标注「未覆盖」", skill)
+        self.assertIn("同批 PR #446，已合入", skill)
+        self.assertIn("同批 PR #453，已合入", skill)
+        self.assertIn("同批 PR #454，已合入", skill)
+        self.assertNotIn("合入前该场景按通用流程处理并在产出中标注「未覆盖」", skill)
         queries = json.loads(read(SKILL_DIR / "evals" / "eval_queries.json"))
         mapping = {"ceph-block-storage-deployment": "#446",
                    "ceph-file-expansion": "#453",
@@ -326,9 +327,9 @@ class Round2FixTests(unittest.TestCase):
             self.assertIn("routes to", q["note"], q["id"])
             for name, pr in mapping.items():
                 if name in q["note"]:
-                    self.assertIn("同批 PR %s，尚未合入" % pr, q["note"], q["id"])
+                    self.assertIn("同批 PR %s，已合入" % pr, q["note"], q["id"])
                     annotated += 1
-        self.assertEqual(annotated, 3, "三个未合入姊妹的负例均须带 PR 标注")
+        self.assertEqual(annotated, 3, "三个姊妹负例均须带 PR 标注")
 
     def test_ssh_key_security_baseline(self):
         # 免密安全基线：口令私钥 + agent、StrictHostKeyChecking=yes + ssh-keyscan 预填

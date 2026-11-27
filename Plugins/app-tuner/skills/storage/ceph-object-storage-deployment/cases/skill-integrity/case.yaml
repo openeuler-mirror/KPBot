@@ -8,7 +8,7 @@
 #                  （《鲲鹏 BoostKit 分布式存储使能套件 Ceph 编译&部署&调优&测试指南》），
 #                  关键内容抽查（cephadm 容器化路径、RGW、17.2.8、路径选择对照表）
 #   边界表         SKILL.md 含姊妹 skill ceph-block-storage-deployment /
-#                  ceph-file-storage-deployment（同批姊妹 PR，同批交付）与 ceph-parameter-tuning
+#                  ceph-file-storage-deployment（均已合入，PR #446/#448）与 ceph-parameter-tuning
 #                  （已合入）路由，表格管道平衡
 #   检视修复守卫   来源 BoostKit 前缀、TLS 字面量全 0（references）、chmod 755、privileged 护栏、
 #                  逐机核准清单（禁范围式直清）、限权身份与 _admin 禁用（覆盖 evals.json 全文：

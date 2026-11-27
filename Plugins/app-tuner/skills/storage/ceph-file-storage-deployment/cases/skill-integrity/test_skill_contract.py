@@ -262,6 +262,11 @@ class BoundaryTests(unittest.TestCase):
         for sibling in ("ceph-object-storage-deployment", "ceph-block-storage-deployment",
                         "ceph-ansible-deployment"):
             self.assertIn(sibling, text, sibling)
+        # python3 缺失降级口径：先补齐解释器，矩阵匹配且用户接受才转交，否则 blocked
+        self.assertIn("缺失时先补齐 python3 解释器", text)
+        self.assertIn("仅当 OS 为其矩阵内", text)
+        self.assertIn("否则 ceph-deploy 路径标 blocked", text)
+        self.assertIn("不得以转交替代补齐依赖", text)
 
     def test_table_pipe_balance(self):
         lines = read(SKILL_DIR / "SKILL.md").splitlines()

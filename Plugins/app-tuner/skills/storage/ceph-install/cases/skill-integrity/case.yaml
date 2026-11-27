@@ -6,8 +6,8 @@
 #   引用完整性     references/installation-guide.md 存在，含 "来源 + 文档版本 07" 标注，
 #                  关键内容抽查（Ceph 16.2.7 安装、openEuler-22.03-LTS-SP4 系统镜像源）
 #   边界表         SKILL.md 含 ceph-build（已合入）与姊妹 skill ceph-ansible-deployment /
-#                  ceph-block-storage-deployment（同批姊妹 PR，同批交付）路由，表格管道平衡；
-#                  指南集群扩容按存储类型路由 ceph-block/file/object-expansion（同批 PR #452/#453/#454），
+#                  ceph-block-storage-deployment（均已合入，PR #445/#446）路由，表格管道平衡；
+#                  指南集群扩容按存储类型路由 ceph-block/file/object-expansion（已合入，PR #452/#453/#454），
 #                  无幻影扩容 skill 名引用
 #   安全守卫       TLS 校验保持开启（update-ca-trust）、GPG 公钥不走明文 HTTP 导入并核对指纹、
 #                  ISO sha256 摘要核对、local.repo gpgcheck=1、repo 备份保留首次原件（cp -n）、
