@@ -28,11 +28,13 @@ python adapters/codex/install.py uninstall project codex "C:\my project"
 ## 适配范围
 
 - 安装器读取插件的 `.claude-plugin/plugin.json`。其中 `platforms` 包含 `codex` 的插件会参与技能发现，例如 `kpbot-pr-maintainer` 和 `common`。安装后可通过 `$kpbot-cannlab-webide` 操作已授权的 CANNLab WebIDE。
+- common 中新增的绘图与 Host 验证技能目前仅随 Codex 适配器发布，本次验证覆盖该适配器的安装与更新。使用 `$kpbot-excalidraw-diagrams` 绘图。定期跟踪训推社区变化时使用 `$kpbot-training-inference-host-insights`。要验证一项具体的 CPU 推理或 Host 开销变化时使用 `$kpbot-ai-host-insight`。
 - 从 `Plugins/` 的分组目录递归发现插件，遇到 `.claude-plugin/plugin.json` 即停止扫描包内资源；嵌入的插件清单作为资源保留，不会产生第二份安装。未声明 Codex 的插件也遵守该包边界，领域拆分时不要在分组目录保留旧聚合清单。
 - 按插件的 `codex.exclude` 跳过依赖其他工具专用工作流的技能。kunpeng-knowledge 的 OpenCode 账户授权流程尚未适配，不在 Codex 中安装。
 - 在安装副本中加入 Codex 工具映射说明，将 Claude/OpenCode 的技能目录改为 `.agents/skills/`；源技能保持原样。
 - 工作流默认在当前会话执行。`agents/*.md` 保留为角色参考，不自动注册为 Codex 子代理；只有授权且当前环境提供子代理能力时才使用。
 - 保留完整脚本、参考资料和嵌套技能资源，并补齐被引用的公共脚本。插件可通过 `codex/<source-skill-directory>/` 提供覆盖层。
+- 对自带 `package-lock.json` 的技能，安装器保留锁文件，跳过技能根目录下的本地依赖 `node_modules/` 和测试输出 `test-output/`。安装或更新绘图技能后，按其 `SKILL.md` 在安装目录执行 `npm ci` 准备依赖。
 - Codex 递归发现嵌套 `SKILL.md`；含入口的技能包保持原目录结构，不额外安装同名副本。
 - 安装器不写入 `AGENTS.md`、`.codex/config.toml`，也不修改模型、权限或 MCP 配置。
 
@@ -58,13 +60,13 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-分别从已包含 `kpbot-pr-maintainer` 的主干 `e2a0de84` 和加入 `kpbot-cannlab-webide` 后的插件树（`git rev-parse HEAD:Plugins` 为 `27e5ab95…`）安装到空项目，测得以下数量。
+以下计数来自三次独立的空目录安装。主干 `e2a0de84` 已含 `kpbot-pr-maintainer`，`4e3a8b1a` 加入了 `kpbot-cannlab-webide`（`Plugins` 树 `27e5ab95`）。本 PR 在 `4e3a8b1a` 上加入绘图与 Host 验证两个技能。
 
-| 口径 | 基线 | 加入 WebIDE 后 |
-| --- | ---: | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 353 | 354 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 399 | 400 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 462 | 463 |
+| 口径 | `e2a0de84` | `4e3a8b1a`（含 WebIDE） | 加入本 PR |
+| --- | ---: | ---: | ---: |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 353 | 354 | 356 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 399 | 400 | 402 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 462 | 463 | 465 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”

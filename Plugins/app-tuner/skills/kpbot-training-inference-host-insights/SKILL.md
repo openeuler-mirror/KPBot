@@ -1,6 +1,6 @@
 ---
 name: kpbot-training-inference-host-insights
-description: Research incremental training/inference community developments and DeepSeek, GLM, and Kimi Agent ecosystems; turn primary-source evidence into prioritized Host/CPU, memory, cache, storage, and network opportunities with Chinese Markdown and offline HTML reports. Use for recurring community insight reports or scoped Host opportunity research, not ordinary model Q&A or live server tuning.
+description: Research incremental training/inference community developments and DeepSeek, GLM, and Kimi Agent ecosystems; turn primary-source evidence into prioritized Host/CPU, memory, cache, storage, and network opportunities with Chinese Markdown and offline HTML reports. Use for recurring reports and scoped community, vendor, or model opportunity surveys, not ordinary model Q&A or live server tuning. In Codex with the common plugin installed, route source-level A/B verification of one named CPU inference or Host mechanism to kpbot-ai-host-insight.
 license: MulanPSL-2.0
 compatibility: Requires access to primary sources and a writable report directory.
 metadata:
@@ -21,6 +21,8 @@ metadata:
 - 模型生态：DeepSeek、GLM（智谱/Z.ai）、Kimi（Moonshot/月之暗面），各自检查模型发布、Harness、记忆、沙箱、Agent 配套。
 - Host：CPU、内存/NUMA、调度、协议与预处理、KV 元数据与数据搬运、缓存/存储、通信与网络、异构重叠、可观测性。
 - “训推”包含与上述链路直接相关的训练数据供给、checkpoint、RL rollout、权重更新与训练/推理闭环；名称不意味着自动扩大为所有训练框架新闻。仅在有本期一手证据时纳入这些方向。
+
+指定一个社区或厂商来盘点近期机会仍使用本入口。若已指定具体 PR、调用路径或 CPU 推理 / Host 假设，且在 Codex 中已安装 common 插件，可将台账路径、事件键和窗口交给 `$kpbot-ai-host-insight` 做源码对照和 A/B 验证。使用 Claude Code、OpenCode 或在 Codex 中单独安装 app-tuner 时，继续按本技能的报告契约给出最小实验。周期报告引用专题验证单时，按[归档与连续性](references/archive-contract.md)的编码规则，在归档根的 `topics/<project>/<event-type>/<stable-id>/` 查找与台账事件键一致的验证单。
 
 默认在当前工作区创建 `host-insights/` 保存报告和状态；用户可指定其他输出目录。首次运行直接检查最近 7 天，默认时区为 `Asia/Shanghai`。
 

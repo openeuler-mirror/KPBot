@@ -1,0 +1,4 @@
+interface:
+  display_name: "Excalidraw 清晰图表"
+  short_description: "从文字、Markdown 和 Mermaid 生成可编辑 Excalidraw 图并检查布局碰撞"
+  default_prompt: "使用 $kpbot-excalidraw-diagrams 将输入转成清晰可编辑的 Excalidraw 图，检查元素、文字和箭头是否重叠。"
