@@ -1,0 +1,67 @@
+{
+  "skill_name": "kptools-tpsplit-optimization-verify",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "VQ-01",
+      "prompt": "TP8 迁移部署和切流都完成了，按部署指南做迁移后的完整验证",
+      "should_trigger": true,
+      "note": "core scenario: post-migration L4-L6 verification"
+    },
+    {
+      "id": "VQ-02",
+      "prompt": "新拓扑跑一轮压测，跟停服前的旧基线对比下性能达标没有",
+      "should_trigger": true,
+      "note": "L5 performance comparison against archived baseline"
+    },
+    {
+      "id": "VQ-03",
+      "prompt": "TP 拓扑切换完，稳定性观察 24 小时看看有没有 KV 报错和 DP 掉员",
+      "should_trigger": true,
+      "note": "L6 stability observation window"
+    },
+    {
+      "id": "VQ-04",
+      "prompt": "部署指南在这，从 L4 功能测试一直验到 L6",
+      "should_trigger": true,
+      "note": "layered delivery verification per deployment guide"
+    },
+    {
+      "id": "VQ-05",
+      "prompt": "把 Prefill 集群从跨机 TP32 拆成单机 TP8 重新部署",
+      "should_trigger": false,
+      "note": "routes to `kptools-tpsplit-optimization`（配套 PR #442 交付）（部署执行面：拉起/L0-L3/切流/回滚）"
+    },
+    {
+      "id": "VQ-06",
+      "prompt": "TP 还能不能切小，单卡显存够不够、DP 能扩多少",
+      "should_trigger": false,
+      "note": "routes to kptools-tpsplit-check（可行性测算）"
+    },
+    {
+      "id": "VQ-07",
+      "prompt": "两套 ttft_table.csv 数据目录都在，出一份 TP 拆分收益对比报告",
+      "should_trigger": false,
+      "note": "routes to kptools-tpsplit-report（正式收益报告）；本 skill 的 L5 只做现场达标判定"
+    },
+    {
+      "id": "VQ-08",
+      "prompt": "TP8 迁移完跑了两天，Decode 偶发报 KV 相关错误，排查下根因",
+      "should_trigger": false,
+      "note": "routes to `kptools-tpsplit-optimization`（配套 PR #442 交付）（迁移后故障排查 + 回滚执行面）；本 skill 只做计划性验证"
+    },
+    {
+      "id": "VQ-09",
+      "prompt": "把这轮压测的 TTFT 打点日志采下来解析出表",
+      "should_trigger": false,
+      "note": "routes to kptools-tpsplit-log-analysis（采集+解析出表；打点 patch 部署 routes to kptools-tpsplit-log-trace）"
+    },
+    {
+      "id": "VQ-10",
+      "prompt": "各 DP 引擎忙闲不均，采集负载指标出均衡性报告",
+      "should_trigger": false,
+      "note": "routes to kptools-dplb-profiler / kptools-dplb-report"
+    }
+  ]
+}
