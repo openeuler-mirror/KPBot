@@ -1,0 +1,41 @@
+{
+  "skill_name": "ceph-block-storage-deployment",
+  "queries": [
+    {
+      "id": "CQ-01",
+      "prompt": "ceph-deploy 部署块存储，MON/OSD 初始化和 rbd 块设备创建映射怎么做",
+      "should_trigger": true,
+      "note": "ceph-deploy 块存储部署与使能"
+    },
+    {
+      "id": "CQ-02",
+      "prompt": "ceph-deploy 部署前防火墙、NTP、免密这些系统配置要怎么做",
+      "should_trigger": true,
+      "note": "系统配置七项（逐节点）"
+    },
+    {
+      "id": "CQ-03",
+      "prompt": "OSD 磁盘有残留分区清不掉，WAL 和 DB 分区怎么快速划分",
+      "should_trigger": true,
+      "note": "常见问题（残留分区清理/快速划分 WAL·DB）"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "用 ceph-ansible 部署 Ceph 集群，all.yml 怎么配",
+      "should_trigger": false,
+      "note": "routes to ceph-ansible-deployment（同批 PR #445，尚未合入；ansible 编排路径）"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "Ceph 对象存储 RGW 用 cephadm 容器化部署怎么做",
+      "should_trigger": false,
+      "note": "routes to ceph-object-storage-deployment（同批 PR #447，尚未合入；对象存储路径）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "Ceph 集群 bluestore cache 比例和 debug 开关怎么调",
+      "should_trigger": false,
+      "note": "routes to ceph-parameter-tuning（集群运行期参数调优）"
+    }
+  ]
+}

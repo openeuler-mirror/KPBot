@@ -1,0 +1,31 @@
+{
+  "skill_name": "ceph-block-storage-deployment",
+  "evals": [
+    {
+      "id": "CBD-E01",
+      "prompt": "ceph-deploy 部署块存储集群，MON/MGR/OSD 怎么初始化？存储池和块设备怎么创建并映射？",
+      "expected_output": "系统配置（防火墙/主机名/NTP/免密/SELINUX/umask）完成后，在主节点 ceph1 的专用集群目录 /root/ceph-mycluster/ 下操作：ceph-deploy new ceph1 ceph2 ceph3 生成配置，编辑 ceph.conf 设置 mon_host（按 MON 节点 ceph1~ceph3 的 Public 地址 198.51.100.166/167/168 生成，与 /etc/hosts 逐项核对）、public_network/cluster_network；ceph-deploy mon create-initial 初始化监视器并收集密钥，ceph-deploy admin 仅向服务端 ceph1~ceph3 分发 keyring（业务客户端不下发 client.admin），ceph-deploy mgr create 部署 MGR；OSD 布局二选一（分支 A 普通创建：disk zap 后 osd create --data；分支 B 外置 DB/WAL：zap 数据盘与 WAL/DB 分区后 osd create --block-wal/--block-db，互斥分支不得先按 A 建完再执行 B 的 zap），目标盘取自 §3.3 逐机核准的设备清单；验收分阶段：MON 后 ceph mon stat 确认 quorum、MGR 后 ceph mgr stat 确认 active、OSD 后 ceph osd stat 确认 up/in，最后整体 ceph -s 确认 HEALTH_OK；使能块存储：ceph osd pool create 创建存储池（pg 数按公式取 2 的整数次幂）、ceph osd pool application enable 使能 rbd 池类型、rbd create 创建块设备、rbd map 以限权身份 client.rbd-app 映射（--name/--keyring），客户端 /dev 下出现 rbd0 即映射成功",
+      "files": [],
+      "expectations": [
+        "说明 ceph-deploy 操作须在专用集群目录 /root/ceph-mycluster/ 下进行，不在 /etc/ceph/ 下直接操作",
+        "给出 ceph-deploy 初始化监视器收集密钥、admin 仅向服务端分发 keyring、部署 MGR 与 OSD 的顺序；OSD 普通创建与 DB/WAL 外置创建（--block-wal/--block-db）为互斥分支，目标盘取自逐机核准清单",
+        "说明业务客户端不下发 client.admin，改用 ceph auth get-or-create 签发限权身份 client.<rbd-app> 并只分发该 keyring，rbd map 以 --name/--keyring 使用该身份",
+        "给出创建存储池（pg 数按公式取 2 的整数次幂）、使能 rbd 池类型的步骤",
+        "说明分阶段验收：MON 后 ceph mon stat 只查 quorum、MGR 后 ceph mgr stat、OSD 后 ceph osd stat 查 up/in，最后整体 ceph -s 确认 HEALTH_OK；块设备映射验证为客户端 /dev 下出现 rbd0"
+      ]
+    },
+    {
+      "id": "CBD-E02",
+      "prompt": "ceph-deploy 部署块存储前系统要配哪些东西？OSD 磁盘上有旧分区清不掉怎么办？",
+      "expected_output": "系统配置七项：SMMU（可选关闭）、关闭防火墙、主机名与 /etc/hosts、NTP（ceph1 为服务端，其余节点每 10 分钟 crontab 同步；NTP 服务端启动后需等 5 分钟再在其他节点同步）、免密登录（ssh-copy-id 分发公钥）、SELINUX permissive、umask 0022（仅 openEuler）；残留数据分区：用 lsblk 观察 bcache 设备或 FSTYPE 列发现残留文件系统后按残留分区清理流程处理（复制目标数据卷 lvm 编号或对残留分区执行清理命令）；OSD 写盘前逐机核准稳定设备 ID 清单（lsblk -o NAME,SIZE,TYPE,MOUNTPOINT 与 /dev/disk/by-id 对照，排除根盘 df -l /、挂载盘 findmnt、现役 OSD），禁止范围式直清，首次写盘前打印清单与集群规划核对；清理与 zap 属不可逆操作，执行前复核目标对象并与用户二次确认",
+      "files": [],
+      "expectations": [
+        "给出系统配置七项清单（SMMU/防火墙/主机名与 hosts/NTP/免密/SELINUX/umask）并声明逐节点执行",
+        "说明 NTP 服务端启动后需等 5 分钟再在其他节点同步，否则报 no server suitable for synchronization found",
+        "给出残留数据分区的识别（lsblk 观察 bcache 设备或 FSTYPE 列）与清理流程",
+        "说明写盘前逐机核准稳定设备 ID 清单（lsblk 与 /dev/disk/by-id 对照，排除根盘、挂载盘与现役 OSD），禁止范围式直清，首次写盘前打印清单并核对",
+        "声明磁盘清理与 zap 属不可逆操作，执行前复核目标对象并二次确认"
+      ]
+    }
+  ]
+}
