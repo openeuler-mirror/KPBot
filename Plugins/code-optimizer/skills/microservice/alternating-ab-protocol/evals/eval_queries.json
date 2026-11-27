@@ -1,0 +1,13 @@
+{
+  "skill_name": "alternating-ab-protocol",
+  "queries": [
+    { "id": "ABP-01", "prompt": "验证这个优化补丁有没有性能提升，跑 A/B 对照", "should_trigger": true },
+    { "id": "ABP-02", "prompt": "5 轮跑完有 3 轮快有 2 轮慢，能下结论吗", "should_trigger": true },
+    { "id": "ABP-03", "prompt": "为什么不能先跑完 baseline 再跑 optimized", "should_trigger": true },
+    { "id": "ABP-04", "prompt": "逐轮比值单调递减是不是说明优化效果越来越大", "should_trigger": true },
+    { "id": "ABP-05", "prompt": "优化 protobuf 的 MapMergeFrom 合并路径", "should_trigger": false },
+    { "id": "ABP-06", "prompt": "火焰图里这个库占比多少", "should_trigger": false },
+    { "id": "ABP-07", "prompt": "对比 jemalloc 和 glibc 的分配性能", "should_trigger": false },
+    { "id": "ABP-08", "prompt": "编译这个库并验证构建参数", "should_trigger": false }
+  ]
+}

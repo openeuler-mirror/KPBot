@@ -1,0 +1,31 @@
+# 验证 tier-A 用例：alternating-ab-protocol 完整性契约
+#
+# 验证内容：
+#   skill     SKILL.md 自身格式（frontmatter name/description）
+#   links     SKILL.md 引用的 references/*.md 与 scripts/*.sh 必须存在
+#   invariants 方法论不变量（交替而非分组/三级健康度（跨轮离散度）/
+#             fail-closed/方向一致性/噪声区/单调漂移）
+#   sensitive 敏感内容看护（SKILL.md + references + scripts + evals，
+#             私网 IP/IPv6/凭据/私钥/个人路径，凭据命中脱敏）
+#   contract  脚本功能契约实测——参数校验（-r 0/abc/2、-w -1 → exit 2）、
+#             3 轮趋势参考（exit 3）、5/5 加快/变慢/无差异（exit 0）、
+#             负值与垃圾输出 fail-closed（exit 1）、科学计数法换算、
+#             混向噪声区（exit 1）、跨轮离散度超限（exit 1）
+
+name: skill-integrity
+skill: alternating-ab-protocol
+tier: A
+
+entrypoint: ["bash", "cases/skill-integrity/run.sh"]
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: pass
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks
+    expect: 32

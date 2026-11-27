@@ -70,7 +70,7 @@ diff 上游新版本，逐项核对"上游有、本地没有"的优化，每项�
 
 ### 步骤 4：单变量 A/B（5 轮交替协议）
 
-每个优化点独立成 patch，微基跑 5 轮 base/opt 交替（**绝不**先跑完所有 base 再跑 opt——共享机器慢漂移会伪装成差异）。绑核固定、warmup 不计时、轮间清理状态。协议框架见 `scripts/alternating_ab.sh`（base/opt 命令交替执行、逐轮比值与方向一致性自动判定）。健康度三级判定：轮内方差 ≈0.2% 内、逐轮比值稳定、5/5 轮同方向。任何 <5% 预估增量的优化必须实测后才允许进入实现评审——resize 链先验估计 25~35%、实测 0.46%（50 倍高估）是真实案例，完整案例见[负结果档案](references/negative-results.md)。
+每个优化点独立成 patch，微基跑 5 轮 base/opt 交替（**绝不**先跑完所有 base 再跑 opt——共享机器慢漂移会伪装成差异）。绑核固定、warmup 不计时、轮间清理状态。协议框架见 `alternating-ab-protocol` skill（测量脚本已拆分至该 skill：交替执行、健康度判定、方向一致性）。健康度三级判定：base 跨轮离散度（CV ≤5% 硬门禁）、逐轮比值无持续单调漂移、N/N 轮同向。任何 <5% 预估增量的优化必须实测后才允许进入实现评审——resize 链先验估计 25~35%、实测 0.46%（50 倍高估）是真实案例，完整案例见[负结果档案](references/negative-results.md)。
 
 ### 步骤 5：生产外推封顶
 
@@ -124,8 +124,9 @@ bash scripts/spe_aggr.sh <perf-script 输出>       # 事件统计 + miss 按函
 ## 脚本用法
 
 ```bash
-# 5 轮交替 A/B 协议（base/opt 交替执行，自动输出逐轮比值与方向一致性）
-bash scripts/alternating_ab.sh -b "<base 命令>" -o "<opt 命令>" -r 5
+# 5 轮交替 A/B 协议（base/opt 交替执行，自动输出逐轮比值/代表值与方向一致性；
+# 脚本已拆分至 alternating-ab-protocol skill；下为源码树布局路径（安装平铺布局下去掉 microservice 一级））
+bash ../microservice/alternating-ab-protocol/scripts/alternating_ab.sh -b "<base 命令>" -o "<opt 命令>" -r 5
 
 # SPE 事件聚合（arm_spe 采样后：事件类型统计 + l1/llc/branch-miss 按函数聚合，过滤内核帧）
 bash scripts/spe_aggr.sh <perf-script 输出文件>
