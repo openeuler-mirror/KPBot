@@ -1,0 +1,54 @@
+# 用例：tier A —— ceph-object-storage-deployment skill 契约与部署知识单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 触发语、metadata.category=deployment、
+#                  metadata.domain=distributed_storage、license 对齐域内惯例 MulanPSL-2.0）、
+#                  TLS 铁律与检视意见护栏铁律（privileged 容器护栏/写盘前核准清单/身份最小化）
+#   引用完整性     references/object-storage-deployment.md 存在，含 "来源 + 文档版本 07" 标注
+#                  （《鲲鹏 BoostKit 分布式存储使能套件 Ceph 编译&部署&调优&测试指南》），
+#                  关键内容抽查（cephadm 容器化路径、RGW、17.2.8、路径选择对照表）
+#   边界表         SKILL.md 含姊妹 skill ceph-block-storage-deployment /
+#                  ceph-file-storage-deployment（同批姊妹 PR，同批交付）与 ceph-parameter-tuning
+#                  （已合入）路由，表格管道平衡
+#   检视修复守卫   来源 BoostKit 前缀、TLS 字面量全 0（references）、chmod 755、privileged 护栏、
+#                  逐机核准清单（禁范围式直清）、限权身份与 _admin 禁用（覆盖 evals.json 全文：
+#                  COS-E01 不出现 --labels _admin，与铁律 10/REF §2.6.3 一致）、镜像摘要核对、
+#                  fsid 变量化（宿主机 shell 采集）、mon_host 修正、rgw_thread_pool_size、
+#                  BlueFS 3108-3118 定位、验证 IP 198.51.100.166、路径一回退节（ceph-deploy
+#                  无 rgw delete 子命令）、官方 PG 口径、NVMe 统一口径、Ubuntu cephadm 版本口径、
+#                  round-2 守卫（privileged 恒真改写 0、本地 registry 鉴权 + 管理网段绑定 +
+#                  digest 固定、insecure 明文通道 0、fsid 不在 cephadm shell 交互块内赋值、
+#                  网关 192.0.2.1、client.admin keyring 不做 setfacl 放权）
+#   evals 契约     evals.json（COS-E 前缀、expectations 全中文、禁乱码、禁命令注入模式）、
+#                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to）
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/storage/ceph-object-storage-deployment/cases/skill-integrity/run.sh
+#   # 产物 results/result.json；退出码 0 = 全部通过
+#
+# 说明：tier A（纯逻辑/静态，python3+bash 标准库，无真机依赖）。
+# integrity_ran 与单测数量同步实测维护（新增/删减用例后更新 expect 值）。
+
+name: skill-integrity
+skill: ceph-object-storage-deployment
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: static_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: integrity_failures
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: integrity_ran
+    expect: 38
