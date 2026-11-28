@@ -60,13 +60,15 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-以下计数来自三次独立的空目录安装。主干 `e2a0de84` 已含 `kpbot-pr-maintainer`，`4e3a8b1a` 加入了 `kpbot-cannlab-webide`（`Plugins` 树 `27e5ab95`）。本 PR 在 `f1fb981e` 之后的目标基线（`618dc4ec`，已含其后合入的 `!460`、`!461`、`!413` 等批次技能）上加入 `kptools-kvc-crosscheck-analyzer`，按本文"后合入的 PR 应在新的目标基线上重新安装、核对三个计数"的规则，在合并树上重新安装实测：
+以主干 `618dc4ec` 为基线，将两个版本分别安装到空项目。安装清单中唯一新增的技能是 `kpbot-milestone-gantt`。
 
-| 口径 | `e2a0de84` | `4e3a8b1a`（含 WebIDE） | 加入本 PR |
-| --- | ---: | ---: | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 356 | 357 | 370 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 403 | 404 | 416 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 466 | 467 | 479 |
+| 口径 | 主干 `618dc4ec` | 加入甘特图技能（`Plugins` 树 `2c881b31`） |
+| --- | ---: | ---: |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 369 | 370 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 |
+
+kvc-crosscheck-analyzer PR 在合并上游 `bf688e47`（加入 `kpbot-milestone-gantt`）后的候选合并树上重新安装核对：当前快照实测为 `manifest_skills=371` / `installed_skill_documents=417` / `source_skill_documents_before_exclusions=480`（`618dc4ec` + 甘特图 + `kptools-kvc-crosscheck-analyzer`）。本批 kvc 技能 PR（!493/!495/!498/!499）同基线各 +1 技能，fixture 与本文按各 PR 的候选合并树逐个重测维护；同批 PR 无论先后，最后合入的 PR 应按文末协议在新的目标基线上重新安装、核对三个计数。
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”

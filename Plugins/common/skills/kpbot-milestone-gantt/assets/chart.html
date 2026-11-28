@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>项目甘特图</title>
+<style>
+:root {
+  color-scheme:light;
+  --ink:#192e35;
+  --muted:#50666b;
+  --line:#d6dfdf;
+  --paper:#fff;
+  --accent:#11685c;
+  --today:#bd442c;
+  --left:316px;
+}
+* {
+  box-sizing:border-box;
+}
+body {
+  margin:0;
+  background:#f4f7f5;
+  color:var(--ink);
+  font:14px/1.45 "Inter","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+main {
+  max-width:1536px;
+  margin:auto;
+  padding:36px clamp(16px,3.2vw,56px) 40px;
+}
+header {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+}
+h1 {
+  margin:0;
+  font-size:clamp(26px,3vw,42px);
+  line-height:1.25;
+  font-weight:690;
+  letter-spacing:-.04em;
+  overflow-wrap:anywhere;
+}
+.range {
+  color:var(--muted);
+  margin:8px 0 0;
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+button {
+  cursor:pointer;
+  color:var(--ink);
+  background:white;
+  border:1px solid #bccac9;
+  border-radius:7px;
+  padding:8px 15px;
+  font:inherit;
+  white-space:nowrap;
+}
+button:hover {
+  background:#e8f0ed;
+}
+button:focus-visible,.viewport:focus-visible {
+  outline:3px solid #68a6d4;
+  outline-offset:2px;
+}
+.overview {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:25px 0 12px;
+}
+.counts {
+  display:flex;
+  gap:17px;
+  align-items:center;
+  flex-wrap:wrap;
+  color:var(--muted);
+  font-size:13px;
+}
+.counts strong {
+  color:var(--ink);
+  margin-left:5px;
+  font-size:16px;
+  font-variant-numeric:tabular-nums;
+}
+.reference {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:#a83a25;
+  font-size:13px;
+  font-weight:650;
+  flex-wrap:wrap;
+  font-variant-numeric:tabular-nums;
+}
+.reference:before {
+  content:"";
+  height:15px;
+  border-left:3px solid var(--today);
+}
+.reference small {
+  font-size:12px;
+  font-weight:450;
+}
+.viewport {
+  border:1px solid #bdccca;
+  border-radius:12px;
+  background:white;
+  overflow-x:auto;
+  box-shadow:0 3px 14px #12332a08;
+}
+.chart {
+  position:relative;
+  min-width:930px;
+  isolation:isolate;
+  overflow:hidden;
+}
+.row {
+  display:grid;
+  grid-template-columns:var(--left) minmax(0,1fr);
+  position:relative;
+}
+.label {
+  background:#fff;
+  position:sticky;
+  left:0;
+  z-index:4;
+  padding:13px 17px;
+  border-right:1px solid var(--line);
+  overflow-wrap:anywhere;
+}
+.axis {
+  background:#e9efec;
+  border-bottom:1px solid #c7d4cf;
+}
+.axis .label {
+  background:#e9efec;
+  display:flex;
+  align-items:center;
+  font-weight:650;
+  font-size:13px;
+  letter-spacing:.06em;
+}
+.axis-track {
+  display:flex;
+  align-items:flex-start;
+  min-height:63px;
+  position:relative;
+  overflow:hidden;
+}
+#period-label {
+  color:#933b27;
+  background:#fff3eb;
+  font-weight:650;
+  position:absolute;
+  top:4px;
+  font-size:11px;
+  border-radius:4px;
+  padding:3px 6px;
+  white-space:nowrap;
+  z-index:4;
+}
+.tick {
+  position:absolute;
+  bottom:7px;
+  font-size:11px;
+  color:#4b605f;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+  transform:translateX(-50%);
+}
+.band .label {
+  background:#f5f5ee;
+  display:flex;
+  align-items:center;
+  font-weight:650;
+  color:#6c5225;
+  gap:8px;
+}
+.band .label:before {
+  content:"";
+  width:9px;
+  height:9px;
+  background:#a77224;
+  transform:rotate(45deg);
+}
+.band {
+  background:#fbfbf5;
+  border-bottom:1px solid #d7d7c8;
+}
+#milestones {
+  position:relative;
+  min-height:66px;
+  z-index:2;
+}
+.milestone-name {
+  font-weight:650;
+  color:#593e19;
+  overflow-wrap:anywhere;
+}
+.milestone-date {
+  display:block;
+  font:550 11px/1.3 "IBM Plex Mono","SFMono-Regular",monospace;
+  color:#785823;
+  margin-top:3px;
+}
+.milestone-box {
+  position:absolute;
+  max-width:180px;
+  padding:3px 5px;
+  background:#fbfbf5e8;
+  border-radius:4px;
+  line-height:1.35;
+  font-size:13px;
+}
+.diamond {
+  position:absolute;
+  width:10px;
+  height:10px;
+  transform:translate(-50%,-50%) rotate(45deg);
+  background:#a77224;
+  border:1px solid #78531d;
+}
+.empty {
+  display:block;
+  margin:21px 13px;
+  color:var(--muted);
+}
+.task-row {
+  border-bottom:1px solid #e0e7e4;
+}
+.task-row:last-child {
+  border-bottom:0;
+}
+.task-row:hover {
+  background:#f2f6f240;
+}
+.name-line {
+  display:flex;
+  align-items:flex-start;
+  gap:7px;
+  justify-content:space-between;
+}
+.task-name {
+  font-size:14px;
+  font-weight:620;
+  color:#243b40;
+  line-height:1.4;
+}
+.status {
+  display:inline-flex;
+  flex-shrink:0;
+  align-items:center;
+  border-radius:10px;
+  gap:5px;
+  padding:2px 7px;
+  background:var(--wash);
+  color:var(--tone);
+  font-size:11px;
+  line-height:1.4;
+  font-weight:650;
+}
+.details {
+  display:flex;
+  gap:5px 9px;
+  flex-wrap:wrap;
+  font-size:12px;
+  color:var(--muted);
+  margin-top:5px;
+  font-variant-numeric:tabular-nums;
+}
+.dates {
+  white-space:nowrap;
+}
+[data-state="未开始"],[data-state="待更新"] {
+  --tone:#59676d;
+  --wash:#e9eef0;
+  --fill:#83959b;
+}
+[data-state="已完成"] {
+  --tone:#466a55;
+  --wash:#e4efe6;
+  --fill:#719581;
+}
+[data-state="进行中"] {
+  --tone:#065f68;
+  --wash:#daeeed;
+  --fill:#27878a;
+}
+[data-state="受阻"] {
+  --tone:#9c3d28;
+  --wash:#fae4da;
+  --fill:#ce8067;
+}
+[data-state="待验收"] {
+  --tone:#605294;
+  --wash:#ece9f6;
+  --fill:#9282b4;
+}
+.task-track {
+  position:relative;
+  min-height:70px;
+  z-index:2;
+  margin:0;
+}
+.task-bar {
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  height:17px;
+  min-width:2px;
+  border-radius:4px;
+  background:var(--wash);
+  border:1px solid var(--fill);
+  overflow:hidden;
+}
+.task-bar-fill {
+  height:100%;
+  background:var(--fill);
+}
+.overlay {
+  position:absolute;
+  left:var(--left);
+  right:0;
+  top:0;
+  bottom:0;
+  pointer-events:none;
+}
+#grid {
+  z-index:1;
+}
+.rule {
+  position:absolute;
+  top:0;
+  bottom:0;
+  border-left:1px solid #20473616;
+}
+#cursor-layer {
+  z-index:3;
+}
+.today-line {
+  position:absolute;
+  top:0;
+  bottom:0;
+  border-left:2px dashed var(--today);
+  opacity:.86;
+}
+.today-line:before {
+  position:absolute;
+  content:"";
+  top:0;
+  left:-5px;
+  border-left:4px solid transparent;
+  border-right:4px solid transparent;
+  border-top:7px solid var(--today);
+}
+.help {
+  margin:10px 2px;
+  color:var(--muted);
+  font-size:12px;
+}
+@media(max-width:700px) {
+  main {
+    padding:21px 13px;
+  }
+  .chart {
+    min-width:850px;
+    --left:231px;
+  }
+  .label {
+    padding:11px 10px;
+  }
+  .name-line {
+    align-items:flex-start;
+  }
+  .task-name {
+    font-size:13px;
+  }
+  .dates {
+    font-size:11px;
+  }
+  .status {
+    font-size:10px;
+  }
+  .overview {
+    margin-top:18px;
+  }
+}
+@media print {
+  @page {
+    size:landscape;
+    margin:10mm;
+  }
+  body {
+    background:white;
+  }
+  main {
+    max-width:none;
+    padding:0;
+  }
+  button {
+    display:none;
+  }
+  .viewport,.chart {
+    overflow:visible;
+    box-shadow:none;
+  }
+  .chart {
+    min-width:0;
+    --left:220px;
+  }
+  .label {
+    position:static;
+  }
+  .task-row,.band {
+    break-inside:avoid;
+  }
+  .overview {
+    margin:15px 0 8px;
+  }
+  * {
+    print-color-adjust:exact;
+  }
+}
+</style>
+</head>
+<body>
+<main>
+<header><div><h1 id="title"></h1><p id="range" class="range"></p></div><button type="button" id="print">打印</button></header>
+<div class="overview"><div id="counts" class="counts"></div><div id="reference" class="reference" aria-live="polite"></div></div>
+<div class="viewport" tabindex="0" aria-label="甘特图，窄屏可横向滚动">
+<div id="chart" class="chart">
+<div class="row axis"><div class="label">事项 / 时间窗</div><div class="axis-track" id="axis"><span id="period-label"></span></div></div>
+<div id="grid" class="overlay" aria-hidden="true"></div>
+<div class="row band"><div class="label">里程碑</div><div id="milestones"></div></div>
+<div id="tasks"></div>
+<div id="cursor-layer" class="overlay" aria-hidden="true"></div>
+</div></div>
+<p class="help">横条覆盖开始日至截止日，深色填充表示已填报的完成率。</p>
+</main>
+<script id="schedule-data" type="application/json"><!--WORKBOOK_JSON--></script>
+<script>
+"use strict";
+
+const data = JSON.parse(document.getElementById("schedule-data").textContent);
+const byId = id => document.getElementById(id);
+const dayMillis = 86400000;
+
+// Calendar-day positions use UTC arithmetic. The moving marker uses the browser's local date.
+const dayIndex = isoDate => Date.parse(isoDate + "T00:00:00Z") / dayMillis;
+const dayText = index => new Date(index * dayMillis).toISOString().slice(0, 10);
+function localDate(date) {
+  return [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+const tasks = data.tasks.map(task => ({
+  ...task, startDay: dayIndex(task.start), endDay: dayIndex(task.end)
+}));
+const milestones = data.milestones
+  .map(milestone => ({...milestone, day: dayIndex(milestone.date)}))
+  .sort((first, second) => first.day - second.day);
+
+let firstDay = Infinity;
+let lastDay = -Infinity;
+for (const task of tasks) {
+  firstDay = Math.min(firstDay, task.startDay);
+  lastDay = Math.max(lastDay, task.endDay);
+}
+for (const milestone of milestones) {
+  firstDay = Math.min(firstDay, milestone.day);
+  lastDay = Math.max(lastDay, milestone.day);
+}
+if (!Number.isFinite(firstDay)) {
+  firstDay = lastDay = dayIndex(data.asOf || localDate(new Date()));
+}
+
+const spanDays = lastDay - firstDay + 1;
+const percentAt = day => 100 * (day - firstDay) / spanDays;
+const midpointPx = (day, width) => percentAt(day + 0.5) * width / 100;
+
+document.title = data.title;
+byId("title").textContent = data.title;
+byId("range").textContent = dayText(firstDay) + " — " + dayText(lastDay) + "  ·  " + spanDays + " 个自然日";
+byId("print").addEventListener("click", () => window.print());
+
+const counts = [
+  ["事项", tasks.length],
+  ["已完成", tasks.filter(task => task.status === "已完成").length],
+  ["受阻", tasks.filter(task => task.status === "受阻").length],
+  ["里程碑", milestones.length]
+];
+for (const [name, count] of counts) {
+  const item = element("span", "", name);
+  item.append(element("strong", "", count));
+  byId("counts").append(item);
+}
+
+function taskRow(task) {
+  const row = element("div", "row task-row");
+  row.dataset.state = task.status;
+  const label = element("div", "label");
+  const heading = element("div", "name-line");
+  heading.append(element("span", "task-name", task.name), element("span", "status", task.status));
+  const details = element("div", "details");
+  const dates = task.start + " → " + task.end;
+  const completion = task.progress == null ? "" : task.progress + "%";
+  details.append(element("span", "dates", dates));
+  if (task.owner) details.append(element("span", "", task.owner));
+  if (completion) details.append(element("span", "", completion));
+  label.append(heading, details);
+
+  const track = element("div", "task-track");
+  const bar = element("div", "task-bar");
+  bar.style.left = percentAt(task.startDay) + "%";
+  bar.style.width = (100 * (task.endDay - task.startDay + 1) / spanDays) + "%";
+  bar.title = [task.name, dates, task.status, task.owner, completion].filter(Boolean).join(" · ");
+  if (task.progress != null) {
+    const fill = element("div", "task-bar-fill");
+    fill.style.width = task.progress + "%";
+    bar.append(fill);
+  }
+  track.append(bar);
+  row.append(label, track);
+  return row;
+}
+for (const task of tasks) byId("tasks").append(taskRow(task));
+if (!tasks.length) byId("tasks").append(element("span", "empty", "本次排期仅有里程碑。"));
+
+function drawMilestones(width) {
+  const track = byId("milestones");
+  track.replaceChildren();
+  if (!milestones.length) {
+    track.append(element("span", "empty", "尚未填写里程碑"));
+    return;
+  }
+
+  // Measure wrapped labels before assigning the first available non-overlapping lane.
+  const lanes = [];
+  const placed = [];
+  for (const milestone of milestones) {
+    const x = midpointPx(milestone.day, width);
+    const label = element("div", "milestone-box");
+    label.append(element("div", "milestone-name", milestone.name),
+                 element("span", "milestone-date", milestone.date));
+    track.append(label);
+    const labelWidth = label.offsetWidth;
+    const left = x + 12 + labelWidth <= width - 4 ? x + 10 : Math.max(3, x - 10 - labelWidth);
+    const groupLeft = Math.min(x - 6, left);
+    const groupRight = Math.max(x + 6, left + labelWidth);
+    let lane = lanes.find(candidate => candidate.right + 12 <= groupLeft);
+    if (!lane) {
+      lane = {right: 0, height: 0};
+      lanes.push(lane);
+    }
+    lane.right = groupRight;
+    lane.height = Math.max(lane.height, label.offsetHeight);
+    const diamond = element("span", "diamond");
+    diamond.style.left = x + "px";
+    diamond.title = milestone.name + " · " + milestone.date;
+    track.append(diamond);
+    label.style.left = left + "px";
+    placed.push({lane, label, diamond});
+  }
+  let top = 12;
+  for (const lane of lanes) {
+    lane.top = top;
+    top += lane.height + 7;
+  }
+  for (const {lane, label, diamond} of placed) {
+    label.style.top = lane.top + "px";
+    diamond.style.top = (lane.top + 11) + "px";
+  }
+  track.style.height = (top + 6) + "px";
+}
+
+function tickDates(width) {
+  const maxTicks = Math.max(2, Math.floor(width / (spanDays > 280 ? 84 : 63)));
+  const minStep = Math.ceil(spanDays / maxTicks);
+  const step = [1, 2, 3, 7, 14, 28, 60, 90, 180, 365].find(days => days >= minStep) ||
+               Math.ceil(minStep / 365) * 365;
+  const dates = [];
+  for (let day = firstDay; day <= lastDay; day += step) dates.push(day);
+  if (dates.length === 1 && lastDay > firstDay) dates.push(lastDay);
+  return dates;
+}
+
+function drawTicks(width) {
+  const axis = byId("axis");
+  const grid = byId("grid");
+  axis.querySelectorAll(".tick").forEach(label => label.remove());
+  grid.replaceChildren();
+  for (const day of tickDates(width)) {
+    const x = midpointPx(day, width);
+    const text = spanDays > 280 ? dayText(day) : dayText(day).slice(5).replace("-", "/");
+    const label = element("span", "tick", text);
+    axis.append(label);
+    const margin = label.offsetWidth / 2 + 3;
+    label.style.left = Math.max(margin, Math.min(width - margin, x)) + "px";
+    const rule = element("div", "rule");
+    rule.style.left = x + "px";
+    grid.append(rule);
+  }
+}
+
+function updateReference() {
+  const kind = data.asOf ? "基准日" : "今天";
+  const current = data.asOf || localDate(new Date());
+  const day = dayIndex(current);
+  const caption = kind + " " + current;
+  const summary = byId("reference");
+  const overlay = byId("cursor-layer");
+  const marker = byId("period-label");
+  summary.replaceChildren(element("span", "", caption));
+  overlay.replaceChildren();
+  marker.textContent = caption;
+  marker.style.right = "auto";
+  if (day < firstDay || day > lastDay) {
+    const before = day < firstDay;
+    const distance = before ? "计划开始前 " + (firstDay - day) : "计划结束后 " + (day - lastDay);
+    summary.append(element("small", "", distance + " 天"));
+    marker.textContent = before ? "← " + caption : caption + " →";
+    marker.style.left = before ? "3px" : "auto";
+    marker.style.right = before ? "auto" : "3px";
+    return;
+  }
+  const width = byId("axis").clientWidth;
+  marker.style.left = Math.max(2, Math.min(width - marker.offsetWidth - 2, midpointPx(day, width) + 4)) + "px";
+  const line = element("div", "today-line");
+  line.dataset.date = current;
+  line.style.left = percentAt(day + 0.5) + "%";
+  overlay.append(line);
+}
+
+let previousWidth = 0;
+function layout() {
+  const width = byId("axis").clientWidth;
+  if (!width || width === previousWidth) return;
+  previousWidth = width;
+  drawTicks(width);
+  drawMilestones(width);
+  updateReference();
+}
+layout();
+new ResizeObserver(layout).observe(byId("axis"));
+
+function tickDay() {
+  updateReference();
+  if (!data.asOf) {
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 100);
+    setTimeout(tickDay, Math.max(1000, midnight.getTime() - Date.now()));
+  }
+}
+tickDay();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) updateReference();
+});
+</script>
+</body></html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "里程碑甘特图"
+  short_description: "从 Excel 的事项和时间窗生成含里程碑、进度和今日位置的离线甘特图"
+  default_prompt: "用 $kpbot-milestone-gantt 将我提供的 Excel 生成为带里程碑、事项时间窗和今日线的甘特图。"

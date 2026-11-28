@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "618dc4ec re-measure (skills merged after f1fb981e included) plus kptools-kvc-crosscheck-analyzer",
-  "upstream_commit": "f1fb981e",
-  "manifest_skills": 370,
-  "installed_skill_documents": 416,
-  "source_skill_documents_before_exclusions": 479
+  "measured_source_commit": "upstream bf688e47 (kpbot-milestone-gantt merged) plus kptools-kvc-crosscheck-analyzer",
+  "upstream_commit": "bf688e4702e1257008b365ea4c3e7257c28a4a71",
+  "manifest_skills": 371,
+  "installed_skill_documents": 417,
+  "source_skill_documents_before_exclusions": 480
 }
