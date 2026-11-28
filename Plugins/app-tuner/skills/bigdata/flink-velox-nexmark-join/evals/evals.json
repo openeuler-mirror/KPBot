@@ -1,0 +1,40 @@
+{
+  "skill_name": "flink-velox-nexmark-join",
+  "evals": [
+    {
+      "id": "join-family-baseline",
+      "query": "把 nexmark 里 join 类查询的吞吐基线测出来，要按 join 类型汇总",
+      "expected": "触发本 skill：固定跑 q3/q7/q8/q13/q20/q23（不接受 --queries 覆写），口径与 performance-verify 逐字节同一份，产出 join_analysis 注解与 regular/window-join/lookup/cascade 四类 summary"
+    },
+    {
+      "id": "join-pushdown-check",
+      "query": "GlutenFlink 对这些 join 查询有没有下推，跑一轮看看",
+      "expected": "触发本 skill：跑在当前侧；GlutenFlink 侧每格结束后经 REST 取 plan 用引擎字段判 join 相关 gluten 节点，无 → 回退（人读报告标 FAILED）；native 侧 pushdown not_applicable"
+    },
+    {
+      "id": "cross-skill-comparable",
+      "query": "join 基准的数字要能跟之前 performance-verify 跑的 q0 基线直接比",
+      "expected": "触发本 skill：口径文件是 performance-verify conf 的逐字节拷贝（1 亿 / 5000 万 / blackhole / warmup / r0），数字跨 skill 可比"
+    },
+    {
+      "id": "rest-jitter-not-blocked",
+      "query": "REST 有点抖，先把 join 矩阵跑起来别被预检挡住",
+      "expected": "触发本 skill：REST / 槽位预检是 warnings 不是门（--skip-check 可整个跳过），blocking 前置只有安装 / conf 可写与形态 / 崩溃遗留"
+    },
+    {
+      "id": "not-full-suite",
+      "query": "跑一轮完整的 nexmark 套件吞吐，全部查询",
+      "expected": "不触发：全量 / 自选查询的裸基线是 flink-velox-performance-verify；本 skill 固定 join 六查询集"
+    },
+    {
+      "id": "not-correctness",
+      "query": "验证两侧 join 查询结果集一致",
+      "expected": "不触发：正确性是 flink-velox-e2e-verify / nexmark 正确性校验的事；本 skill 只报吞吐与 plan 观察"
+    },
+    {
+      "id": "not-switch-side",
+      "query": "切到原生侧再跑 join 基准",
+      "expected": "不触发 apply：切栈属 flink-velox-cluster-switch 且须用户同意；本 skill 跑在当前侧、不设侧门"
+    }
+  ]
+}

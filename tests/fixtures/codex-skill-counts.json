@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "Plugins tree b33aabda3d13da9f981d74dc1a4cfc17c05eaa9b",
-  "upstream_commit": "16b90a849d8e450bbea87aa15e36889bc73f5474",
-  "manifest_skills": 371,
-  "installed_skill_documents": 417,
-  "source_skill_documents_before_exclusions": 486
+  "measured_source_commit": "Plugins tree e1b40b478f0ee2ff9dfa150ddb405e3ce64e7c0a",
+  "upstream_commit": "b04fc9e23365528843f2c379ec945c5c0f91f236",
+  "manifest_skills": 372,
+  "installed_skill_documents": 418,
+  "source_skill_documents_before_exclusions": 487
 }
