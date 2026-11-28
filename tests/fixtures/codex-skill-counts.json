@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "f1fb981e plus benchmark-webarena-protocol",
-  "upstream_commit": "f1fb981e",
-  "manifest_skills": 357,
-  "installed_skill_documents": 404,
-  "source_skill_documents_before_exclusions": 467
+  "measured_source_commit": "Plugins tree 2c881b31f9724ed2d96744eeee80ec4f98b53376",
+  "upstream_commit": "618dc4ece58c1139cfa128eab2ac12f29174eef8",
+  "manifest_skills": 370,
+  "installed_skill_documents": 416,
+  "source_skill_documents_before_exclusions": 479
 }
