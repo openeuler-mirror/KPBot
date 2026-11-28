@@ -60,15 +60,17 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-将主干 `873e9c6f` 和加入搜推分析技能的版本分别安装到空目录，后者的安装清单只增加了 `sra-scenario-analysis`。
+以主干 `618dc4ec` 为基线，将两个版本分别安装到空项目。安装清单中唯一新增的技能是 `kpbot-milestone-gantt`。
 
-| 口径 | 主干 `618dc4ec` | 主干 `bf688e47`（含甘特图） | 主干 `873e9c6f` | 加入搜推分析技能后 |
-| --- | ---: | ---: | ---: | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 369 | 370 | 372 | 373 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 | 418 | 419 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 | 487 | 488 |
+| 口径 | 主干 `618dc4ec` | 加入甘特图技能（`Plugins` 树 `2c881b31`） |
+| --- | ---: | ---: |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 369 | 370 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 |
 
-从 `bf688e47` 到 `873e9c6f`，源树新增 5 份 `ascend_kunpeng/layerwise` 技能文档，以及 Go、Flink 和 MySQL 技能文档各 1 份。
+`ascend_kunpeng/layerwise` 在本 PR 新增 5 个 `SKILL.md` 后，按同一口径实测为：安装清单 370、安装树递归 416、源树递归 484。
+
+kvc-crosscheck-analyzer PR 在合并上游 `2359dde7`（mysql-optimize 十件套、`benchmark-gaia/paperqa/swebench/vitabench-protocol`、`flink-velox-quick-verify`、`sandbox-bench-topdown`、`ascend_kunpeng/layerwise` 等批次技能）后的候选合并树上重新安装核对：当前快照实测为 `manifest_skills=388` / `installed_skill_documents=434` / `source_skill_documents_before_exclusions=503`（上游批次 + `kptools-kvc-crosscheck-analyzer`；注：上游 `2359dde7` 自身的 fixture 仍停在 layerwise 批次的 370/416/484，未含其后合入的 mysql/benchmark/flink 批次——后合入的 PR 按文末协议以候选合并树实测为准）。本批 kvc 技能 PR（!493/!495/!498/!499）同基线各 +1 技能，fixture 与本文按各 PR 的候选合并树逐个重测维护；同批 PR 无论先后，最后合入的 PR 应按文末协议在新的目标基线上重新安装、核对三个计数。
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”

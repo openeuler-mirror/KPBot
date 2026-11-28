@@ -1,0 +1,80 @@
+{
+ "skill_name": "mysql-container-deployment",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "容器要固定 CPU/NUMA，docker run 该怎么给？为什么两个参数必须一起？不要执行命令。",
+   "expected_output": "--cpuset-cpus 给 CPU 列表、--cpuset-mems 给 NUMA 节点（如 80-87 与 1）。必须一起给：只限 CPU 不限 mem 时容器内存可能跨节点分配，本地内存变远端访问，延迟翻倍；两参数的核与节点必须同域（核 80-87 属节点 1）。再配 --memory 限制并保证大于 buffer pool + 余量，否则 OOM 被杀。",
+   "files": [
+    "SKILL.md",
+    "references/container-deploy.md"
+   ],
+   "expectations": [
+    "给出 cpuset-cpus/cpuset-mems 成对出现",
+    "解释跨 NUMA 远端访问代价",
+    "提到 memory 与 buffer pool 余量",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "宿主机网卡 IRQ 和容器核怎么安排？怎么查？不要执行命令。",
+   "expected_output": "宿主 IRQ 绑到容器 cpuset 之外的核（或按规格绑容器首核 80），避免软中断抢业务核。查法：ethtool -i 网卡取 bus-info → /sys 设备 NUMA 归属 → /proc/interrupts 找队列 IRQ → 写 smp_affinity 绑核；容器内核号沿用宿主编号（cpuset 首核 80 即容器核 80，业务核 81-87），改队列数后须重新查询 IRQ 并回读 effective_affinity_list，映射关系写进验收记录。",
+   "files": [
+    "SKILL.md",
+    "references/container-deploy.md"
+   ],
+   "expectations": [
+    "说明 IRQ 绑 cpuset 外或首核",
+    "给出 bus-info→NUMA→IRQ 查询链",
+    "提到容器核与宿主核映射",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "supermin 镜像怎么做？为什么不用现成镜像？不要执行命令。",
+   "expected_output": "宿主装 supermin 工具，准备基础包列表（bash/coreutils/glibc/libaio/ncurses/openssl + 按需 perf/sysstat/numactl/vim），supermin --prepare 把包列表写入 supermin.d，supermin --build 从该目录生成 rootfs（appliance.d），tar 打包后 docker import 导入。--format chroot 不生成 kernel/initrd，使用宿主内核。自建镜像可控：MySQL 用宿主编译的二进制挂载进容器，镜像只承载运行时依赖，无历史层污染、体积小、内核参数与宿主一致（host 网络），POC 结果可归因到二进制本身。",
+   "files": [
+    "SKILL.md",
+    "references/container-deploy.md"
+   ],
+   "expectations": [
+    "给出 prepare→build 两步流程（prepare 准备包列表，build 生成 rootfs）",
+    "解释挂载二进制与可控依赖",
+    "提到 host 网络或宿主一致",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "容器里 mysqld 起来后怎么绑 worker 和 log 线程？为什么首核 80 不放 worker？不要执行命令。",
+   "expected_output": "压测建连后按 performance_schema.threads.NAME 取 THREAD_OS_ID（即 /proc/<pid>/task 下 TID），用 taskset -pc 把 thread/sql/one_connection 的连接线程轮流绑到业务核 83-87；后台线程按 NAME LIKE 'thread/innodb/%' 取 TID，log_writer/log_flusher 单独绑 81/82（worker 集合之外）。不要用 /proc/<pid>/task/*/comm 匹配：8.0.25 无线程命名、comm 恒为 mysqld，8.0.28 虽由 P_S 命名但 flusher 的 comm 是 ib_log_flush，且 P_S 关闭时全空——匹配不到时 taskset 静默空转，会把未绑核当已绑核。首核 80 留给中断/系统噪声与后台线程，worker 放上去会被抢占导致 P99 抖动；加线程到接近满载（如 28→30）验证首核 80 独立后的余量。",
+   "files": [
+    "references/container-deploy.md"
+   ],
+   "expectations": [
+    "给出按 threads.NAME 取 THREAD_OS_ID 再用 taskset 均分绑核的方法",
+    "解释首核 80 保留理由与 worker 83-87 / log 81-82 的分工",
+    "说明 comm 匹配在 8.0.25（以及 P_S 关闭时）不可用",
+    "提到 log 线程单独绑",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "preflight_container.sh 在容器部署前检查什么？怎么算通过？不要执行命令。",
+   "expected_output": "用 CPUSET/MEMS/MEM_LIMIT_GB/MYSQL_PORT/IMAGE_NAME/DATA_ROOT 等环境变量入参，只读检查：docker 客户端与守护进程可访问（docker info；docker ps 查询失败记 FAIL，只有成功取到清单才判断容器名冲突）、cpuset 核与 mems 节点合法性（mems 支持 0,1/0-3 列表与区间）、内存上限、端口（含 1-65535 范围与占用）、镜像存在、挂载目录与宿主路径、nofile、大页提示。PASS/WARN/FAIL 三级；退出码 0=无 FAIL、1=有 FAIL、端口非法 exit 2；不改任何系统状态。",
+   "files": [
+    "scripts/preflight_container.sh"
+   ],
+   "expectations": [
+    "列出环境变量与检查类别",
+    "说明退出码语义",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

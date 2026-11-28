@@ -1,0 +1,21 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "paperqa",
+ "cases": [
+  {"case_id": "paperqa_01_antibiotic_resistance", "image": "agbench-paperqa_01_antibiotic_resistance:v1", "steps": 47, "exec": 44, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 686636, "think_time": 55.6, "skipped": "无"},
+  {"case_id": "paperqa_02_olfactory_receptor_contacts", "image": "agbench-paperqa_02_olfactory_receptor_contacts:v1", "steps": 38, "exec": 35, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 590346, "think_time": 48.3, "skipped": "无"},
+  {"case_id": "paperqa_03_protein_interaction_assay", "image": "agbench-paperqa_03_protein_interaction_assay:v1", "steps": 38, "exec": 35, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 534716, "think_time": 59.9, "skipped": "无"},
+  {"case_id": "paperqa_04_pdf_processing_pipeline", "image": "agbench-paperqa_04_pdf_processing_pipeline:v1", "steps": 50, "exec": 44, "read": 0, "write": 3, "edit": 1, "apply_patch": 0, "tokens_total": 1958796, "think_time": 231.5, "skipped": "process×14"},
+  {"case_id": "paperqa_05_embedding_search", "image": "agbench-paperqa_05_embedding_search:v1", "steps": 62, "exec": 58, "read": 1, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 3364927, "think_time": 166.7, "skipped": "process×58"},
+  {"case_id": "paperqa_06_html_processing", "image": "agbench-paperqa_06_html_processing:v1", "steps": 61, "exec": 56, "read": 1, "write": 1, "edit": 1, "apply_patch": 0, "tokens_total": 1914965, "think_time": 139.8, "skipped": "process×21"}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py + image-build/agbench (build/import) argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "build_cli": ["--agbenchmark-root", "--base-image", "--benchmarks", "--cases", "--context-root", "--docker", "--dry-run", "--jdk-path", "--manifest"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}

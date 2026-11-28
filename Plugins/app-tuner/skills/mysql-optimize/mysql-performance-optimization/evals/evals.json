@@ -1,0 +1,77 @@
+{
+ "skill_name": "mysql-performance-optimization",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "拿到一份热点证据，怎么从证据选杠杆？顺序是什么？不要执行命令。",
+   "expected_output": "按决策树：先确认瓶颈类别（计算/访存/锁/IO/等待），再按杠杆优先级：1) 正确性/数据模型（索引/SQL/事务边界/隔离级别）→ 2) 部署/系统（规格/绑核/IRQ/NUMA/大页/文件系统）→ 3) 配置（Buffer Pool/redo/binlog/IO/刷脏/线程/AHI）→ 4) 编译（-O3/LSE/CRC/LTO/原子写）→ 5) 源码补丁（最后手段）。每步单变量改、同口径 A/B、负收益回滚并记台账；跨类别的通用问题先路由到 os-optimization 等兄弟 skill。",
+   "files": [
+    "references/decision-and-negative-results.md"
+   ],
+   "expectations": [
+    "给出瓶颈类别到杠杆的顺序",
+    "强调单变量与回滚",
+    "提到路由到兄弟 skill",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "编译侧能动什么？怎么确认产物真的带了优化？不要执行命令。",
+   "expected_output": "编译杠杆：-O3 -march=armv8-a+crypto+lse+crc（含 RELWITHDEBINFO）、-flto=auto、-funroll-loops、关闭无用引擎减体积；分配器可换 jemalloc/tcmalloc 对比。产物校验用 verify_build_opts.sh：版本、库依赖、aarch64 特性（LSE 指令出现在反汇编）、关键符号、md5，并记录编译参数与源码 commit——缺记录的“优化二进制”不可比。",
+   "files": [
+    "references/compiler-and-atomic-write.md",
+    "scripts/verify_build_opts.sh"
+   ],
+   "expectations": [
+    "列出编译开关与分配器对比",
+    "提到产物校验与身份记录",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "配置杠杆有哪些大项？为什么不能直接抄别人的 my.cnf？不要执行命令。",
+   "expected_output": "大项：连接与元数据（max_connections/table_open_cache）、Buffer Pool（size/instances）、redo/binlog 与 durability（sync_binlog/innodb_flush_log_at_trx_commit）、刷脏与 IO（io_capacity/flush 方法）、自旋与并发、AHI。不能照抄：参数值依赖规格/数据集/场景（RO 与 RW 的取值方向不同，如读 IO 线程 25–35 vs 20、写 IO 线程 5 vs 15、自旋 20/100 vs 30/110，而脏页上限 90/90 不随场景变化），先算内存预算再按场景矩阵取值，在线参数逐项核对在线/重启属性。",
+   "files": [
+    "references/config-tuning.md"
+   ],
+   "expectations": [
+    "列出主要参数分组",
+    "解释场景依赖与内存预算",
+    "提到在线/重启区分",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "什么情况下必须停止优化？负结果怎么处理？不要执行命令。",
+   "expected_output": "停止条件（任一即停）：正确性失败（MTR/冒烟/对账/回读）、错误率上升或 P99 明显恶化且无法解释、目标场景收益 <5% 且波动 >5%、出现 OOM/崩溃/数据风险、变更无法回滚或回滚未验证、归因证据不足。负结果必须归档：记录假设、证据、改动、轮次数据与回滚结论——反模式清单（如小 pool 多 instances、无证据换分配器）靠负结果积累，防止下次重复踩坑。",
+   "files": [
+    "references/decision-and-negative-results.md"
+   ],
+   "expectations": [
+    "给出至少三条停止条件",
+    "说明负结果归档内容",
+    "提到反模式积累",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "MySQL 源码侧已经有哪些可用的优化点？怎么评估该不该用？不要执行命令。",
+   "expected_output": "已归档的 patch 族：fast-tuple（比较直通）、Read View version（视图复用）、space-skipping+NEON collation（ASCII 批量）、binlog ordered（组提交锁优化）、rec_get_offsets（去重复判断）、binlog preallocate（fallocate 预扩容）。评估按适用场景（point/range 只读 vs 高并发写）、语义边界清单（比较/可见性/字符/提交/持久化/平台）与验证成本（MTR+四场景 A/B）逐项对照；具体实施与风险看 mysql-source-optimization。",
+   "files": [
+    "references/source-optimizations.md"
+   ],
+   "expectations": [
+    "列出至少四个 patch 与核心机制",
+    "提到语义边界评估",
+    "指向源码优化子 skill",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

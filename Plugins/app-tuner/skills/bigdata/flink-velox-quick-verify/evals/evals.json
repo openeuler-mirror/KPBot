@@ -1,0 +1,12 @@
+{
+  "skill_name": "flink-velox-quick-verify",
+  "evals": [
+    { "id": "quick-smoke-after-change", "query": "改了 velox 的一个时间提取函数实现，先快速确认 GlutenFlink 侧语义没有坏", "expected": "触发 flink-velox-quick-verify：plan 打印场景与命令，run --yes 提交内置场景库（datetime-expr 十函数投影等），捕获 print changelog 折叠后与 Python 参考模型精确比对，字段级归因点名出错表达式" },
+    { "id": "field-attribution", "query": "这条 SQL 的输出有一列值不对，帮我定位是哪个表达式错了", "expected": "触发本 skill：失配场景按首列配对做字段级归因，column_diffs 逐列给 mismatch 计数与样例差异，直接点名出错列" },
+    { "id": "dayofweek-regression", "query": "回归一下 DAYOFWEEK 语义，之前 velox 返回过 Sun=0 的错误口径", "expected": "触发本 skill 的 datetime-expr 场景：输入含周日/周六边界行，参考模型按 Flink 口径 Sun=1..Sat=7，错误口径会在 dow 列归因为 FAIL" },
+    { "id": "single-side-vs-e2e", "query": "把同一 SQL 在原生 Flink 和 GlutenFlink 上双跑对比输出是否一致", "expected": "不触发本 skill（单侧+参考模型）：两侧等价性裁决 → flink-velox-e2e-verify 双跑零容差对比；本 skill 只在单侧对独立参考模型做语义校验" },
+    { "id": "throughput-benchmark", "query": "测一下 GlutenFlink 比 native 快了多少，跑 nexmark 基准", "expected": "不触发：吞吐基准（nexmark 固定口径、加速比）→ flink-velox-performance-verify；本 skill 不计时" },
+    { "id": "stack-switch", "query": "把集群从原生侧切到 GlutenFlink 再跑", "expected": "不触发：本 skill 不切栈不重启不动 conf（这是它『快』的一部分）；切栈由调用方或 flink-velox-cluster-switch 负责，切完再回来跑本 skill" },
+    { "id": "start-cluster", "query": "REST 探活失败，帮我把 Flink 集群启动起来", "expected": "不触发：本 skill 绝不启动/重启/切栈集群；探活失败如实拒绝并给出修复提示，集群管理归调用方" }
+  ]
+}

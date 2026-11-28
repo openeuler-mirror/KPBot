@@ -1,0 +1,77 @@
+{
+ "skill_name": "mysql-app-config-optimization",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "8U32G 机器 buffer pool 设多少？怎么推导而不是拍脑袋？不要执行命令。",
+   "expected_output": "先算内存预算：buffer pool ≈ 总内存 50%–70%，8U32G 基线 22G；再扣每连接内存（连接数 × sort/join/read buffer + 临时表）、redo log buffer（1–3G）、binlog cache（事务大小 × 并发）、OS 与其他留 20%–30%。容器场景 --memory 必须大于 buffer pool + 余量。instances 按规格表取 2C8G=4、8C16G=8、8U32G 的 22G=16；只有小 pool 才取更少实例，22G 配 16 与规格矩阵一致。",
+   "files": [
+    "SKILL.md",
+    "references/config-matrix.md"
+   ],
+   "expectations": [
+    "给出 22G 基线与 50%-70% 区间",
+    "列出预算扣减项",
+    "提到容器 memory 余量与 instances 按规格取 4/8/16（22G 为 16）",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "Point 场景和 RW 场景的 my.cnf 取值方向差在哪？不要执行命令。",
+   "expected_output": "Point：--db-ps-mode 依赖的 prepare 路径要顺（stmt 元数据上限、table_open_cache 足够）、AHI 纳入 A/B（场景矩阵 Point/RO 取 OFF，高压读多建议 OFF）、自旋保守（线程少）。RW/WO：脏页上限与 io_capacity 按盘定、sync_binlog/innodb_flush_log_at_trx_commit 显式定夺（双 1 vs 性能档）、binlog cache 与组提交队列、自旋/并发上限放宽。同一份配置吃两头的场景必然有一侧亏。",
+   "files": [
+    "references/config-matrix.md"
+   ],
+   "expectations": [
+    "对比 PS/AHI/自旋的方向",
+    "对比刷脏/双 1/binlog 的方向",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "2C8G、8C16G、32C256G 容器分别怎么取参？不要执行命令。",
+   "expected_output": "按规格矩阵：2C8G：buffer pool 4G、instances 4、innodb_read/write_io_threads 1/1、innodb_purge_threads 1、innodb_page_cleaners 4；8C16G：pool 8G、instances 8、4/4、purge 4、page cleaners 8；32C256G：pool 128G、instances 8、16/16、purge 16、page cleaners 8，刷脏/IO 并发放大、大 redo。innodb_thread_concurrency 全规格为 0、自旋仅随场景取 20/100 或 30/110，不随规格收缩；performance_schema 模板恒为 OFF，不存在按规格的 PS 受限档。所有取值以 50%-70% 预算与压测回验为准，矩阵是起点不是承诺。",
+   "files": [
+    "references/config-matrix.md"
+   ],
+   "expectations": [
+    "给出三档 buffer pool 数值",
+    "给出 instances 4/8/8 并说明线程随规格缩放",
+    "提到矩阵是起点需回验",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "哪些参数在线改、哪些必须重启？变更怎么落地？不要执行命令。",
+   "expected_output": "在线：buffer pool 大小（需按 innodb_buffer_pool_chunk_size 对齐）、AHI 等可 SET GLOBAL 切（注意短时抖动）、自旋/并发类；character_set_server 为动态变量，SET GLOBAL 在线生效，无需重启；仅初始化可设：page 大小（变更需新建实例并迁移数据）、lower_case_table_names；重启：buffer pool 实例数、redo/双写相关、性能模式/PS 消费类、大页相关。落地流程：render_mycnf dry-run 出配置 → diff 备份现网 → --write 落盘（同目录临时文件校验后原子替换）→ validate（mysqld --defaults-file=my.cnf --validate-config）→ 按在线/重启分类执行 → 回读 SHOW VARIABLES 确认 → 记录变更与回滚点。",
+   "files": [
+    "references/config-matrix.md",
+    "scripts/render_mycnf.sh"
+   ],
+   "expectations": [
+    "各给出至少两个在线/重启参数，buffer pool 在线调整需按 chunk 对齐",
+    "给出 dry-run→diff→write→validate→回读流程且 page 大小属仅初始化可设",
+    "提到回读确认与回滚点",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "render_mycnf.sh 怎么用？直接覆盖现网 my.cnf 有什么保护？不要执行命令。",
+   "expected_output": "按 --spec 8u32g --scenario ro 选模板渲染（可覆盖 home/datadir/socket/port），默认 dry-run 只打印；--write 才落盘，目标已存在且无 --force 时拒绝覆盖。默认 ssl=1 保留 TLS，ssl=0 仅显式隔离压测；max_prepared_stmt_count 上限 4194304。--write 在同目录临时文件写完并校验后原子替换，保留 .bak 与目标权限，不先截断目标；取值含换行/控制字符拒绝渲染；带值选项缺值会点名选项并退出非零。模板是起点不是承诺：写前 diff、写后回读验证；退出码 0 成功、1 拒绝覆盖/写盘失败、2 参数错误。",
+   "files": [
+    "scripts/render_mycnf.sh"
+   ],
+   "expectations": [
+    "给出 spec/scenario 用法与 dry-run 默认",
+    "说明覆盖保护、默认 TLS、原子替换/备份/校验与缺值拒绝",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

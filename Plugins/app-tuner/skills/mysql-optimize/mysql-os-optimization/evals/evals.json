@@ -1,0 +1,82 @@
+{
+  "skill_name": "mysql-os-optimization",
+  "version": "1.0.0",
+  "notes": "基于快照语料构建；评估不实际执行命令。",
+  "evals": [
+   {
+    "id": 1,
+    "prompt": "MySQL 场景网卡 IRQ 绑核完整流程？不要执行命令。",
+    "expected_output": "先只读采集现状（/proc/interrupts、队列数、bus-info→NUMA）；从目标网卡 sysfs 枚举 IRQ 并核实 BDF 非空、IRQ 集合非空，空集合直接退出，不用空 BDF 匹配其它设备中断；改队列后重新枚举 IRQ，确认后才停 irqbalance（记录原状态），不停止宿主防火墙；按队列设 ring buffer/coalesce；逐队列绑核到非业务核（避免与 mysqld worker 同核），范围按队列序号错开而非全部同掩码；每项回读 affinity，验证中断分布均匀、压测 P99 改善；回滚=恢复队列→重定位 IRQ→恢复原 affinity 与 irqbalance。",
+    "files": [
+     "references/os-tuning.md"
+    ],
+    "expectations": [
+     "给出采集→从 sysfs 核实 IRQ→停平衡→定位→逐队列绑核流程",
+     "提到 BDF/IRQ 集合为空即退出，且不停止宿主防火墙",
+     "提到逐队列错开而非同掩码",
+     "给出按队列恢复的回滚顺序",
+     "没有执行命令"
+    ]
+   },
+   {
+    "id": 2,
+    "prompt": "THP 开还是关？大页怎么决策？不要执行命令。",
+    "expected_output": "MySQL 常态建议 THP=never（alloc 延迟与内存放大影响写路径长尾），延迟敏感场景用显式大页：按 NUMA 节点分配 nr_hugepages、mysqld 或 hugetlbfs 显式启用并回验 TLB miss。决策依据是实测：对比 madvise/never/always 与 2M/1G 页的 P99 与缺页计数；改 THP 属系统级变更，走 optimize_os.sh --execute + 变更单流程；容器环境下脚本在首次写入前按部署形态拒绝 --thp/--hugepages。",
+    "files": [
+     "references/os-tuning.md"
+    ],
+    "expectations": [
+     "给出 never 建议+显式大页路径",
+     "提到按实测对比决策",
+     "提到变更单纪律与容器内拒绝",
+     "没有执行命令"
+    ]
+   },
+   {
+    "id": 3,
+    "prompt": "MySQL 主机的 sysctl 基线分哪几组？各组管什么？不要执行命令。",
+    "expected_output": "分四组（脚本 --category 可选）：网络（somaxconn/tcp_max_syn_backlog/netdev_max_backlog/tcp_sack/tcp_tw_reuse/tcp_adv_win_scale，tcp_timestamps 仅 write 画像写入；收发缓冲/TIME_WAIT 上限等不在脚本写入集合，影响建连与远端压测）、IO（fs.aio-max-nr=1048576、vm.dirty_background_ratio=5、vm.dirty_ratio=20，影响刷脏节奏）、内存（vm.overcommit_memory=0、vm.swappiness=1、vm.min_free_kbytes=262144）、调度（kernel.numa_balancing=0，按实测 A/B）。永久化写 /etc/sysctl.d/99-mysql.conf 并 sysctl --system 生效，先 sysctl -w 试点验证再固化；不支持的键逐项记为失败并返回非零。",
+    "files": [
+     "SKILL.md",
+     "references/os-tuning.md",
+     "scripts/optimize_os.sh"
+    ],
+    "expectations": [
+     "列出网络/IO/内存/调度四组及代表参数",
+     "提到 vm.dirty_*、swappiness/min_free、numa_balancing 的归属",
+     "提到永久化文件与先 sysctl -w 试点",
+     "没有执行命令"
+    ]
+   },
+   {
+    "id": 4,
+    "prompt": "nofile 和 SELinux 各怎么处理？跟 MySQL 什么关系？不要执行命令。",
+    "expected_output": "open_files_limit 依赖 ulimit：/etc/security/limits.conf 的 soft/hard nofile（如 102400）与 systemd 单元 LimitNOFILE 一致，压测高并发/大表数时过小会报 Too many open files。SELinux=enforcing 可能拦截 mysqld 读写 datadir/socket，改 /etc/selinux/config 为 disabled（需重启）或按策略放行端口/目录；两者都属需审批变更，先只读核对当前值。",
+    "files": [
+     "references/os-tuning.md"
+    ],
+    "expectations": [
+     "说明 ulimit/limits.conf/LimitNOFILE 链",
+     "说明 SELinux 放行或关闭路径",
+     "提到先只读核对",
+     "没有执行命令"
+    ]
+   },
+   {
+    "id": 5,
+    "prompt": "optimize_os.sh 为什么默认 dry-run？执行要什么前置？不要执行命令。",
+    "expected_output": "OS 变更影响整机（sysctl/THP/大页/网卡队列与 IRQ），写动作必须可追溯：默认 dry-run 打印计划；执行需 --execute --approved-change-id <变更单>，并给 --profile/--category/--eth/--irq-cores/--queues/--thp/--hugepages 等显式参数，--category 让计划/备份/执行只覆盖所选类别。备份按每次运行用 mktemp 独占创建，原值未完整保存前不改系统；逐项回读目标值，部分成功返回非零并列出已生效与待恢复项；--rollback 按队列→重定位 IRQ→原掩码→irqbalance→sysctl→内存页顺序回滚。脚本不碰内核启动参数/BIOS/文件系统格式化；退出码 0 成功或已打印计划、1 拒绝/失败、2 用法错误。",
+    "files": [
+     "scripts/optimize_os.sh",
+     "SKILL.md"
+    ],
+    "expectations": [
+     "说明 dry-run 与变更单前置",
+     "列出显式执行参数与 --category 选类",
+     "说明独占备份/回滚与逐项回读、部分失败非零",
+     "说明不碰的高风险范围",
+     "没有执行命令"
+    ]
+   }
+  ]
+ }
