@@ -3,8 +3,17 @@
 
 Guards the frontmatter (name/license/metadata), the build-guide reference
 (source annotation + key-command spot checks against the Kunpeng Ceph official guide), the boundary table (sibling routing), table pipe
-balance, and the evals contract. Run via run.sh,
-or directly:
+balance, and the evals contract. Round-2 review-fix guards cover the
+line-anchored ceph-install routing assertions (boundary-table row,
+Dependencies gcc/cmake row, description negative route); round-3 covers
+the deployment-axis anchors (boundary-table cluster-deployment row
+routing to ceph-ansible-deployment / ceph-block-storage-deployment,
+same-batch PRs #445/#446); round-4 covers the three-face deployment-axis
+anchors (frontmatter description routing phrase, eval_queries NQ-02 note,
+build-guide handover paragraph); round-5 covers the NQ-01 note anchor
+(ceph-install axis), the SP4-scoped fallback condition (16.2.7 only ships
+in the SP4 system-image source), and the ansible-leg matrix annotations
+(boundary row + build-guide handover). Run via run.sh, or directly:
 
     py -3 test_skill_contract.py
 """
@@ -125,12 +134,141 @@ class ReferenceTests(unittest.TestCase):
 class BoundaryTests(unittest.TestCase):
     def test_boundary_routes_to_siblings(self):
         text = read(SKILL_DIR / "SKILL.md")
-        for sibling in ("ceph-parameter-tuning",):
+        for sibling in ("ceph-parameter-tuning", "ceph-install",
+                        "ceph-ansible-deployment",
+                        "ceph-block-storage-deployment"):
             self.assertIn(sibling, text, sibling)
+        # 本断言的 ceph-install 存在性以 #444 同批交付为前提；合并次序约束：
+        # 本 PR（#469）不得先于 #444/#445/#446 合入，否则 master 上 ceph-build 将
+        # 指向未合入 skill（GitCode mergeable 无次序门禁，需人工保证顺序）。
         self.assertNotIn("ceph-optimization", text, "ceph-optimization")
-        for name in ("ceph-install", "ceph-ansible-deployment",
-                     "ceph-block-storage-deployment"):
-            self.assertNotIn(name, text, name)
+
+
+class RoutingAnchorTests(unittest.TestCase):
+    """检视意见闭环守卫（PR 469 round-2/round-3）：ceph-install 路由按行锚定，
+    替代全文子串弱断言（assertIn("ceph-install") 会把任意正文提及误当路由）；
+    round-3 补部署轴锚定（集群部署行内含两个姊妹 skill 名与同批 PR 标注）；
+    round-4 补部署轴三面锚定（description / eval_queries NQ-02 note /
+    build-guide 交接段），任一面静默回退单独红；round-5 补 NQ-01 note 锚定
+    （ceph-install 轴三要素）、降级列 OS 条件收敛为 openEuler 22.03 LTS SP4
+    （16.2.7 仅集成于 SP4 系统镜像源）与 ansible 腿矩阵括注（边界表行 +
+    build-guide 交接段）。"""
+
+    def _lines(self):
+        return read(SKILL_DIR / "SKILL.md").splitlines()
+
+    def _frontmatter(self):
+        return frontmatter(read(SKILL_DIR / "SKILL.md"))
+
+    def test_boundary_row_anchors_ceph_install(self):
+        # 边界表行断言：含「| Ceph repo 安装（16.2.7」前缀的行内含 skill ceph-install
+        rows = [line for line in self._lines()
+                if line.strip().startswith("| Ceph repo 安装（16.2.7")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("skill `ceph-install`", rows[0], rows[0])
+        self.assertIn("同批 PR #444，同批交付", rows[0], rows[0])
+
+    def test_boundary_row_anchors_deployment_siblings(self):
+        # 边界表集群部署行断言：含「| 集群部署（MON/MGR/OSD 初建」前缀的行内含
+        # 两个姊妹 skill 名与同批 PR #445/#446 标注（与 ceph-install 轴同款锚定），
+        # 且 ceph-ansible 路径括注其矩阵（14.2.22/CentOS 7.6/20.03，不覆盖本
+        # skill 的 14.2.8 产物与 22.03 路径）
+        rows = [line for line in self._lines()
+                if line.strip().startswith("| 集群部署（MON/MGR/OSD 初建")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("skill `ceph-ansible-deployment`", rows[0], rows[0])
+        self.assertIn("`ceph-block-storage-deployment`", rows[0], rows[0])
+        self.assertIn("同批 PR #445/#446，同批交付", rows[0], rows[0])
+        self.assertIn("含 ceph-ansible 路径（其矩阵为 14.2.22/CentOS 7.6/20.03）",
+                      rows[0], rows[0])
+
+    def test_description_anchors_deployment_siblings(self):
+        # description 面断言：frontmatter description 的集群部署路由片段含两个姊妹
+        # skill 名与同批 PR #445/#446 标注（description 为折叠块，跨行文本按空白
+        # 归一后匹配），且不含「当前仓库无对应 skill」回退文案
+        fm = self._frontmatter()
+        self.assertIn(
+            "skill `ceph-ansible-deployment` / `ceph-block-storage-deployment`"
+            "（同批 PR #445/#446，同批交付）",
+            " ".join(fm.split()))
+        self.assertNotIn("当前仓库无对应 skill", fm)
+
+    def test_eval_queries_nq02_note_anchors_deployment_siblings(self):
+        # evals 面断言：eval_queries.json 中 id==NQ-02 项的 note 含两个姊妹 skill
+        # 名与同批 PR #445/#446 标注（任一要素缺失即单独红）
+        queries = json.loads(read(SKILL_DIR / "evals" / "eval_queries.json"))["queries"]
+        rows = [q for q in queries if q["id"] == "NQ-02"]
+        self.assertEqual(len(rows), 1, rows)
+        note = rows[0]["note"]
+        self.assertIn("ceph-ansible-deployment", note, note)
+        self.assertIn("ceph-block-storage-deployment", note, note)
+        self.assertIn("同批 PR #445/#446", note, note)
+
+    def test_eval_queries_nq01_note_anchors_ceph_install(self):
+        # evals 面断言：eval_queries.json 中 id==NQ-01 项的 note 含 ceph-install、
+        # 16.2.7 repo 安装与同批 PR #444 标注（与 NQ-02 部署轴锚定同款，
+        # 任一要素缺失即单独红）
+        queries = json.loads(read(SKILL_DIR / "evals" / "eval_queries.json"))["queries"]
+        rows = [q for q in queries if q["id"] == "NQ-01"]
+        self.assertEqual(len(rows), 1, rows)
+        note = rows[0]["note"]
+        self.assertIn("ceph-install", note, note)
+        self.assertIn("16.2.7 repo 安装", note, note)
+        self.assertIn("同批 PR #444", note, note)
+
+    def test_build_guide_handover_anchors_deployment_siblings(self):
+        # build-guide 面断言：安装验证后的边界交接段含两姊妹承接句（各腿括注其
+        # 矩阵与主承接腿标注，跨行文本按空白归一后匹配），且全文不含
+        # 「当前仓库无对应 skill」回退文案
+        guide = read(SKILL_DIR / "references" / "build-guide.md")
+        norm = " ".join(guide.split())
+        self.assertIn(
+            "MON/MGR/OSD 部署由姊妹 skill 承接—— "
+            "`ceph-ansible-deployment`（其矩阵为 Ceph 14.2.22、CentOS 7.6/openEuler 20.03，"
+            "不覆盖本 skill 的 14.2.8 产物与 22.03 路径）或 "
+            "`ceph-block-storage-deployment`（Ceph 14.2.8/16.2.7、",
+            norm)
+        self.assertIn(
+            "OS 含 openEuler 22.03；本 skill 14.2.8 自编译产物——尤其 22.03 编译路径——的部署承接",
+            norm)
+        self.assertIn(
+            "以该 skill 为主）（同批 PR #445/#446，同批交付）；"
+            "不得在本 skill 流程内混跑部署动作",
+            norm)
+        self.assertNotIn("当前仓库无对应 skill", guide)
+
+    def test_dependencies_row_anchors_ceph_install(self):
+        # Dependencies gcc/cmake 行断言：该行含 ceph-install，且降级列保留 blocked
+        # 并改为条件化转交（14.2.8 自编译 RPM 无法由 16.2.7 安装交付；仅当 OS 为
+        # openEuler 22.03 LTS SP4——ceph-install 矩阵，16.2.7 仅集成于 SP4 系统镜像
+        # 源——且用户明确接受改用 16.2.7 repo 安装时转交）
+        rows = [line for line in self._lines()
+                if line.lstrip().startswith("|") and "devtoolset-8-gcc-c++" in line
+                and "cmake" in line]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("ceph-install", rows[0], rows[0])
+        self.assertIn("blocked", rows[0], rows[0])
+        self.assertIn("14.2.8 自编译 RPM 无法由 16.2.7 安装交付", rows[0], rows[0])
+        self.assertIn("仅当 OS 为 openEuler 22.03 LTS SP4（ceph-install 矩阵，"
+                      "16.2.7 仅集成于 SP4 系统镜像源）", rows[0], rows[0])
+        self.assertIn("且用户明确接受改用 16.2.7 repo 安装时", rows[0], rows[0])
+        self.assertIn("转交 skill `ceph-install`", rows[0], rows[0])
+        self.assertIn("同批 PR #444", rows[0], rows[0])
+
+    def test_description_negative_route_updated(self):
+        # description 负例断言：description 不再含「当前仓库无对应 skill」与「规划中」
+        # （repo 安装已互指 ceph-install），且含 ceph-install 互指（OS 条件收敛为
+        # openEuler 22.03 LTS SP4——ceph-install 矩阵，16.2.7 仅集成于 SP4 系统镜像
+        # 源；description 为折叠块，跨行文本按空白归一后匹配）与同批 PR 标注
+        fm = self._frontmatter()
+        self.assertNotIn("当前仓库无对应 skill", fm)
+        self.assertNotIn("规划中", fm)
+        self.assertIn("ceph-install", fm)
+        self.assertIn(
+            "16.2.7 repo 安装（openEuler 22.03 LTS SP4，ceph-install 矩阵，"
+            "16.2.7 仅集成于 SP4 系统镜像源）→ skill `ceph-install`",
+            " ".join(fm.split()))
+        self.assertIn("同批 PR #444，同批交付", fm)
 
     def test_table_pipe_balance(self):
         lines = read(SKILL_DIR / "SKILL.md").splitlines()

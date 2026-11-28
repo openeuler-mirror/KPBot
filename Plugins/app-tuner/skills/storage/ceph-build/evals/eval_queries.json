@@ -23,13 +23,13 @@
       "id": "NQ-01",
       "prompt": "openEuler 22.03 上直接 yum 装 Ceph 16.2.7，repo 源怎么配置",
       "should_trigger": false,
-      "note": "routes to 暂无对应 skill（当前仓库无 repo 安装 skill，规划中），不触发本 skill"
+      "note": "routes to ceph-install（16.2.7 repo 安装，同批 PR #444，同批交付），不触发本 skill"
     },
     {
       "id": "NQ-02",
       "prompt": "编译完 Ceph 之后用 ceph-ansible 部署一套集群，hosts 和 group_vars 怎么配",
       "should_trigger": false,
-      "note": "routes to 暂无对应 skill（当前仓库无部署 skill，规划中），不触发本 skill"
+      "note": "routes to ceph-ansible-deployment / ceph-block-storage-deployment（集群部署，同批 PR #445/#446，同批交付），不触发本 skill"
     },
     {
       "id": "NQ-03",
