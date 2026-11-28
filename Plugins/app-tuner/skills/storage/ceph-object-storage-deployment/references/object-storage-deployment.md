@@ -415,7 +415,7 @@ unset https_proxy
 使用 Ceph 14.2.8 版本的用户，参见《Ceph 14.2.8 编译指南（CentOS 7.6&openEuler 20.03&openEuler
 22.03）》（即 skill `ceph-build` 的 `build-guide.md`）对 Ceph 进行安装；使用 Ceph 16.2.7 版本的
 用户，参见《Ceph 16.2.7 安装指南（openEuler 22.03）》（即姊妹 skill `ceph-install` 的
-`installation-guide.md`，同批姊妹 PR，同批交付）对 Ceph 进行安装。
+`installation-guide.md`，已合入，PR #444）对 Ceph 进行安装。
 
 ### 1.5.2 部署 MON 节点（仅需在主节点 ceph1 执行，需先完成 §1.4.1）
 

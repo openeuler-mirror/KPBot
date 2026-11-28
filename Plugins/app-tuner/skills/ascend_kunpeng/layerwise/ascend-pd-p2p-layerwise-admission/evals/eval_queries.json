@@ -1,0 +1,12 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-admission",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "公开版 PD 分离想开 P2P layerwise，先看哪些指标？", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "这个模型/checkout 支持 P2P layerwise 吗？", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "Store layerwise range 能不能一起用？", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "P/D 两侧 CANN 和 torch_npu 版本不一致怎么查？", "should_trigger": false, "note": "routes to kptools-ascend-pd-env" },
+    { "id": "EQ-05", "prompt": "分析 vLLM profiling trace 找热点算子", "should_trigger": false, "note": "routes to kptools-ascend-profiling-analysis" }
+  ]
+}

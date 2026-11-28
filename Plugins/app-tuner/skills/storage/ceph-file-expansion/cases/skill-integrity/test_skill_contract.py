@@ -398,15 +398,16 @@ class Round3ReviewFixTests(unittest.TestCase):
         self.assertIsNone(re.search(r"secretfile=[^,\s]*keyring", skill))
 
     def test_unmerged_siblings_annotated_with_pr(self):
-        # 修复2：未合入姊妹按「名字 + 同批 PR 编号」标注，禁止裸路由「同批姊妹 PR，同批交付」
+        # 同批姊妹已合入：仍按「名字 + 同批 PR 编号」标注（已合入态），禁止裸路由
+        # 「同批姊妹 PR，同批交付」，也不得残留合入前的降级措辞
         skill = self._skill()
         self.assertNotIn("同批姊妹 PR，同批交付", skill)
-        self.assertIn("同批 PR #446，尚未合入", skill)
-        self.assertIn("同批 PR #452，尚未合入", skill)
-        self.assertIn("同批 PR #454，尚未合入", skill)
-        self.assertIn("合入前该场景按通用流程处理并在产出中标注「未覆盖」", skill)
+        self.assertIn("同批 PR #448，已合入", skill)
+        self.assertIn("同批 PR #452，已合入", skill)
+        self.assertIn("同批 PR #454，已合入", skill)
+        self.assertNotIn("合入前该场景按通用流程处理并在产出中标注「未覆盖」", skill)
         queries = json.loads(read(SKILL_DIR / "evals" / "eval_queries.json"))
-        mapping = {"ceph-file-storage-deployment": "#446",
+        mapping = {"ceph-file-storage-deployment": "#448",
                    "ceph-block-expansion": "#452",
                    "ceph-object-expansion": "#454"}
         annotated = 0
@@ -416,9 +417,9 @@ class Round3ReviewFixTests(unittest.TestCase):
             self.assertIn("routes to", q["note"], q["id"])
             for name, pr in mapping.items():
                 if name in q["note"]:
-                    self.assertIn("同批 PR %s，尚未合入" % pr, q["note"], q["id"])
+                    self.assertIn("同批 PR %s，已合入" % pr, q["note"], q["id"])
                     annotated += 1
-        self.assertEqual(annotated, 3, "三个未合入姊妹的负例均须带 PR 标注")
+        self.assertEqual(annotated, 3, "三个姊妹负例均须带 PR 标注")
 
     def test_selinux_scope_narrowed_with_recovery(self):
         # 修复3：SELinux permissive 仅新增节点 ceph4/ceph5 执行 + 授权确认 + cp -n 备份；

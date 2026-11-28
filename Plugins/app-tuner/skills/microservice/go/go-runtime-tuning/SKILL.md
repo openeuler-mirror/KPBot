@@ -75,6 +75,7 @@ description: 当 Go 服务在容器内并行度与配额不一致、GC 频率偏
 - 唯一归属：并行度与 GC 参数只在本 skill 调整；其他组件 skill 提到 GC 时只做委派，不得给出具体值。
 - 组件分配点：字符串解码、上下文链、元信息、请求/响应结构等分配来源由对应组件专题定位（如 `kitex-allocation-hotspot-tuning`），本 skill 只根据分配速率判断"是否该调 GC"。
 - `sync.Pool` 参数与运行时补丁：分别在 `go-syncpool-optimization` 与 `go-runtime-patch-build`。
+- 缓存行争用识别：cache miss、跨核迁移或伪共享/真共享证据不在本 skill 内判断，转 `go-cacheline-optimization`。
 - 本 skill 可独立调用，不依赖 `WORKFLOW.md` 的中间产物。
 
 ## 参考

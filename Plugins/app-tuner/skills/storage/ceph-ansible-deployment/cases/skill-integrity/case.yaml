@@ -7,7 +7,7 @@
 #                  关键内容抽查（ceph-ansible、group_vars、ceph_input.xlsx/input_check.sh/install_all.sh）
 #   边界表         SKILL.md 含 ceph-parameter-tuning（已合入）与姊妹 skill ceph-block-storage-deployment、
 #                  非 ansible 扩容按存储类型路由 ceph-block-expansion / ceph-file-expansion /
-#                  ceph-object-expansion（同批姊妹 PR，同批交付）路由，表格管道平衡
+#                  ceph-object-expansion（均已合入，PR #452/#453/#454）路由，表格管道平衡
 #   安全守卫       TLS 校验保持开启（update-ca-trust，git 仅命令级绕过并 log -1 核对版本）、
 #                  供应链验签（rpm 一律 https 下载并 rpm -K 签名校验、本地 repo 一律
 #                  gpgcheck=1/repo_gpgcheck=1）、业务客户端不下发 client.admin（client.<app>

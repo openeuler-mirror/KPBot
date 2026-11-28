@@ -1,0 +1,23 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-verification",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "P2P layerwise 配置好了，怎么验证真的生效？",
+      "expected_output": "按健康检查、证据采集、唯一 prompt 触发、block 映射一致性、精度对比、失败注入的顺序验证；不能只看请求成功。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "请求返回正常，但输出和本地不一致，怎么查？",
+      "expected_output": "先查是否缺层/缺 block、indexer/tail cache 是否未传，再做同 prompt 的本地 vs PD 精度对比；必要时检查 remote_block_ids 与 transed_idx。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "远端 block 数比本地少，验证时应该看什么？",
+      "expected_output": "检查 block 映射是否越界、是否被静默跳过；应确认请求被收敛为失败/重算，而不是把缺块当成功。",
+      "files": []
+    }
+  ]
+}

@@ -17,7 +17,7 @@
       "id": "NQ-01",
       "prompt": "从零部署一套新的 Ceph 对象存储（RGW）集群",
       "should_trigger": false,
-      "note": "routes to ceph-object-storage-deployment（同批 PR #446，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」）"
+      "note": "routes to ceph-object-storage-deployment（同批 PR #447，已合入）"
     },
     {
       "id": "NQ-02",
@@ -29,13 +29,13 @@
       "id": "NQ-03",
       "prompt": "块存储扩容后怎么在 RBD 存储池创建块设备",
       "should_trigger": false,
-      "note": "routes to ceph-block-expansion（同批 PR #452，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」）"
+      "note": "routes to ceph-block-expansion（同批 PR #452，已合入）"
     },
     {
       "id": "NQ-04",
       "prompt": "Ceph 扩容后 CephFS 客户端要重新挂载吗，MDS 怎么扩",
       "should_trigger": false,
-      "note": "routes to ceph-file-expansion（同批 PR #453，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」）"
+      "note": "routes to ceph-file-expansion（同批 PR #453，已合入）"
     }
   ]
 }

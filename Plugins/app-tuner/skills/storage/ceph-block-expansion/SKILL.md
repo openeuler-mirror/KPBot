@@ -7,8 +7,8 @@ description: >
   推送、创建 Monitor 并以 ceph mon stat 验证、MGR/OSD 部署、存储池 pgnum/pgpnum 公式调整、
   添加块设备；以 ceph -s 恢复健康与 ceph osd df 容量增加收尾。当需要给现有 Ceph 集群扩容
   鲲鹏节点（块存储路径）时使用；首次部署 → 姊妹 skill `ceph-block-storage-deployment`
-  （同批 PR #446，尚未合入）；文件存储扩容 → `ceph-file-expansion`（同批 PR #453，尚未
-  合入）、对象存储扩容 → `ceph-object-expansion`（同批 PR #454，尚未合入）；运行期调优 →
+  （同批 PR #446，已合入）；文件存储扩容 → `ceph-file-expansion`（同批 PR #453，
+  已合入）、对象存储扩容 → `ceph-object-expansion`（同批 PR #454，已合入）；运行期调优 →
   skill `ceph-parameter-tuning`（已合入）；编译 → skill `ceph-build`（已合入）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）扩容节点加入 x86 集群；OS 矩阵 CentOS 7.6.1810 / RHEL 7.5；Ceph 12.2.11（扩容基线，新节点须安装与原集群同版本）+ ceph-deploy 2.0.1；NTP/crontab；扩容含删除 Monitor 等破坏性操作
@@ -36,9 +36,9 @@ pgnum/pgpnum → 创建块设备。以 `ceph -s` 数据迁移结束恢复健康�
 | 场景 | 归属 |
 |---|---|
 | 块存储扩容（鲲鹏节点加入 x86 集群：Monitor/MGR/OSD/pgnum/块设备） | **本 skill** |
-| 首次部署（ceph-deploy 手工部署块存储集群） | 姊妹 skill `ceph-block-storage-deployment`（同批 PR #446，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 文件存储扩容（MDS/CephFS 路径） | 姊妹 skill `ceph-file-expansion`（同批 PR #453，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 对象存储扩容（RGW 路径） | 姊妹 skill `ceph-object-expansion`（同批 PR #454，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
+| 首次部署（ceph-deploy 手工部署块存储集群） | 姊妹 skill `ceph-block-storage-deployment`（同批 PR #446，已合入） |
+| 文件存储扩容（MDS/CephFS 路径） | 姊妹 skill `ceph-file-expansion`（同批 PR #453，已合入） |
+| 对象存储扩容（RGW 路径） | 姊妹 skill `ceph-object-expansion`（同批 PR #454，已合入） |
 | 集群运行期参数调优 | skill `ceph-parameter-tuning`（已合入） |
 | Ceph 源码编译 | skill `ceph-build`（已合入） |
 
@@ -84,7 +84,7 @@ pgnum/pgpnum → 创建块设备。以 `ceph -s` 数据迁移结束恢复健康�
   `ceph osd df` 容量增加对比；块存储输出 rbd 块设备创建与 `rbd ls` 列举回显。
 - **回退说明**：本 skill 只覆盖扩容加入路径，OSD/RGW 等拆除、下线动作不在本 skill 范围；如需
   收缩集群参见官方 shrink/下线文档与姊妹 deployment skill `ceph-block-storage-deployment`
-  （同批 PR #446，尚未合入）的回退小节。参考内可选的删除 Monitor 步骤属破坏性操作（二次
+  （同批 PR #446，已合入）的回退小节。参考内可选的删除 Monitor 步骤属破坏性操作（二次
   确认后执行，见铁律 4）。pgnum/pgpnum 调整前原值入变更窗口台账并核准目标 PG 数：Ceph
   12.2.11 拒绝调低 pg_num，原值仅作防呆记录，不承诺用同款命令还原（见铁律 5）。环境收尾
   恢复项：SELinux 恢复 `setenforce 1` 并将 /etc/selinux/config 恢复 SELINUX=enforcing（变更
