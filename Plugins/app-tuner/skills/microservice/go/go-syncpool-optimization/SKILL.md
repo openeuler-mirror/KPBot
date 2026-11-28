@@ -119,4 +119,5 @@ description: 当 Go 服务 sync.Pool 创建/回收频繁、GC 后池被清空、
 - 不修改业务代码；需要改业务代码时交给 code-optimizer。
 - 不调整 `GOGC`、`GOMEMLIMIT` 等 GC 策略；这些属于 application-config-optimization。
 - 不定义补丁内容、不写构建/回退命令、不定义组件热点；分别由 `go-runtime-patch-build` 和组件 skill 负责。
+- 缓存行争用识别：池结构或 runtime 热路径的 cache miss、跨核迁移、伪共享/真共享转 `go-cacheline-optimization`；本 skill 只做池参数。
 - 不生成、不保存补丁原文；补丁由外部私有制品提供。

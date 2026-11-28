@@ -1,0 +1,79 @@
+{
+  "skill_name": "go-cacheline-optimization",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-cache-miss-diagnosis",
+      "prompt": "Go 服务 cache miss 很高，怎么判断是不是伪共享",
+      "should_trigger": true,
+      "note": "识别类触发词：cache miss、伪共享判断"
+    },
+    {
+      "id": "q-adjacent-fields",
+      "prompt": "多个 worker 分别更新同一个结构体的不同字段，性能上不去，是不是缓存行争用",
+      "should_trigger": true,
+      "note": "相邻字段跨核读写，需要差分诊断"
+    },
+    {
+      "id": "q-false-vs-true",
+      "prompt": "怎么区分伪共享和真共享，各自的证据是什么",
+      "should_trigger": true,
+      "note": "差分诊断是 cacheline skill 的核心入口"
+    },
+    {
+      "id": "q-field-ownership",
+      "prompt": "怎么定位哪个字段在被不同核读写，缓存行归属怎么分析",
+      "should_trigger": true,
+      "note": "字段归属映射"
+    },
+    {
+      "id": "q-worth-optimizing",
+      "prompt": "缓存行争用怎么判断值不值得优化，置信度怎么给",
+      "should_trigger": true,
+      "note": "优化点判定和置信度"
+    },
+    {
+      "id": "q-direction",
+      "prompt": "识别出伪共享后，给个大致修复方向就行",
+      "should_trigger": true,
+      "note": "识别后的方向级建议"
+    },
+    {
+      "id": "q-solution-execution",
+      "prompt": "直接帮我改代码做缓存行隔离和字段重排",
+      "should_trigger": false,
+      "note": "方案执行 → code-optimizer"
+    },
+    {
+      "id": "q-patch-code",
+      "prompt": "直接给我改好的 patch 或具体代码",
+      "should_trigger": false,
+      "note": "具体实现/补丁 → code-optimizer / go-runtime-patch-build"
+    },
+    {
+      "id": "q-syncpool",
+      "prompt": "sync.Pool 的 poolretain 怎么用",
+      "should_trigger": false,
+      "note": "池参数 → go-syncpool-optimization"
+    },
+    {
+      "id": "q-runtime-build",
+      "prompt": "Go runtime 补丁怎么在隔离目录构建并重编译服务",
+      "should_trigger": false,
+      "note": "补丁构建与重编译 → go-runtime-patch-build"
+    },
+    {
+      "id": "q-gomaxprocs",
+      "prompt": "容器里 GOMAXPROCS 设多少合适",
+      "should_trigger": false,
+      "note": "运行时参数 → go-runtime-tuning"
+    },
+    {
+      "id": "q-kitex-alloc",
+      "prompt": "Kitex 每请求为什么分配这么多",
+      "should_trigger": false,
+      "note": "组件分配点 → kitex-allocation-hotspot-tuning"
+    }
+  ]
+}

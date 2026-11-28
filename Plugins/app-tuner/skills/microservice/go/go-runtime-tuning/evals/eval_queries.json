@@ -38,6 +38,12 @@
       "prompt": "要给 Go runtime 打补丁吗",
       "should_trigger": false,
       "note": "补丁与重编译 → go-runtime-patch-build"
+    },
+    {
+      "id": "q-cacheline",
+      "prompt": "Go 服务 cache miss 高，怀疑伪共享，怎么判断",
+      "should_trigger": false,
+      "note": "缓存行争用识别 → go-cacheline-optimization"
     }
   ]
 }
