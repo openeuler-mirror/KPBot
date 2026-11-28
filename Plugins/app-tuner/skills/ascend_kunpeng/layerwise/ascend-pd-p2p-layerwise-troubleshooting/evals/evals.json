@@ -1,0 +1,23 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-troubleshooting",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "D 只发后缀 remote_block_ids，P 侧 get_transfer_mappings 报 IndexError，怎么查？",
+      "expected_output": "检查 d_block_idx 是否按 per-rank 前缀块数偏移；不要静默 continue，应收敛为失败并触发 D 侧 invalid block / 重算。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "MultiConnector 里 AscendStore 在前，Decode store hit 后出现 double-write，怎么处理？",
+      "expected_output": "检查 FirstWin ownership；losing Mooncake 不应继续接收 real blocks 或重复 metaserver 回调。给出调整连接器顺序或避免 AscendStore 赢得 load ownership 的 workaround。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "启动报 Layerwise Host offload requires compatible base-layer cache page sizes，怎么办？",
+      "expected_output": "确认 main/indexer 等非 MTP base layer 页大小是否一致；不一致时去掉 host offload，回 Mode A/B，不要改单个字段绕过。",
+      "files": []
+    }
+  ]
+}
