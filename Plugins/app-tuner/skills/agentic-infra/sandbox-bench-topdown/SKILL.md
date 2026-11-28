@@ -1,16 +1,18 @@
 ---
 name: sandbox-bench-topdown
-description: 解决 AgentENV 官方 benchmark 单项时延过短、无法采集 top-down 比例分析的问题（与 sandbox-bench-flame 同思路，采集工具换为鲲鹏 DevKit Tuner CLI 的 top-down PMU 分析）。通过 sample-size 100 + 拉长 measurement-time 把单项跑长，等基准进入计量期后用 DevKit 在指定核上采集 top-down（frontend/backend/retiring/bad-speculation），产物 top-down.tar 可用 devkit report 或 WebUI 复核。触发词：benchmark 采 top-down、topdown 比例、DevKit 采集、前端/后端瓶颈分类、短时延单项采不到 PMU 数据。本技能做 AgentENV 单项的"采集编排"；top-down 级别口径与通用质量诊断/解读走 kptools-devkit（topdown-quality-diagnosis / references/topdown-guide.md）。
+description: 解决 AgentENV 官方 benchmark 单项时延过短、无法采集 top-down 比例分析的问题（与 sandbox-bench-flame 同思路，采集工具换为鲲鹏 DevKit Tuner CLI 的 top-down PMU 分析）。通过 sample-size 100 + 拉长 measurement-time 把单项跑长，等基准进入计量期后用 DevKit 在指定核上采集 top-down（frontend/backend/retiring/bad-speculation），产物 top-down.tar 可用 devkit report 或 WebUI 复核。触发词：benchmark 采 top-down、topdown 比例、DevKit 采集、前端/后端瓶颈分类、短时延单项采不到 PMU 数据。本技能做 AgentENV 单项的"采集编排"；级别口径见 kptools-devkit 技能的 references/topdown-guide.md；通用质量诊断/审核转独立技能 topdown-quality-diagnosis；解读与优化建议转 topdown-analysis-advisor。
 ---
 
 # 沙箱官方 benchmark 短时延 → DevKit top-down 采集
 
 **核心思想**（与 `sandbox-bench-flame` 一致）：官方 benchmark 单项仅 ~30ms 量级，
-与 `kptools-devkit` 的 **topdown-quality-diagnosis**（通用 top-down 质量诊断与
-解读，含 `references/topdown-guide.md` 分类知识）划界：**本技能负责 AgentENV
-benchmark 单项的"长时化 + 采集编排"**（窗口门禁、白名单、范围化清理、产物
-核验）；级别口径（`-L 0-6`）与瓶颈分类解读引用该 guide，需要通用诊断/报告
-解读时转 kptools-devkit。
+**划界（按 skill 名定位，不用 `../` 相对路径）**：本技能负责 AgentENV
+benchmark 单项的"长时化 + 采集编排"（窗口门禁、白名单、范围化清理、产物
+核验）。级别口径（`-L 0-6`）见 **kptools-devkit** 技能的
+`references/topdown-guide.md`（源码树 `skills/kptools-devkit/references/`；
+平铺安装后 `<config>/skills/kptools-devkit/references/`）；通用质量诊断/审核
+转独立技能 **topdown-quality-diagnosis**；解读与优化建议转独立技能
+**topdown-analysis-advisor**。
 
 PMU 采集窗口不够。先把单项**长时化**——`--sample-size 100`（样本数固定）+
 `--measurement-time` 拉长（如 120s），让计量期足够长；等基准进入计量期后，
@@ -30,7 +32,7 @@ DevKit 原生支持 `-c` 指定核、`-p` PID、`-G` cgroup 范围化采集。
 | 采集范围授权 | top-down 按指定的 `-c` 核范围采集，不采整机；但共享主机上仍须确认所选核在采集窗内承载本轮负载（或为本轮专用），以及 PMU 访问权限（devkit 需要 perf 权限） | **必须确认**；所选核承载他人负载时换核或停止 |
 | 绑核范围 | benchmark 与采集共用同一核集合：48 个连续核；内存侧 `MEMBIND`（NUMA 节点） | 核默认 `47-94`，MEMBIND 默认 `2`，均可环境变量覆盖 |
 | 计量时长 | 拉长后的 measurement 秒数 | 默认 120s（保证采集窗落在忙期内） |
-| 采集参数 | top-down 采集时长 `TD_SEC`（默认 10s）、分析层级 `TD_LEVEL`（`-L 0-6`，**默认 1**=四分类 Retiring/Frontend/Backend/Bad-Speculation；2=Core Bound 子类、3=Memory Bound 子类，口径详见 ../kptools-devkit/references/topdown-guide.md） | 可环境变量覆盖；语义见 DevKit 官方文档 |
+| 采集参数 | top-down 采集时长 `TD_SEC`（默认 10s）、分析层级 `TD_LEVEL`（`-L 0-6`，**默认 1**=四分类 Retiring/Frontend/Backend/Bad-Speculation；2=Core Bound 子类、3=Memory Bound 子类，口径见 kptools-devkit 技能 references/topdown-guide.md） | 可环境变量覆盖；语义见 DevKit 官方文档 |
 | 路径参数 | `AENV_ROOT` / `DEVKIT_BIN` / `WORK_ROOT` / `AENV_RUN_USER` / `AENV_HOME_PATH` / `AENV_RUNTIME_PATH` / `AENV_CONFIG_PATH` | 缺省见 §1；`DEVKIT_BIN` 与 `AENV_CONFIG_PATH` **必填**（自动探测失败即停），启动前逐一校验 |
 
 ## 1. 路径输入（缺省 `$HOME` 相对；换机作为输入提供，勿硬编码绝对路径）
@@ -90,15 +92,15 @@ BIN=$(ls -t target/release/deps/snapshot-* 2>/dev/null | grep -v '\.d$' | head -
 [ -n "$BIN" ] && [ -x "$BIN" ] || { echo "[err] bench binary not found"; exit 1; }
 BIN="$AENV_ROOT/${BIN#./}"                            # 绝对路径，供精确进程核对
 
-# 范围化清理：仅终止 cmdline 同时含本 BIN 绝对路径与本项精确过滤器的进程
-LEFT=0
+# 冲突检测：同账号同项同二进制已有进程在跑 → 拒绝启动（不做跨轮清理——
+# 另一轮可能正是他人/另一目录在跑的合法任务，只能提示冲突，不能杀）
 for pid in $(pgrep -u "$(id -u)" -f "snapshot-" || true); do
   CMD=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
   if [[ "$CMD" == *"$BIN"* && "$CMD" == *"--bench ^${BENCH}$"* ]]; then
-    kill -9 "$pid" && LEFT=$((LEFT + 1))
+    echo "[err] 检测到同项基准正在运行（pid $pid，匹配本 BIN + 过滤器）——拒绝启动；请先结束该轮再试"
+    exit 1
   fi
 done
-[ "$LEFT" -gt 0 ] && { echo "== 清理本项旧残留 $LEFT 个"; sleep 2; }
 
 echo "== bin=$BIN cores=$CORES membind=$MEMBIND samples=100 measure=${MEAS_SEC}s"
 
@@ -120,6 +122,7 @@ exit "${PIPESTATUS[0]}"
 - `--sample-size 100 --measurement-time 120`：**样本数固定、时长拉长**——这是"时延短采不到 PMU"的核心解法
 - `DIR` 在任何 `cd` 之前解析为绝对路径；启动即写 `runner.pgid`，收尾只对本轮进程组发信号
 - 所有机器相关变量均为 `${VAR:-缺省}` 可覆盖形式，与 §0 输入契约一致
+- **不做跨轮进程清理**：启动前只做冲突检测（同 BIN+过滤器在跑即拒绝启动）；清理仅限本轮 `runner.pgid` 进程组
 - concurrent_* 项可加 `AENV_BENCH_CONCURRENCY=<n>` 调并发
 
 ## 3. 自动生成脚本二：`capture_topdown.sh`（等计量期 → DevKit 采集）
@@ -140,44 +143,77 @@ case "$BENCH" in
   *) echo "[err] 非法 benchmark 名: $BENCH"; exit 2 ;;
 esac
 CORES="${CORES:-47-94}"
-TD_SEC="${TD_SEC:-10}"               # top-down 采集时长，须罩住计量忙期内的稳态段
+MEAS_SEC="${MEAS_SEC:-120}"          # 计量窗兜底口径（Collecting 行解析失败时使用）
+TD_SEC="${TD_SEC:-10}"               # top-down 采集时长，必须完整落在剩余计量窗内
 TD_LEVEL="${TD_LEVEL:-1}"            # -L 1=四分类；2/3=Backend 子类深挖，口径见 kptools-devkit topdown-guide
 DEVKIT_BIN="${DEVKIT_BIN:-}"
+CHECKER="${CHECK_BENCH_PHASE:-}"     # 本技能 scripts/check_bench_phase.py 绝对路径（生成脚本时由 agent 填入）
 LOG="$DIR/bench-run.log"
 TD_LOG="$DIR/devkit-topdown.log"
-PGID="$(cat "$DIR/runner.pgid" 2>/dev/null || true)"
 
-[ -n "$PGID" ] || { echo "[err] 缺 runner.pgid（基准未按本流程启动，拒绝采集）"; exit 1; }
+# 0) 限时等待本轮 runner 写好进程组号（后台启动与读取有竞态），同时检查启动是否失败；
+#    超时即清理本轮并退出——不留孤儿基准
+PGID=""
+for i in $(seq 1 15); do
+  PGID="$(cat "$DIR/runner.pgid" 2>/dev/null || true)"
+  [ -n "$PGID" ] && break
+  grep -q "\[err\]" "$DIR/runner.out" 2>/dev/null && break
+  sleep 2
+done
+grep -q "\[err\]" "$DIR/runner.out" 2>/dev/null && { echo "[err] 基准启动失败（见 runner.out）"; exit 1; }
+[ -n "$PGID" ] || { echo "[err] 30s 内未见 runner.pgid（启动异常？）"; exit 1; }
+
 if [ -z "$DEVKIT_BIN" ]; then
   DEVKIT_BIN=$(ls -t "$HOME"/devkit-tuner*/DevKit-Tuner-CLI-*/devkit 2>/dev/null | head -1 || true)
 fi
 [ -n "$DEVKIT_BIN" ] && [ -x "$DEVKIT_BIN" ] || { echo "[err] 需提供可执行的 DEVKIT_BIN=<devkit 路径>"; exit 1; }
+[ -n "$CHECKER" ] && [ -f "$CHECKER" ] || { echo "[err] 需提供 CHECK_BENCH_PHASE=<本技能 scripts/check_bench_phase.py 路径>"; exit 1; }
 
-# 1) 等目标项进入计量期：Benchmarking <BENCH>（行尾锚定，防前缀变体）之后出现 "Collecting N samples"
-#    进度行（criterion 计量进行中的标准输出，不依赖 PRINT_SAMPLES；最终报告的
-#    time: 行出现在测量结束后，不能作门禁）。基准退出或 120s 超时立即失败。
+# 1) 等目标项进入计量期——门禁唯一实现在 scripts/check_bench_phase.py（顺序解析：
+#    Benchmarking 行切换"当前项"，Collecting 只在当前项==目标项时计入，防他项
+#    Collecting 先行出现误判；行尾锚定防前缀变体）。退出码契约：0=measuring、
+#    1=尚未进入、2=输入缺失。基准退出或 120s 超时立即失败。
 ok=0
 for i in $(seq 1 60); do
-  if grep -qE "Benchmarking ${BENCH}[[:space:]]*$" "$LOG" 2>/dev/null \
-      && grep -Eq "Collecting [0-9]+ samples" "$LOG" 2>/dev/null; then
-    ok=1; break
-  fi
+  set +e; OUT=$(python3 "$CHECKER" "$LOG" --bench "$BENCH" 2>/dev/null); RC=$?; set -e
+  [ "$RC" = 0 ] && { ok=1; TS_COLLECT=$(date +%s); break; }
+  [ "$RC" = 2 ] && { echo "[err] 基准日志缺失/不可读"; exit 1; }
   kill -0 "$PGID" 2>/dev/null || { echo "[err] 基准进程已退出且未见计量期"; exit 1; }
   sleep 2
 done
 [ "$ok" = 1 ] || { echo "[err] 120s 内 ${BENCH} 未进入计量阶段，放弃采集"; exit 1; }
-sleep 5    # Collecting 出现即 warm-up 已完成、计量进行中，稍候落入稳态
 kill -0 "$PGID" 2>/dev/null || { echo "[err] 采集前基准已退出"; exit 1; }
 
-# 2) DevKit top-down 采集：范围即 -c 所选核（已按 §0 确认归本轮）；在 $DIR 下
+# 2) 计量窗校验：剩余计量时间 = 估计时长 -（现在 - Collecting 出现时刻）；
+#    TD_SEC 超出剩余窗则拒绝采集（否则空闲期计入瓶颈比例）
+EST_SEC=$(python3 -c "import json,sys;print(json.loads(sys.argv[1]).get('est_sec') or 0)" "$OUT" 2>/dev/null || echo 0)
+[ "$EST_SEC" -gt 0 ] || EST_SEC=$MEAS_SEC
+TS_NOW=$(date +%s)
+REMAIN=$(( EST_SEC - (TS_NOW - TS_COLLECT) ))
+if [ "$TD_SEC" -gt "$REMAIN" ]; then
+  echo "[err] TD_SEC=${TD_SEC}s 超出剩余计量窗 ${REMAIN}s（est=${EST_SEC}s）——拒绝采集，避免空闲期污染比例"
+  exit 1
+fi
+
+# 3) DevKit top-down 采集：范围即 -c 所选核（已按 §0 确认归本轮）；在 $DIR 下
 #    运行使产物（top-down.tar 等）落在本轮目录
+TS_START=$(date +%s)
 ( cd "$DIR" && "$DEVKIT_BIN" tuner top-down -c "$CORES" -d "$TD_SEC" -L "$TD_LEVEL" ) 2>&1 | tee "$TD_LOG"
+TS_END=$(date +%s)
 [ -s "$TD_LOG" ] || { echo "[err] devkit 日志为空"; exit 1; }
 
-# 3) 产物核验：top-down.tar（或任务 tar 产物）应出现在 $DIR
-TAR=$(ls -t "$DIR"/top-down.tar "$DIR"/*.tar 2>/dev/null | head -1 || true)
+# 4) 采集终点越出计量窗（实际耗时超预算）→ 产物标记无效
+if [ $(( TS_END - TS_COLLECT )) -gt "$EST_SEC" ]; then
+  TAR=$(ls -t "$DIR"/top-down.tar "$DIR"/*.tar 2>/dev/null | head -1 || true)
+  [ -n "$TAR" ] && mv "$TAR" "${TAR}.invalid-window"
+  echo "[err] 采集终点越出计量窗（起点+${TD_SEC}s 预算、实际止于 $(( TS_END - TS_COLLECT ))s > est ${EST_SEC}s），产物已标记无效"
+  exit 1
+fi
+
+# 5) 产物核验：top-down.tar（或任务 tar 产物）应出现在 $DIR
+TAR=$(ls -t "$DIR"/top-down.tar "$DIR"/*.tar 2>/dev/null | grep -v '.invalid-window$' | head -1 || true)
 [ -n "$TAR" ] && [ -s "$TAR" ] || { echo "[err] 缺 top-down.tar 产物"; exit 1; }
-echo "OK: top-down 产物 $TAR（devkit report 或 WebUI 可复核）"
+echo "OK: top-down 产物 $TAR（devkit report 或 WebUI 可复核）；窗口校验通过（est=${EST_SEC}s，采集 ${TD_SEC}s）"
 ```
 
 ## 4. 执行流程
@@ -190,6 +226,7 @@ mkdir -p "$DIR" && cd "$DIR"
 # 写入 bench_run.sh / capture_topdown.sh 后：
 chmod +x bench_run.sh capture_topdown.sh
 export AENV_CONFIG_PATH=<对齐配置 toml>
+export CHECK_BENCH_PHASE=<本技能 scripts/check_bench_phase.py 绝对路径>   # 门禁唯一实现，模板直接调用
 [ -n "${DEVKIT_BIN:-}" ] || export DEVKIT_BIN=<devkit 路径>   # 留空则脚本自动探测
 setsid nohup ./bench_run.sh > runner.out 2>&1 < /dev/null &   # setsid：独立进程组，号已记入 runner.pgid
 ./capture_topdown.sh                                          # 前台：等计量期 + DevKit 采集 + 产物核验
@@ -207,7 +244,8 @@ ls /sys/class/ublk-char | wc -l             # ublk 残留检查
 benchmark: <名> | 采集: devkit tuner top-down -c <核> -d <秒> -L <层级>
 top-down: <DIR>/top-down.tar（devkit report 或 WebUI 导入复核；-L 1 四分类
           Retiring / Frontend Bound / Backend Bound / Bad Speculation，
-          口径与解读见 ../kptools-devkit/references/topdown-guide.md）
+          口径见 kptools-devkit 技能的 references/topdown-guide.md，
+          通用诊断/审核转 topdown-quality-diagnosis，解读转 topdown-analysis-advisor）
 采集日志: <DIR>/devkit-topdown.log
 基准日志: <DIR>/bench-run.log
 瓶颈分流: 比例指向 frontend 瓶颈 → 指令取指/分支预测方向；
@@ -224,9 +262,7 @@ top-down: <DIR>/top-down.tar（devkit report 或 WebUI 导入复核；-L 1 四�
 3. **采集核范围**：benchmark 绑核与 `-c` 采集核保持同一集合；共享主机上确认所选核
    归本轮（devkit 原生 `-p`/`-G` 亦可作更细的范围化）
 4. **PMU 权限**：devkit 依赖 perf 权限，权限不足会非零退出（脚本即失败，不产出）
-5. **二进制名带哈希会变，且旧哈希残留**：`ls -t` 按 mtime 取最新
-6. **进程清理只按本轮范围**：残留清理校验 cmdline 含 BIN 绝对路径 + 本项过滤器；
-   收尾只 kill 本轮 PGID
-7. **其他分析任务**：`devkit tuner` 还有 hotspot / miss / memory / numafast /
+5. **进程清理只按本轮范围**：启动前是冲突检测（发现同项在跑即拒绝，绝不杀他人/他轮）；收尾只 kill 本轮 PGID
+6. **其他分析任务**：`devkit tuner` 还有 hotspot / miss / memory / numafast /
    hpc-perf / roofline / turbostat 等子任务（参数语义见官方文档），本技能的
    长时化+门禁骨架同样适用，替换 `tuner top-down` 子命令与产物核验即可

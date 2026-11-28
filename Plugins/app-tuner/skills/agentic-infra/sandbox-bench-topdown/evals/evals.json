@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "snapshot_creation 单项太短，想采 top-down 比例分析瓶颈类型，怎么弄？",
-      "expected_output": "指向本技能：sample-size 100 + 拉长 measurement-time 长时化，等 Benchmarking + Collecting 进度行确认进入计量期，再用 DevKit tuner top-down -c <绑核> 采集，top-down.tar 复核；要调用栈火焰图则转 sandbox-bench-flame。",
+      "expected_output": "指向本技能：sample-size 100 + 拉长 measurement-time 长时化，等 Benchmarking + Collecting 进度行确认进入计量期，再用 DevKit tuner top-down -c <绑核> 采集，top-down.tar 复核；要调用栈火焰图转 sandbox-bench-flame；通用质量诊断/审核转 topdown-quality-diagnosis；解读与优化建议转 topdown-analysis-advisor。",
       "files": [],
       "expectations": [
         "先长时化再采集（窗口落在忙期）",
