@@ -1,0 +1,15 @@
+{
+  "skill_name": "flink-velox-quick-verify",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "q-quick-semantics", "prompt": "改完下推表达式先快速校验这一侧语义对不对", "should_trigger": true, "note": "场景入口类触发词：快速语义校验、单侧验证" },
+    { "id": "q-reference-model", "prompt": "用参考模型 ground-truth 对比 Flink 打印输出的差异", "should_trigger": true, "note": "验证协议类触发词：参考模型对比、print 捕获对比" },
+    { "id": "q-field-attribution", "prompt": "输出不一致，字段级归因看是哪一列错了", "should_trigger": true, "note": "归因类触发词：字段级归因、点名出错表达式" },
+    { "id": "q-datetime-functions", "prompt": "校验 DAYOFWEEK WEEK QUARTER 这些时间函数的语义", "should_trigger": true, "note": "场景触发词：时间函数校验、DAYOFWEEK 校验（datetime-expr 场景）" },
+    { "id": "q-dual-run", "prompt": "同一 SQL 双栈双跑做等价性对比", "should_trigger": false, "note": "两侧等价性裁决 → flink-velox-e2e-verify；本 skill 是单侧+参考模型" },
+    { "id": "q-nexmark-throughput", "prompt": "跑 nexmark 吞吐基准测加速比", "should_trigger": false, "note": "吞吐基准 → flink-velox-performance-verify" },
+    { "id": "q-switch-stack", "prompt": "重启集群切换到 GlutenFlink 构建再验证", "should_trigger": false, "note": "切栈/重启 → 调用方或 flink-velox-cluster-switch；本 skill 不动 conf 不切栈" },
+    { "id": "q-profile-bottleneck", "prompt": "作业跑得慢，定位热点算子", "should_trigger": false, "note": "瓶颈定位 → profiling 类 skill" }
+  ]
+}

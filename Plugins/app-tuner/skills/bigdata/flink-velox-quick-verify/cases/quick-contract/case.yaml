@@ -1,0 +1,11 @@
+name: quick-contract
+skill: flink-velox-quick-verify
+tier: A
+entrypoint: ["python3", "cases/quick-contract/run.py"]
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
