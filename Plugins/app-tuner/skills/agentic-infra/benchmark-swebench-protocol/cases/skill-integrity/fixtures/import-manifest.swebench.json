@@ -1,0 +1,18 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "swebench",
+ "cases": [
+  {"case_id": "swebench_01_invalid_url_check", "image": "agbench-swebench_01_invalid_url_check:v1", "steps": 32, "exec": 27, "read": 2, "write": 0, "edit": 1, "apply_patch": 0, "tokens_total": 604006, "think_time": 87.8, "skipped": "无"},
+  {"case_id": "swebench_02_empty_blueprint_name", "image": "agbench-swebench_02_empty_blueprint_name:v1", "steps": 27, "exec": 17, "read": 3, "write": 4, "edit": 1, "apply_patch": 0, "tokens_total": 582815, "think_time": 70.3, "skipped": "无"},
+  {"case_id": "swebench_03_get_content_length", "image": "agbench-swebench_03_get_content_length:v1", "steps": 40, "exec": 33, "read": 2, "write": 0, "edit": 3, "apply_patch": 0, "tokens_total": 657765, "think_time": 107.4, "skipped": "无"}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py + image-build/agbench (build/import) argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "build_cli": ["--agbenchmark-root", "--base-image", "--benchmarks", "--cases", "--context-root", "--docker", "--dry-run", "--jdk-path", "--manifest"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}
