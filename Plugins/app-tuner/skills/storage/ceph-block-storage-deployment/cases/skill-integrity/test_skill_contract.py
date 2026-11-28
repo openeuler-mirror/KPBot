@@ -214,16 +214,21 @@ class SafetyGuardTests(unittest.TestCase):
 
 class BoundaryTests(unittest.TestCase):
     def test_boundary_routes_to_siblings(self):
-        # 姊妹 skill 尚未合入：路由必须带「同批 PR 编号 + 尚未合入 + 未覆盖」标注，
-        # 不得裸断言未合入名（合入前按通用流程处理并在产出中标注「未覆盖」）
+        # 姊妹 skill 已合入：路由仍带「同批 PR 编号 + 已合入」标注，并保留依赖缺失时
+        # 标注「未覆盖」的降级口径
         text = read(SKILL_DIR / "SKILL.md")
         for sibling, pr in (("ceph-ansible-deployment", "同批 PR #445"),
                             ("ceph-object-storage-deployment", "同批 PR #447"),
                             ("ceph-file-storage-deployment", "同批 PR #448")):
             self.assertIn(sibling, text, sibling)
             self.assertIn(pr, text, sibling)
-        self.assertIn("尚未合入", text)
+        self.assertIn("已合入", text)
         self.assertIn("未覆盖", text)
+        # python 缺失降级口径：先补齐解释器，矩阵匹配且用户接受才转交，否则 blocked
+        self.assertIn("缺失时先补齐解释器", text)
+        self.assertIn("仅当 OS 为其矩阵内", text)
+        self.assertIn("否则 ceph-deploy 路径标 blocked", text)
+        self.assertIn("不得以转交替代补齐依赖", text)
 
     def test_table_pipe_balance(self):
         lines = read(SKILL_DIR / "SKILL.md").splitlines()

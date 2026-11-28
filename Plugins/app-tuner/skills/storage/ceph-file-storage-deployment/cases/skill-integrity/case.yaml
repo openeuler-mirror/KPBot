@@ -20,7 +20,7 @@
 #                  （不对 admin keyring 授持久 ACL，含 ACL 与身份回收）、ceph-deploy 固定
 #                  v2.1.0 tag + rev-parse 台账核对 + 隔离 venv 安装（无免校验 github clone）
 #   边界表         SKILL.md 含姊妹 skill ceph-object-storage-deployment /
-#                  ceph-block-storage-deployment / ceph-ansible-deployment（同批姊妹 PR，同批交付）
+#                  ceph-block-storage-deployment / ceph-ansible-deployment（均已合入，PR #447/#446/#445）
 #                  路由，表格管道平衡
 #   evals 契约     evals.json（CFS-E 前缀、expectations 全中文、禁乱码、禁命令注入模式）、
 #                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to）

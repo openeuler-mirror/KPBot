@@ -1,0 +1,19 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "vitabench",
+ "cases": [
+  {"case_id": "vitabench_01_ota_hotel_booking", "image": "agbench-vitabench_01_ota_hotel_booking:v1", "steps": 40, "exec": 37, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 1560531, "think_time": 100.3, "skipped": "无"},
+  {"case_id": "vitabench_02_delivery_rice_noodles", "image": "agbench-vitabench_02_delivery_rice_noodles:v1", "steps": 52, "exec": 50, "read": 0, "write": 0, "edit": 0, "apply_patch": 0, "tokens_total": 1655751, "think_time": 188.4, "skipped": "无"},
+  {"case_id": "vitabench_03_instore_gym_search", "image": "agbench-vitabench_03_instore_gym_search:v1", "steps": 46, "exec": 44, "read": 0, "write": 0, "edit": 0, "apply_patch": 0, "tokens_total": 1445894, "think_time": 138.7, "skipped": "无"},
+  {"case_id": "vitabench_04_redis_session_store", "image": "agbench-vitabench_04_redis_session_store:v1", "steps": 37, "exec": 32, "read": 0, "write": 2, "edit": 1, "apply_patch": 0, "tokens_total": 1528006, "think_time": 207.3, "skipped": "无"}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py + image-build/agbench (build/import) argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "build_cli": ["--agbenchmark-root", "--base-image", "--benchmarks", "--cases", "--context-root", "--docker", "--dry-run", "--jdk-path", "--manifest"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}

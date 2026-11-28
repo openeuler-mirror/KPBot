@@ -1,0 +1,79 @@
+{
+ "skill_name": "mysql-hotspot-analysis",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "CPU 打满但 TPS 不涨，mysqld 里 ut_delay/自旋很高，怎么归因？不要执行命令。",
+   "expected_output": "这是自旋/锁竞争形态：ut_delay 是 InnoDB mutex/rw_lock 争用的忙等；用 SHOW ENGINE INNODB STATUS 的 mutex summary、performance_schema waits_summary 确认热点锁（如 lock_sys、index_tree、log mutex）。杠杆按场景：调 innodb_thread_concurrency/自旋参数、拆 buffer pool instances、降低热点索引并发，或走 mysql-source-optimization 的锁优化补丁；确认不是客户端瓶颈后再动手。",
+   "files": [
+    "references/innodb-waits-and-locks.md",
+    "references/scenario-hotspots.md"
+   ],
+   "expectations": [
+    "识别 ut_delay 为自旋忙等",
+    "提到 mutex summary 或 waits_summary 定位",
+    "给出至少两类杠杆方向",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "profiling 采集前要固定哪些条件？为什么？不要执行命令。",
+   "expected_output": "先固定场景（point/ro/rw/wo）、并发、数据集与轮次，确认处于稳态窗口（避开 prepare/预热）；记录 mysqld 版本/线程、确认调试符号与 perf 权限。不固定场景会把不同热点混在一份数据里（例如把建连、冷读、刷脏混入稳态样本），归因完全失真。",
+   "files": [
+    "references/profiling-playbook.md"
+   ],
+   "expectations": [
+    "列出场景/并发/数据集/稳态窗口",
+    "提到调试符号与权限",
+    "解释不固定的后果",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "写场景 P99 抖动、iostat util 高，怎么区分是刷脏、组提交还是锁？不要执行命令。",
+   "expected_output": "分层取证：SHOW ENGINE INNODB STATUS 看脏页数/LSN 差/checkpoint 距离判刷脏积压；mysqlbinlog/组提交统计与 sync_binlog、innodb_flush_log_at_trx_commit 判 fsync 提交路径；performance_schema 锁等待判 lock_sys/行锁。perf off-CPU 看等待点落在 page_cleaner/io_submit/log_writer 还是 futex；按 scenario-hotspots 的写场景画像交叉验证。",
+   "files": [
+    "references/scenario-hotspots.md",
+    "references/innodb-waits-and-locks.md"
+   ],
+   "expectations": [
+    "给出刷脏/提交/锁三类判据",
+    "提到 off-CPU 或等待事件区分",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "Topdown/PMU 指标怎么和 MySQL 现象结合？什么时候用？不要执行命令。",
+   "expected_output": "当 CPU 饱和但 on-CPU 火焰图解释不了差距时用 Topdown/PMU：Retiring 高=指令效率问题（做太多工作/重复计算），collation/排序键生成慢归此类（Core Bound、指令多，查 my_strnxfrm/解码路径），不能答成 Retiring 低；Back-End+Memory Bound 高=访存（cache miss，查 B+Tree/随机页）；Front-End Bound 高=取指/解码/i-cache（代码体积/LTO/PGO）；自旋多=Retiring 高但无效工作（降争用）。核间同步/atomic 高不在本 reference 的判读项中，不作为标准答案。采集用 perf stat/devkit，与场景热点对应，指标只做归因佐证不做唯一定论。",
+   "files": [
+    "references/topdown-and-pmu.md"
+   ],
+   "expectations": [
+    "说明 Topdown 的使用时机",
+    "collation/排序键生成慢对应 Retiring 高/Core Bound、指令多（不能说 Retiring 低）",
+    "对应到 MySQL 至少两类其它路径（如 B+Tree→Memory Bound、Front-End→代码体积/i-cache）",
+    "提到指标作为佐证而非唯一定论",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "off-CPU 什么时候必须采？和 on-CPU 火焰图怎么配合？不要执行命令。",
+   "expected_output": "TPS/QPS 上不去但 CPU 不满（<60%）时必须看 off-CPU：线程在等 IO/锁/网络而非计算。on-CPU 火焰图找计算热点（自旋/比较/拷贝），off-CPU 找阻塞点（fsync、futex、io_submit、network read）。两者同窗口配合：on-CPU 解释算得慢，off-CPU 解释等得久；bcc 的 offcputime 或内核栈采样，输出等待时长加权火焰图。",
+   "files": [
+    "references/profiling-playbook.md"
+   ],
+   "expectations": [
+    "给出 off-CPU 的触发条件",
+    "说明两者各自解释什么",
+    "提到 offcputime/等待加权",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

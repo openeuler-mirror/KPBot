@@ -1,0 +1,12 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-config",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "公开版 P2P layerwise 的 Mode A 配置怎么写？", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "检查这个 Mode A MultiConnector JSON 是否合法", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "Store use_layerwise=true 能不能用于 P2P layerwise？", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "启动后 IndexError 怎么排查？", "should_trigger": false, "note": "routes to troubleshoot" },
+    { "id": "EQ-05", "prompt": "P/D 环境版本是否一致？", "should_trigger": false, "note": "routes to kptools-ascend-pd-env" }
+  ]
+}

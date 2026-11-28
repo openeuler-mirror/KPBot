@@ -1,0 +1,12 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-verification",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    { "id": "EQ-01", "prompt": "怎么验证 P2P layerwise 是否生效？", "should_trigger": true },
+    { "id": "EQ-02", "prompt": "请求成功但输出不对，怀疑 KV 不完整", "should_trigger": true },
+    { "id": "EQ-03", "prompt": "帮我做一次 layerwise 失败注入验证", "should_trigger": true },
+    { "id": "EQ-04", "prompt": "P2P layerwise 配置怎么写？", "should_trigger": false, "note": "routes to config" },
+    { "id": "EQ-05", "prompt": "分析 NPU profiling trace", "should_trigger": false, "note": "routes to profiling-analysis" }
+  ]
+}

@@ -5,9 +5,9 @@
 #                  metadata.domain=distributed_storage、license 对齐域内惯例 MulanPSL-2.0）
 #   引用完整性     references/file-expansion.md 存在，含 "来源 + 文档版本 07" 标注，
 #                  关键内容抽查（鲲鹏节点加入 x86 集群、文件存储扩容路径、ceph osd df 容量验证）
-#   边界表         SKILL.md 含姊妹 skill ceph-file-storage-deployment（同批 PR #446，
-#                  尚未合入）、ceph-block-expansion（同批 PR #452，尚未合入）/
-#                  ceph-object-expansion（同批 PR #454，尚未合入）与
+#   边界表         SKILL.md 含姊妹 skill ceph-file-storage-deployment（同批 PR #448，
+#                  已合入）、ceph-block-expansion（同批 PR #452，已合入）/
+#                  ceph-object-expansion（同批 PR #454，已合入）与
 #                  ceph-parameter-tuning / ceph-build（已合入）路由，表格管道平衡
 #   单路径守卫     不含块/对象存储扩容章节标题与两路径专属命令事实（rgw/rbd 等），
 #                  无私网示例 IP 字面量（仅允许 RFC 5737 文档保留地址）

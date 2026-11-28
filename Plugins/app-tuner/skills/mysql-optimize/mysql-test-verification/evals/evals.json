@@ -1,0 +1,78 @@
+{
+ "skill_name": "mysql-test-verification",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "MTR 怎么跑单个用例？失败后怎么定位？不要执行命令。",
+   "expected_output": "进入源码 mysql-test 目录、非 root 用户：perl mysql-test-run.pl t/example.test（或 --do-test 模糊匹配；--suite 选 suite）。失败定位：看 var/log/mysqltest 的 diff 与 reject 文件、error log、是否已有 .result 需要更新（先复核语义再 mysql-test-run.pl --record）；偶发失败先复跑确认，环境类失败核对端口/残留实例；用 mtr.add_suppression 处理已知告警。",
+   "files": [
+    "references/functional-and-mtr.md"
+   ],
+   "expectations": [
+    "给出单用例/单 suite 运行方式",
+    "提到 reject/diff 与 --record 的关系",
+    "提到 add_suppression 或偶发复跑",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "sysbench 四个场景各自压什么？指标怎么读才不被坑？不要执行命令。",
+   "expected_output": "Point（oltp_read_only --range_selects=0 --skip-trx=1）压主键等值与 prepare/网络路径；RO 含 range/order/distinct；RW 混合读写含组提交与锁；WO 纯写压刷脏/redo/binlog。读 events per second（QPS/TPS 口径分开）、P95/99；--report-interval=1 观察稳态；prepare 数据集固定（64t_1000w 或 20t_100w）、预热 600s 级、≥3 轮取均值；客户端 CPU 打满会掩盖服务端差异。",
+   "files": [
+    "references/sysbench-harness.md"
+   ],
+   "expectations": [
+    "区分四场景各自压的路径",
+    "提到数据集/预热/轮次纪律",
+    "提到客户端瓶颈判别",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "A/B 对比怎么判定有效？噪声怎么处理？不要执行命令。",
+   "expected_output": "同口径：同一数据集（md5 记录）、同并发、同轮次（≥3）、同机器与网络；基线/候选只差一个变量。判定用均值差与轮间波动：波动 <5% 时差异 >5% 才可判实质变化；波动大先加轮次或查环境（频率/中断/邻居）。报告记录每轮原始值、环境与二进制 md5；负收益也要归档，不能只留正结果。",
+   "files": [
+    "references/ab-protocol-and-metrics.md"
+   ],
+   "expectations": [
+    "说明单变量与同口径前提",
+    "给出波动/差异阈值判据",
+    "提到负结果归档",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "优化后功能冒烟至少做哪些？为什么不能只看 TPS？不要执行命令。",
+   "expected_output": "连接与版本核对、基础视图（information_schema）、关键参数与状态（SHOW VARIABLES/STATUS）、只读查询正确性、写入验证在隔离库做插入/更新/回滚并自动清理（smoke_test.sh --write-test）。TPS 正常不代表语义正确：优化可能破坏 collation、可见性、提交顺序，必须 MTR + 冒烟 + 数据回读对账一起过，读写类补丁还要加复制/崩溃恢复用例。",
+   "files": [
+    "SKILL.md",
+    "scripts/smoke_test.sh"
+   ],
+   "expectations": [
+    "列出冒烟清单项目",
+    "解释为什么 TPS 不能证明正确性",
+    "提到隔离库写入验证",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "sysbench prepare 和预热为什么不能省？各占多久？不要执行命令。",
+   "expected_output": "prepare 建表与灌数（64t_1000w 约小时级、20t_100w 约 20 分钟级），完成后 ANALYZE TABLE 让优化器统计准确。预热让 Buffer Pool 装入热点页、稳定脏页与统计，约 600s 或 2-3 个压测窗口；跳过预热首轮冷读会把 P95 拉爆，误判成回退。",
+   "files": [
+    "references/sysbench-harness.md"
+   ],
+   "expectations": [
+    "说明 prepare 建数据与 ANALYZE TABLE",
+    "给出预热时长量级",
+    "解释冷启动误判",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

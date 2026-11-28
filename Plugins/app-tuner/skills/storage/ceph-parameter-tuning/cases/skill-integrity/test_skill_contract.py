@@ -333,6 +333,52 @@ class BoundaryTests(unittest.TestCase):
             self.assertNotIn("99-ceph-tuning.conf", text, rel)
 
 
+class PhantomRouteFixTests(unittest.TestCase):
+    """PR 487 检视意见闭环守卫：幻影路由 ceph-deployment-installation 修复补钉。
+
+    四钉——① 边界表部署行锚定（四部署姊妹 skill 名 + 同批 PR #445/#446/#447/#448）、
+    ② 边界表 repo 安装行锚定（ceph-install）、③ 幻影 skill 名全文禁入、
+    ④ eval_queries NQ-01 note 含 ceph-install；任一钉单独红。"""
+
+    def _lines(self):
+        return read(SKILL_DIR / "SKILL.md").splitlines()
+
+    def test_boundary_row_anchors_four_deployment_siblings(self):
+        # 钉①：含「| Ceph 集群部署」前缀的行内含四个部署姊妹 skill 名与
+        # 同批 PR #445/#446/#447/#448 标注
+        rows = [line for line in self._lines()
+                if line.strip().startswith("| Ceph 集群部署")]
+        self.assertEqual(len(rows), 1, rows)
+        for sibling in ("ceph-ansible-deployment", "ceph-block-storage-deployment",
+                        "ceph-object-storage-deployment", "ceph-file-storage-deployment"):
+            self.assertIn(sibling, rows[0], sibling)
+        for pr in ("#445", "#446", "#447", "#448"):
+            self.assertIn(pr, rows[0], pr)
+
+    def test_boundary_row_anchors_repo_install(self):
+        # 钉②：含「| Ceph 16.2.7 repo 安装」前缀的行内含 skill ceph-install
+        rows = [line for line in self._lines()
+                if line.strip().startswith("| Ceph 16.2.7 repo 安装")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("skill `ceph-install`", rows[0], rows[0])
+
+    def test_phantom_name_absent_whole_text(self):
+        # 钉③：幻影 skill 名 ceph-deployment-installation 全文禁入
+        # （部署路由已修复为四个已合入的部署姊妹 skill）
+        self.assertNotIn("ceph-deployment-installation",
+                         read(SKILL_DIR / "SKILL.md"))
+
+    def test_eval_queries_nq01_note_routes_ceph_install(self):
+        # 钉④：eval_queries.json 中 id==NQ-01 项的 note 含 ceph-install
+        # （现文 routes to ceph-build / ceph-install / ceph-ansible-deployment 等
+        # 部署类姊妹 skill，引用 install/build/ansible 三腿而非四姊妹部署全列，
+        # 按实际内容锚定 ceph-install 要素）
+        queries = json.loads(read(SKILL_DIR / "evals" / "eval_queries.json"))["queries"]
+        rows = [q for q in queries if q["id"] == "NQ-01"]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("ceph-install", rows[0]["note"], rows[0]["note"])
+
+
 class EvalsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

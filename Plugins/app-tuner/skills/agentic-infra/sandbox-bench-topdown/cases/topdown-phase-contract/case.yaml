@@ -1,0 +1,10 @@
+name: topdown-phase-contract
+skill: sandbox-bench-topdown
+tier: A
+entrypoint: ["python3", "cases/topdown-phase-contract/test_phase.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 合成 criterion 日志驱动计量期门禁（scripts/check_bench_phase.py）的契约回归：
+# 成功路径（measuring/pass）与误判路径（warmup / not_started / 精确匹配失败 /
+# 输入缺失 rc=2）。不代表真机基准或 PMU 采集。

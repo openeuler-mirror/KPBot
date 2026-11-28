@@ -1,0 +1,10 @@
+name: skeleton-drift-contract
+skill: sandbox-bench-topdown
+tier: A
+entrypoint: ["python3", "cases/skeleton-drift-contract/test_drift.py"]
+assert:
+  - type: exit_code
+    expect: 0
+# 与 sandbox-bench-flame 的共享骨架 drift 检查：7 个评审纪律标记
+# （白名单/pgid/门禁/锚定/回环监听/变量可覆盖/必填输入）两侧必须同时在场，
+# 任一侧演进触发失败，强制同步。

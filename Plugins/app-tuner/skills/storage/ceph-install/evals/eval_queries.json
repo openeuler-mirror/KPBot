@@ -23,13 +23,13 @@
       "id": "NQ-02",
       "prompt": "用 ceph-ansible 部署一套新的 Ceph 块存储集群，部署命令是什么",
       "should_trigger": false,
-      "note": "routes to 姊妹 skill ceph-ansible-deployment（同批姊妹 PR，同批交付，ansible 编排部署路径）"
+      "note": "routes to 姊妹 skill ceph-ansible-deployment（已合入，PR #445，ansible 编排部署路径）"
     },
     {
       "id": "NQ-03",
       "prompt": "ceph-deploy 手工部署块存储，MON/OSD 怎么初始化",
       "should_trigger": false,
-      "note": "routes to 姊妹 skill ceph-block-storage-deployment（同批姊妹 PR，同批交付，ceph-deploy 手工路径）"
+      "note": "routes to 姊妹 skill ceph-block-storage-deployment（已合入，PR #446，ceph-deploy 手工路径）"
     }
   ]
 }

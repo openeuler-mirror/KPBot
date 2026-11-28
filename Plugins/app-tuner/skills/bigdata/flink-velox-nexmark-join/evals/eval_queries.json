@@ -1,0 +1,67 @@
+{
+  "skill_name": "flink-velox-nexmark-join",
+  "eval_type": "trigger_rate",
+  "protocol": "each query run 3 times; per-query trigger rate >= 0.5 must match should_trigger",
+  "queries": [
+    {
+      "id": "q-run-join-benchmark",
+      "prompt": "在这台机器的 Flink 上把 nexmark join 类查询的吞吐跑一轮",
+      "should_trigger": true,
+      "note": "场景入口类触发词：join 基准、nexmark、吞吐"
+    },
+    {
+      "id": "q-join-pushdown",
+      "prompt": "GlutenFlink 对 q3 q7 q8 q13 q20 q23 这些 join 有没有下推，跑基准看 plan",
+      "should_trigger": true,
+      "note": "join 下推判定：查询点名 + plan 观察"
+    },
+    {
+      "id": "q-join-type-summary",
+      "prompt": "按 regular、window join、维表 lookup、多流级联分类汇总 nexmark 的 join 吞吐",
+      "should_trigger": true,
+      "note": "per-type summary：四类汇总口径"
+    },
+    {
+      "id": "q-comparable-calibre",
+      "prompt": "join 基准口径要跟 performance-verify 的 q0 基线可比，按 1 亿 events blackhole 跑",
+      "should_trigger": true,
+      "note": "口径可比：同 calibre 跨 skill"
+    },
+    {
+      "id": "q-rest-jitter",
+      "prompt": "REST 最近有点抖，join 矩阵别被预检挡住，跳过检查直接跑",
+      "should_trigger": true,
+      "note": "检查尽力不拦 / --skip-check 口径"
+    },
+    {
+      "id": "q-not-full-suite",
+      "prompt": "跑一轮完整的 nexmark 全套件基准，q0 到 q23 都要",
+      "should_trigger": false,
+      "note": "全量套件裸基线 → flink-velox-performance-verify"
+    },
+    {
+      "id": "q-not-pick-queries",
+      "prompt": "只跑 q20 和 q2 这两个查询的 join 吞吐",
+      "should_trigger": false,
+      "note": "自选查询集 → performance-verify --queries；本 skill 固定六查询集不接受覆写"
+    },
+    {
+      "id": "q-not-correctness",
+      "prompt": "对比 GlutenFlink 侧和原生侧 join 查询的结果集是否一致",
+      "should_trigger": false,
+      "note": "正确性 → flink-velox-e2e-verify / nexmark 正确性校验（规划中）"
+    },
+    {
+      "id": "q-not-switch-side",
+      "prompt": "先把集群切到原生侧，再跑 join 基准",
+      "should_trigger": false,
+      "note": "切栈 → flink-velox-cluster-switch（须用户同意）；本 skill 不设侧门"
+    },
+    {
+      "id": "q-not-install",
+      "prompt": "机器上没有 nexmark，先把 jar 和可运行树装上",
+      "should_trigger": false,
+      "note": "安装 → flink-velox-runtime-install；本 skill 在 runner 缺失时 BLOCKED 并指向它"
+    }
+  ]
+}

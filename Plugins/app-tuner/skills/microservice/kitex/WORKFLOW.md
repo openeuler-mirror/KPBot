@@ -144,6 +144,7 @@
 | 框架源码改造 | `code-optimizer`（由 `kitex-hot-path-analysis` 输出候选） |
 | 业务代码与算法 | `code-optimizer` |
 | 通用 Go profiling 方法 | `code-optimizer` 侧 `microservice/go-pprof-analysis` |
+| cache miss、跨核迁移或伪共享/真共享怀疑 | `go-cacheline-optimization`（先识别优化点，方案落地再分流） |
 
 ## 产物与交回契约
 
@@ -177,6 +178,7 @@
 | 吞吐上不去、CPU 未打满 | 0 → 1 → 2 → 3 → 4（按分诊结果逐项）→ 5 |
 | 只有长尾变差 | 0 → 1 → 2（锁/阻塞优先）→ 3 → 4（`kitex-transport-tuning` 或 `go-runtime-tuning`）→ 5 |
 | 内存/GC 偏高 | 0 → 1 → 2（堆采样）→ 3 → 4（`kitex-allocation-hotspot-tuning` 或 `go-runtime-tuning`）→ 5 |
+| cache miss 高或怀疑伪共享 | 0 → 1 → 2（缓存事件/字段归属）→ 3 → 4（`go-cacheline-optimization`）→ 5 |
 | 连接数或 fd 异常 | 0 → 1 → 2 → 3 → 4（`kitex-transport-tuning`）→ 5 |
 | 计划升级 | 0 → 1 → 2 → 3 → 4（`kitex-version-upgrade-audit`）→ 5；升级后再按需进入 2 |
 

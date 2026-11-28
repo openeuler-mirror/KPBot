@@ -468,9 +468,9 @@ parted /dev/nvme0n1 mkpart primary ext4 60G 240G
 ### 4.1 安装 Ceph 软件
 
 - Ceph 14.2.8 版本：参见 skill `ceph-build` 的 `build-guide.md`（Ceph 14.2.8 编译指南，已合入）；
-- Ceph 16.2.7 版本：参见姊妹 skill `ceph-install` 的 `installation-guide.md`（Ceph 16.2.7 安装指南；
-  同批姊妹 PR，尚未合入——合入前按本文件 §1.2 在线源/本地源配置安装 Ceph 16.2.7，并在产出中
-  标注「未覆盖」）。
+- Ceph 16.2.7 版本：参见姊妹 skill `ceph-install` 的 `installation-guide.md`（Ceph 16.2.7 安装指南，
+  已合入，PR #444）；镜像源异常时的降级路径按本文件 §1.2 在线源/本地源配置安装
+  Ceph 16.2.7，并在产出中标注「未覆盖」。
 
 ### 4.2 部署 MON 节点（仅需在主节点 ceph1 执行；需完成 §3.1；使用 ceph-deploy 时须在
 /root/ceph-mycluster/ 目录下执行，否则会报错）
@@ -603,8 +603,7 @@ ceph osd erasure-code-profile get default   # 查看 default 配置（显示 k=2
 ```
 
 需要新建纠删配置并应用到存储池的用户，参见姊妹 skill `ceph-object-storage-deployment`
-的创建 EC 存储池相关内容（同批 PR #447，尚未合入；合入前该场景按通用流程处理并在产出中
-标注「未覆盖」）。
+的创建 EC 存储池相关内容（同批 PR #447，已合入）。
 
 ```bash
 # 步骤2 创建存储池后需指定池类型（cephFS、rbd、rgw），此处以块存储 rbd 为例

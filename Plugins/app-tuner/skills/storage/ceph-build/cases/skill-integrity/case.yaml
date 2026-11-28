@@ -5,10 +5,24 @@
 #                  metadata.domain=distributed_storage、license 对齐域内惯例 MulanPSL-2.0）
 #   引用完整性     references/build-guide.md 存在，含 "来源" 标注，
 #                  关键内容抽查（openEuler 22.03 编译路径、rpmbuild -ba ceph.spec 编译命令）
-#   边界表         SKILL.md 含 ceph-install / ceph-ansible-deployment / ceph-block-storage-deployment /
-#                  ceph-parameter-tuning 兄弟路由，表格管道平衡
+#   边界表         SKILL.md 含 ceph-install（同批 PR #444，同批交付）、
+#                  ceph-ansible-deployment / ceph-block-storage-deployment（同批
+#                  PR #445/#446，同批交付）与 ceph-parameter-tuning 兄弟路由，
+#                  表格管道平衡
+#   二轮检视守卫   ceph-install 路由按行锚定：边界表「| Ceph repo 安装（16.2.7」行含
+#                  skill ceph-install、Dependencies gcc/cmake 行含 ceph-install 且保留
+#                  blocked 并改为条件化转交（仅当 OS 为 openEuler 22.03 LTS SP4——
+#                  16.2.7 仅集成于 SP4 系统镜像源——且用户明确接受改用 16.2.7 repo
+#                  安装时转交）、description 不再含「当前仓库无对应 skill」/
+#                  「规划中」且含 ceph-install 互指
+#   三轮检视守卫   部署轴路由锚定：边界表「| 集群部署（MON/MGR/OSD 初建」行含
+#                  skill ceph-ansible-deployment / ceph-block-storage-deployment 与
+#                  同批 PR #445/#446 标注；test_boundary_routes_to_siblings 注释
+#                  写明 #444/#445/#446 三姊妹同批交付前提与合并次序约束
 #   evals 契约     evals.json（CB-E 前缀、expectations 全中文、禁乱码、禁命令注入模式）、
-#                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to）
+#                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to；NQ-01 路由
+#                  ceph-install、NQ-02 路由 ceph-ansible-deployment /
+#                  ceph-block-storage-deployment 并带同批 PR 标注）
 #
 # 运行：
 #   bash Plugins/app-tuner/skills/storage/ceph-build/cases/skill-integrity/run.sh

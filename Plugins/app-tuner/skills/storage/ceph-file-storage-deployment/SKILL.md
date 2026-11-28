@@ -7,7 +7,7 @@ description: >
   元数据池在前数据池在后，fs_data 分配更多 pg）、客户机挂载（mount -t ceph，MON 默认端口 6789，
   stat -f 验证 type=ceph）、常见问题与故障排除三则。当需要 ceph-deploy 手工部署文件存储集群
   （CephFS）时使用；对象存储 RGW → 姊妹 skill `ceph-object-storage-deployment`，块存储 →
-  姊妹 skill `ceph-block-storage-deployment`（同批姊妹 PR，同批交付）。
+  姊妹 skill `ceph-block-storage-deployment`（已合入，PR #446）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）；OS 矩阵 CentOS 7.6.1810 / openEuler 20.03 LTS SP1 / openEuler 22.03 LTS SP4；Ceph 14.2.8 Nautilus / 16.2.7 Pacific；ceph-deploy 2.0.1/2.1.0（CentOS yum 安装、openEuler 固定 v2.1.0 tag 源码克隆 + 隔离 venv 安装）；客户端 mount -t ceph（内核 ceph 客户端）
 metadata:
@@ -35,9 +35,9 @@ fs_data 与 fs_metadata 两个存储池（pg 数按官方单池基线公式 (OSD
 | 场景 | 归属 |
 |---|---|
 | 文件存储 MDS 部署（CephFS 存储池/文件系统/客户机挂载，ceph-deploy 路径） | **本 skill** |
-| 对象存储 RGW（ceph-deploy / cephadm 双路径） | 姊妹 skill `ceph-object-storage-deployment`（同批姊妹 PR，同批交付） |
-| 块存储 ceph-deploy 手工部署（RBD 使能） | 姊妹 skill `ceph-block-storage-deployment`（同批姊妹 PR，同批交付） |
-| ceph-ansible 编排路径 | 姊妹 skill `ceph-ansible-deployment`（同批姊妹 PR，同批交付） |
+| 对象存储 RGW（ceph-deploy / cephadm 双路径） | 姊妹 skill `ceph-object-storage-deployment`（已合入，PR #447） |
+| 块存储 ceph-deploy 手工部署（RBD 使能） | 姊妹 skill `ceph-block-storage-deployment`（已合入，PR #446） |
+| ceph-ansible 编排路径 | 姊妹 skill `ceph-ansible-deployment`（已合入，PR #445） |
 
 ## 铁律
 
@@ -108,7 +108,7 @@ fs_data 与 fs_metadata 两个存储池（pg 数按官方单池基线公式 (OSD
 | 工具/资源 | 用途 | 缺失影响与降级 |
 |---|---|---|
 | ceph-deploy（2.0.1 / 2.1.0） | MON/MGR/OSD/MDS 部署 | 缺失时 CentOS 用 yum 安装，openEuler 走固定 v2.1.0 tag 源码克隆 + 隔离 venv 安装 |
-| python3（含 venv 模块） | ceph-deploy 隔离 venv 安装与运行 | 缺失时 ceph-deploy 路径不可用，改走 skill `ceph-ansible-deployment` |
+| python3（含 venv 模块） | ceph-deploy 隔离 venv 安装与运行 | 缺失时先补齐 python3 解释器（CentOS 7.6：yum install python36；openEuler 20.03/22.03：dnf install python3）并确认 `python3 -m venv` 可用，补齐后 ceph-deploy 隔离 venv 路径恢复；直接转交 skill `ceph-ansible-deployment`（已合入，PR #445）仅当 OS 为其矩阵内（CentOS 7.6 / openEuler 20.03）且用户明确接受路径变更，否则 ceph-deploy 路径标 blocked，不得以转交替代补齐依赖 |
 | 内核 ceph 客户端（mount -t ceph） | 客户机挂载 CephFS | 客户机内核不支持时挂载路径 blocked，先确认客户端内核版本 |
 | 系统镜像源（everything iso/在线源） | liboath 与依赖安装 | 缺失时镜像源适配路径 blocked |
 | `references/file-storage-deployment.md` | 全量命令 SOP | 缺失时输出 blocked，不得凭记忆拼命令 |

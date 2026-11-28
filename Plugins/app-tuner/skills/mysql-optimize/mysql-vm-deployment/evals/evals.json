@@ -1,0 +1,83 @@
+{
+ "skill_name": "mysql-vm-deployment",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "libvirt XML 里哪些字段决定 MySQL 虚机性能？不要执行命令。",
+   "expected_output": "vcpu placement=static + cputune/vcpupin 把 vCPU 钉到 host 核；memory backing 用 hugepages（1G 页减 TLB miss）+ domain 级 numatune 的 host NUMA 节点；磁盘 bus 用 virtio（或 scsi 控制器多队列）、网卡 virtio + 队列数；桥接到 br0。未做 vcpupin/大页/NUMA 固定时，虚机内看到的 CPU/页/中断受宿主调度摆布，性能不可复现；固定这些字段后才能与容器/物理机做可复现对照。",
+   "files": [
+    "SKILL.md",
+    "references/vm-deploy.md"
+   ],
+   "expectations": [
+    "提到 vcpupin 与 cputune",
+    "提到 hugepages 与 NUMA numatune",
+    "说明未固定时受宿主调度摆布、固定后可复现对照",
+    "提到 virtio 磁盘/网卡",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "虚机要配大页，宿主和 guest 各做什么？怎么验证生效？不要执行命令。",
+   "expected_output": "宿主侧按 XML 的页大小（如 1 GiB）在目标 NUMA 节点写 /sys/devices/system/node/nodeX/hugepages/hugepages-1048576kB/nr_hugepages；/proc/sys/vm/nr_hugepages 只调全局默认页池，不能用于 1 GiB 页；XML 用 <memoryBacking><hugepages> 声明。验收在宿主启动前后核对同节点 free_hugepages 差值 ≥ 所需页数（或 virsh dommemstat 确认 guest 实际获得大页内存）；host 大页 backing 对 guest 不可见，guest /proc/meminfo 的 HugePages_Total 只反映 guest 自身大页池，不能作为该项验收。若要在 guest 内用大页（MySQL large_pages=1）须另在 guest OS 分配大页并匹配 buffer pool，本工作流不含该步骤。THP 与标准大页是两套机制，虚机场景优先标准大页。",
+   "files": [
+    "references/vm-deploy.md"
+   ],
+   "expectations": [
+    "给出宿主按节点与页大小分配 nr_hugepages 与 XML hugepages 声明",
+    "说明 /proc/sys/vm/nr_hugepages 仅默认页池，不能用于 1 GiB 页",
+    "验收用宿主 free_hugepages 差值或 virsh dommemstat，不用 guest HugePages_Total",
+    "区分 THP 与标准大页两套机制",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "guest 里 MySQL 的网络路径经过网桥，宿主侧怎么布局中断？不要执行命令。",
+   "expected_output": "宿主把网卡队列 IRQ 绑到 vcpu pin 集合之外的核，避免中断抢占 guest vCPU 的物理核；网桥 br0 关 STP、静态 IP。guest 内核对 virtio 网卡队列中断分布（多队列时 spread）；压测时同时观察宿主 softirq 核与 guest 内 CPU 占用，两边都只读记录，出现 util 尖峰先查宿主 IRQ 是否漂移。",
+   "files": [
+    "SKILL.md",
+    "references/vm-deploy.md"
+   ],
+   "expectations": [
+    "说明 IRQ 绑 vcpu pin 外",
+    "提到网桥 STP 与静态 IP",
+    "提到宿主/guest 两侧同时观察",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "virtio 和直通什么差别？什么时候必须直通？不要执行命令。",
+   "expected_output": "virtio 走 hypervisor 软件队列，通用、可迁移、开销中等；直通（VFIO）把物理设备独占给 guest，绕过软件路径，延迟与抖动最优，但该设备宿主不可用、虚机不可迁移、故障排查复杂。POC 对照实验一般 virtio 够用；只有当瓶颈明确在虚拟化 IO 路径（如 nvme 直通压写延迟、网卡直通压小包）且要测“物理机极限对齐”时才直通。",
+   "files": [
+    "references/vm-deploy.md"
+   ],
+   "expectations": [
+    "给出两者机制差异",
+    "说明直通的代价（迁移/宿主独占）",
+    "给出直通的适用条件",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "preflight_vm.sh 虚机部署前查什么？虚机名冲突怎么处理？不要执行命令。",
+   "expected_output": "VM_NAME/VM_CPUS/VM_MEM_GB/VM_NODE/BRIDGE/VM_IMAGE/MYSQL_PORT/PAGE_KB 入参，只读检查 libvirt/qemu 可用、KVM 加速、按 XML 页大小读取宿主节点 sysfs hugepages-${PAGE_KB}kB 的 nr/free_hugepages 并与 HUGEPAGE_COUNT 比对、NUMA 节点存在、网桥 up、qcow2 镜像存在、宿主端口（范围 1-65535）、同名虚机已定义则报 FAIL（先 virsh undefine 或换名）。数字参数非数字/越界/超长整数按 exit 2 拒绝；退出码 0/1/2 语义与 preflight 系列一致，全程只读。",
+   "files": [
+    "scripts/preflight_vm.sh"
+   ],
+   "expectations": [
+    "列出检查类别与入参（含 PAGE_KB）",
+    "说明按页大小核对宿主大页 nr/free 与 HUGEPAGE_COUNT",
+    "说明数字参数非法按 exit 2 拒绝",
+    "说明同名虚机处理",
+    "说明只读与退出码",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

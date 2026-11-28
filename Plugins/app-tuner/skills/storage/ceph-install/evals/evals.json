@@ -16,11 +16,11 @@
     {
       "id": "CI-E02",
       "prompt": "Ceph 16.2.7 装好之后想搭一套集群，接下来该做什么？你们这个安装路径管到哪一步？",
-      "expected_output": "本 skill 边界止于 openEuler 22.03 上的 16.2.7 安装：安装完成后用 ceph -v 确认显示 16.2.7 版本号即完成；集群搭建属部署路径——ceph-ansible 编排或自动部署走姊妹 skill ceph-ansible-deployment，ceph-deploy 手工块存储走姊妹 skill ceph-block-storage-deployment（均为同批姊妹 PR，同批交付）；14.2.8 源码编译走 skill ceph-build；集群运行期参数调优走 skill ceph-parameter-tuning",
+      "expected_output": "本 skill 边界止于 openEuler 22.03 上的 16.2.7 安装：安装完成后用 ceph -v 确认显示 16.2.7 版本号即完成；集群搭建属部署路径——ceph-ansible 编排或自动部署走姊妹 skill ceph-ansible-deployment，ceph-deploy 手工块存储走姊妹 skill ceph-block-storage-deployment（均已合入，PR #445/#446）；14.2.8 源码编译走 skill ceph-build；集群运行期参数调优走 skill ceph-parameter-tuning",
       "files": [],
       "expectations": [
         "给出 ceph -v 显示 16.2.7 版本号作为安装完成的判据",
-        "声明集群搭建路由到姊妹 skill ceph-ansible-deployment 或 ceph-block-storage-deployment（同批姊妹 PR，同批交付）",
+        "声明集群搭建路由到姊妹 skill ceph-ansible-deployment 或 ceph-block-storage-deployment（均已合入，PR #445/#446）",
         "声明本 skill 边界：仅覆盖 openEuler 22.03 的 16.2.7 安装，源码编译属 ceph-build"
       ]
     }

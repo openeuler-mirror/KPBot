@@ -1,0 +1,23 @@
+{
+  "skill_name": "ascend-pd-p2p-layerwise-config",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "公开版 P2P layerwise 的 Mode A MultiConnector 配置怎么写？",
+      "expected_output": "给出 MultiConnector + MooncakeLayerwiseConnector + AscendStoreConnector(use_layerwise=false) 的结构模板，拓扑、端口和 engine_id 用占位符，说明 load_async 必须是 JSON boolean。不要加入 use_layerwise_range、layerwise_host_kv_offload 或 use_ascend_direct。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Store 子项写了 use_layerwise=true，启动前怎么检查？",
+      "expected_output": "指出 use_layerwise=true 超出公开 Mode A 范围；建议改为 false。运行 python3 scripts/check_layerwise_config.py <config.json> 检查后端、端口和 load_async 类型。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "load_async 写 \"false\" 可以吗？",
+      "expected_output": "不可以，必须是 JSON boolean false；字符串会被当成 truthy。",
+      "files": []
+    }
+  ]
+}

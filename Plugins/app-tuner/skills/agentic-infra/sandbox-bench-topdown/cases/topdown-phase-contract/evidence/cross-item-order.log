@@ -1,0 +1,5 @@
+# Synthetic criterion output; not real benchmark data.
+Benchmarking concurrent_resume
+Collecting 100 samples in estimated 120
+Benchmarking snapshot_creation
+warm-up iteration 1

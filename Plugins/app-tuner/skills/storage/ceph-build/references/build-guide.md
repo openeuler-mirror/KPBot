@@ -445,8 +445,11 @@ ceph -v
 （RELEASE/VENDOR 与本机 rpmbuild 产物相同），并用 `yum list ceph` 核对包来自 local_ceph 源而非
 其他启用源或预装残留；`ceph -v` 正确显示 ceph version 14.2.8 才算安装成功。
 
-编译产物安装验证完成即达本 skill 边界。MON/MGR/OSD 部署当前仓库无对应 skill（规划中），由调用方按
-通用部署流程处理并在产出中标注「未覆盖」，不得在本 skill 流程内混跑部署动作。
+编译产物安装验证完成即达本 skill 边界。MON/MGR/OSD 部署由姊妹 skill 承接——
+`ceph-ansible-deployment`（其矩阵为 Ceph 14.2.22、CentOS 7.6/openEuler 20.03，不覆盖本
+skill 的 14.2.8 产物与 22.03 路径）或 `ceph-block-storage-deployment`（Ceph 14.2.8/16.2.7、
+OS 含 openEuler 22.03；本 skill 14.2.8 自编译产物——尤其 22.03 编译路径——的部署承接
+以该 skill 为主）（同批 PR #445/#446，同批交付）；不得在本 skill 流程内混跑部署动作。
 
 须知（交付给后续部署环节的交接信息）：部署指南中配置的 Ceph 镜像源为 Ceph 官方镜像（不包含本次
 编译新特性的 RPM 包），后续部署时需采用本地源方式配置本次编译的 RPM 包（即本节 local_ceph 源）。

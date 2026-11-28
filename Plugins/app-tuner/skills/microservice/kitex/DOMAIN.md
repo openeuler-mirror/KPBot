@@ -8,6 +8,7 @@ CloudWeGo/Kitex 是 Go 微服务 RPC 框架。本专题只放 **Kitex 组件专�
 - GOMAXPROCS、容器配额、GC 参数 → `go-runtime-tuning`
 - 通用 Go profiling 方法 → `code-optimizer` 侧 `microservice/go-pprof-analysis`
 - 通用运行时补丁与重编译 → `go-runtime-patch-build`
+- Go 缓存行争用识别（cache miss、跨核迁移、伪共享/真共享）→ `go-cacheline-optimization`
 - 绑核、IRQ 亲和、内核参数 → 由 app-tuner 主流程的 `cpu-affinity-optimization`、`network-optimization`、`os-optimization` 承接
 
 ## 推荐入口
@@ -40,6 +41,7 @@ CloudWeGo/Kitex 是 Go 微服务 RPC 框架。本专题只放 **Kitex 组件专�
 
 - 加核不涨、系统调用占比高、连接数/fd 异常、复用连接后长尾变差 → `kitex-transport-tuning`
 - 每请求分配高、GC 频繁且堆增长快 → 先 `kitex-allocation-hotspot-tuning`，参数层再去 `go-runtime-tuning`
+- cache miss 高、跨核缓存行迁移或怀疑伪共享/真共享 → `go-cacheline-optimization`（先识别优化点，再决定改代码或打补丁）
 - 判断该用哪种编解码 → `kitex-thrift-codec-selection`；判断该用哪种传输协议/是否付元信息成本 → `kitex-transport-protocol-selection`
 - 不知道该采什么证据、或火焰图看不懂 Kitex 帧 → `kitex-profiling`
 - 只有现象没有方向 → `kitex-troubleshooting`
@@ -58,6 +60,7 @@ kitex-troubleshooting
   └── kitex-transport-protocol-selection
         └── 统一验证：microservice-ab-testing
 参数层：go-runtime-tuning
+缓存行识别：go-cacheline-optimization
 候选落地：code-optimizer（由 kitex-hot-path-analysis 输出候选）
 ```
 

@@ -68,7 +68,9 @@ kpbot uninstall global codex
 | 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 |
 | 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 |
 
-kvc-crosscheck-analyzer PR 在合并上游 `bf688e47`（加入 `kpbot-milestone-gantt`）后的候选合并树上重新安装核对：当前快照实测为 `manifest_skills=371` / `installed_skill_documents=417` / `source_skill_documents_before_exclusions=480`（`618dc4ec` + 甘特图 + `kptools-kvc-crosscheck-analyzer`）。本批 kvc 技能 PR（!493/!495/!498/!499）同基线各 +1 技能，fixture 与本文按各 PR 的候选合并树逐个重测维护；同批 PR 无论先后，最后合入的 PR 应按文末协议在新的目标基线上重新安装、核对三个计数。
+`ascend_kunpeng/layerwise` 在本 PR 新增 5 个 `SKILL.md` 后，按同一口径实测为：安装清单 370、安装树递归 416、源树递归 484。
+
+kvc-crosscheck-analyzer PR 在合并上游 `e06cb898`（mysql-optimize 十件套、`benchmark-gaia/paperqa/swebench/vitabench-protocol`、`sandbox-bench-topdown`、`ascend_kunpeng/layerwise` 等批次技能）后的候选合并树上重新安装核对：当前快照实测为 `manifest_skills=387` / `installed_skill_documents=433` / `source_skill_documents_before_exclusions=502`（上游批次 + `kptools-kvc-crosscheck-analyzer`；注：上游 `e06cb898` 自身的 fixture 仍停在 layerwise 批次的 370/416/484，未含其后合入的 mysql/benchmark 批次——后合入的 PR 按文末协议以候选合并树实测为准）。本批 kvc 技能 PR（!493/!495/!498/!499）同基线各 +1 技能，fixture 与本文按各 PR 的候选合并树逐个重测维护；同批 PR 无论先后，最后合入的 PR 应按文末协议在新的目标基线上重新安装、核对三个计数。
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”

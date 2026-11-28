@@ -1,0 +1,80 @@
+{
+ "skill_name": "mysql-architecture",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "MySQL 的一条主键 point select 从客户端发 SQL 到 InnoDB 返回行，经过哪些层？每层各自做什么？不要执行命令。",
+   "expected_output": "连接层线程接收包 → Server 层解析（词法/语法/预处理）→ 优化器（基于成本选访问路径，主键等值走 ref/eq_ref）→ 执行器逐行取数 → handler 接口 → InnoDB 分两条路径：AHI 开启且热键命中时由自适应哈希索引直接定位记录，跳过从根到叶的逐层查找；未命中（AHI 关闭/冷键/条件不满足）才走 row_search_mvcc → btr_cur_search_to_nth_level → page_cur_search_with_match 的 B+Tree 逐层定位 → Buffer Pool 命中返回页内行、未命中物理读；行经 MVCC 可见性判断（Read View）后逐层返回。prepare 语句可复用解析/优化结果，减少 Server 层开销。",
+   "files": [
+    "references/query-execution-flow.md",
+    "references/overview-and-source-map.md"
+   ],
+   "expectations": [
+    "列出连接→解析→优化→执行→handler→InnoDB 的分层链路",
+    "区分 AHI 命中直定位与未命中走完整 B+Tree 两条路径",
+    "提到 B+Tree 定位与 Buffer Pool 命中/物理读",
+    "提到 prepare 语句复用解析/优化结果",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "redo 和 binlog 是怎么保证一致的？两阶段提交和组提交分别在什么时机起作用？不要执行命令。",
+   "expected_output": "事务提交先写 redo prepare，再写 binlog，最后 redo commit——以内部 XA 绑定两份日志；崩溃恢复按两阶段状态决定提交或回滚。组提交在多个事务并发提交时合并刷盘：binlog 组提交分 flush/sync/commit 三阶段，配合 sync_binlog 与 innodb_flush_log_at_trx_commit 决定 fsync 策略；一次 fsync 落多个事务，是写场景降低提交延迟的关键。",
+   "files": [
+    "references/innodb-storage-and-locking.md"
+   ],
+   "expectations": [
+    "说明 redo/binlog 两阶段提交顺序",
+    "提到 flush/sync/commit 三阶段组提交",
+    "提到 sync_binlog 与 innodb_flush_log_at_trx_commit 的配合",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "MVCC 的 Read View 是怎么决定一行旧版本可见性的？长事务为什么会拖慢整个库？不要执行命令。",
+   "expected_output": "每行保存隐藏列与 undo 链；事务开启时构造 Read View（活跃事务列表与 up_limit/down_limit）。判断：行的 trx_id 小于 up_limit 可见；大于等于 down_limit 不可见，沿 undo 链回溯到可见版本；中间则查活跃列表。长事务持旧 Read View，导致 purge 无法清理其可见的 undo，undo 链变长、回溯变慢、ibtmp/undo 膨胀，全库读写都被拖慢。",
+   "files": [
+    "references/innodb-storage-and-locking.md"
+   ],
+   "expectations": [
+    "解释 up_limit/down_limit 或活跃事务列表判定",
+    "提到沿 undo 链回溯旧版本",
+    "提到长事务阻塞 purge 导致 undo 膨胀",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "Buffer Pool 的 LRU 与刷脏是怎么工作的？脏页积压会有什么表现？不要执行命令。",
+   "expected_output": "BP 用改良 LRU（young/old 子链，防止全表扫描污染热点），页从 old 头插入、命中多次后晋升 young。修改产生脏页，由 page_cleaner 线程组按 innodb_io_capacity/innodb_io_capacity_max 与脏页比例刷盘，checkpoint 推进。脏页积压表现为写场景 TPS 下滑、P99 抖动、redo 空间逼近、自适应刷脏突然拉满 IO；核对 SHOW ENGINE INNODB STATUS 的脏页数与 LSN 差值。",
+   "files": [
+    "references/innodb-storage-and-locking.md",
+    "references/threads-and-config-map.md"
+   ],
+   "expectations": [
+    "说明 young/old 子链与防污染",
+    "提到 page_cleaner 与 innodb_io_capacity",
+    "提到脏页积压的外部表现与核对手段",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "mysqld 都有哪些后台线程？做热点分析或绑核时为什么要区分它们？不要执行命令。",
+   "expected_output": "后台线程分两层名字：performance_schema.threads.NAME 由 PSI 注册键名生成，8.0.25/8.0.28 的 InnoDB 线程形如 thread/innodb/log_writer_thread、log_flusher_thread、log_checkpointer_thread、page_flush_thread（page cleaner）、srv_purge_thread（purge worker）、dict_stats_thread、buf_dump_thread、srv_master_thread（master thread 仍存在，承担 purge 等杂务，但 8.0 起不再做周期 checkpoint，已移交 log checkpointer）；ib_* 是 OS 线程名（comm，8.0.27+ 且 performance_schema=ON 时才有；8.0.28 的 flusher/checkpointer OS 名是 ib_log_flush/ib_log_checkpt），用于 ps -T/top -H，不用于 threads.NAME 查询。业务线程是 thread/sql/one_connection（handle_connection），THREAD_OS_ID 即 /proc/<pid>/task 下 TID。压测时按 NAME 查出 TID 把后台线程绑到独立核、与 worker 分离，避免刷脏/purge 抢占业务核造成抖动；核少时反而负收益。",
+   "files": [
+    "references/threads-and-config-map.md"
+   ],
+   "expectations": [
+    "用 thread/innodb/<键名>_thread 口径列出 page flush、purge、log writer 等后台线程，并说明 ib_* 是 OS 线程名",
+    "说明 handle_connection 与连接数的关系",
+    "解释后台线程与业务线程分离绑核的理由",
+    "没有执行命令"
+   ]
+  }
+ ]
+}

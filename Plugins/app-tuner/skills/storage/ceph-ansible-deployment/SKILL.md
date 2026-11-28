@@ -9,7 +9,7 @@ description: >
   当需要 ansible 编排部署/扩容/删除 Ceph 集群或自动部署时使用；ceph-deploy 手工路径 → 姊妹
   skill `ceph-block-storage-deployment`；非 ansible 的鲲鹏扩容按集群实际使用的存储接口路由 →
   姊妹 skill `ceph-block-expansion`（块存储）/`ceph-file-expansion`（文件存储）/
-  `ceph-object-expansion`（对象存储），类型不确定时在三者中按实际接口选择（同批姊妹 PR，同批交付）。
+  `ceph-object-expansion`（对象存储），类型不确定时在三者中按实际接口选择（均已合入，PR #452/#453/#454）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）；OS 矩阵 CentOS 7.6.1810 / openEuler 20.03 SP1（自动部署套件仅 CentOS 7.6）；Ansible 2.9.0 + ceph-ansible stable-4.0（Ceph 14.2.22 Nautilus）/ 自动部署套件 Ceph 14.2.1（依赖 python 2.7.9+）
 metadata:
@@ -37,10 +37,10 @@ YAML 结构的安全/正确性加固为本仓口径补充（见铁律 7 与指�
 | 场景 | 归属 |
 |---|---|
 | ceph-ansible 编排部署/扩容/删除集群/repo 源压缩包、ceph-ansible-autotool 自动部署 | **本 skill** |
-| ceph-deploy 手工部署（块存储） | 姊妹 skill `ceph-block-storage-deployment`（同批姊妹 PR，同批交付） |
-| 鲲鹏节点加入 x86 集群扩容（非 ansible 路径，块存储扩容） | 姊妹 skill `ceph-block-expansion`（同批姊妹 PR，同批交付） |
-| 鲲鹏节点加入 x86 集群扩容（非 ansible 路径，文件存储扩容） | 姊妹 skill `ceph-file-expansion`（同批姊妹 PR，同批交付） |
-| 鲲鹏节点加入 x86 集群扩容（非 ansible 路径，对象存储扩容） | 姊妹 skill `ceph-object-expansion`（同批姊妹 PR，同批交付）；扩容存储类型不确定时按集群实际使用的存储接口在三者中选择 |
+| ceph-deploy 手工部署（块存储） | 姊妹 skill `ceph-block-storage-deployment`（已合入，PR #446） |
+| 鲲鹏节点加入 x86 集群扩容（非 ansible 路径，块存储扩容） | 姊妹 skill `ceph-block-expansion`（已合入，PR #452） |
+| 鲲鹏节点加入 x86 集群扩容（非 ansible 路径，文件存储扩容） | 姊妹 skill `ceph-file-expansion`（已合入，PR #453） |
+| 鲲鹏节点加入 x86 集群扩容（非 ansible 路径，对象存储扩容） | 姊妹 skill `ceph-object-expansion`（已合入，PR #454）；扩容存储类型不确定时按集群实际使用的存储接口在三者中选择 |
 | 集群运行期参数调优 | skill `ceph-parameter-tuning` |
 
 ## 铁律
@@ -97,7 +97,7 @@ YAML 结构的安全/正确性加固为本仓口径补充（见铁律 7 与指�
 
 | 工具/资源 | 用途 | 缺失影响与降级 |
 |---|---|---|
-| ansible（2.9.0）+ ceph-ansible（stable-4.0） | 集群自动化部署、扩容、删除集群 | 缺失时改走 ceph-deploy 手工路径（姊妹 skill `ceph-block-storage-deployment`，同批姊妹 PR，同批交付） |
+| ansible（2.9.0）+ ceph-ansible（stable-4.0） | 集群自动化部署、扩容、删除集群 | 缺失时改走 ceph-deploy 手工路径（姊妹 skill `ceph-block-storage-deployment`，已合入，PR #446） |
 | python（自动部署套件需 2.7.9+） | ceph-ansible 依赖、自动部署套件运行 | 缺失时自动部署路径不可用，仅 ansible 手工编排可走 |
 | ceph-ansible-autotool.zip 套件 | 自动部署（ceph_input.xlsx/input_check.sh/install_all.sh） | 缺失时降级为 ansible 手工编排路径 |
 | 互联网接入（在线安装软件包与依赖） | Ansible/ceph-ansible 安装、reposync | 无外网时降级为离线 repo 源压缩包路径（§9 已给出制作方法） |
