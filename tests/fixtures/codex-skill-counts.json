@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "upstream e06cb898 (mysql/benchmark-protocol/layerwise batch) plus kptools-kvc-crosscheck-analyzer",
-  "upstream_commit": "e06cb898",
-  "manifest_skills": 387,
-  "installed_skill_documents": 433,
-  "source_skill_documents_before_exclusions": 502
+  "measured_source_commit": "upstream 2359dde7 (mysql/benchmark/flink-velox/layerwise batch) plus kptools-kvc-crosscheck-analyzer",
+  "upstream_commit": "2359dde7",
+  "manifest_skills": 388,
+  "installed_skill_documents": 434,
+  "source_skill_documents_before_exclusions": 503
 }
