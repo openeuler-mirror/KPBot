@@ -23,13 +23,13 @@
       "id": "NQ-01",
       "prompt": "ceph-deploy 手工部署块存储，MON/OSD 初始化和 rbd 块设备创建映射怎么做",
       "should_trigger": false,
-      "note": "routes to 姊妹 skill ceph-block-storage-deployment（同批姊妹 PR，同批交付，ceph-deploy 手工路径）"
+      "note": "routes to 姊妹 skill ceph-block-storage-deployment（已合入，PR #446，ceph-deploy 手工路径）"
     },
     {
       "id": "NQ-02",
       "prompt": "鲲鹏节点加入现有 x86 Ceph 集群做扩容，ceph-deploy 路径怎么做",
       "should_trigger": false,
-      "note": "routes to 姊妹 skill ceph-block-expansion / ceph-file-expansion / ceph-object-expansion（同批姊妹 PR，同批交付，非 ansible 的鲲鹏扩容按集群实际使用的存储接口路由）"
+      "note": "routes to 姊妹 skill ceph-block-expansion / ceph-file-expansion / ceph-object-expansion（均已合入，PR #452/#453/#454，非 ansible 的鲲鹏扩容按集群实际使用的存储接口路由）"
     },
     {
       "id": "NQ-03",

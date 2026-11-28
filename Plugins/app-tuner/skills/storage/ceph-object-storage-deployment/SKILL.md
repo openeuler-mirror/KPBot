@@ -8,7 +8,7 @@ description: >
   cephadm 安装、自制容器镜像与本地仓库、bootstrap 部署 MON/MGR/OSD/RGW/客户端、卸载 Ceph）。
   当需要部署对象存储 RGW 时使用；块存储 → 姊妹 skill
   `ceph-block-storage-deployment`，文件存储 MDS → 姊妹 skill
-  `ceph-file-storage-deployment`（同批姊妹 PR，同批交付）。
+  `ceph-file-storage-deployment`（已合入，PR #448）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）；路径一 OS 矩阵 CentOS 7.6.1810 / openEuler 20.03 LTS SP1 / openEuler 22.03 LTS SP4 + Ceph 14.2.8/16.2.7 + ceph-deploy 2.0.1/2.1.0；路径二 OS 矩阵 Ubuntu 22.04（Docker≥24）/ openEuler 22.03 LTS SP4（Podman≥2.0，以 3.4.4 为例）+ Ceph 17.2.8 Quincy + cephadm（Ubuntu apt 安装 / openEuler quincy 脚本）
 metadata:
@@ -36,8 +36,8 @@ Ceph 编译&部署&调优&测试指南》（文档版本 07，2025-06-30）第 5
 | 场景 | 归属 |
 |---|---|
 | 对象存储 RGW（ceph-deploy 路径与 cephadm 容器化路径） | **本 skill** |
-| 块存储 ceph-deploy 手工部署（MON/MGR/OSD/RBD 使能） | 姊妹 skill `ceph-block-storage-deployment`（同批姊妹 PR，同批交付） |
-| 文件存储 MDS（CephFS） | 姊妹 skill `ceph-file-storage-deployment`（同批姊妹 PR，同批交付） |
+| 块存储 ceph-deploy 手工部署（MON/MGR/OSD/RBD 使能） | 姊妹 skill `ceph-block-storage-deployment`（已合入，PR #446） |
+| 文件存储 MDS（CephFS） | 姊妹 skill `ceph-file-storage-deployment`（已合入，PR #448） |
 | 集群运行期参数调优 | skill `ceph-parameter-tuning` |
 
 ## 铁律

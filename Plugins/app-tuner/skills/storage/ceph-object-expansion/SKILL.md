@@ -7,9 +7,9 @@ description: >
   RGW 端口规划（bucket 端口递推）、新增 RGW 实例并 curl 网关验证、MGR/OSD 部署、存储池
   pgnum/pgpnum 公式调整；以 ceph -s 恢复健康与 ceph osd df 容量增加收尾。当需要给现有
   Ceph 集群扩容鲲鹏节点（对象存储路径）时使用；首次部署 → 姊妹 skill
-  `ceph-object-storage-deployment`（同批 PR #446，尚未合入）；块存储扩容 →
-  `ceph-block-expansion`（同批 PR #452，尚未合入）、文件存储扩容 →
-  `ceph-file-expansion`（同批 PR #453，尚未合入）；运行期调优 → skill
+  `ceph-object-storage-deployment`（同批 PR #447，已合入）；块存储扩容 →
+  `ceph-block-expansion`（同批 PR #452，已合入）、文件存储扩容 →
+  `ceph-file-expansion`（同批 PR #453，已合入）；运行期调优 → skill
   `ceph-parameter-tuning`（已合入）；编译 → skill `ceph-build`（已合入）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）扩容节点加入 x86 集群；OS 矩阵 CentOS 7.6.1810 / RHEL 7.5；Ceph 12.2.11（扩容基线，新节点须安装与原集群同版本）+ ceph-deploy 2.0.1；NTP/crontab；扩容含删除 Monitor 等破坏性操作
@@ -38,9 +38,9 @@ curl 网关访问 → 部署 MGR/OSD 与存储池调整（default.rgw.buckets.da
 | 场景 | 归属 |
 |---|---|
 | 对象存储扩容（鲲鹏节点加入 x86 集群：Monitor/RGW 实例/MGR/OSD/pgnum） | **本 skill** |
-| 首次部署（对象存储 RGW 集群，ceph-deploy / cephadm 双路径） | 姊妹 skill `ceph-object-storage-deployment`（同批 PR #446，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 块存储扩容（RBD 路径） | 姊妹 skill `ceph-block-expansion`（同批 PR #452，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 文件存储扩容（MDS/CephFS 路径） | 姊妹 skill `ceph-file-expansion`（同批 PR #453，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
+| 首次部署（对象存储 RGW 集群，ceph-deploy / cephadm 双路径） | 姊妹 skill `ceph-object-storage-deployment`（同批 PR #447，已合入） |
+| 块存储扩容（RBD 路径） | 姊妹 skill `ceph-block-expansion`（同批 PR #452，已合入） |
+| 文件存储扩容（MDS/CephFS 路径） | 姊妹 skill `ceph-file-expansion`（同批 PR #453，已合入） |
 | 集群运行期参数调优 | skill `ceph-parameter-tuning`（已合入） |
 | Ceph 源码编译 | skill `ceph-build`（已合入） |
 
@@ -87,7 +87,7 @@ curl 网关访问 → 部署 MGR/OSD 与存储池调整（default.rgw.buckets.da
   `ceph osd df` 容量增加对比；对象存储输出新增 RGW 进程在线与 curl 网关验证回显。
 - **回退说明**：本 skill 只覆盖扩容加入路径，OSD/RGW 等拆除、下线动作不在本 skill 范围；如需
   收缩集群参见官方 shrink/下线文档与姊妹 deployment skill `ceph-object-storage-deployment`
-  （同批 PR #446，尚未合入）的回退小节。参考内可选的删除 Monitor 步骤属破坏性操作（二次
+   （同批 PR #447，已合入）的回退小节。参考内可选的删除 Monitor 步骤属破坏性操作（二次
   确认后执行，见铁律 4）。pgnum/pgpnum 调整前原值入变更窗口台账并核准目标 PG 数：Ceph
   12.2.11 拒绝调低 pg_num，原值仅作防呆记录，不承诺用同款命令还原（见铁律 5）。环境收尾
   恢复项：SELinux 恢复 `setenforce 1` 并将 /etc/selinux/config 恢复 SELINUX=enforcing（变更

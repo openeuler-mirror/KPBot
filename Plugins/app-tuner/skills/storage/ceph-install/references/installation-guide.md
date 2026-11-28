@@ -249,7 +249,7 @@ yum clean all && yum makecache && yum repolist
 ## 3. 后续
 
 安装完成后，MON/MGR/OSD 部署与块存储使能参见姊妹 skill `ceph-block-storage-deployment`
-（同批姊妹 PR，同批交付）；集群扩容按存储类型路由到对应扩容姊妹 skill：块存储扩容参见
-`ceph-block-expansion`（同批 PR #452）、文件存储扩容参见 `ceph-file-expansion`（同批 PR #453）、
-对象存储扩容参见 `ceph-object-expansion`（同批 PR #454）；不确定存储类型时列出上述三个扩容
+（已合入，PR #446）；集群扩容按存储类型路由到对应扩容姊妹 skill：块存储扩容参见
+`ceph-block-expansion`（已合入，PR #452）、文件存储扩容参见 `ceph-file-expansion`（已合入，PR #453）、
+对象存储扩容参见 `ceph-object-expansion`（已合入，PR #454）；不确定存储类型时列出上述三个扩容
 skill，按集群实际使用的存储接口（块/文件/对象）选择对应 skill。

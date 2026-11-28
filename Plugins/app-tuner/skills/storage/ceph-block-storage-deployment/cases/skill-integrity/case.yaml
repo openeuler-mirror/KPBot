@@ -16,7 +16,7 @@
 #                  .bak.<run_id>（无固定 .bak 裸名与 mv 覆盖）、免密信任域最小化（ssh-copy-id
 #                  循环仅覆盖服务端）、ceph-deploy 固定 v2.1.0 克隆 + rev-parse 核对
 #   边界表         SKILL.md 含姊妹 skill ceph-ansible-deployment / ceph-object-storage-deployment /
-#                  ceph-file-storage-deployment 路由且带同批 PR #445/#447/#448「尚未合入」标注，
+#                  ceph-file-storage-deployment 路由且带同批 PR #445/#447/#448「已合入」标注，
 #                  表格管道平衡
 #   evals 契约     evals.json（CBD-E 前缀、expectations 全中文、禁乱码、禁命令注入模式）、
 #                  eval_queries.json（正例/负例矩阵，负例 note 含 routes to）

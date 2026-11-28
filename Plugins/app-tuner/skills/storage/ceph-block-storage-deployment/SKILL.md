@@ -6,10 +6,9 @@ description: >
   系统配置七项（SMMU/防火墙/主机名/NTP/免密/SELINUX/umask）、部署前环境分析与配置、
   MON/MGR/OSD 部署、存储池/块设备/映射使能（rbd）、常见问题五则、故障排除三则。
   当需要 ceph-deploy 手工部署块存储集群并使能 RBD 时使用；ansible 编排路径 → 姊妹
-  skill `ceph-ansible-deployment`（同批 PR #445，尚未合入；合入前该场景按通用流程处理
-  并在产出中标注「未覆盖」），对象存储 RGW → 姊妹 skill `ceph-object-storage-deployment`
-  （同批 PR #447，尚未合入；合入前同上），文件存储 MDS → 姊妹 skill
-  `ceph-file-storage-deployment`（同批 PR #448，尚未合入；合入前同上）。
+  skill `ceph-ansible-deployment`（同批 PR #445，已合入），对象存储 RGW → 姊妹 skill
+  `ceph-object-storage-deployment`（同批 PR #447，已合入），文件存储 MDS → 姊妹 skill
+  `ceph-file-storage-deployment`（同批 PR #448，已合入）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）；OS 矩阵 CentOS 7.6.1810 / openEuler 20.03 LTS SP1 / openEuler 22.03 LTS SP4；Ceph 14.2.8 Nautilus / 16.2.7 Pacific；ceph-deploy 2.0.1/2.1.0（CentOS yum 安装、openEuler git clone 源码安装）；BlueStore（DB/WAL 分区）
 metadata:
@@ -34,9 +33,9 @@ metadata:
 | 场景 | 归属 |
 |---|---|
 | ceph-deploy 块存储手工部署与 RBD 使能 | **本 skill** |
-| ceph-ansible 编排部署/自动部署 | 姊妹 skill `ceph-ansible-deployment`（同批 PR #445，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 对象存储 RGW（ceph-deploy / cephadm 双路径） | 姊妹 skill `ceph-object-storage-deployment`（同批 PR #447，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 文件存储 MDS（CephFS） | 姊妹 skill `ceph-file-storage-deployment`（同批 PR #448，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
+| ceph-ansible 编排部署/自动部署 | 姊妹 skill `ceph-ansible-deployment`（同批 PR #445，已合入） |
+| 对象存储 RGW（ceph-deploy / cephadm 双路径） | 姊妹 skill `ceph-object-storage-deployment`（同批 PR #447，已合入） |
+| 文件存储 MDS（CephFS） | 姊妹 skill `ceph-file-storage-deployment`（同批 PR #448，已合入） |
 
 ## 铁律
 
@@ -105,9 +104,9 @@ metadata:
 | 工具/资源 | 用途 | 缺失影响与降级 |
 |---|---|---|
 | ceph-deploy（2.0.1 / 2.1.0） | MON/MGR/OSD 部署与块设备使能 | 缺失时 CentOS 用 yum 安装，openEuler 走 git clone + setup.py install |
-| python3 / python2（按 OS） | ceph-deploy 源码安装与运行 | 缺失时 ceph-deploy 路径不可用，改走姊妹 skill `ceph-ansible-deployment`（同批 PR #445，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
+| python3 / python2（按 OS） | ceph-deploy 源码安装与运行 | 缺失时先补齐解释器（CentOS 7.6：yum install python2/python36；openEuler 20.03/22.03：dnf install python3），补齐后 ceph-deploy 路径可用；直接转交姊妹 skill `ceph-ansible-deployment`（同批 PR #445，已合入）仅当 OS 为其矩阵内（CentOS 7.6 / openEuler 20.03）且用户明确接受路径变更，否则 ceph-deploy 路径标 blocked，不得以转交替代补齐依赖 |
 | skill `ceph-build`（已合入） | Ceph 14.2.8 源码编译安装与 liboath 手动编译（本文件 §1.1、§4.1 引用） | 缺失时 14.2.8 编译路径 blocked，改走 Ceph 16.2.7 镜像源安装路径并在产出中标注「未覆盖」 |
-| skill `ceph-install`（同批姊妹 PR，尚未合入） | Ceph 16.2.7 镜像源安装参考（本文件 §4.1 引用；其在线源七段 repo 配置已内联至本文件 §1.2） | 缺失时按本文件 §1.2 内联配置与 §1.1 本地源路径安装并在产出中标注「未覆盖」 |
+| skill `ceph-install`（已合入，PR #444） | Ceph 16.2.7 镜像源安装参考（本文件 §4.1 引用；其在线源七段 repo 配置已内联至本文件 §1.2） | 缺失时按本文件 §1.2 内联配置与 §1.1 本地源路径安装并在产出中标注「未覆盖」 |
 | 磁盘拓扑（`lsblk -o NAME,SIZE,TYPE,MOUNTPOINT` 与 `/dev/disk/by-id` 对照，确认数据盘与 NVMe DB/WAL 盘） | OSD 划分与部署 | 缺失时不得执行 disk zap/parted/osd create，先补齐逐机核准清单 |
 | 系统镜像源（everything iso/在线源） | liboath 与依赖安装 | 缺失时镜像源适配路径 blocked |
 | `references/block-storage-deployment.md` | 全量命令 SOP | 缺失时输出 blocked，不得凭记忆拼命令 |

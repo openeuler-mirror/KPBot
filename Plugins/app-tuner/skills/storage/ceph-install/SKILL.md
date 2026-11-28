@@ -6,7 +6,7 @@ description: >
   iso 配 local.repo 或配置指向 repo.openeuler.org 的七段在线源、刷新 Yum 缓存、yum 安装并以
   ceph -v 验证。当需要在 openEuler 22.03 直接安装 Ceph 16.2.7 时使用；不适用 14.2.8 源码
   编译（→ skill `ceph-build`）与集群部署（→ 姊妹 skill `ceph-ansible-deployment` /
-  `ceph-block-storage-deployment`，同批姊妹 PR，同批交付）。
+  `ceph-block-storage-deployment`，均已合入，PR #445/#446）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）；OS 矩阵 openEuler 22.03 LTS SP4（Ceph 16.2.7 已集成系统镜像源，仅此矩阵）；yum、NTP；安装过程需接入互联网（在线源）
 metadata:
@@ -38,7 +38,7 @@ metadata:
 |---|---|
 | Ceph 16.2.7 安装（openEuler 22.03 本地源/在线源） | **本 skill** |
 | Ceph 14.2.8 源码编译 | skill `ceph-build` |
-| 集群部署（ceph-ansible 编排 / ceph-deploy 手工块存储） | 姊妹 skill `ceph-ansible-deployment` 或 `ceph-block-storage-deployment`（同批姊妹 PR，同批交付） |
+| 集群部署（ceph-ansible 编排 / ceph-deploy 手工块存储） | 姊妹 skill `ceph-ansible-deployment` 或 `ceph-block-storage-deployment`（均已合入，PR #445/#446） |
 
 ## 铁律
 

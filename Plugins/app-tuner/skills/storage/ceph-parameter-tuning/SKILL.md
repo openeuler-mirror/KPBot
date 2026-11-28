@@ -47,9 +47,10 @@ metadata:
 | 场景 | 归属 |
 |---|---|
 | Ceph 参数（ceph.conf 全量）、PG 分布与 balancer、OSD 绑核、OS 系统层参数证据与调优 | **本 skill** |
-| Ceph 编译 | skill `ceph-build`（姊妹 PR #327，同批交付） |
-| Ceph 安装、部署、集群初建 | skill `ceph-deployment-installation`（规划中） |
-| 基准压测与验证方法学（rbd fio 口径、A/B 压测框架搭建） | skill `ceph-testing`（规划中） |
+| Ceph 编译 | skill `ceph-build`（已合入，PR #327） |
+| Ceph 16.2.7 repo 安装 | skill `ceph-install`（已合入） |
+| Ceph 集群部署（MON/MGR/OSD 初建，含 ansible/cephadm 路径） | skill `ceph-ansible-deployment` / `ceph-block-storage-deployment` / `ceph-object-storage-deployment` / `ceph-file-storage-deployment`（均已合入，PR #445/#446/#447/#448） |
+| 基准压测与验证方法学（rbd fio 口径、A/B 压测框架搭建） | skill `ceph-testing`（当前仓库无对应 skill，规划中） |
 | 编排器双轨 | 已合入的编排器 subskill `ceph-optimization` 保留派发入口；其"OS 层证据移交 os-optimization"的边界仅适用于编排器流程——独立使用本 skill 时，OS 层参数属本 skill 调优范围（见 `references/tuning-playbook.md` 文首独立使用说明） |
 
 ## 铁律
@@ -97,5 +98,5 @@ metadata:
 | `/etc/ceph/ceph.conf` | 配置现状读取 | 配置体检降级为经验比对，标 low/experience_only |
 | `sysctl` / `lsblk` / `blockdev` / `numactl` | OS 层只读体检与变更 | 对应项标 unknown，不得凭经验补值 |
 | `/etc/sysctl.d/`、tuned、udev rules、rc-local | OS 层参数持久化通道 | 持久化缺失时变更动作不得标记完成（重启后失效） |
-| 基准压测框架（rbd fio 等，见 skill `ceph-testing`） | 业务级 A/B 验证 | 收益无法量化，仅输出配置生效验证；`expected_gain_metric` 标注待基线建立后验证 |
+| 基准压测框架（rbd fio 等，见 skill `ceph-testing`——当前仓库无对应 skill，规划中） | 业务级 A/B 验证 | 收益无法量化，仅输出配置生效验证；`expected_gain_metric` 标注待基线建立后验证 |
 | `references/tuning-kb.json` | 参数清单与建议值（机器可读） | 体检降级为经验比对 |

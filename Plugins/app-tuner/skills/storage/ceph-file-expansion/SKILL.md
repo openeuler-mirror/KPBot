@@ -8,9 +8,9 @@ description: >
    挂载、MGR/MDS/OSD 部署（建 OSD 前逐机核对设备标识）、存储池 pgnum/pgpnum 按官方口径
    公式调整；以 ceph -s 恢复健康、ceph osd df 容量增加与 ceph fs status 收尾。当需要给
    现有 Ceph 集群扩容鲲鹏节点（文件存储路径）时使用；首次部署 → 姊妹 skill
-   `ceph-file-storage-deployment`（同批 PR #446，尚未合入）；块存储扩容 →
-   `ceph-block-expansion`（同批 PR #452，尚未合入）、对象存储扩容 →
-   `ceph-object-expansion`（同批 PR #454，尚未合入）；运行期调优 → skill
+   `ceph-file-storage-deployment`（同批 PR #448，已合入）；块存储扩容 →
+   `ceph-block-expansion`（同批 PR #452，已合入）、对象存储扩容 →
+   `ceph-object-expansion`（同批 PR #454，已合入）；运行期调优 → skill
    `ceph-parameter-tuning`（已合入）；编译 → skill `ceph-build`（已合入）。
 license: MulanPSL-2.0
 compatibility: 鲲鹏 920 5220（aarch64）扩容节点加入 x86 集群；OS 矩阵 CentOS 7.6.1810 / RHEL 7.5；Ceph 12.2.11（扩容基线，新节点须安装与原集群同版本）+ ceph-deploy 2.0.1；NTP/crontab；扩容含删除 Monitor 等破坏性操作
@@ -41,9 +41,9 @@ MGR/MDS/OSD（建 OSD 前逐机核对设备标识、写 by-id；MDS 扩 active �
 | 场景 | 归属 |
 |---|---|
 | 文件存储扩容（鲲鹏节点加入 x86 集群：Monitor/MGR/MDS/OSD/CephFS 重新挂载/pgnum） | **本 skill** |
-| 首次部署（文件存储 MDS/CephFS 集群） | 姊妹 skill `ceph-file-storage-deployment`（同批 PR #446，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 块存储扩容（RBD 路径） | 姊妹 skill `ceph-block-expansion`（同批 PR #452，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
-| 对象存储扩容（RGW 路径） | 姊妹 skill `ceph-object-expansion`（同批 PR #454，尚未合入；合入前该场景按通用流程处理并在产出中标注「未覆盖」） |
+| 首次部署（文件存储 MDS/CephFS 集群） | 姊妹 skill `ceph-file-storage-deployment`（同批 PR #448，已合入） |
+| 块存储扩容（RBD 路径） | 姊妹 skill `ceph-block-expansion`（同批 PR #452，已合入） |
+| 对象存储扩容（RGW 路径） | 姊妹 skill `ceph-object-expansion`（同批 PR #454，已合入） |
 | 集群运行期参数调优 | skill `ceph-parameter-tuning`（已合入） |
 | Ceph 源码编译 | skill `ceph-build`（已合入） |
 
