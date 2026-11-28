@@ -1,0 +1,14 @@
+name: workbook-render
+skill: kpbot-milestone-gantt
+tier: B
+# 本机需 Python 3.10+ 及 requirements.txt 中的 openpyxl。
+description: 从示例工作簿生成甘特图，并验证日期逆序或输出路径不可写入时返回错误且已有图表完整保留。
+entrypoint: ["python3", "cases/workbook-render/run.py"]
+env_requires: []
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
