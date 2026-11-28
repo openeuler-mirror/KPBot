@@ -1,0 +1,125 @@
+{
+  "skill_name": "kptools-kvc-crosscheck-analyzer",
+  "queries": [
+    {
+      "id": "AQ-01",
+      "prompt": "压测完了，四个地方的总量对不上：RoCE 601GB、双写 704GB、master 655.86GiB、池侧每请求 2.61GB，帮我核一下这笔账",
+      "should_trigger": true,
+      "note": "四源齐全的完整对账（对账矩阵 + 区间 + 放大倍数）"
+    },
+    {
+      "id": "AQ-02",
+      "prompt": "RoCE 收到的比预期多了快一倍，是不是哪里有问题",
+      "should_trigger": true,
+      "note": "wire 实收 vs 预期，需要排除法与区间判定"
+    },
+    {
+      "id": "AQ-03",
+      "prompt": "帮我算一下每传输段多大",
+      "should_trigger": true,
+      "note": "每传输段量级区间（下界/上界）"
+    },
+    {
+      "id": "AQ-04",
+      "prompt": "线上 KV 传输到底放大几倍？同事算出 5.3 倍，我觉得不对",
+      "should_trigger": true,
+      "note": "放大倍数 + 基数口径修正"
+    },
+    {
+      "id": "AQ-05",
+      "prompt": "有人说是 TP 全量复制（每段 2.44GB），这批数据能不能排除这个假设",
+      "should_trigger": true,
+      "note": "排除法上界检验（三态判定）"
+    },
+    {
+      "id": "AQ-06",
+      "prompt": "P tx 每请求 5.56GB，D rx 每请求 5.50GB，这俩对得上吗，单侧是不是有异常",
+      "should_trigger": true,
+      "note": "P/D 对称性检查"
+    },
+    {
+      "id": "AQ-07",
+      "prompt": "master 记账是 GiB，其他源都是 GB，直接比会不会出错",
+      "should_trigger": true,
+      "note": "GiB/GB 单位陷阱"
+    },
+    {
+      "id": "AQ-08",
+      "prompt": "客户端全挂了 ok=0，但网卡还在发几百 GB，这算传输放大吗",
+      "should_trigger": true,
+      "note": "窗口口径差异（客户端失败但服务端全传）"
+    },
+    {
+      "id": "AQ-09",
+      "prompt": "双写总量除以请求数和池侧对不上，落盘环节是不是丢了数据",
+      "should_trigger": true,
+      "note": "双写对账"
+    },
+    {
+      "id": "AQ-10",
+      "prompt": "按量子口径和按池 key 口径算出来的放大倍数不一样，该信哪个",
+      "should_trigger": true,
+      "note": "基数口径统一纪律"
+    },
+    {
+      "id": "NQ-01",
+      "prompt": "采集一下 RoCE 网卡的窗口差分收发包计数",
+      "should_trigger": false,
+      "note": "采集面非分析面；本技能只消费现成总量数字，不做采集"
+    },
+    {
+      "id": "NQ-02",
+      "prompt": "把带 MKT 打点的 mooncake .so 部署到 P/D 容器并校验生效",
+      "should_trigger": false,
+      "note": "routes to mooncake .so 部署替换（mooncake-log-trace）"
+    },
+    {
+      "id": "NQ-03",
+      "prompt": "解析这轮压测的 TTFT 打点日志出 Excel 表",
+      "should_trigger": false,
+      "note": "routes to 日志解析出表（tpsplit-log-analysis）"
+    },
+    {
+      "id": "NQ-04",
+      "prompt": "单卡显存还够不够把 TP32 切成 TP8，帮我测算一下",
+      "should_trigger": false,
+      "note": "routes to 显存切分可行性测算（tpsplit-check）"
+    },
+    {
+      "id": "NQ-05",
+      "prompt": "TP 拆分之后收益多少，帮我出一份前后对比报告",
+      "should_trigger": false,
+      "note": "routes to TTFT 收益对比报告（tpsplit-report）"
+    },
+    {
+      "id": "NQ-06",
+      "prompt": "P/D 分离集群的负载均衡策略怎么配",
+      "should_trigger": false,
+      "note": "routes to 负载均衡部署配置（dplb-optimization）"
+    },
+    {
+      "id": "NQ-07",
+      "prompt": "mooncake 传输耗时的打点该怎么加，帮我编译带日志的 .so",
+      "should_trigger": false,
+      "note": "routes to mooncake 源码打点与编译（mooncake-instrumentation）"
+    },
+    {
+      "id": "NQ-08",
+      "prompt": "压测客户端 ok=0，怎么把客户端成功率调上去",
+      "should_trigger": false,
+      "note": "压测配置/客户端侧问题，不是 KVC 传输总量对账"
+    },
+    {
+      "id": "NQ-09",
+      "prompt": "帮我写个脚本定时采集网卡速率和收发包计数",
+      "should_trigger": false,
+      "note": "routes to 网卡速率定时采集（network-collector）"
+    },
+    {
+      "id": "NQ-10",
+      "prompt": "TTFT 首 token 延迟怎么拆解到 tokenize/queue/forward 各环节",
+      "should_trigger": false,
+      "note": "routes to TTFT 时延拆解（tpsplit-log-analysis / vllm-ttft）"
+    }
+  ]
+}

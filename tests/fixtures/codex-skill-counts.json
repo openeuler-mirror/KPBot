@@ -1,7 +1,7 @@
 {
-  "measured_source_commit": "bf688e47 plus layerwise changes",
-  "upstream_commit": "bf688e47",
-  "manifest_skills": 370,
-  "installed_skill_documents": 416,
-  "source_skill_documents_before_exclusions": 484
+  "measured_source_commit": "upstream 2359dde7 (mysql/benchmark/flink-velox/layerwise batch) plus kptools-kvc-crosscheck-analyzer",
+  "upstream_commit": "2359dde7",
+  "manifest_skills": 388,
+  "installed_skill_documents": 434,
+  "source_skill_documents_before_exclusions": 503
 }

@@ -1,0 +1,42 @@
+# 用例：tier A —— kptools-kvc-crosscheck-analyzer skill 契约单测
+#
+# 覆盖：
+#   SKILL.md       frontmatter（name 与目录一致、description 含触发词、metadata 完整）
+#   资源完整性      evals/evals.json、evals/eval_queries.json（>=8 正例 + >=8 负例）
+#   内容卫生        无设备厂商/型号词、无工号、无个人绝对路径、LF 行尾
+#                  （行尾以 git 索引为准，Windows autocrlf 检出不算失败；
+#                   独立拷贝无 git 时回退原始字节检查）
+#   自包含         不得引用未随技能交付的采集/解析/部署脚本；
+#                  纯分析技能不得携带 scripts/ 目录
+#   触发面         description 覆盖四源对账高频说法与口语化变体（欠触发防护）
+#
+# 不含（有意为之，见 test_skill_contract.py 头部注册说明）：
+#   - CHANGELOG 条目检查：仓库 CHANGELOG.md 按文首声明只记录 npm 包发布变更
+#   - 脚本回归组：本技能无脚本；安装/发现注册面由仓库级
+#     tests/test_codex_install.py 计数回归守护（增删技能须同步
+#     tests/fixtures/codex-skill-counts.json 与 docs/codex.md，各口径 +1）
+#
+# 运行：
+#   bash Plugins/app-tuner/skills/kptools-kvc-crosscheck-analyzer/cases/skill-contract/run.sh
+#   产物 results/result.json；退出码 0 = 全部通过
+
+name: skill-contract
+skill: kptools-kvc-crosscheck-analyzer
+tier: A
+
+assert:
+  - type: exit_code
+    expect: 0
+  - type: json_field
+    file: results/result.json
+    field: success
+    expect: true
+  - type: json_field
+    file: results/result.json
+    field: checks_ran
+    op: gte
+    expect: 10
+  - type: json_field
+    file: results/result.json
+    field: failures
+    expect: 0

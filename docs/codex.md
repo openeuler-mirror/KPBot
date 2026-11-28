@@ -70,6 +70,8 @@ kpbot uninstall global codex
 
 `ascend_kunpeng/layerwise` 在本 PR 新增 5 个 `SKILL.md` 后，按同一口径实测为：安装清单 370、安装树递归 416、源树递归 484。
 
+kvc-crosscheck-analyzer PR 在合并上游 `2359dde7`（mysql-optimize 十件套、`benchmark-gaia/paperqa/swebench/vitabench-protocol`、`flink-velox-quick-verify`、`sandbox-bench-topdown`、`ascend_kunpeng/layerwise` 等批次技能）后的候选合并树上重新安装核对：当前快照实测为 `manifest_skills=388` / `installed_skill_documents=434` / `source_skill_documents_before_exclusions=503`（上游批次 + `kptools-kvc-crosscheck-analyzer`；注：上游 `2359dde7` 自身的 fixture 仍停在 layerwise 批次的 370/416/484，未含其后合入的 mysql/benchmark/flink 批次——后合入的 PR 按文末协议以候选合并树实测为准）。本批 kvc 技能 PR（!493/!495/!498/!499）同基线各 +1 技能，fixture 与本文按各 PR 的候选合并树逐个重测维护；同批 PR 无论先后，最后合入的 PR 应按文末协议在新的目标基线上重新安装、核对三个计数。
+
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
 未绑定可复现的树状态，不应用作当前版本的验证结论。
