@@ -1,0 +1,78 @@
+{
+ "skill_name": "mysql-source-optimization",
+ "version": "1.0.0",
+ "notes": "基于快照语料构建；评估不实际执行命令。",
+ "evals": [
+  {
+   "id": 1,
+   "prompt": "fast-tuple 补丁改了什么？什么场景能用、什么不能？不要执行命令。",
+   "expected_output": "把 dtuple 与 rec 的比较中固定长度/确定类型的字段改为 rec_direct_memcmp 直接内存比较（dtuple_fetch_partial_cmp_rec 路径），跳过逐字段的类型分发。适用 point/range 等值比较密集场景。不能用于：NULL 参与比较、变长/不确定类型、降序、min-rec、instant 列等语义分支——这些必须走原逻辑；补丁按条件判断回退，等价性用 debug 构建对照 cmp_dtuple_rec 校验。",
+   "files": [
+    "references/patch-catalog.md"
+   ],
+   "expectations": [
+    "说明直接内存比较机制",
+    "列出不适用的语义分支",
+    "提到 debug 等价校验",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "Read View version 补丁解决什么问题？最大的语义风险在哪？不要执行命令。",
+   "expected_output": "高并发只读下 view_open 要拿事务系统锁扫活跃事务列表；补丁引入 readview_version 原子计数，Read View 无锁复用与快速失效判断。风险在可见性：RC/RR 快照边界、活跃事务增删的可见性判断、长事务下 purge 推进与视图复用的交互；必须跑隔离级别全矩阵 MTR + 长时间 purge 的测试用例，回归立即回退。",
+   "files": [
+    "references/patch-catalog.md"
+   ],
+   "expectations": [
+    "说明原子计数与无锁复用",
+    "指出可见性/长事务/purge 风险",
+    "提到隔离级别矩阵验证",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 3,
+   "prompt": "space-skipping + NEON collation 什么时候走快路径？非 ASCII 怎么办？不要执行命令。",
+   "expected_output": "生成 sort key（my_strnxfrm_*）与哈希/去重（my_hash_sort_*）路径：确定 ASCII 的段用 NEON 16B 批量做空格跳过与计数、8B 生成 sort key、16B 算哈希。非 ASCII 或 collation 特殊语义（重音/大小写/尾空格 PAD）必须回退原函数；补丁按字符集/collation 白名单与段内字节判断走分支，条件编译 __aarch64__ && __linux__，x86 不受影响；MTR 用 utf8/ucs2 多字符集用例验证回退边界。",
+   "files": [
+    "references/patch-catalog.md"
+   ],
+   "expectations": [
+    "说明 ASCII 16B 批量机制",
+    "说明非 ASCII 回退条件",
+    "提到条件编译平台守卫",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 4,
+   "prompt": "补丁实施有哪些不可违反的纪律？为什么一个 patch 一个机制？不要执行命令。",
+   "expected_output": "纪律：默认可回退（条件不满足走原逻辑）；先 debug 等价校验再关闭；一个 patch 只做一件事——混合多机制的补丁出问题时无法归因是哪个语义破坏，回滚也只能整回；基线/候选分别构建并记 md5/参数/commit；正确性门禁 MTR+冒烟+对账+回读（读写补丁加复制/崩溃）；四场景 ≥3 轮同口径 A/B，波动 <5%，负收益回滚记账；高风险补丁（视图/提交/binlog）先备份+回滚演练。",
+   "files": [
+    "SKILL.md"
+   ],
+   "expectations": [
+    "列出默认回退/等价校验/单机制",
+    "解释混合机制无法归因",
+    "提到 ≥3 轮与负收益回滚",
+    "没有执行命令"
+   ]
+  },
+  {
+   "id": 5,
+   "prompt": "apply_patch.sh 怎么保证不误改源码树？不要执行命令。",
+   "expected_output": "默认 --check 只做 git apply --index --check 干跑，要求目标为 Git 工作树（索引与工作树判据同执行）；--apply 需要 --approved-change-id 变更单，--patch 必须是操作者提供的真实补丁文件并先校验存在（仓内不附带补丁）；PATCH/OUTDIR 在 cd 前绝对化，检查日志用 mktemp 私有临时目录并在退出时清理。应用前后把 git status/diff --cached 快照写入输出目录对照：before.txt 写失败就不应用，after.txt 写失败退出 3 并明确「补丁已应用、回执不完整」。不做构建、不改配置——构建验证回到 build-deployment/test-verification 流程；退出码 0 成功或检查通过、1 拒绝/失败、2 参数错误、3 已应用但回执不完整。",
+   "files": [
+    "scripts/apply_patch.sh"
+   ],
+   "expectations": [
+    "说明 --check 默认与变更单前置",
+    "提到 Git 工作树要求与 --index 检查",
+    "提到补丁存在校验与 before/after 回执",
+    "说明职责边界（不构建不改配置）",
+    "没有执行命令"
+   ]
+  }
+ ]
+}
