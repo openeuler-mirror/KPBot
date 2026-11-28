@@ -60,13 +60,13 @@ kpbot uninstall global codex
 ## 验证
 
 技能计数区分三个口径，不能将清单条目数等同于递归可见的技能文档数。
-分别将主干 `618dc4ec` 和在该基线上加入 `sra-scenario-analysis` 的工作树安装到空目录，得到以下计数。
+主干 `bf688e47` 已包含甘特图技能 `kpbot-milestone-gantt`。将该主干和加入搜推分析技能的版本分别安装到空目录，后者的安装清单只增加了 `sra-scenario-analysis`。
 
-| 口径 | 主干 `618dc4ec` | 加入 `sra-scenario-analysis` 后 |
-| --- | ---: | ---: |
-| 安装清单 `installed_skills`（安装器管理的技能根） | 369 | 370 |
-| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 |
-| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 |
+| 口径 | 主干 `618dc4ec` | 主干 `bf688e47`（含甘特图） | 加入搜推分析技能后 |
+| --- | ---: | ---: | ---: |
+| 安装清单 `installed_skills`（安装器管理的技能根） | 369 | 370 | 371 |
+| 安装树递归 `SKILL.md`（包含嵌套技能文档） | 415 | 416 | 417 |
+| 声明 Codex 的插件 `skills/` 源树递归 `SKILL.md`（排除前） | 478 | 479 | 480 |
 
 递归文档数只证明文件已安装，不代表真实 Codex CLI
 已逐个成功加载；真实加载验证须另运行下述可选 app-server 测试。此前 PR 描述中的“139 个技能”
