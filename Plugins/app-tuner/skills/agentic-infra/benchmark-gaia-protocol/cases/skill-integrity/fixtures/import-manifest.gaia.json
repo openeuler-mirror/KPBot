@@ -1,0 +1,21 @@
+{
+ "source": "agent-workload-benchmark-suite@673be52 artifacts/traces/agbench/import-manifest.json",
+ "schema_version": "agbench-import-v1",
+ "benchmark": "gaia",
+ "cases": [
+  {"case_id": "gaia_01_invasive_clownfish_zipcodes", "image": "agbench-gaia_01_invasive_clownfish_zipcodes:v1", "steps": 24, "exec": 21, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 1343209, "think_time": 83.8, "skipped": "process×6、web_fetch×7、web_search×4"},
+  {"case_id": "gaia_02_arxiv_lattice_articles", "image": "agbench-gaia_02_arxiv_lattice_articles:v1", "steps": 27, "exec": 24, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 659323, "think_time": 64.8, "skipped": "process×6"},
+  {"case_id": "gaia_03_numpy_regression_date", "image": "agbench-gaia_03_numpy_regression_date:v1", "steps": 27, "exec": 24, "read": 0, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 648099, "think_time": 89.1, "skipped": "process×1、web_fetch×1、web_search×1"},
+  {"case_id": "gaia_04_multiformat_parsing", "image": "agbench-gaia_04_multiformat_parsing:v1", "steps": 51, "exec": 46, "read": 1, "write": 2, "edit": 0, "apply_patch": 0, "tokens_total": 1356849, "think_time": 98.9, "skipped": "process×15"},
+  {"case_id": "gaia_05_ocr_image_analysis", "image": "agbench-gaia_05_ocr_image_analysis:v1", "steps": 58, "exec": 53, "read": 2, "write": 1, "edit": 0, "apply_patch": 0, "tokens_total": 1755844, "think_time": 164.3, "skipped": "process×25"},
+  {"case_id": "gaia_06_audio_transcription", "image": "agbench-gaia_06_audio_transcription:v1", "steps": 35, "exec": 29, "read": 1, "write": 3, "edit": 0, "apply_patch": 0, "tokens_total": 786576, "think_time": 93.6, "skipped": "process×2"}
+ ],
+ "contract": {
+  "source": "suite@673be52: runner/cli.py + trajectory_importer/__main__.py + image-build/agbench (build/import) argparse; report/{step_active_report,compare_loop_scheduling,plot_trajectory_completion_time}.py; observability/make_obs_report.py usage; agent_replay README env table",
+  "runner_cli": ["--api-key-file", "--api-url", "--backend", "--base-count", "--command-timeout-continue", "--command-timeout-sec", "--cooldown-sec", "--create-retries", "--dry-run", "--e2b-domain", "--event-loop", "--experiment-dir", "--fc-cpus-per-sandbox", "--fc-pin-cpus", "--image-map", "--launch-interval-sec", "--mock", "--mode", "--observability", "--observability-interval-sec", "--output-dir", "--ratios", "--repeats", "--request-timeout-sec", "--resume-retries", "--reuse", "--sandbox-timeout-sec", "--selection", "--setup-command", "--skip-delays", "--skip-orphan-cleanup", "--stop-on-error", "--stop-on-failure", "--template", "--total-multiplier", "--trajectory", "--trajectory-dir", "--verbose", "--workdir"],
+  "importer_cli": ["--benchmarks", "--cases", "--delay-model", "--fixed-sec", "--image-prefix", "--image-tag", "--no-verify", "--output-dir", "--trajectories-dir"],
+  "report_cli": ["--baseline", "--dpi", "--label", "--label-a", "--label-b", "--output-dir", "--output-json", "--success-only"],
+  "build_cli": ["--agbenchmark-root", "--base-image", "--benchmarks", "--cases", "--context-root", "--docker", "--dry-run", "--jdk-path", "--manifest"],
+  "env": ["DISKS", "E2B_ACCESS_TOKEN", "E2B_API_KEY", "E2B_API_KEY_FILE", "E2B_API_URL", "E2B_DOMAIN", "E2B_HTTP_SSL", "E2B_SANDBOX_URL", "SNAP_BASE"]
+ }
+}
