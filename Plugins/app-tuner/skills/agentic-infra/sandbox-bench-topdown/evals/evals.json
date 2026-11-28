@@ -1,0 +1,36 @@
+{
+  "skill_name": "sandbox-bench-topdown",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "snapshot_creation 单项太短，想采 top-down 比例分析瓶颈类型，怎么弄？",
+      "expected_output": "指向本技能：sample-size 100 + 拉长 measurement-time 长时化，等 Benchmarking + Collecting 进度行确认进入计量期，再用 DevKit tuner top-down -c <绑核> 采集，top-down.tar 复核；要调用栈火焰图转 sandbox-bench-flame；通用质量诊断/审核转 topdown-quality-diagnosis；解读与优化建议转 topdown-analysis-advisor。",
+      "files": [],
+      "expectations": [
+        "先长时化再采集（窗口落在忙期）",
+        "与火焰图技能按产物类型分流",
+        "benchmark 名走 9 项白名单"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "共享主机上能直接对我那几个核跑 DevKit top-down 吗？",
+      "expected_output": "按输入契约确认采集范围授权：-c 所选核须在采集窗内承载本轮负载（或本轮专用）；承载他人负载时换核或停止；devkit 亦支持 -p PID / -G cgroup 更细范围化。",
+      "files": [],
+      "expectations": [
+        "范围授权前置确认，不默认直接采",
+        "给出 -p/-G 范围化替代"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "DevKit 命令行工具在哪下载？我机器上是 tar 解压的版本。",
+      "expected_output": "给出官网 https://www.hikunpeng.com/developer/devkit/download?tab=commandLine；tar 版可执行文件位置经 DEVKIT_BIN 显式提供或按 $HOME/devkit-tuner*/DevKit-Tuner-CLI-*/devkit 自动探测。",
+      "files": [],
+      "expectations": [
+        "给出官方下载来源",
+        "tar 版路径自适应（自动探测 + 显式兜底）"
+      ]
+    }
+  ]
+}
